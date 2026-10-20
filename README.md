@@ -1,6 +1,6 @@
 # RiffApi Local Extended
 
-## 🔖 Foreword — this is a fork with AI generated improvements (Not reviewed!)
+## 🔖 Foreword — this is a fork with AI generated improvements (Not reviewed but tested for functionality!)
 
 `riffapi-local-extended` is a fork of [rebane2001/riffapi-local](https://github.com/rebane2001/riffapi-local), the basic local server that restored online play for **Riff Racer** after the official servers were shut down. This fork extends it with a persistent Parse-compatible backend so the game's online features actually work: **ghost upload/download**, scores & leaderboards, overthrow notifications, user login, track & playlist persistence, and a web admin GUI.
 
