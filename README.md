@@ -31,6 +31,8 @@ Docker alternative: `docker compose up --build`
 
 > `data/` (ghosts, scores, logs) is gitignored and never published — back it up by copying the folder.
 
+For the full reverse-engineering story, analysis tools, patches and test suites, see [`docs/README.md`](docs/README.md).
+
 ---
 
 ## 📖 Original README (rebane2001/riffapi-local)
@@ -117,7 +119,7 @@ The game talks the standard [Parse REST API](https://docs.parseplatform.org/rest
 
 Classes observed from the live game: `ghost_v18` (ghost metadata), `FileData` (ghost file records), `Score`, `Notification`, `Track`, `PlaylistTracks`, `Profile_Steam`, `_User`, `_Installation`.
 
-Want the full reverse-engineering story — how the API surface was recovered from the game binaries, including all analysis tools and tests? See the companion project **riffapi-re-tutorial**.
+Want the full reverse-engineering story — how the API surface was recovered from the game binaries, including all analysis tools and tests? See the [`docs/`](docs/) subfolder for the complete tutorial, analysis tools, patches and test suites.
 
 ### Credits
 
