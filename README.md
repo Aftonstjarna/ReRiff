@@ -92,34 +92,6 @@ This is an extended fork of [rebane2001/riffapi-local](https://github.com/rebane
 - **Track & playlist persistence** - shared track metadata, playlists and profile changes survive restarts.
 - **Web admin GUI** - browse/edit/delete everything the game stores at <http://127.0.0.1:5144/admin>.
 
-### Requirements
-
-- Python 3.8+ (or Docker)
-- Flask (`pip install Flask`)
-
-### Quick start
-
-1. Patch `ParseOctane.dll` in the game folder (see the **EXE / DLL patching** section in the Foreword above), replacing
-
-       https://parseapi.back4app.com
-
-   with
-
-       http://127.000000000.0.1:5144
-
-2. Start the server:
-
-       pip install Flask
-       python riffapi-local.py
-
-3. Launch the game. Watch the console (or `data/requests.log`) to see it connect, log in and sync.
-
-4. Open <http://127.0.0.1:5144/admin> to manage stored data.
-
-#### Docker
-
-    docker compose up --build
-
 ### Where data lives
 
     data/
@@ -127,8 +99,7 @@ This is an extended fork of [rebane2001/riffapi-local](https://github.com/rebane
       files/<name>                          # uploaded binaries (ghosts, tracks)
       requests.log                          # full log of game API traffic
 
-Back up or move your ghosts/scores by copying the `data/` folder, or export/import individual objects through the admin GUI.  
-**Note:** `data/` is gitignored and never published — it contains your personal ghosts and scores.
+Back up or move your ghosts/scores by copying the `data/` folder, or export/import individual objects through the admin GUI.
 
 ### How it works
 
