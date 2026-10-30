@@ -47,6 +47,24 @@ those settings. Use local server fills http://127.0.0.1:5144 into fallback;
 Save settings or Save and play commits changes. Existing comments and unknown
 INI keys are retained by Windows profile APIs.
 
+**External server only** saves `external_only = true` in the client INI. It skips
+local server autostart and ignores the saved fallback address, including in
+`--skip-launcher` mode. If the external server cannot be reached, networking is
+disabled rather than falling back locally. Restart the game after changing it.
+The existing fallback value is retained so unchecking restores the earlier setup.
+
+**Stop local server** stops only this installation's Python backend. On Linux it
+verifies the exact runner and server-directory arguments before sending SIGTERM.
+On Windows it checks the backend's recorded PID and creation time before stopping
+it. It does not stop Docker containers or arbitrary services on port 5144. Server
+controls are disabled while the game launched by this launcher is running.
+
+**Check for updates** queries published releases in Aftonstjarna/ReRiff. A newer
+release opens the GitHub release page so you can choose the correct installer.
+It does not replace running executables automatically. No published releases is
+reported separately from network/rate-limit errors. GitHub commits and container
+images alone do not count as client releases.
+
 ## Builds and backups
 
 Build with a Zig Windows cross-compiler:

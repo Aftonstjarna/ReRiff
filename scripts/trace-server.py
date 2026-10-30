@@ -185,6 +185,19 @@ def main():
     # Disable access-log query strings (login requests contain credentials).
     import logging
     logging.getLogger('werkzeug').setLevel(logging.ERROR)
+    # Windows uses a creation-time-checked process record for the native Stop
+    # button. Linux verifies the exact installation's /proc command line.
+    if __import__('os').name == 'nt':
+        import ctypes
+        from ctypes import wintypes
+        kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+        kernel.GetCurrentProcess.restype = wintypes.HANDLE
+        kernel.GetProcessTimes.argtypes = [wintypes.HANDLE] + [ctypes.POINTER(wintypes.FILETIME)] * 4
+        created, exited, system, user = (wintypes.FILETIME() for _ in range(4))
+        if kernel.GetProcessTimes(kernel.GetCurrentProcess(), ctypes.byref(created), ctypes.byref(exited), ctypes.byref(system), ctypes.byref(user)):
+            creation = (created.dwHighDateTime << 32) | created.dwLowDateTime
+            record = args.server_dir.parent/'server-process.ini'
+            record.write_text('[process]\npid='+str(__import__('os').getpid())+'\ncreation='+str(creation)+'\n', encoding='ascii')
     server.app.run(host='127.0.0.1', port=5144, debug=False, threaded=True)
 
 
