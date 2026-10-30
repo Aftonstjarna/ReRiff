@@ -1,0 +1,2 @@
+-r ../packaging/requirements.txt
+waitress==3.0.2

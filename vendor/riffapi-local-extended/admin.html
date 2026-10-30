@@ -1,0 +1,436 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RiffApiLocal Admin</title>
+<style>
+:root {
+  --bg: #0f1216;
+  --panel: #171c23;
+  --panel2: #1e2530;
+  --border: #2a3342;
+  --text: #d7dee8;
+  --muted: #8b96a5;
+  --accent: #4da3ff;
+  --accent2: #37d29c;
+  --danger: #ff5d6c;
+  --warn: #ffc555;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 14px/1.45 "Segoe UI", system-ui, sans-serif;
+}
+header {
+  display: flex; align-items: center; gap: 18px;
+  padding: 10px 18px; background: var(--panel); border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 5;
+}
+header h1 { font-size: 17px; margin: 0; font-weight: 600; }
+header h1 span { color: var(--accent); font-weight: 400; }
+nav { display: flex; gap: 6px; margin-left: auto; }
+nav button {
+  background: transparent; color: var(--muted); border: 1px solid transparent;
+  padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 13px;
+}
+nav button:hover { color: var(--text); background: var(--panel2); }
+nav button.active { color: var(--accent); border-color: var(--border); background: var(--panel2); }
+main { padding: 18px; max-width: 1200px; margin: 0 auto; }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
+.card {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+  padding: 14px 16px;
+}
+.card .num { font-size: 26px; font-weight: 600; color: var(--accent); }
+.card .lbl { color: var(--muted); font-size: 12px; margin-top: 2px; }
+.card.green .num { color: var(--accent2); }
+h2 { font-size: 15px; margin: 22px 0 10px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
+table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 13px; }
+th { color: var(--muted); font-weight: 600; background: var(--panel2); position: sticky; top: 0; }
+tr.clickable { cursor: pointer; }
+tr.clickable:hover td { background: var(--panel2); }
+tr.selected td { background: #223047; }
+td.mono, .mono { font-family: Consolas, "Courier New", monospace; }
+.muted { color: var(--muted); }
+.pill { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11px; background: var(--panel2); border: 1px solid var(--border); color: var(--muted); }
+button.btn {
+  background: var(--panel2); color: var(--text); border: 1px solid var(--border);
+  padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 13px;
+}
+button.btn:hover { border-color: var(--accent); color: var(--accent); }
+button.btn.danger:hover { border-color: var(--danger); color: var(--danger); }
+button.btn.primary { background: var(--accent); border-color: var(--accent); color: #08111d; font-weight: 600; }
+button.btn.primary:hover { filter: brightness(1.1); color: #08111d; }
+.toolbar { display: flex; gap: 8px; align-items: center; margin: 10px 0; flex-wrap: wrap; }
+.split { display: grid; grid-template-columns: 220px 1fr; gap: 14px; }
+ul.classlist { list-style: none; margin: 0; padding: 0; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+ul.classlist li { padding: 8px 12px; cursor: pointer; display: flex; justify-content: space-between; border-bottom: 1px solid var(--border); font-size: 13px; }
+ul.classlist li:last-child { border-bottom: none; }
+ul.classlist li:hover { background: var(--panel2); }
+ul.classlist li.active { background: #223047; color: var(--accent); }
+ul.classlist li .cnt { color: var(--muted); }
+textarea.json {
+  width: 100%; min-height: 260px; background: #0b0e12; color: #cde3ff;
+  border: 1px solid var(--border); border-radius: 8px; padding: 10px;
+  font: 12.5px/1.5 Consolas, "Courier New", monospace; resize: vertical;
+}
+pre#logView {
+  background: #0b0e12; border: 1px solid var(--border); border-radius: 8px;
+  padding: 12px; max-height: 65vh; overflow: auto; font: 12px/1.5 Consolas, "Courier New", monospace;
+  color: #b9c6d6; white-space: pre-wrap; word-break: break-all;
+}
+#toast {
+  position: fixed; bottom: 18px; right: 18px; background: var(--panel2);
+  border: 1px solid var(--border); border-left: 3px solid var(--accent2);
+  padding: 10px 16px; border-radius: 8px; display: none; z-index: 50; max-width: 420px;
+}
+#toast.err { border-left-color: var(--danger); }
+.detailhead { display: flex; align-items: center; gap: 10px; margin: 14px 0 8px; }
+.detailhead h3 { margin: 0; font-size: 14px; color: var(--accent); font-family: Consolas, monospace; }
+.spacer { flex: 1; }
+input[type=file] { color: var(--muted); }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+.empty { color: var(--muted); padding: 24px; text-align: center; background: var(--panel); border: 1px dashed var(--border); border-radius: 8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>RiffApiLocal <span>admin</span></h1>
+  <span class="pill" id="srvInfo">local parse-compatible server</span>
+  <nav>
+    <button data-tab="overview" class="active">Overview</button>
+    <button data-tab="classes">Classes</button>
+    <button data-tab="files">Files</button>
+    <button data-tab="log">Request log</button>
+  </nav>
+</header>
+<main>
+  <!-- OVERVIEW -->
+  <section id="tab-overview">
+    <div class="cards" id="overviewCards"></div>
+    <h2>Stored classes</h2>
+    <div id="overviewClasses"></div>
+  </section>
+
+  <!-- CLASSES -->
+  <section id="tab-classes" hidden>
+    <div class="split">
+      <div>
+        <ul class="classlist" id="classList"></ul>
+      </div>
+      <div>
+        <div class="toolbar">
+          <strong id="classNameTitle" class="mono">select a class</strong>
+          <span class="pill" id="classCount"></span>
+          <span class="spacer"></span>
+          <button class="btn" id="btnRefreshObjs">Refresh</button>
+          <button class="btn primary" id="btnAddObj">+ Add object</button>
+        </div>
+        <div id="objTableWrap"></div>
+        <div id="addObjPanel" hidden>
+          <div class="detailhead"><h3>New object</h3><span class="spacer"></span>
+            <button class="btn" id="btnCancelAdd">Cancel</button>
+            <button class="btn primary" id="btnCreateObj">Create</button>
+          </div>
+          <textarea class="json" id="newObjJson" placeholder='{"Score": 123456, "SongID": "17SJWbBsrv", ...}&#10;Optional "objectId" to import with a specific id.'></textarea>
+        </div>
+        <div id="objDetail" hidden>
+          <div class="detailhead">
+            <h3 id="detailId"></h3>
+            <span class="spacer"></span>
+            <button class="btn" id="btnCloseDetail">Close</button>
+            <button class="btn danger" id="btnDeleteObj">Delete</button>
+            <button class="btn primary" id="btnSaveObj">Save</button>
+          </div>
+          <textarea class="json" id="objJson" spellcheck="false"></textarea>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FILES -->
+  <section id="tab-files" hidden>
+    <div class="toolbar">
+      <input type="file" id="fileInput">
+      <button class="btn primary" id="btnUpload">Upload</button>
+      <span class="spacer"></span>
+      <button class="btn" id="btnRefreshFiles">Refresh</button>
+    </div>
+    <div id="fileTableWrap"></div>
+  </section>
+
+  <!-- LOG -->
+  <section id="tab-log" hidden>
+    <div class="toolbar">
+      <button class="btn" id="btnRefreshLog">Refresh</button>
+      <label><input type="checkbox" id="autoLog"> auto-refresh (3s)</label>
+      <span class="muted">last 400 lines of data/requests.log</span>
+    </div>
+    <pre id="logView">loading...</pre>
+  </section>
+</main>
+<div id="toast"></div>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+let currentClass = null;
+let currentObjectId = null;
+let logTimer = null;
+
+function toast(msg, isErr) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.className = isErr ? "err" : "";
+  t.style.display = "block";
+  clearTimeout(t._h);
+  t._h = setTimeout(() => t.style.display = "none", 3500);
+}
+
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  const text = await r.text();
+  let data = null;
+  try { data = JSON.parse(text); } catch (e) { data = text; }
+  if (!r.ok) throw new Error((data && data.error) ? data.error : (r.status + " " + text.slice(0, 120)));
+  return data;
+}
+
+function fmtBytes(n) {
+  if (n < 1024) return n + " B";
+  if (n < 1048576) return (n / 1024).toFixed(1) + " KB";
+  return (n / 1048576).toFixed(2) + " MB";
+}
+function esc(s) {
+  const _m = { "&": "\u0026amp;", "<": "\u0026lt;", ">": "\u0026gt;", '"': "\u0026quot;" };
+  return String(s).replace(/[&<>"]/g, c => _m[c]);
+}
+function short(s, n) { s = String(s); return s.length > n ? s.slice(0, n - 1) + "…" : s; }
+
+// ---------- tabs ----------
+document.querySelectorAll("nav button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("nav button").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    document.querySelectorAll("main section").forEach(s => s.hidden = true);
+    $("tab-" + btn.dataset.tab).hidden = false;
+    if (btn.dataset.tab === "overview") loadOverview();
+    if (btn.dataset.tab === "classes") { loadClassList(); }
+    if (btn.dataset.tab === "files") loadFiles();
+    if (btn.dataset.tab === "log") { loadLog(); }
+  });
+});
+
+// ---------- overview ----------
+async function loadOverview() {
+  try {
+    const o = await api("/admin/api/overview");
+    const cards = [];
+    cards.push(["Classes", Object.keys(o.classes).length, ""]);
+    cards.push(["Objects", Object.values(o.classes).reduce((a, b) => a + b, 0), ""]);
+    cards.push(["Files", o.fileCount, "green"]);
+    cards.push(["Files size", fmtBytes(o.fileBytes), "green"]);
+    cards.push(["Log lines", o.logLines, ""]);
+    $("overviewCards").innerHTML = cards.map(c =>
+      `<div class="card ${c[2]}"><div class="num">${esc(c[1])}</div><div class="lbl">${esc(c[0])}</div></div>`).join("");
+    const names = Object.keys(o.classes).sort();
+    $("overviewClasses").innerHTML = names.length
+      ? `<table><tr><th>Class</th><th>Objects</th></tr>${names.map(n =>
+          `<tr class="clickable" data-cls="${esc(n)}"><td class="mono">${esc(n)}</td><td>${o.classes[n]}</td></tr>`).join("")}</table>`
+      : `<div class="empty">No data stored yet. Play a track in Riff Racer — ghosts and scores will appear here.</div>`;
+    $("overviewClasses").querySelectorAll("tr.clickable").forEach(tr =>
+      tr.addEventListener("click", () => { switchTab("classes"); selectClass(tr.dataset.cls); }));
+  } catch (e) { toast("Overview failed: " + e.message, true); }
+}
+
+function switchTab(name) {
+  document.querySelector(`nav button[data-tab="${name}"]`).click();
+}
+
+// ---------- classes ----------
+async function loadClassList() {
+  try {
+    const o = await api("/admin/api/classes");
+    const names = Object.keys(o.classes).sort();
+    $("classList").innerHTML = names.length ? names.map(n =>
+      `<li data-cls="${esc(n)}" class="${n === currentClass ? "active" : ""}"><span class="mono">${esc(n)}</span><span class="cnt">${o.classes[n]}</span></li>`).join("")
+      : `<li class="muted">no classes yet</li>`;
+    $("classList").querySelectorAll("li[data-cls]").forEach(li =>
+      li.addEventListener("click", () => selectClass(li.dataset.cls)));
+  } catch (e) { toast("Failed to load classes: " + e.message, true); }
+}
+
+async function selectClass(name) {
+  currentClass = name;
+  currentObjectId = null;
+  $("objDetail").hidden = true;
+  $("addObjPanel").hidden = true;
+  $("classNameTitle").textContent = name;
+  document.querySelectorAll("#classList li").forEach(li =>
+    li.classList.toggle("active", li.dataset.cls === name));
+  await loadObjects();
+}
+
+async function loadObjects() {
+  if (!currentClass) return;
+  try {
+    const o = await api("/admin/api/classes/" + encodeURIComponent(currentClass));
+    $("classCount").textContent = o.count + " objects";
+    if (!o.results.length) {
+      $("objTableWrap").innerHTML = `<div class="empty">No objects in this class.</div>`;
+      return;
+    }
+    // collect interesting columns
+    const meta = new Set(["objectId", "createdAt", "updatedAt", "password", "sessionToken"]);
+    const cols = [];
+    o.results.forEach(obj => Object.keys(obj).forEach(k => {
+      if (!meta.has(k) && !cols.includes(k) && cols.length < 4) cols.push(k);
+    }));
+    let html = `<table><tr><th>objectId</th><th>createdAt</th>${cols.map(c => `<th>${esc(c)}</th>`).join("")}</tr>`;
+    o.results.forEach(obj => {
+      html += `<tr class="clickable" data-oid="${esc(obj.objectId)}"><td class="mono">${esc(obj.objectId)}</td><td class="muted">${esc(short(obj.createdAt || "", 19))}</td>`;
+      cols.forEach(c => {
+        const v = obj[c];
+        const s = (v === null || v === undefined) ? "" : (typeof v === "object" ? JSON.stringify(v) : String(v));
+        html += `<td class="mono">${esc(short(s, 60))}</td>`;
+      });
+      html += `</tr>`;
+    });
+    html += `</table>`;
+    $("objTableWrap").innerHTML = html;
+    $("objTableWrap").querySelectorAll("tr.clickable").forEach(tr =>
+      tr.addEventListener("click", () => showObject(tr.dataset.oid)));
+  } catch (e) { toast("Failed to load objects: " + e.message, true); }
+}
+
+async function showObject(oid) {
+  try {
+    const obj = await api("/classes/" + encodeURIComponent(currentClass) + "/" + encodeURIComponent(oid));
+    currentObjectId = oid;
+    $("detailId").textContent = currentClass + " / " + oid;
+    $("objJson").value = JSON.stringify(obj, null, 2);
+    $("addObjPanel").hidden = true;
+    $("objDetail").hidden = false;
+    $("objTableWrap").querySelectorAll("tr").forEach(tr =>
+      tr.classList.toggle("selected", tr.dataset.oid === oid));
+  } catch (e) { toast("Failed to load object: " + e.message, true); }
+}
+
+$("btnRefreshObjs").addEventListener("click", loadObjects);
+$("btnCloseDetail").addEventListener("click", () => { $("objDetail").hidden = true; currentObjectId = null; });
+
+$("btnSaveObj").addEventListener("click", async () => {
+  if (!currentObjectId) return;
+  let body;
+  try { body = JSON.parse($("objJson").value); }
+  catch (e) { toast("Invalid JSON: " + e.message, true); return; }
+  try {
+    await api("/admin/api/classes/" + encodeURIComponent(currentClass) + "/" + encodeURIComponent(currentObjectId), {
+      method: "PUT", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)
+    });
+    toast("Saved " + currentObjectId);
+    await loadObjects();
+    await showObject(currentObjectId);
+  } catch (e) { toast("Save failed: " + e.message, true); }
+});
+
+$("btnDeleteObj").addEventListener("click", async () => {
+  if (!currentObjectId) return;
+  if (!confirm("Delete " + currentClass + "/" + currentObjectId + "?")) return;
+  try {
+    await api("/classes/" + encodeURIComponent(currentClass) + "/" + encodeURIComponent(currentObjectId), { method: "DELETE" });
+    toast("Deleted " + currentObjectId);
+    $("objDetail").hidden = true;
+    currentObjectId = null;
+    await loadObjects();
+    loadClassList();
+  } catch (e) { toast("Delete failed: " + e.message, true); }
+});
+
+$("btnAddObj").addEventListener("click", () => {
+  $("objDetail").hidden = true;
+  $("newObjJson").value = "{\n  \n}";
+  $("addObjPanel").hidden = false;
+  $("newObjJson").focus();
+});
+$("btnCancelAdd").addEventListener("click", () => $("addObjPanel").hidden = true);
+$("btnCreateObj").addEventListener("click", async () => {
+  let body;
+  try { body = JSON.parse($("newObjJson").value); }
+  catch (e) { toast("Invalid JSON: " + e.message, true); return; }
+  try {
+    const res = await api("/admin/api/classes/" + encodeURIComponent(currentClass), {
+      method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)
+    });
+    toast("Created " + res.objectId);
+    $("addObjPanel").hidden = true;
+    await loadObjects();
+    loadClassList();
+    await showObject(res.objectId);
+  } catch (e) { toast("Create failed: " + e.message, true); }
+});
+
+// ---------- files ----------
+async function loadFiles() {
+  try {
+    const o = await api("/admin/api/files");
+    if (!o.files.length) {
+      $("fileTableWrap").innerHTML = `<div class="empty">No files stored yet. Ghost binaries uploaded by the game will appear here.</div>`;
+      return;
+    }
+    $("fileTableWrap").innerHTML = `<table><tr><th>Name</th><th>Size</th><th></th></tr>` +
+      o.files.map(f =>
+        `<tr><td class="mono">${esc(f.name)}</td><td>${fmtBytes(f.size)}</td>` +
+        `<td><a href="/files/${encodeURIComponent(f.name)}" target="_blank">download</a> · ` +
+        `<a href="#" class="delfile" data-name="${esc(f.name)}">delete</a></td></tr>`).join("") +
+      `</table>`;
+    $("fileTableWrap").querySelectorAll("a.delfile").forEach(a =>
+      a.addEventListener("click", async (ev) => {
+        ev.preventDefault();
+        if (!confirm("Delete file " + a.dataset.name + "?")) return;
+        try {
+          await api("/files/" + encodeURIComponent(a.dataset.name), { method: "DELETE" });
+          toast("Deleted " + a.dataset.name);
+          loadFiles();
+        } catch (e) { toast("Delete failed: " + e.message, true); }
+      }));
+  } catch (e) { toast("Failed to load files: " + e.message, true); }
+}
+$("btnRefreshFiles").addEventListener("click", loadFiles);
+$("btnUpload").addEventListener("click", async () => {
+  const f = $("fileInput").files[0];
+  if (!f) { toast("Choose a file first", true); return; }
+  try {
+    const buf = await f.arrayBuffer();
+    const r = await fetch("/files/" + encodeURIComponent(f.name), { method: "POST", body: buf });
+    if (!r.ok) throw new Error(r.status + " " + (await r.text()));
+    toast("Uploaded " + f.name);
+    $("fileInput").value = "";
+    loadFiles();
+  } catch (e) { toast("Upload failed: " + e.message, true); }
+});
+
+// ---------- log ----------
+async function loadLog() {
+  try {
+    const o = await api("/admin/api/log?lines=400");
+    $("logView").textContent = o.lines.length ? o.lines.join("\n") : "(log is empty)";
+    $("logView").scrollTop = $("logView").scrollHeight;
+  } catch (e) { toast("Failed to load log: " + e.message, true); }
+}
+$("btnRefreshLog").addEventListener("click", loadLog);
+$("autoLog").addEventListener("change", (e) => {
+  if (logTimer) { clearInterval(logTimer); logTimer = null; }
+  if (e.target.checked) logTimer = setInterval(() => {
+    if (!$("tab-log").hidden) loadLog();
+  }, 3000);
+});
+
+// ---------- init ----------
+loadOverview();
+</script>
+</body>
+</html>

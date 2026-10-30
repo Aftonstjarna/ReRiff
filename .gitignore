@@ -1,0 +1,15 @@
+build/
+dist/
+backups/
+**/bin/
+**/obj/
+**/__pycache__/
+*.pyc
+
+# Local reverse-engineering captures contain game material and player data.
+analysis/
+data/
+*.dll
+*.exe
+*.log
+server.ini

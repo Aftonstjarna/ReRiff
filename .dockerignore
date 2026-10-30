@@ -1,0 +1,17 @@
+# Send only the server sources and dependency manifests to the builder.
+**
+!Dockerfile
+!LICENSE
+!docker/
+!docker/**
+!packaging/
+!packaging/requirements.txt
+!scripts/
+!scripts/trace-server.py
+!vendor/
+!vendor/riffapi-local-extended/
+!vendor/riffapi-local-extended/riffapi-local.py
+!vendor/riffapi-local-extended/admin.html
+!vendor/riffapi-local-extended/LICENSE
+!vendor/riffapi-local-extended/ORIGIN.txt
+**/__pycache__/

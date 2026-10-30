@@ -1,0 +1,91 @@
+name: Build and publish server container
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: container-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set image name and publishing policy
+        id: image
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+          publish=false
+          if [[ "$GITHUB_EVENT_NAME" != pull_request ]] && \
+             { [[ "$GITHUB_REF" == "refs/heads/$DEFAULT_BRANCH" ]] || [[ "$GITHUB_REF" == refs/tags/v* ]]; }; then
+            publish=true
+          fi
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build image for integration tests
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          tags: reriff-server:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Test the running server and persistent storage
+        run: python3 docker/smoke_test.py --image reriff-server:ci
+
+      - name: Generate image tags and labels
+        if: steps.image.outputs.publish == 'true'
+        id: metadata
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ steps.image.outputs.name }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=tag
+            type=sha
+
+      - name: Log in to GitHub Container Registry
+        if: steps.image.outputs.publish == 'true'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish the tested image
+        if: steps.image.outputs.publish == 'true'
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.metadata.outputs.tags }}
+          labels: ${{ steps.metadata.outputs.labels }}
+          cache-from: type=gha
+
+      - name: Summarize the published image
+        if: steps.image.outputs.publish == 'true'
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}
+          TAGS: ${{ steps.metadata.outputs.tags }}
+        run: |
+          printf '### Server image\n\nPublished after integration tests passed:\n\n```text\n%s\n```\n' "$TAGS" >> "$GITHUB_STEP_SUMMARY"
