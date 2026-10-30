@@ -52,7 +52,7 @@ def build(args):
     payload = common/'payload'
     for name in ('ReRiff.ClientConfig.dll','ReRiff.Notify.dll','ReRiff-Launcher.exe'):
         copy(ROOT/'build'/name, payload/name)
-    for name in ('trace-server.py','server_routing.py','steam-launcher.sh','start-server-host.sh'):
+    for name in ('trace-server.py','server_routing.py','steam-launcher.sh','start-server-host.sh','stop-server-host.sh','server-control.py'):
         copy(ROOT/'scripts'/name,payload/'localserver'/name)
     for path in (ROOT/'vendor/riffapi-local-extended').iterdir():
         if path.is_file():

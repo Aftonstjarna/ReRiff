@@ -13,14 +13,18 @@
 #include <string.h>
 
 #define CAP 32768
+#ifndef RERIFF_VERSION
+#define RERIFF_VERSION "0.1.0"
+#endif
 #ifndef RERIFF_HEALTH_URL
 #define RERIFF_HEALTH_URL L"http://127.0.0.1:5144/"
 #endif
 #define WM_COMPLETE (WM_APP + 1)
 #define WM_GAME_RUNNING (WM_APP + 2)
-enum { EXTERNAL=101, FALLBACK, TIMEOUT, POPUP, SAVE, PLAY, LOCAL };
+enum { EXTERNAL=101, FALLBACK, TIMEOUT, POPUP, SAVE, PLAY, LOCAL, EXTERNAL_ONLY, STOP, UPDATE };
 static WCHAR folder[CAP], ini[CAP], message[1024];
 static HWND window, status, external, fallback, timeout_edit, popup, play_button, save_button;
+static HWND only_checkbox, stop_button, update_button;
 static BOOL busy = FALSE, playing = FALSE;
 static HFONT font;
 
@@ -48,6 +52,84 @@ static BOOL spawn(WCHAR *command, BOOL hidden, PROCESS_INFORMATION *process) {
 
 static BOOL is_wine(void) {
     return GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "wine_get_version") != NULL;
+}
+
+static BOOL external_only(void) {
+    WCHAR value[32];GetPrivateProfileStringW(L"server",L"external_only",L"false",value,32,ini);
+    return !_wcsicmp(value,L"true")||!wcscmp(value,L"1")||!_wcsicmp(value,L"yes");
+}
+
+static BOOL check_updates(void) {
+    HINTERNET session=InternetOpenW(L"ReRiffLauncher/" RERIFF_VERSION,INTERNET_OPEN_TYPE_PRECONFIG,NULL,NULL,0);
+    if(!session){wcscpy(message,L"Could not check GitHub releases.");return FALSE;}
+    DWORD limit=5000;
+    InternetSetOptionW(session,INTERNET_OPTION_CONNECT_TIMEOUT,&limit,sizeof(limit));
+    InternetSetOptionW(session,INTERNET_OPTION_RECEIVE_TIMEOUT,&limit,sizeof(limit));
+    const WCHAR *headers=L"Accept: application/vnd.github+json\r\n";
+    HINTERNET request=InternetOpenUrlW(session,L"https://api.github.com/repos/Aftonstjarna/ReRiff/releases/latest",headers,(DWORD)-1,
+        INTERNET_FLAG_RELOAD|INTERNET_FLAG_NO_CACHE_WRITE|INTERNET_FLAG_NO_UI,0);
+    BOOL ok=FALSE;DWORD code=0,size=sizeof(code),count=0;
+    if(request && HttpQueryInfoW(request,HTTP_QUERY_STATUS_CODE|HTTP_QUERY_FLAG_NUMBER,&code,&size,NULL)){
+        if(code==404){wcscpy(message,L"No GitHub release has been published yet. Your installed files were not changed.");ok=TRUE;}
+        else if(code==200){
+            char body[65536];DWORD total=0;
+            while(total<sizeof(body)-1 && InternetReadFile(request,body+total,sizeof(body)-1-total,&count) && count)total+=count;
+            body[total]=0;char *tag=strstr(body,"\"tag_name\"");
+            if(tag && (tag=strchr(tag,':')) && (tag=strchr(tag,'\"'))){
+                char version[128];size_t length=strcspn(++tag,"\"");
+                if(length<sizeof(version)){
+                    memcpy(version,tag,length);version[length]=0;
+                    int a=0,b=0,c=0,x=0,y=0,z=0;
+                    const char *number=version[0]=='v'?version+1:version;
+                    BOOL newer=sscanf(number,"%d.%d.%d",&a,&b,&c)!=3 || sscanf(RERIFF_VERSION,"%d.%d.%d",&x,&y,&z)!=3
+                        || a>x || (a==x && (b>y || (b==y && c>z)));
+                    if(newer){
+                        HINSTANCE opened=ShellExecuteW(window,L"open",L"https://github.com/Aftonstjarna/ReRiff/releases/latest",NULL,NULL,SW_SHOWNORMAL);
+                        wcscpy(message,(INT_PTR)opened>32?L"Update available. The GitHub release page is open; download the installer for your operating system.":L"Update available at github.com/Aftonstjarna/ReRiff/releases/latest; browser could not be opened.");
+                    }else wcscpy(message,L"You have the latest published release. Installed files were not changed.");
+                    ok=TRUE;
+                }
+            }
+        }
+    }
+    if(!ok)wcscpy(message,L"Could not check releases (network error or GitHub rate limit). Try again later.");
+    if(request)InternetCloseHandle(request);InternetCloseHandle(session);return ok;
+}
+
+static BOOL stop_server(void) {
+    if (is_wine()) {
+        typedef char * (__cdecl *unix_fn)(LPCWSTR);
+        union {FARPROC address;unix_fn function;} conversion;
+        conversion.address=GetProcAddress(GetModuleHandleW(L"kernel32.dll"),"wine_get_unix_file_name");
+        WCHAR script[CAP],host[CAP],system[CAP],command[CAP];path(script,L"localserver\\stop-server-host.sh");
+        if(!conversion.address||GetFileAttributesW(script)==INVALID_FILE_ATTRIBUTES){wcscpy(message,L"The local stop-server helper is missing.");return FALSE;}
+        char *value=conversion.function(script);if(!value)return FALSE;
+        MultiByteToWideChar(CP_UTF8,0,value,-1,host,CAP);HeapFree(GetProcessHeap(),0,value);
+        GetSystemDirectoryW(system,CAP);
+        _snwprintf(command,CAP,L"\"%ls\\start.exe\" /wait /unix /bin/sh \"%ls\"",system,host);command[CAP-1]=0;
+        PROCESS_INFORMATION process;if(!spawn(command,TRUE,&process)){wcscpy(message,L"Could not invoke the local stop helper.");return FALSE;}
+        CloseHandle(process.hThread);
+        DWORD waited=WaitForSingleObject(process.hProcess,15000),code=1;
+        if(waited==WAIT_OBJECT_0)GetExitCodeProcess(process.hProcess,&code);
+        CloseHandle(process.hProcess);
+        if(code){wcscpy(message,L"Server could not be stopped. Check localserver/server-console.log.");return FALSE;}
+        wcscpy(message,L"Local stop requested. Only this installation's Python backend was targeted; Docker is untouched.");return TRUE;
+    }
+    WCHAR record[CAP],value[64];path(record,L"localserver\\server-process.ini");
+    DWORD pid=GetPrivateProfileIntW(L"process",L"pid",0,record);
+    GetPrivateProfileStringW(L"process",L"creation",L"0",value,64,record);
+    ULONGLONG expected=_wcstoui64(value,NULL,10);
+    if(!pid||!expected){wcscpy(message,L"No launcher-owned server record. Docker and other services were left untouched.");return TRUE;}
+    HANDLE process=OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION|PROCESS_TERMINATE|SYNCHRONIZE,FALSE,pid);
+    if(!process){wcscpy(message,L"Recorded server is not running or cannot be accessed.");return FALSE;}
+    FILETIME created,exited,kernel,user;
+    BOOL match=GetProcessTimes(process,&created,&exited,&kernel,&user)
+        && ((((ULONGLONG)created.dwHighDateTime<<32)|created.dwLowDateTime)==expected);
+    BOOL ok=match&&TerminateProcess(process,0);
+    if(ok){WaitForSingleObject(process,5000);DeleteFileW(record);}
+    CloseHandle(process);
+    wcscpy(message,ok?L"Local Python server stopped.":L"Server identity did not match or stop failed. No unrelated process was stopped.");
+    return ok;
 }
 
 /* 1: ReRiff, 0: no reachable server, -1: another HTTP service. */
@@ -141,23 +223,25 @@ static BOOL launch_game(void) {
 }
 
 static DWORD WINAPI worker(LPVOID parameter) {
-    BOOL play=(BOOL)(INT_PTR)parameter;
-    BOOL ok=start_server();
+    int action=(int)(INT_PTR)parameter;
+    BOOL play=action==1;
+    BOOL only=external_only();
+    BOOL ok=action==3?check_updates():action==2?stop_server():(only?TRUE:start_server());
     if (ok && play) ok=launch_game();
-    if (ok) wcscpy(message,play?L"Game closed. Local server remains running.":L"Local server is ready.");
+    if (ok && action<2) wcscpy(message,only?(play?L"Game closed. External-only mode did not start a local server.":L"External-only mode: local autostart and fallback are disabled."):(play?L"Game closed. Local server remains running.":L"Local server is ready."));
     log_message(message);
     PostMessageW(window,WM_COMPLETE,ok,play);
     return 0;
 }
 
-static void begin(BOOL play) {
+static void begin(int action) {
     if (busy) return;
-    busy=TRUE;playing=play;
-    EnableWindow(play_button,FALSE);EnableWindow(save_button,FALSE);
-    SetWindowTextW(status,L"Starting or checking the local server...");
-    HANDLE thread=CreateThread(NULL,0,worker,(LPVOID)(INT_PTR)play,0,NULL);
+    busy=TRUE;playing=action==1;
+    EnableWindow(play_button,FALSE);EnableWindow(save_button,FALSE);EnableWindow(stop_button,FALSE);EnableWindow(update_button,FALSE);
+    SetWindowTextW(status,action==3?L"Checking published GitHub releases...":action==2?L"Stopping this installation's local server...":L"Checking server settings...");
+    HANDLE thread=CreateThread(NULL,0,worker,(LPVOID)(INT_PTR)action,0,NULL);
     if (thread) CloseHandle(thread);
-    else { busy=FALSE; EnableWindow(play_button,TRUE);EnableWindow(save_button,TRUE);SetWindowTextW(status,L"Could not start launcher worker."); }
+    else { busy=FALSE; EnableWindow(play_button,TRUE);EnableWindow(save_button,TRUE);EnableWindow(stop_button,TRUE);EnableWindow(update_button,TRUE);SetWindowTextW(status,L"Could not start launcher worker."); }
 }
 
 static HWND control(const WCHAR *cls,const WCHAR *text,DWORD style,int x,int y,int w,int h,int id) {
@@ -179,12 +263,14 @@ static BOOL save(void) {
     WCHAR a[4096],b[4096],t[32];
     GetWindowTextW(external,a,4096);GetWindowTextW(fallback,b,4096);GetWindowTextW(timeout_edit,t,32);
     WCHAR *end; double seconds=wcstod(t,&end);
-    if (!valid_url(a)||!valid_url(b)||!*t||*end||!(seconds>0 && seconds<=60)) {
+    BOOL only=SendMessageW(only_checkbox,BM_GETCHECK,0,0)==BST_CHECKED;
+    if (!valid_url(a)||(!only&&!valid_url(b))||!*t||*end||!(seconds>0 && seconds<=60)) {
         MessageBoxW(window,L"Use HTTP(S) URLs and a timeout greater than 0 and at most 60 seconds.",L"Invalid settings",MB_OK|MB_ICONWARNING);return FALSE;
     }
     BOOL ok=WritePrivateProfileStringW(L"server",L"external_url",a,ini)
         && WritePrivateProfileStringW(L"server",L"fallback_url",b,ini)
         && WritePrivateProfileStringW(L"server",L"timeout_seconds",t,ini)
+        && WritePrivateProfileStringW(L"server",L"external_only",only?L"true":L"false",ini)
         && WritePrivateProfileStringW(L"server",L"show_server_popup",SendMessageW(popup,BM_GETCHECK,0,0)==BST_CHECKED?L"true":L"false",ini);
     if (!ok) MessageBoxW(window,L"Could not save server.ini.",L"ReRiff",MB_OK|MB_ICONERROR);
     else SetWindowTextW(status,L"Settings saved. They apply on the next game start.");
@@ -202,29 +288,36 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
         control(L"STATIC",L"Timeout (seconds)",0,22,150,145,24,0);
         timeout_edit=control(L"EDIT",L"5",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,172,146,95,28,TIMEOUT);
         popup=control(L"BUTTON",L"Show the selected server when the game starts",BS_AUTOCHECKBOX|WS_TABSTOP,22,191,590,28,POPUP);
-        control(L"STATIC",L"Both addresses blank disables game networking.\nThe local backend starts automatically and stays running after the game closes.",0,22,234,600,46,0);
-        status=control(L"STATIC",L"Starting local server...",0,22,291,600,52,0);
-        control(L"BUTTON",L"Use local server",WS_TABSTOP,22,355,155,34,LOCAL);
-        save_button=control(L"BUTTON",L"Save settings",WS_TABSTOP,345,355,130,34,SAVE);
-        play_button=control(L"BUTTON",L"Save and play",WS_TABSTOP|BS_DEFPUSHBUTTON,490,355,130,34,PLAY);
+        only_checkbox=control(L"BUTTON",L"External server only (no local autostart or fallback)",BS_AUTOCHECKBOX|WS_TABSTOP,22,225,590,28,EXTERNAL_ONLY);
+        control(L"STATIC",L"Both addresses blank disables game networking.\nStop local server affects this installation's Python backend, not Docker.",0,22,267,600,46,0);
+        status=control(L"STATIC",L"Checking server settings...",0,22,323,600,62,0);
+        control(L"BUTTON",L"Use local server",WS_TABSTOP,22,409,145,34,LOCAL);
+        stop_button=control(L"BUTTON",L"Stop local server",WS_TABSTOP,180,409,150,34,STOP);
+        save_button=control(L"BUTTON",L"Save settings",WS_TABSTOP,345,409,130,34,SAVE);
+        play_button=control(L"BUTTON",L"Save and play",WS_TABSTOP|BS_DEFPUSHBUTTON,490,409,130,34,PLAY);
+        update_button=control(L"BUTTON",L"Check for updates",WS_TABSTOP,22,453,155,30,UPDATE);
         WCHAR value[4096];
         GetPrivateProfileStringW(L"server",L"external_url",L"",value,4096,ini);SetWindowTextW(external,value);
         GetPrivateProfileStringW(L"server",L"fallback_url",L"",value,4096,ini);SetWindowTextW(fallback,value);
         GetPrivateProfileStringW(L"server",L"timeout_seconds",L"5",value,4096,ini);SetWindowTextW(timeout_edit,value);
         GetPrivateProfileStringW(L"server",L"show_server_popup",L"true",value,4096,ini);
         SendMessageW(popup,BM_SETCHECK,(_wcsicmp(value,L"false")&&_wcsicmp(value,L"no")&&wcscmp(value,L"0"))?BST_CHECKED:BST_UNCHECKED,0);
+        SendMessageW(only_checkbox,BM_SETCHECK,external_only()?BST_CHECKED:BST_UNCHECKED,0);EnableWindow(fallback,!external_only());
         begin(FALSE);return 0;
     }
     if (event==WM_COMMAND) {
         switch (LOWORD(wp)) {
-            case LOCAL:SetWindowTextW(fallback,L"http://127.0.0.1:5144");break;
+            case LOCAL:SendMessageW(only_checkbox,BM_SETCHECK,BST_UNCHECKED,0);EnableWindow(fallback,TRUE);SetWindowTextW(fallback,L"http://127.0.0.1:5144");break;
+            case EXTERNAL_ONLY:EnableWindow(fallback,SendMessageW(only_checkbox,BM_GETCHECK,0,0)!=BST_CHECKED);break;
+            case STOP:begin(2);break;
+            case UPDATE:begin(3);break;
             case SAVE:save();break;
             case PLAY:if (save()) begin(TRUE);break;
         }return 0;
     }
     if (event==WM_GAME_RUNNING) { SetWindowTextW(status,L"Game running. Keep the launcher open until the game closes.");ShowWindow(window,SW_MINIMIZE);return 0; }
     if (event==WM_COMPLETE) {
-        busy=FALSE;playing=FALSE;EnableWindow(play_button,TRUE);EnableWindow(save_button,TRUE);SetWindowTextW(status,message);
+        busy=FALSE;playing=FALSE;EnableWindow(play_button,TRUE);EnableWindow(save_button,TRUE);EnableWindow(stop_button,TRUE);EnableWindow(update_button,TRUE);SetWindowTextW(status,message);
         if (lp) ShowWindow(window,SW_RESTORE);return 0;
     }
     if (event==WM_CLOSE) {
@@ -251,14 +344,14 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE previous,LPWSTR command,int sho
         log_message(L"SELFTEST: native launcher initialized; no game or server started.");log_message(ini);log_message(value);return 0;
     }
     if (skip) {
-        if (!start_server()||!launch_game()) {log_message(message);return 1;}
+        if ((!external_only()&&!start_server())||!launch_game()) {log_message(message);return 1;}
         return 0;
     }
     WNDCLASSW cls;ZeroMemory(&cls,sizeof(cls));cls.lpfnWndProc=procedure;cls.hInstance=instance;cls.lpszClassName=L"ReRiffNativeLauncher";
     cls.hCursor=LoadCursorW(NULL,IDC_ARROW);cls.hbrBackground=(HBRUSH)(COLOR_WINDOW+1);
     RegisterClassW(&cls);
     HWND handle=CreateWindowExW(0,cls.lpszClassName,L"ReRiff Launcher",WS_OVERLAPPED|WS_CAPTION|WS_SYSMENU|WS_MINIMIZEBOX,
-        CW_USEDEFAULT,CW_USEDEFAULT,660,450,NULL,NULL,instance,NULL);
+        CW_USEDEFAULT,CW_USEDEFAULT,660,545,NULL,NULL,instance,NULL);
     if (!handle) return 1;
     ShowWindow(handle,show);UpdateWindow(handle);
     MSG msg;while (GetMessageW(&msg,NULL,0,0)>0) {if (!IsDialogMessageW(handle,&msg)) {TranslateMessage(&msg);DispatchMessageW(&msg);}}

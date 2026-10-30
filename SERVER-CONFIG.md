@@ -10,6 +10,7 @@ external_url = https://your-compatible-server.example
 fallback_url = http://127.0.0.1:5144
 timeout_seconds = 5
 show_server_popup = true
+external_only = false
 ```
 
 Restart the game after editing. Client settings do not require a server restart.
@@ -33,6 +34,10 @@ network requests. Missing keys are blank. There is no hidden localhost default.
 The patched Parse.NetFx45.dll transport guard returns a failed network task before
 request creation when disabled, including SDK calls before normal initialization.
 This does not disable unrelated Steam traffic.
+
+Set `external_only = true` to use only the external URL. The launcher then skips
+local backend startup and the client ignores the fallback address. If the external
+server is unavailable or blank, Parse networking is disabled for that session.
 
 Both settings accept HTTP(S) hosts, IPs, custom ports, and optional base paths.
 Credentials, query strings, and fragments in base URLs are rejected. The selected

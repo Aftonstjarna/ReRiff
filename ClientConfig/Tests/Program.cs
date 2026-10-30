@@ -16,6 +16,8 @@ try {
     Check(Select("[server]\nexternal_url=\nfallback_url=\n") == "reriff-disabled://offline", "both addresses blank disables networking");
     Check(Select("[server]\nfallback_url=http://127.0.0.1:6123\n") == "http://127.0.0.1:6123", "configured fallback and custom port");
     Check(Select("[server]\nexternal_url=http://127.0.0.1:1\nfallback_url=http://127.0.0.1:6123\ntimeout_seconds=0.1\n") == "http://127.0.0.1:6123", "unavailable external selects configured fallback");
+    Check(Select("[server]\nexternal_only=true\nexternal_url=http://127.0.0.1:1\nfallback_url=http://127.0.0.1:6123\ntimeout_seconds=0.1\n") == "reriff-disabled://offline", "external-only never falls back when remote is unavailable");
+    Check(Select("[server]\nexternal_only=true\nexternal_url=\nfallback_url=http://127.0.0.1:6123\n") == "reriff-disabled://offline", "external-only with blank remote disables networking");
     Check(Select("[server]\nfallback_url=ftp://host\n") == "reriff-disabled://offline", "invalid URL fails closed");
     File.Delete(Path.Combine(root, "server.ini"));
     Check(ReRiff.ClientConfig.Select(root) == "reriff-disabled://offline", "missing file fails closed");

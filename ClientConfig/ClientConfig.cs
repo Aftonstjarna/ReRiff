@@ -72,7 +72,10 @@ namespace ReRiff {
                     timeout = (int)(seconds * 1000);
                 }
                 external = Validate(external);
-                fallback = Validate(fallback);
+                string onlySetting;
+                bool externalOnly = values.TryGetValue("external_only", out onlySetting)
+                    && (onlySetting.Equals("true", StringComparison.OrdinalIgnoreCase) || onlySetting == "1" || onlySetting.Equals("yes", StringComparison.OrdinalIgnoreCase));
+                fallback = externalOnly ? "" : Validate(fallback);
                 string endpoint;
                 string reason;
                 if (external.Length > 0 && Available(external, timeout)) {
@@ -80,7 +83,7 @@ namespace ReRiff {
                 } else if (fallback.Length > 0) {
                     endpoint = fallback; reason = "configured_fallback";
                 } else {
-                    endpoint = Disabled; reason = "no_available_configured_address";
+                    endpoint = Disabled; reason = externalOnly ? "external_only_unavailable" : "no_available_configured_address";
                 }
                 Log(folder, endpoint, reason);
                 return endpoint;
