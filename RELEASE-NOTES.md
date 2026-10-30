@@ -1,3 +1,23 @@
+# ReRiff 0.1.1 — Updated launcher
+
+- Add **Stop local server**, restricted to the Python backend belonging to this
+  installation. Docker containers and unrelated services are left untouched.
+- Add **External server only**, disabling local autostart and fallback in both
+  GUI and `--skip-launcher` modes. An unavailable external server disables game
+  networking rather than silently using localhost.
+- Add **Check for updates**, checking published GitHub releases and opening the
+  release page when a newer version is available.
+- Include user-agnostic Linux installation instructions in release downloads.
+- Publish update-only Windows/Linux packages through GitHub Actions. These
+  update ReRiff components and verify the existing patched DLL hashes, without
+  including or changing game-derived DLL patches. An existing supported ReRiff
+  installation is required; these packages are not fresh-install packages.
+
+Close the game and launcher before installing. Existing settings and saved server
+data are preserved. Set Steam's launcher bridge as described in README-LINUX.md.
+The game's original Proton/.NET requirements and the backend limitations below
+still apply.
+
 # ReRiff 0.1.0 — Initial release
 
 ## Included

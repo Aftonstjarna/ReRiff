@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import tarfile
 import zipfile
+import zlib
 
 from shared_patch import make_patch, digest
 
@@ -26,6 +27,10 @@ def build(args):
     version = (ROOT/'VERSION').read_text().strip()
     if not re.fullmatch(r'\d+\.\d+\.\d+', version):
         raise ValueError('Invalid VERSION')
+    if args.update_only:
+        tracked=subprocess.check_output(['git','ls-tree','-r','--name-only','HEAD'],cwd=ROOT,text=True).splitlines()
+        if any(name.endswith('.rrpatch') for name in tracked):
+            raise ValueError('Remove game-derived deltas from the committed source tree before building a public update release.')
     if digest(args.python_zip.read_bytes()) != PYTHON_SHA:
         raise ValueError('Portable Python checksum does not match the Python.org release.')
     output = ROOT/'dist'/('v'+version)
@@ -40,14 +45,18 @@ def build(args):
     for name in ('README.md', 'README-LINUX.md', 'LICENSE', 'RELEASE-NOTES.md', 'SERVER-CONFIG.md', 'LAUNCHER.md'):
         copy(ROOT/name, common/name)
     patches = {}
-    for name in ('ParseOctane.dll', 'Parse.NetFx45.dll'):
-        original = (args.original_dir/name).read_bytes()
-        patched = (ROOT/'build'/name).read_bytes()
-        encoded = make_patch(original, patched)
+    for name in (() if args.update_only else ('ParseOctane.dll', 'Parse.NetFx45.dll')):
+        if args.original_dir:
+            original = (args.original_dir/name).read_bytes()
+            patched = (ROOT/'build'/name).read_bytes()
+            encoded = make_patch(original, patched)
+        else:
+            encoded = (args.patch_dir/(name+'.rrpatch')).read_bytes()
+        metadata = json.loads(zlib.decompress(encoded))
         path = common/'patches'/(name+'.rrpatch')
         path.parent.mkdir(exist_ok=True)
         path.write_bytes(encoded)
-        patches[name] = {'file': path.relative_to(common).as_posix(), 'original': digest(original), 'patched': digest(patched)}
+        patches[name] = {'file': path.relative_to(common).as_posix(), 'original': metadata['original'], 'patched': metadata['patched']}
         print(name, 'delta:',len(encoded),'bytes')
     payload = common/'payload'
     for name in ('ReRiff.ClientConfig.dll','ReRiff.Notify.dll','ReRiff-Launcher.exe'):
@@ -87,6 +96,8 @@ def build(args):
                 archive.extractall(folder/'python')
             (folder/'python/python313._pth').write_text('python313.zip\n.\n..\nimport site\n')
         manifest = {'version':version,'commit':commit,'platform':platform,'patches':patches,
+                    'update_only':args.update_only,
+                    'required_existing':json.loads((ROOT/'packaging/required-client.json').read_text()) if args.update_only else {},
                     'files':{p.relative_to(folder).as_posix():digest(p.read_bytes()) for p in sorted(folder.rglob('*')) if p.is_file()}}
         (folder/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
         if platform=='windows':
@@ -112,7 +123,7 @@ __RERIFF_PAYLOAD__
 '''
             run = output/f'ReRiff-{version}-linux.run'
             run.write_bytes(shell.encode()+archive_bytes.getvalue());run.chmod(0o755)
-    # Source archive excludes game-derived binary patches, player data, and caches.
+    # Source archive excludes original game files, player data, and caches.
     with (output/f'ReRiff-{version}-source.tar.gz').open('wb') as stream:
         subprocess.run(['git','archive','--format=tar.gz',f'--prefix=ReRiff-{version}/','HEAD'],cwd=ROOT,stdout=stream,check=True)
     artifacts = sorted(p for p in output.iterdir() if p.suffix in ('.run','.zip','.gz'))
@@ -125,7 +136,10 @@ __RERIFF_PAYLOAD__
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--original-dir',type=Path,required=True)
+    inputs=parser.add_mutually_exclusive_group(required=True)
+    inputs.add_argument('--original-dir',type=Path)
+    inputs.add_argument('--patch-dir',type=Path,help='Use versioned deltas without accessing original game DLLs')
+    inputs.add_argument('--update-only',action='store_true',help='Update only ReRiff components; include no game-derived binary patches')
     parser.add_argument('--wheels-dir',type=Path,required=True)
     parser.add_argument('--python-zip',type=Path,required=True)
     build(parser.parse_args())

@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 import random
 import shutil
@@ -9,7 +10,7 @@ import unittest
 from unittest.mock import patch
 
 import installer
-from shared_patch import apply_patch, make_patch
+from shared_patch import apply_patch, make_patch, digest
 
 ROOT=Path(__file__).resolve().parent.parent
 
@@ -27,14 +28,35 @@ class InstallerTests(unittest.TestCase):
     def setUp(self):
         self.bundle=ROOT/'build/release/linux'
         originals=ROOT/'backups/client'
-        if not self.bundle.is_dir() or not originals.is_dir():
-            self.skipTest('Build a release and supply original DLLs before installer integration tests.')
+        if os.environ.get('RERIFF_SYNTHETIC_TESTS')=='1':
+            originals=ROOT/'build/no-original-fixtures'
+        if not self.bundle.is_dir():
+            self.skipTest('Build a release before installer integration tests.')
         self.temp=tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root=Path(self.temp.name);self.game=self.root/'game';self.game.mkdir()
         (self.game/'Game.exe').write_bytes(b'fixture')
-        self.originals={n:(originals/n).read_bytes() for n in ('ParseOctane.dll','Parse.NetFx45.dll')}
+        names=('ParseOctane.dll','Parse.NetFx45.dll')
+        update_only=json.loads((self.bundle/'manifest.json').read_text()).get('update_only',False)
+        if update_only and os.environ.get('RERIFF_SYNTHETIC_TESTS')!='1':
+            originals=ROOT/'build'
+        self.originals={n:(originals/n).read_bytes() if (originals/n).exists() else (b'MZ-synthetic-original-'+n.encode()) for n in names}
+        if not all((originals/n).exists() for n in names):
+            bundle=self.root/'synthetic-bundle';shutil.copytree(self.bundle,bundle);self.bundle=bundle
+            manifest=json.loads((bundle/'manifest.json').read_text())
+            for n,b in self.originals.items():
+                if update_only:
+                    manifest['required_existing'][n]=digest(b)
+                    continue
+                patched=b+b'-patched';relative=manifest['patches'][n]['file']
+                encoded=make_patch(b,patched);(bundle/relative).write_bytes(encoded)
+                manifest['patches'][n].update(original=digest(b),patched=digest(patched))
+                manifest['files'][relative]=digest(encoded)
+            (bundle/'manifest.json').write_text(json.dumps(manifest))
         for n,b in self.originals.items():(self.game/n).write_bytes(b)
+        self.previous_helper=b'existing-ReRiff-helper' if update_only else None
+        if self.previous_helper is not None:
+            (self.game/'ReRiff.ClientConfig.dll').write_bytes(self.previous_helper)
         self.backups=self.root/'project/backups'
 
     def install(self, **kwargs):
@@ -51,7 +73,11 @@ class InstallerTests(unittest.TestCase):
         import os
         result=subprocess.run([sys.executable,'-c','import flask,click,markupsafe; assert markupsafe.escape("<") == "&lt;"; print(flask.Flask("test").test_client().get("/").status_code)'],env=dict(os.environ,**env),capture_output=True,text=True)
         self.assertEqual(result.returncode,0,result.stderr)
-        self.install(restore=True)
+        if json.loads((self.bundle/'manifest.json').read_text()).get('update_only'):
+            with self.assertRaisesRegex(ValueError,'original full installer'):
+                self.install(restore=True)
+        else:
+            self.install(restore=True)
         for n,b in self.originals.items():self.assertEqual((self.game/n).read_bytes(),b)
         self.assertTrue(data.exists())
 
@@ -83,7 +109,9 @@ class InstallerTests(unittest.TestCase):
             with self.assertRaises(OSError):self.install()
         self.assertTrue(triggered)
         for n,b in self.originals.items():self.assertEqual((self.game/n).read_bytes(),b)
-        self.assertFalse((self.game/'ReRiff.ClientConfig.dll').exists())
+        helper=self.game/'ReRiff.ClientConfig.dll'
+        if self.previous_helper is None:self.assertFalse(helper.exists())
+        else:self.assertEqual(helper.read_bytes(),self.previous_helper)
 
 
 if __name__=='__main__':unittest.main()
