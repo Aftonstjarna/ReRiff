@@ -23,12 +23,15 @@
 #endif
 #define WM_COMPLETE (WM_APP + 1)
 #define WM_GAME_RUNNING (WM_APP + 2)
-enum { EXTERNAL=101, FALLBACK, TIMEOUT, POPUP, SAVE, PLAY, LOCAL, EXTERNAL_ONLY, STOP, UPDATE, EXPERIMENTAL };
+enum { EXTERNAL=101, FALLBACK, TIMEOUT, POPUP, SAVE, PLAY, LOCAL, EXTERNAL_ONLY, STOP, UPDATE, EXPERIMENTAL, NETWORKING };
 static WCHAR folder[CAP], ini[CAP], message[1024];
 static HWND window, status, external, fallback, timeout_edit, popup, play_button, save_button;
 static HWND only_checkbox, stop_button, update_button;
 static BOOL busy = FALSE, playing = FALSE;
 static HWND experimental_checkbox;
+static HWND networking_checkbox;
+static ULONGLONG settings_signature;
+static BOOL settings_observed=FALSE;
 static BOOL installed_experimental=FALSE, requested_experimental=FALSE;
 static HFONT font;
 
@@ -273,21 +276,46 @@ static BOOL save(void) {
     GetWindowTextW(external,a,4096);GetWindowTextW(fallback,b,4096);GetWindowTextW(timeout_edit,t,32);
     WCHAR *end; double seconds=wcstod(t,&end);
     BOOL only=SendMessageW(only_checkbox,BM_GETCHECK,0,0)==BST_CHECKED;
-    if (!valid_url(a)||(!only&&!valid_url(b))||!*t||*end||!(seconds>0 && seconds<=60)) {
+    BOOL enabled=SendMessageW(networking_checkbox,BM_GETCHECK,0,0)==BST_CHECKED;
+    if ((enabled&&(!valid_url(a)||(!only&&!valid_url(b))))||!*t||*end||!(seconds>0 && seconds<=60)) {
         MessageBoxW(window,L"Use HTTP(S) URLs and a timeout greater than 0 and at most 60 seconds.",L"Invalid settings",MB_OK|MB_ICONWARNING);return FALSE;
     }
     BOOL ok=WritePrivateProfileStringW(L"server",L"external_url",a,ini)
         && WritePrivateProfileStringW(L"server",L"fallback_url",b,ini)
         && WritePrivateProfileStringW(L"server",L"timeout_seconds",t,ini)
         && WritePrivateProfileStringW(L"server",L"external_only",only?L"true":L"false",ini)
+        && WritePrivateProfileStringW(L"server",L"networking_enabled",enabled?L"true":L"false",ini)
         && WritePrivateProfileStringW(L"server",L"show_server_popup",SendMessageW(popup,BM_GETCHECK,0,0)==BST_CHECKED?L"true":L"false",ini);
     if (!ok) MessageBoxW(window,L"Could not save server.ini.",L"ReRiff",MB_OK|MB_ICONERROR);
     else SetWindowTextW(status,L"Settings saved. They apply on the next game start.");
     return ok;
 }
 
+/* Watch content rather than timestamps: the game replaces the INI atomically. */
+static BOOL read_settings_signature(ULONGLONG *signature) {
+    HANDLE file=CreateFileW(ini,GENERIC_READ,FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,NULL,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,NULL);
+    if(file==INVALID_HANDLE_VALUE){
+        if(GetLastError()==ERROR_FILE_NOT_FOUND){*signature=0;return TRUE;}
+        return FALSE;
+    }
+    BYTE block[4096];DWORD count;ULONGLONG hash=14695981039346656037ULL;BOOL ok=TRUE;
+    for(;;){
+        if(!ReadFile(file,block,sizeof(block),&count,NULL)){ok=FALSE;break;}
+        if(!count)break;
+        for(DWORD i=0;i<count;i++){hash^=block[i];hash*=1099511628211ULL;}
+    }
+    CloseHandle(file);if(ok)*signature=hash;return ok;
+}
+
+static void update_networking_controls(void) {
+    BOOL enabled=SendMessageW(networking_checkbox,BM_GETCHECK,0,0)==BST_CHECKED;
+    EnableWindow(external,enabled);EnableWindow(only_checkbox,enabled);
+    EnableWindow(fallback,enabled&&SendMessageW(only_checkbox,BM_GETCHECK,0,0)!=BST_CHECKED);
+}
+
 static void reload_settings_controls(void) {
     WCHAR value[4096];
+    settings_observed=read_settings_signature(&settings_signature);
     /* Another process (the game menu) can atomically replace this file. */
     WritePrivateProfileStringW(NULL,NULL,NULL,ini);
     GetPrivateProfileStringW(L"server",L"external_url",L"",value,4096,ini);SetWindowTextW(external,value);
@@ -296,7 +324,17 @@ static void reload_settings_controls(void) {
     GetPrivateProfileStringW(L"server",L"show_server_popup",L"true",value,4096,ini);
     SendMessageW(popup,BM_SETCHECK,(_wcsicmp(value,L"false")&&_wcsicmp(value,L"no")&&wcscmp(value,L"0"))?BST_CHECKED:BST_UNCHECKED,0);
     SendMessageW(only_checkbox,BM_SETCHECK,external_only()?BST_CHECKED:BST_UNCHECKED,0);
-    EnableWindow(fallback,!external_only());
+    GetPrivateProfileStringW(L"server",L"networking_enabled",L"true",value,4096,ini);
+    SendMessageW(networking_checkbox,BM_SETCHECK,(_wcsicmp(value,L"false")&&_wcsicmp(value,L"no")&&wcscmp(value,L"0"))?BST_CHECKED:BST_UNCHECKED,0);
+    update_networking_controls();
+}
+
+static void refresh_changed_settings(void) {
+    ULONGLONG current;
+    if(networking_checkbox&&read_settings_signature(&current)&&(!settings_observed||current!=settings_signature)){
+        reload_settings_controls();
+        if(!busy)SetWindowTextW(status,L"Saved server settings changed. The launcher has been updated.");
+    }
 }
 
 static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
@@ -311,7 +349,8 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
         timeout_edit=control(L"EDIT",L"5",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,172,146,95,28,TIMEOUT);
         popup=control(L"BUTTON",L"Show the selected server when the game starts",BS_AUTOCHECKBOX|WS_TABSTOP,22,191,590,28,POPUP);
         only_checkbox=control(L"BUTTON",L"External server only (no local autostart or fallback)",BS_AUTOCHECKBOX|WS_TABSTOP,22,225,590,28,EXTERNAL_ONLY);
-        control(L"STATIC",L"Both addresses blank disables game networking.\nStop local server affects this installation's Python backend, not Docker.",0,22,267,600,46,0);
+        networking_checkbox=control(L"BUTTON",L"Enable networking (keep saved addresses when disabled)",BS_AUTOCHECKBOX|WS_TABSTOP,22,259,600,28,NETWORKING);
+        control(L"STATIC",L"Stop local server affects this installation's Python backend, not Docker.",0,22,296,600,24,0);
         status=control(L"STATIC",L"Checking server settings...",0,22,323,600,62,0);
         control(L"BUTTON",L"Use local server",WS_TABSTOP,22,409,145,34,LOCAL);
         stop_button=control(L"BUTTON",L"Stop local server",WS_TABSTOP,180,409,150,34,STOP);
@@ -322,21 +361,24 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
         SendMessageW(experimental_checkbox,BM_SETCHECK,installed_experimental?BST_CHECKED:BST_UNCHECKED,0);
         channel_title();
         reload_settings_controls();
+        SetTimer(hwnd,1,500,NULL);
         begin(FALSE);return 0;
     }
     if (event==WM_COMMAND) {
         switch (LOWORD(wp)) {
-            case LOCAL:SendMessageW(only_checkbox,BM_SETCHECK,BST_UNCHECKED,0);EnableWindow(fallback,TRUE);SetWindowTextW(fallback,L"http://127.0.0.1:5144");break;
-            case EXTERNAL_ONLY:EnableWindow(fallback,SendMessageW(only_checkbox,BM_GETCHECK,0,0)!=BST_CHECKED);break;
+            case LOCAL:SendMessageW(networking_checkbox,BM_SETCHECK,BST_CHECKED,0);SendMessageW(only_checkbox,BM_SETCHECK,BST_UNCHECKED,0);update_networking_controls();SetWindowTextW(fallback,L"http://127.0.0.1:5144");break;
+            case NETWORKING:case EXTERNAL_ONLY:update_networking_controls();break;
             case STOP:begin(2);break;
             case EXPERIMENTAL:
                 requested_experimental=SendMessageW(experimental_checkbox,BM_GETCHECK,0,0)==BST_CHECKED;
                 begin(3);break;
             case UPDATE:begin(3);break;
-            case SAVE:save();break;
+            case SAVE:if(save())settings_observed=read_settings_signature(&settings_signature);break;
             case PLAY:begin(TRUE);break;
         }return 0;
     }
+    if(event==WM_TIMER&&wp==1){refresh_changed_settings();return 0;}
+    if(event==WM_ACTIVATE&&LOWORD(wp)!=WA_INACTIVE)refresh_changed_settings();
     if (event==WM_GAME_RUNNING) { SetWindowTextW(status,L"Game running. Keep the launcher open until the game closes.");ShowWindow(window,SW_MINIMIZE);return 0; }
     if (event==WM_COMPLETE) {
         if (lp==2) { DestroyWindow(hwnd);return 0; }
@@ -350,7 +392,7 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
         if (busy) { SetWindowTextW(status,L"Wait for server startup or close the game before closing this launcher.");return 0; }
         DestroyWindow(hwnd);return 0;
     }
-    if (event==WM_DESTROY) { DeleteObject(font);PostQuitMessage(0);return 0; }
+    if (event==WM_DESTROY) { KillTimer(hwnd,1);DeleteObject(font);PostQuitMessage(0);return 0; }
     return DefWindowProcW(hwnd,event,wp,lp);
 }
 
