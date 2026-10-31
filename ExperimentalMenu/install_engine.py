@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import shutil
 import tempfile
+from setup_client import backup_directory
 
 ROOT = Path(__file__).resolve().parent.parent
 ORIGINAL = '2d1af8a01ec6b1e3477ff6dbe4a44895828e2ac71449344fec9d7d99e87a58e2'
@@ -36,7 +37,7 @@ def main():
     if digest(game / 'Game.exe') != ORIGINAL:
         raise SystemExit('Unsupported Game.exe; nothing changed.')
     destination = game / 'ReRiff.Notify.dll'
-    backup_dir = ROOT / 'backups/experimental-engine-menu'
+    backup_dir = backup_directory(game)
     backup_dir.mkdir(parents=True, exist_ok=True)
     record_path = backup_dir / (hashlib.sha256(str(game).encode()).hexdigest() + '.json')
     record = json.loads(record_path.read_text()) if record_path.exists() else None

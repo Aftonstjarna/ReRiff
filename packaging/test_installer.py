@@ -86,6 +86,21 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(set(self.game.rglob('*')),before)
         self.assertFalse(self.backups.exists())
 
+    def test_default_backup_location_is_game_bak(self):
+        state = self.game/'localserver/install-state.json'
+        state.parent.mkdir(parents=True, exist_ok=True)
+        state.write_text(json.dumps({'backup_dir': str(self.root/'old-project-backups')}))
+        plan = installer.install(self.bundle, self.game, None, 'linux', dry_run=True)
+        next_state = json.loads(plan['localserver/install-state.json'])
+        self.assertEqual(Path(next_state['backup_dir']), self.game/'bak')
+        self.assertFalse((self.game/'bak').exists())
+
+    def test_empty_python_executable_uses_native_fallback(self):
+        with patch.object(installer.sys, 'executable', ''), patch.object(installer.shutil, 'which', return_value='/usr/bin/python3'):
+            plan = self.install(dry_run=True)
+        self.assertIn(b'exec /usr/bin/python3 ', plan['localserver/start-server.sh'])
+        self.assertNotIn(b"exec '' ", plan['localserver/start-server.sh'])
+
     def test_unknown_modification_rejected(self):
         (self.game/'ParseOctane.dll').write_bytes(b'unknown')
         with self.assertRaises(ValueError):self.install()

@@ -2,7 +2,7 @@ name: Build and publish client release
 
 on:
   push:
-    branches: [launcher]
+    branches: [main, launcher]
     paths: [VERSION]
   workflow_dispatch:
 
@@ -48,8 +48,16 @@ jobs:
           --implementation cp --abi cp313 -r packaging/requirements.txt
       - name: Build client helper
         run: dotnet build ClientConfig/ClientConfig.csproj -c Release -o build
+      - name: Build client version header adapter
+        run: dotnet build NewsHeaders/NewsHeaders.csproj -c Release -o build
       - name: Build native launcher, notification, and Windows setup
         run: python scripts/build-windows-launcher.py --zig "$RUNNER_TEMP/release-tools/zig-x86_64-linux-0.14.1/zig"
+      - name: Build Linux and Windows server identity libraries
+        # Native catalog matches the platform running Python, not the x86 game.
+        # Portable Windows Python and supported Linux release targets are x64.
+        run: >-
+          python scripts/build-song-catalog.py
+          --zig "$RUNNER_TEMP/release-tools/zig-x86_64-linux-0.14.1/zig"
       - name: Package Windows and Linux installers
         run: >-
           python packaging/build_release.py --update-only
@@ -59,6 +67,8 @@ jobs:
         env:
           RERIFF_SYNTHETIC_TESTS: '1'
         run: python -m unittest discover -s packaging -p test_installer.py -v
+      - name: Verify automatic update extraction and rollback
+        run: python scripts/test_client_update.py
       - name: Validate Linux self-extractor
         run: sh "dist/v$(cat VERSION)/ReRiff-$(cat VERSION)-linux.run" --help
       - name: Verify published archive checksums
@@ -68,8 +78,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           version=$(cat VERSION)
+          python packaging/release_notes.py --version "$version" --output "$RUNNER_TEMP/RELEASE-NOTES.md"
           gh release create "v$version" \
             --target "$GITHUB_SHA" \
             --title "ReRiff $version" \
-            --notes-file RELEASE-NOTES.md \
+            --notes-file "$RUNNER_TEMP/RELEASE-NOTES.md" \
             "dist/v$version/"*

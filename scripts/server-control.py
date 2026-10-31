@@ -48,6 +48,13 @@ def stop(root):
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('action',choices=('stop',))
+    parser.add_argument('--result',type=Path,help='Write an atomic completion marker for the Wine bridge')
     args=parser.parse_args()
+    error_text=None
     try:stop(Path(__file__).resolve().parent)
-    except (OSError,RuntimeError) as error:sys.exit(str(error))
+    except (OSError,RuntimeError) as error:error_text=str(error)
+    if args.result:
+        temporary=args.result.with_name(args.result.name+'.partial')
+        temporary.write_text('error: '+error_text+'\n' if error_text else 'ok\n',encoding='utf-8')
+        temporary.replace(args.result)
+    if error_text:sys.exit(error_text)

@@ -1,3 +1,76 @@
+# ReRiff 0.1.6 — Updater verification release
+
+This release provides a new version to test **Update from GitHub** from v0.1.5.
+It retains v0.1.5's updater and server-stop fixes without additional behavior
+changes. It is published as a normal release so the stable-release updater can
+find it.
+
+To verify: click **Update from GitHub**, allow the launcher to reopen, and confirm
+the title reads `ReRiff Launcher v0.1.6`. Settings and saved data should remain.
+An already stopped local server must not block the update; a running owned local
+backend is stopped before installation. Docker servers are left untouched.
+
+# ReRiff 0.1.5 — Proton update shutdown fix
+
+- Confirm local-server stop results through an atomic completion marker instead
+  of Wine start.exe's exit code. Stopping an already stopped server succeeds.
+- Let the Linux update tool verify owned-server shutdown directly, fixing updates
+  blocked at "Could not stop this installation's local server" in external-only
+  mode. Docker and unrelated processes remain untouched.
+
+Launchers affected by the old stop failure need this update installed manually
+once. Subsequent updates use the corrected handoff.
+
+# ReRiff 0.1.4 — Launcher version display
+
+- Show the running launcher's compiled version in its window title, for example
+  `ReRiff Launcher v0.1.4`.
+
+Use **Update from GitHub** in launcher 0.1.3 or install this update manually.
+
+# ReRiff 0.1.3 — Automatic client updates
+
+- **Update from GitHub** now downloads and installs the latest stable client
+  release, then reopens the launcher, on Windows and Linux/Proton.
+- Verify the official release SHA256 and package integrity before closing the
+  launcher. Apply through the existing installer with backups and rollback;
+  preserve server.ini and saved server data.
+- Use a separate temporary native updater to wait for the launcher to exit.
+  Windows applies from a private Python runtime; Proton uses native Linux Python.
+- Stop only this installation's local Python server before replacement. Docker
+  servers are not updated or stopped by the client update button.
+- Keep the launcher open on download, checksum or preflight failures, with log
+  details. Updates remain disabled during a launcher-managed game session.
+
+Install 0.1.3 once using the release installer to enable this feature. Older
+launchers still open the release page; they cannot gain automatic updating
+without that initial launcher update. An existing supported ReRiff installation
+is required. This release includes only ReRiff components, not game DLL patches.
+
+# ReRiff 0.1.2 — Shared song identity
+
+- Automatically register cached song IDs with audio-file SHA256 identities when
+  the launcher starts and after the game closes. Identical files on different
+  clients share leaderboards without hand-written per-song mappings.
+- Persist the server's song catalog in its existing data volume. Existing scores,
+  cached IDs, object IDs and ghost uploads remain intact.
+- Resolve shared scores, friend queries, ranking counts, ghost lists, FileData
+  lookups and ghost downloads across verified equivalent IDs. Count each player's
+  best score once per song/mode/version, without deleting duplicate history.
+- Keep different source files separate even if their title and artist match.
+  Reject conflicting registrations instead of moving existing history.
+- Include native C++ identity libraries for Linux and Windows local servers and
+  build the library into the Docker image.
+
+Update the server image and the launcher on **both clients**, then launch the
+game once through each updated launcher. Source audio files must still be
+accessible. New imports made during a session register when the game closes.
+Only hashes, song IDs, title and artist are sent; audio and local paths are not.
+Older launchers still connect, but cannot register missing cached song identities.
+
+These remain update-only installers requiring an existing supported ReRiff
+installation. No original game binaries or binary patches are distributed.
+
 # ReRiff 0.1.1 — Updated launcher
 
 - Add **Stop local server**, restricted to the Python backend belonging to this

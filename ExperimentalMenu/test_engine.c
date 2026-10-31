@@ -102,13 +102,16 @@ int main(int argc,char **argv) {
     select_item(6);
     WCHAR value[2048]; GetPrivateProfileStringW(L"keep",L"key",L"",value,2048,config_path);
     CHECK(!wcscmp(value,L"value"));
-    select_item(5); CHECK(!*pending.external && !*pending.fallback);
+    select_item(5); CHECK(!pending.enabled && !wcscmp(pending.external,L"https://example.com")
+        && !wcscmp(pending.fallback,L"http://127.0.0.1:5144"));
     select_item(7); CHECK(!wcscmp(pending.external,L"https://example.com"));
     select_item(2000); CHECK(!server_page && !wcscmp(label(2),L"two")
         && !wcscmp(label(8),L"Servers") && !wcscmp(label(4),L"four"));
     CHECK(delegated==9);
     select_item(8); select_item(5); select_item(10); CHECK(!server_page);
-    GetPrivateProfileStringW(L"server",L"external_url",L"missing",value,2048,config_path); CHECK(!*value);
+    load_settings(); CHECK(!pending.enabled && !wcscmp(pending.external,L"https://example.com")
+        && !wcscmp(pending.fallback,L"http://127.0.0.1:5144"));
+    select_item(8); select_item(5); select_item(10); load_settings(); CHECK(pending.enabled);
     cleanup_entry(menu,NULL,NULL); CHECK(cleaned==1 && !page_owner);
     DeleteFileW(config_path); DeleteFileW(log_path);
     puts("PASS: original hash/image guards, foreign-host refusal, corrupted-vtable refusal, x86 callback ABI, engine text routing, navigation, presets, save/reload, cleanup");

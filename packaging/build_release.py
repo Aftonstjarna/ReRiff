@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import io
+import os
 import json
 from pathlib import Path
 import re
@@ -13,6 +14,7 @@ import zipfile
 import zlib
 
 from shared_patch import make_patch, digest
+from release_notes import release_notes
 
 ROOT = Path(__file__).resolve().parent.parent
 PYTHON_SHA = '9e35319bffedab8b36ad44d8f377cb4f1733bcec257a0b6d04d94f01486ddb38'
@@ -24,7 +26,11 @@ def copy(source, destination):
 
 
 def build(args):
+    channel = os.environ.get('RERIFF_RELEASE_CHANNEL', 'experimental')
+    if channel not in ('stable', 'experimental'):
+        raise ValueError('Invalid release channel')
     version = (ROOT/'VERSION').read_text().strip()
+    notes = release_notes((ROOT/'RELEASE-NOTES.md').read_text(encoding='utf-8'), version)
     if not re.fullmatch(r'\d+\.\d+\.\d+', version):
         raise ValueError('Invalid VERSION')
     if args.update_only:
@@ -42,8 +48,8 @@ def build(args):
     common.mkdir()
     for name in ('installer.py', 'shared_patch.py'):
         copy(ROOT/'packaging'/name, common/name)
-    for name in ('README.md', 'README-LINUX.md', 'LICENSE', 'RELEASE-NOTES.md', 'SERVER-CONFIG.md', 'LAUNCHER.md'):
-        copy(ROOT/name, common/name)
+    copy(ROOT/'LICENSE', common/'LICENSE')
+    (common/'RELEASE-NOTES.md').write_text(notes, encoding='utf-8')
     patches = {}
     for name in (() if args.update_only else ('ParseOctane.dll', 'Parse.NetFx45.dll')):
         if args.original_dir:
@@ -59,14 +65,19 @@ def build(args):
         patches[name] = {'file': path.relative_to(common).as_posix(), 'original': metadata['original'], 'patched': metadata['patched']}
         print(name, 'delta:',len(encoded),'bytes')
     payload = common/'payload'
-    for name in ('ReRiff.ClientConfig.dll','ReRiff.Notify.dll','ReRiff-Launcher.exe'):
+    for name in ('ReRiff.ClientConfig.dll','ReRiff.Notify.dll','ReRiff-Launcher.exe','ReRiff-Updater.exe'):
         copy(ROOT/'build'/name, payload/name)
-    for name in ('trace-server.py','server_routing.py','steam-launcher.sh','start-server-host.sh','stop-server-host.sh','server-control.py'):
+    copy(ROOT/'build/ReRiff.NewsHeaders.dll', payload/'ReRiff.NewsHeaders.dll')
+    copy(ROOT/'VERSION', payload/'localserver/client-version.txt')
+    (payload/'localserver/client-channel.ini').write_text('[client]\nchannel='+channel+'\n')
+    copy(ROOT/'VERSION', payload/'localserver/server/VERSION')
+    for name in ('trace-server.py','server_routing.py','steam-launcher.sh','start-server-host.sh','stop-server-host.sh','server-control.py','apply-client-update.py'):
         copy(ROOT/'scripts'/name,payload/'localserver'/name)
     for path in (ROOT/'vendor/riffapi-local-extended').iterdir():
         if path.is_file():
             copy(path,payload/'localserver/server'/path.name)
     copy(ROOT/'LICENSE',payload/'localserver/licenses/ReRiff.txt')
+    copy(ROOT/'ServerSync/third_party/LICENSE.MIT',payload/'localserver/licenses/nlohmann-json.txt')
     libs = payload/'localserver/python-libs'
     for requirement in (ROOT/'packaging/requirements.txt').read_text().splitlines():
         name, version_pin = requirement.split('==')
@@ -90,12 +101,16 @@ def build(args):
     for platform in ('linux','windows'):
         folder = stage/platform
         shutil.copytree(common,folder)
+        library = 'reriff-catalog.dll' if platform == 'windows' else 'libreriff-catalog.so'
+        copy(ROOT/'build/server-sync'/library, folder/'payload/localserver/server'/library)
+        news_library = library.replace('catalog', 'news')
+        copy(ROOT/'build/server-sync'/news_library, folder/'payload/localserver/server'/news_library)
         if platform == 'windows':
             copy(ROOT/'build/ReRiff-Setup.exe',folder/'ReRiff-Setup.exe')
             with zipfile.ZipFile(args.python_zip) as archive:
                 archive.extractall(folder/'python')
             (folder/'python/python313._pth').write_text('python313.zip\n.\n..\nimport site\n')
-        manifest = {'version':version,'commit':commit,'platform':platform,'patches':patches,
+        manifest = {'channel':channel,'version':version,'commit':commit,'platform':platform,'patches':patches,
                     'update_only':args.update_only,
                     'required_existing':json.loads((ROOT/'packaging/required-client.json').read_text()) if args.update_only else {},
                     'files':{p.relative_to(folder).as_posix():digest(p.read_bytes()) for p in sorted(folder.rglob('*')) if p.is_file()}}
@@ -129,8 +144,9 @@ __RERIFF_PAYLOAD__
     artifacts = sorted(p for p in output.iterdir() if p.suffix in ('.run','.zip','.gz'))
     (output/'SHA256SUMS').write_text(''.join(digest(p.read_bytes())+'  '+p.name+'\n' for p in artifacts))
     (output/'release.json').write_text(json.dumps({'version':version,'commit':commit,'artifacts':[p.name for p in artifacts]},indent=2)+'\n')
-    copy(ROOT/'RELEASE-NOTES.md',output/'RELEASE-NOTES.md')
-    copy(ROOT/'README-LINUX.md',output/'README-LINUX.md')
+    (output/'RELEASE-NOTES.md').write_text(notes, encoding='utf-8')
+    # User documentation lives on the main repository README, not per release.
+    (output/'README-LINUX.md').unlink(missing_ok=True)
     print('Release artifacts:',output)
 
 

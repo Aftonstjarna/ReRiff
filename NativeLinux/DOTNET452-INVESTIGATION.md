@@ -57,7 +57,7 @@ Microsoft CLR rejects it as an unverifiable EXE with fixups. The diagnostic uses
 a disposable `Game.reference.dll`, with the DLL header bit set and both native
 and managed process entry points cleared. Original method bodies are unchanged.
 This is an isolated reference host, not a converted game or a full-game test.
-`scripts/prepare-original-reference.py` reproduces the copy and records the exact
+`build/native-linux/reriff-reference prepare-pe` reproduces the copy and records the exact
 header changes and hashes; its output is restricted to ignored `build/`.
 
 Proton's packaged `libvkd3d-1.dll`, `libvkd3d-shader-1.dll` and

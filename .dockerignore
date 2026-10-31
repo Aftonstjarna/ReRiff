@@ -1,7 +1,10 @@
 # Send only the server sources and dependency manifests to the builder.
 **
+!VERSION
 !Dockerfile
 !LICENSE
+!ServerSync/
+!ServerSync/**
 !docker/
 !docker/**
 !packaging/
@@ -11,6 +14,8 @@
 !vendor/
 !vendor/riffapi-local-extended/
 !vendor/riffapi-local-extended/riffapi-local.py
+!vendor/riffapi-local-extended/song_catalog.py
+!vendor/riffapi-local-extended/news_adapter.py
 !vendor/riffapi-local-extended/admin.html
 !vendor/riffapi-local-extended/LICENSE
 !vendor/riffapi-local-extended/ORIGIN.txt

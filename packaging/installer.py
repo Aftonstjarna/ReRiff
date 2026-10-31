@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Offline ReRiff installer for Linux/Proton and Windows. Close the game first."""
 import argparse
-import hashlib
 import json
 import os
 from pathlib import Path
 import re
 import shlex
+import shutil
 import sys
 import tempfile
 
@@ -36,16 +36,7 @@ def auto_game():
 
 
 def backup_base(game):
-    for parent in Path(__file__).resolve().parents:
-        if (parent/'.git').is_dir():
-            project = parent
-            break
-    else:
-        project = Path.home()/'.dev/ReRiff'
-        if not project.is_dir():
-            project = Path.home()/'ReRiff'
-    key = hashlib.sha256(str(game).encode()).hexdigest()[:12]
-    return project/'backups/installations'/key
+    return game/'bak'
 
 
 def replace(path, data):
@@ -81,8 +72,7 @@ def install(bundle, game, backups, platform, dry_run=False, restore=False):
                 raise ValueError('This is an update-only package. A supported existing ReRiff installation is required: '+name)
         if not (game/'ReRiff.ClientConfig.dll').is_file():
             raise ValueError('This update requires an existing ReRiff client helper.')
-    if state.get('backup_dir') and backups is None:
-        backups = Path(state['backup_dir'])
+    previous_backups = Path(state['backup_dir']) if state.get('backup_dir') else None
     backups = backups or backup_base(game)
     originals, plan = {}, {}
     for name, patch_info in manifest['patches'].items():
@@ -94,6 +84,8 @@ def install(bundle, game, backups, platform, dry_run=False, restore=False):
         if digest(candidate) != patch_info['original']:
             legacy = Path(__file__).resolve()
             candidates = [saved]
+            if previous_backups is not None:
+                candidates.append(previous_backups/'originals'/name)
             for parent in legacy.parents:
                 candidates.append(parent/'backups/client'/name)
             original = next((p.read_bytes() for p in candidates if p.is_file() and digest(p.read_bytes()) == patch_info['original']), None)
@@ -121,7 +113,10 @@ def install(bundle, game, backups, platform, dry_run=False, restore=False):
             plan['localserver/start-server.cmd'] = b'@echo off\r\n"%~dp0windows-python\\python.exe" "%~dp0trace-server.py" --server-dir "%~dp0server"\r\n'
         else:
             root = game/'localserver'
-            script = '#!/bin/sh\nset -eu\nunset PYTHONHOME\nexport PYTHONNOUSERSITE=1\nexport PYTHONPATH='+shlex.quote(str(root/'python-libs'))+'\nexec '+shlex.quote(sys.executable)+' '+shlex.quote(str(root/'trace-server.py'))+' --server-dir '+shlex.quote(str(root/'server'))+'\n'
+            interpreter = sys.executable or shutil.which('python3')
+            if not interpreter:
+                raise ValueError('A native Python 3 interpreter is required for local server startup.')
+            script = '#!/bin/sh\nset -eu\nunset PYTHONHOME\nexport PYTHONNOUSERSITE=1\nexport PYTHONPATH='+shlex.quote(str(root/'python-libs'))+'\nexec '+shlex.quote(interpreter)+' '+shlex.quote(str(root/'trace-server.py'))+' --server-dir '+shlex.quote(str(root/'server'))+'\n'
             plan['localserver/start-server.sh'] = script.encode()
         if not (game/'server.ini').exists():
             plan['server.ini'] = b'[server]\nexternal_url =\nfallback_url = http://127.0.0.1:5144\ntimeout_seconds = 5\nshow_server_popup = true\n'

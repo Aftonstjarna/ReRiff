@@ -3,15 +3,15 @@
 Launch from the project root:
 
 ```sh
-python3 scripts/view-vehicle.py --track
+build/native-linux/reriff --track
 ```
 
 This displays the original-scale ALF vehicle, a reconstructed straight road,
 sidewalls, and the decoded original Dance ramp model. Optional flags:
 
 ```sh
-python3 scripts/view-vehicle.py --track --genre rock --vehicle bui
-python3 scripts/view-vehicle.py --track --overview
+build/native-linux/reriff --track --genre rock --vehicle bui
+build/native-linux/reriff --track --overview
 ```
 
 Use left-drag to orbit, the wheel to zoom, right-drag to pan, arrow keys to move
@@ -133,7 +133,7 @@ Build checks and capture:
 ```sh
 make -C NativeLinux test
 VK_DRIVER_FILES=/usr/share/vulkan/icd.d/lvp_icd.x86_64.json \
-  python3 scripts/view-vehicle.py --track --screenshot /tmp/reriff-track.ppm
+  build/native-linux/reriff --track --screenshot /tmp/reriff-track.ppm
 ```
 
 The Mesa software ICD path is distribution-specific. Native screenshot output

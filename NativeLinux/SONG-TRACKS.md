@@ -5,9 +5,9 @@ cached analysis. The reference example is **Rolling On**, profile ID
 `17SJWbBsrv` (601 beats, 635 nodes including the original lead-in/out padding).
 
 ```sh
-python3 scripts/view-vehicle.py --list-songs
-python3 scripts/view-vehicle.py --song 'Rolling On'
-python3 scripts/view-vehicle.py --song 'Rolling On' --overview
+build/native-linux/reriff --list-songs
+build/native-linux/reriff --song 'Rolling On'
+build/native-linux/reriff --song 'Rolling On' --overview
 ```
 
 Home shows the entire road; 1–4 focus four inspection vehicles. Orbit/zoom/pan
@@ -18,11 +18,14 @@ A song's genre and a user's saved visual theme mapping are separate original
 settings. Other bundled songs can be inspected with the supported genre overrides;
 this does not establish parity with their original default genres/themes.
 
-No MP3 decoding or new signal analysis is performed. These are the original
-bundled analyses, rather than synthesized beat sequences. Audio playback, driving,
+Track generation uses the original bundled analyses without new signal analysis
+or synthesized beat sequences. Optional native audio
+playback and a moving centerline preview are available with `--play`. Driving,
 original ramp models at jump gaps, props, and animated shaders remain separate work.
-Asset preparation uses Python on Linux; evaluation and orientation use the existing
-native C++ library, and display uses the SDL3/Vulkan viewer. Windows is not needed
+Packed analysis decoding, original asset loading, generation, geometry validation,
+texture decoding, scene and playback preparation all run in C++17. Display and
+audio use SDL3/Vulkan. Playback uses FFmpeg to decode the installed MP3.
+No Python interpreter is required to build, test or run. Windows is not needed
 to generate or view the track.
 
 ## Packed song format
@@ -57,7 +60,7 @@ time synchronization; generation uses the analysis beat timestamps and tempo.
 
 ## Recovered pipeline
 
-`SongGenerator` reads original `segments_PC.cfg` and `sections_PC.cfg` from the
+`rr::Generator` in `native_song.hpp` reads original `segments_PC.cfg` and `sections_PC.cfg` from the
 installed `vfs.zip` using the checked GFCF decoder. Config values that are two-item
 arrays interpolate between 100 and 180 BPM and clamp outside that range.
 
@@ -84,8 +87,7 @@ arrays interpolate between 100 and 180 BPM and clamp outside that range.
 The port preserves unusual details, including inclusive modulo integer ranges,
 float32 random scaling (which can round to one), RNG consumption with equal range
 endpoints, after-span retry exclusions, and the original relaxation cross-product
-order. It intentionally does not replace these with Python's random library or
-standard spline routines. Host sine/cosine replaces the original Windows math
+order. It intentionally does not replace these with a different random API or standard spline routines. Host sine/cosine replaces the original Windows math
 library; generation has not been certified bit-for-bit equivalent as a whole.
 
 Primary methods are recorded in the local decompilation, not included here as
@@ -131,14 +133,14 @@ make -C NativeLinux test viewer
 For direct original-executable math comparisons:
 
 ```sh
-python3 scripts/verify-song-math.py --game-dir '/path/to/Riff Racer' \
+build/native-linux/reriff-reference math --game-dir '/path/to/Riff Racer' \
   --nodes analysis/native-port/song-17sjwbbsrv-dance-alf/song-nodes.json
 ```
 
 This isolates original x86 functions without Windows startup. It compares 32,000
 random results (five seeds, four APIs, across state refreshes), 100 matrix products,
-and 200 evaluations/tangents at points along the generated song. All tested values
-matched bitwise. The existing `verify-track-math.py` separately tests orientation,
+800 spline evaluations/tangents and 400 orientation cases using generated-song and synthetic control points. All tested values
+matched bitwise. The existing `reriff-reference math` separately tests orientation,
 spline endpoints, extrapolation and degenerate vectors. A host must permit 32-bit
 Linux syscalls for these reference executables.
 
@@ -157,8 +159,8 @@ subsequent width-modulation RNG state.
 Reproduce with the existing isolated, normal 64-bit Microsoft .NET prefix:
 
 ```sh
-python3 scripts/capture-original-song.py --output analysis/native-port/original-rolling-on
-python3 scripts/view-vehicle.py --song 'Rolling On' \
+build/native-linux/reriff-reference capture --output analysis/native-port/original-rolling-on
+build/native-linux/reriff --song 'Rolling On' \
   --reference-nodes analysis/native-port/original-rolling-on/original-nodes.json
 ```
 
@@ -197,11 +199,71 @@ Save an independent JSON reference with `source: "original-game"`,
 original capture. Then run:
 
 ```sh
-python3 scripts/compare-song-track.py \
-  analysis/native-port/song-17sjwbbsrv-dance-alf/song-nodes.json \
-  /path/to/independent-original-nodes.json --output /tmp/song-comparison.json
+build/native-linux/reriff-reference compare \
+  --nodes analysis/native-port/song-17sjwbbsrv-dance-alf/song-nodes.json \
+  --reference /path/to/independent-original-nodes.json --output /tmp/song-comparison.json
 ```
 
 The comparison rejects mismatched song/genre/executable metadata, reports numeric
 errors and flag/visibility mismatches, and exits unsuccessfully on differences.
 It does not mark the scene as original-layout validated without that reference.
+
+## Audio and moving preview
+
+```sh
+build/native-linux/reriff --song 'Rolling On' --play
+build/native-linux/reriff --song 'Rolling On' --play --time 60
+build/native-linux/reriff --song 'Rolling On' --play --mute
+```
+
+Space pauses/resumes; J/L seek five seconds; Backspace restarts. C toggles the
+following camera, which uses the recovered road up axis through banks and loops.
+Home disables following and opens the overview. `--overview` starts detached.
+`--screenshot /tmp/song.ppm --time 60 --play` captures a fixed silent pose.
+
+The helper decodes the installed, lowercase-ID MP3 using system `ffmpeg` into
+48 kHz stereo PCM16 WAV. Audio, decoded buffers and provenance remain ignored
+local analysis artifacts; no original audio is included in source control.
+The native viewer uses SDL3 audio and consumed input frames as its clock, so
+render stalls do not accumulate simulation drift. Pause, resume, seeks and EOF
+share the same clock. Output-device buffering and acoustic latency are **not
+calibrated**; this is not a claim of sample-accurate audible synchronization.
+`--mute` uses a monotonic clock without opening an audio device.
+
+Recovered timing follows `gaNode.assignNodeLinks`, `gaNodeManager.fixupNetwork`,
+`gaTrackEntityManager.getSplineTForSongTime`, `getNodeIndexAndT`, and
+`gaPaceMarker.checkMusicStart`. Node-link chord lengths are accumulated in float32.
+Pace time scales distance between start and finish by original `track/beat_span`;
+the containing node pair maps distance to the spline parameter. The original
+first/mid-beat calibration determines the audio-file-to-pace offset: about
+**-0.464539 seconds** for Rolling On. This is distinct from simply mapping each
+analysis beat to an integer node. The preview clamps motion at start/finish.
+It follows the centerline through gaps without simulating jumps or suspension;
+vehicle clearance uses an approximate fixed local lift.
+
+The offline reference host also completes original network fixup for the timing
+context and captures 101 original song-time evaluations across the full beat span.
+This setup is needed before querying the network's distance limit; generator
+capture alone is not full playback initialization. Its temporary timing-manager
+input supplies the first-beat cache pointer read by that method. Original timing
+methods remain unchanged.
+
+```sh
+build/native-linux/reriff-reference capture --output analysis/native-port/original-rolling-on
+# First generate the playback buffer with --play (or --play --mute).
+build/native-linux/reriff-reference timing
+make -C NativeLinux test viewer test-audio
+```
+
+All 101 native timing parameters match numerically with original distances
+(maximum error zero). Using the Linux-generated geometry yields a maximum
+parameter difference of **0.000091553 node**, below the 0.001 tolerance. The report
+is saved beside the scene as `timing-comparison.json`. The SDL dummy-device test
+checks advance, pause, paused seek, resume, EOF and restart, without a sound card.
+The moving Vulkan scene was also smoke-tested with decoded Rolling On audio
+routed to the dummy device. Listening and output-latency measurement remain manual.
+
+`--drive` now adds a road-relative steering and suspension prototype on the same
+song geometry. It uses original tuning and independently tested scalar helpers;
+its integration and airborne behavior are approximate. See [driving controls and
+limits](DRIVING.md). The existing `--play` mode remains the synchronized preview.

@@ -3,7 +3,7 @@
 From the project root:
 
 ```sh
-python3 scripts/view-vehicle.py --section combined
+build/native-linux/reriff --section combined
 ```
 
 The connected course contains a bend, ascent, crest/descent and banking, with
@@ -31,8 +31,9 @@ inspected rather than treating ILSpy's external declarations as source.
 | Vector normalization helper | — | `0x26d90` | `0x426d90` |
 
 `track_math.hpp` contains the C++ port, with a checked C ABI in `track_math.cpp`.
-`splines.py` invokes the compiled library during asset preparation; there is no
-alternate Python spline formula. The native viewer renders the prepared buffers.
+`native_scene.hpp` calls the recovered C++ evaluator and orientation routines
+directly. There is no scripting boundary or alternate spline formula. The native
+viewer renders the prepared buffers.
 The same header can be used directly in the future native game runtime.
 
 For `t <= 1`, evaluation is `P0 + (P1-P0)*t`, tangent `P1-P0`. Negative values
@@ -91,7 +92,7 @@ or physics settling; a rigid car cannot perfectly fit a twisting surface.
 
 ## Original-code parity and reproduction
 
-`scripts/verify-track-math.py` maps the supported local executable into a small
+`reriff-reference math` maps the supported local executable into a small
 freestanding x86 Linux harness and calls only the three math entry points. No
 Windows startup or game loop runs. Wrapper sources are in `reference/`; generated
 original bytes and binaries remain in ignored `build/`. Unknown hashes are refused.
@@ -106,13 +107,13 @@ near-zero vectors and parallel guides. This proves parity for the tested inputs,
 not every floating-point edge case or whole-game behavior.
 
 ```sh
-python3 scripts/verify-track-math.py --game-dir '/path/to/Riff Racer'
+build/native-linux/reriff-reference math --game-dir '/path/to/Riff Racer'
 make -C NativeLinux test viewer
 ```
 
-The parity script needs `pefile`, GNU binutils and an x86 Linux kernel permitting
+The native reference tool needs GNU binutils and an x86 Linux kernel permitting
 32-bit system calls. Restricted environments may block the harness; use a normal
-terminal in that case. Its report is `analysis/native-port/spline-parity.json`.
+terminal in that case. Its report is `analysis/native-port/cpp-primitive-parity.json`.
 Ordinary tests need neither original bytes nor 32-bit execution.
 
 All five fixtures were rendered offscreen through Vulkan and inspected. The
@@ -122,5 +123,5 @@ kept out of spline fixtures until its separate placement behavior is ported;
 the older straight inspection scene retains it.
 
 Original bundled analyses now feed the ported node generator and these routines;
-see [song tracks](SONG-TRACKS.md). A full original-game route comparison remains
-pending, followed by driving physics.
+see [song tracks](SONG-TRACKS.md). The Rolling On route passes the independent original-node comparison.
+Driving physics remains separate work.

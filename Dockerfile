@@ -1,4 +1,12 @@
-FROM python:3.13-slim-bookworm
+FROM docker.io/library/gcc:14-bookworm AS catalog-build
+WORKDIR /src
+COPY ServerSync/ /src/
+RUN mkdir /out && g++ -std=c++17 -O2 -shared -fPIC -static-libstdc++ -static-libgcc \
+    catalog.cpp -o /out/libreriff-catalog.so
+RUN g++ -std=c++17 -O2 -shared -fPIC -static-libstdc++ -static-libgcc \
+    news.cpp -o /out/libreriff-news.so
+
+FROM docker.io/library/python:3.13-slim-bookworm
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -14,9 +22,13 @@ RUN python -m pip install --no-cache-dir -r /app/docker/requirements.txt \
     && chown 10001:10001 /data
 
 COPY vendor/riffapi-local-extended/ /app/server/
+COPY VERSION /app/server/VERSION
+COPY --from=catalog-build /out/libreriff-catalog.so /app/server/libreriff-catalog.so
+COPY --from=catalog-build /out/libreriff-news.so /app/server/libreriff-news.so
 COPY scripts/trace-server.py /app/trace-server.py
 COPY docker/server.py docker/healthcheck.py /app/docker/
 COPY LICENSE /app/LICENSE
+COPY ServerSync/third_party/LICENSE.MIT /app/licenses/nlohmann-json.txt
 
 USER 10001:10001
 VOLUME ["/data"]

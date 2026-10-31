@@ -10,18 +10,17 @@ below. No original executable or asset was changed.
 
 ## Reproduce the export
 
-From the project root, with Pillow installed (the tested version is pinned in
-`NativeLinux/asset-requirements.txt`):
+From the project root, using the C++ exporter (zlib, OpenSSL and libpng):
 
 ```sh
-python3 NativeLinux/assets.py \
+make -C NativeLinux all
+build/native-linux/reriff --prepare-only \
   --game-dir '/path/to/Riff Racer' --vehicle alf \
   --output analysis/native-port/vehicle-alf
 ```
 
 This produces `vehicle.gltf` with `vehicle.bin`, the original DDS payloads,
-decoded PNG textures, all six environment cube faces, `texture-sheet.png`,
-`geometry-preview.png`, and a manifest with source hashes and shader parameters.
+decoded PNG textures, all six environment cube faces, and a manifest with source hashes and shader parameters.
 Keep the glTF, BIN, and textures directory together. All exported game material
 is local research output in the ignored `analysis/` directory.
 
@@ -40,8 +39,8 @@ Glass is opaque dark blue-gray for predictable inspection. These presets improve
 readability and do not reproduce the original game's shaders. The complete
 `vehicle.gltf` retains its original texture mappings and parameter metadata.
 
-The geometry preview uses diagnostic colors and flat lighting, and displays
-only body/wheel nodes. The glTF preserves all 26 mesh sections, including electric
+For a diagnostic preview, open the native Vulkan viewer; it displays only
+body and wheel nodes and uses approximate materials. The glTF preserves all 26 mesh sections, including electric
 effects and the shadow plane. Its basic materials are approximations: several
 original DDS channels encode shader inputs rather than ordinary diffuse color.
 The exporter does not implement the original shaders, effects, animated livery,
@@ -51,7 +50,7 @@ Run synthetic and installed-asset checks:
 
 ```sh
 make -C NativeLinux test
-RERIFF_GAME_DIR='/path/to/Riff Racer' python3 tests/test_vehicle_assets.py
+RERIFF_GAME_DIR='/path/to/Riff Racer' make -C NativeLinux test
 ```
 
 Reproduce ILSpy output:

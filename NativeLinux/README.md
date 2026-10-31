@@ -2,6 +2,7 @@
 
 This directory contains the native reconstruction and an initial Vulkan vehicle
 viewer. It is **not yet a playable Linux game**.
+The native pipeline is C++17 throughout; see [migration details](MIGRATION.md).
 The existing Windows/Proton restoration remains separate. Nothing here patches
 the installed game, launches it, or modifies its saved data.
 
@@ -9,7 +10,7 @@ Vehicle meshes and texture batches can now be decoded and exported as glTF,
 DDS, and PNG. See [asset decoding and format findings](ASSET-FORMATS.md) for
 commands, validation, loader evidence, and remaining shader limitations.
 
-To open the native viewer, run `python3 scripts/view-vehicle.py` from the project
+After building, to open the native viewer, run `build/native-linux/reriff` from the project
 root. See [viewer controls, dependencies and verification](VIEWER.md).
 Add `--track` for the reconstructed road scene; see [track findings](TRACK-SCENE.md).
 Use `--section combined` for curved, sloped and banked test geometry generated
@@ -20,11 +21,13 @@ analysis, or `--list-songs` to list the bundled catalog. See
 
 ## Build and exercise the native code
 
-Requires a C++17 compiler, Make, zlib development headers, and Python 3 for tests.
+Requires a C++17 compiler, Make, zlib, OpenSSL and libpng development headers,
+SDL3 runtime/headers, Vulkan drivers and libshaderc_shared. FFmpeg is optional
+for audio preparation. Build, tests and runtime do not require Python.
 From the ReRiff project root:
 
 ```sh
-make -C NativeLinux test
+make -C NativeLinux all test
 build/native-linux/reriff-native '/path/to/Riff Racer' --verify
 build/native-linux/reriff-native '/path/to/Riff Racer' --list
 build/native-linux/reriff-native '/path/to/Riff Racer' --config scripts/config/vehicles_PC.cfg
@@ -123,10 +126,23 @@ identifies XInput, X3DAudio, Win32 window/filesystem calls, FFTW, and the Parse
 bridge. Audio backend internals and physics library boundaries still need
 identification; an `fmod` string alone does not establish the complete backend.
 
-Next, capture an independent original route to finish generator parity,
-restore shaders, connect audio decoding and analysis, then port vehicle physics, input, race
-states, menus, and persistence. Compare deterministic outputs with the original
+Native audio playback and a moving song-synchronized preview are available with
+`build/native-linux/reriff --song 'Rolling On' --play`. Original timing
+evaluations pass independent comparison; output latency is not calibrated.
+Next, restore shaders and port vehicle physics, input, race states, menus and persistence. Compare deterministic outputs with the original
 at each boundary: analyzed beats, generated geometry, torque curves, and replay
 positions. A full port cannot be produced by renaming the EXE or recompiling the
 Parse DLLs; the 32-bit pointers and Windows/native calls in the recovered IL
 must be replaced explicitly.
+
+## Vehicle physics
+
+The prerequisite byte-for-byte original source rebuild is not complete.
+See [matching decompilation status](../Decomp/README.md); the comparisons below
+validate sampled behavior, not executable identity.
+
+The placeholder driving integrator has been removed. Original vehicle routines
+have been located. Pace control, manual drive impulses, drift-input transitions,
+steering, grip, friction, adhesion, skid state, skid forces, yaw damping, body force accumulation, suspension and tire forces are now ported and checked against 21,447
+original-executable cases. Steered wheel transforms and body/contact integration remain unported.
+Use the recovered song/asset preview above. See [source map and validation](DRIVING.md).

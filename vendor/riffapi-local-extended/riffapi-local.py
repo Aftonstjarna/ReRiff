@@ -20,6 +20,7 @@ Every request is logged to ./data/requests.log and to the console.
 """
 
 import datetime
+import importlib.util
 import json
 import mimetypes
 import os
@@ -41,23 +42,18 @@ LOG_FILE = os.path.join(DATA_DIR, "requests.log")
 
 STORAGE_LOCK = threading.RLock()
 
-news = {
-    "title": "RiffApiLocal",
-    "msg": "You're connected to RiffApiLocal.\nScores and ghosts are saved locally.",
-}
 username = "RiffApiLocal"
 
 # Canned responses kept from the original riffapi-local: the game needs these
 # exact configuration values to function.
 responses = {
     "Configuration": '{"results":[{"objectId":"ITz5K79wcQ","updatedAt":"2015-10-06T15:37:10.761Z","RegionGroup":"Default","createdAt":"2015-08-27T16:48:23.993Z","OnTrackCoinValue":10,"TrackConversionCost":300,"ShareScoreCoinReward":200,"WatchAdCoinReward":200,"TrackCreatorCoinReward":100}]}',
-    "News": f'{{"results":[{{"objectId":"RiffApiLocalNews","updatedAt":"2000-01-01T00:00:00.000Z","de":"{news["msg"]}","createdAt":"2000-01-01T00:00:00.000Z","ru":"{news["msg"]}","en":"{news["msg"]}","esTitle":"{news["title"]}","it":"{news["msg"]}","fr":"{news["msg"]}","frTitle":"{news["title"]}","itTitle":"{news["title"]}","es":"{news["msg"]}","enTitle":"{news["title"]}","Status":"Active","ruTitle":"{news["title"]}","deTitle":"{news["title"]}","Pinned":true,"ID":16}}]}}',
     "Profile_Steam": f'{{"results":[{{"objectId":"{username}Profile","SystemID":"1","FavouriteCar":1,"FavouriteSong":"null","FavouriteGenre":"pop","DriverLevel":0,"Platform":"PC","Username":"{username}","createdAt":"2000-01-01T00:00:00.000Z","updatedAt":"2000-01-01T00:00:00.000Z"}}]}}',
     "Version": '{"results":[{"objectId":"BoJMZ1TQJZ","updatedAt":"2015-02-10T21:05:53.214Z","Ver":100,"createdAt":"2015-02-10T20:50:24.164Z"}]}',
 }
 
 # Classes that always return the canned response above.
-CANNED_CLASSES = ("Configuration", "News", "Version")
+CANNED_CLASSES = ("Configuration", "Version")
 
 LOG_LOCK = threading.Lock()
 
@@ -240,6 +236,62 @@ def matches_where(obj, where):
         if not condition_matches(value, present, cond):
             return False
     return True
+
+
+def song_aliases():
+    """Use registered source hashes, retaining legacy explicit groups."""
+    aliases = dict(catalog_aliases())
+    path = os.path.join(DATA_DIR, "song-aliases.json")
+    if not os.path.isfile(path):
+        return aliases
+    with open(path, encoding="utf-8") as stream:
+        groups = json.load(stream)
+    if not isinstance(groups, list):
+        raise ValueError("song-aliases.json must contain a list of ID groups")
+    seen = set()
+    for group in groups:
+        if (not isinstance(group, list) or len(group) < 2
+                or any(not isinstance(x, str) or not re.fullmatch(r"[A-Za-z0-9_-]+", x) for x in group)
+                or len(set(group)) != len(group) or any(x in seen for x in group)):
+            raise ValueError("Invalid or overlapping song alias group")
+        seen.update(group)
+        roots = {aliases.get(x, x) for x in group}
+        canonical = min(roots)
+        aliases = {key: canonical if value in roots else value for key, value in aliases.items()}
+        aliases.update((x, canonical) for x in group)
+    return aliases
+
+
+def song_query_view(cls, objs, where):
+    """Compare cached song IDs canonically without modifying stored records.
+
+    Object IDs, file names and URLs remain intact so updates and ghost downloads
+    still refer to their original records. Only song identity is translated.
+    """
+    field = ("SongID" if cls == "Score" else "song" if cls.startswith("ghost_v")
+             else "name" if cls == "FileData" else None)
+    if field is None or not isinstance(where, dict) or field not in where:
+        return objs, where
+    aliases = song_aliases()
+
+    def canonical(value):
+        if isinstance(value, str):
+            if cls == "FileData":
+                parts = song_file_parts(value)
+                return aliases.get(parts[0], parts[0]) + parts[1] if parts else value
+            return aliases.get(value, value)
+        if isinstance(value, list):
+            return [canonical(v) for v in value]
+        if isinstance(value, dict):
+            return {k: canonical(v) if k in ("$in", "$nin", "$ne") else v for k, v in value.items()}
+        return value
+
+    return [dict(o, **{field: canonical(o[field])}) if field in o else o for o in objs], dict(where, **{field: canonical(where[field])})
+
+
+def song_file_parts(name):
+    match = re.fullmatch(r"([A-Za-z0-9_-]+?)(-[0-9]+\.ghost|_v[0-9]+\.bin)", name)
+    return match.groups() if match else None
 
 
 def sort_objects(objs, order_spec):
@@ -430,6 +482,19 @@ def upload_file(filename):
 def download_file(filename):
     name = safe_name(filename)
     path = os.path.join(FILES_DIR, name)
+    # The game builds ghost names from its own cached ID plus the selected user.
+    # Resolve equivalent IDs on reads; preserve the original upload and URL.
+    if not os.path.isfile(path):
+        parts = song_file_parts(name)
+        if parts:
+            with STORAGE_LOCK:
+                aliases = song_aliases()
+                root = aliases.get(parts[0], parts[0])
+                for song_id, canonical in sorted(aliases.items()):
+                    candidate = os.path.join(FILES_DIR, song_id + parts[1])
+                    if canonical == root and os.path.isfile(candidate):
+                        path = candidate
+                        break
     if not os.path.isfile(path):
         return error_response(404, 101, "File not found: %s" % name)
     mime = mimetypes.guess_type(name)[0] or "application/octet-stream"
@@ -478,7 +543,25 @@ def query_class(cls):
     with STORAGE_LOCK:
         objs = load_all_objects(cls)
 
-    filtered = [o for o in objs if matches_where(o, where)]
+    if cls == "News":
+        objs = news_response(objs)
+
+    views, match_where = song_query_view(cls, objs, where)
+    filtered = [o for o, view in zip(objs, views) if matches_where(view, match_where)]
+    # A player may already have records under several equivalent cached IDs.
+    # Rank their best score once, while retaining every stored record for undo.
+    identity_field = 'SongID' if cls == 'Score' else 'song' if cls.startswith('ghost_v') else None
+    if identity_field and isinstance(where, dict) and identity_field in where:
+        aliases = song_aliases()
+        best = {}
+        for obj in filtered:
+            owner = obj.get('Owner' if cls == 'Score' else 'user', obj['objectId'])
+            song = obj.get(identity_field)
+            key = (aliases.get(song, song), str(owner), str(obj.get('Mode')), str(obj.get('Version')))
+            score_field = 'Score' if cls == 'Score' else 'score'
+            if key not in best or compare_values(obj.get(score_field, 0), best[key].get(score_field, 0)) > 0:
+                best[key] = obj
+        filtered = list(best.values())
     total = len(filtered)
 
     order = args.get("order")
@@ -865,6 +948,18 @@ def admin_log():
             out = f.readlines()[-lines_n:]
     return jsonify({"lines": [l.rstrip("\n") for l in out]})
 
+
+_catalog_spec = importlib.util.spec_from_file_location(
+    'reriff_song_catalog', os.path.join(BASE_DIR, 'song_catalog.py'))
+_catalog_module = importlib.util.module_from_spec(_catalog_spec)
+_catalog_spec.loader.exec_module(_catalog_module)
+_catalog_module.install(globals())
+
+_news_spec = importlib.util.spec_from_file_location(
+    'reriff_news_adapter', os.path.join(BASE_DIR, 'news_adapter.py'))
+_news_module = importlib.util.module_from_spec(_news_spec)
+_news_spec.loader.exec_module(_news_module)
+_news_module.install(globals())
 
 if __name__ == "__main__":
     ensure_dirs()

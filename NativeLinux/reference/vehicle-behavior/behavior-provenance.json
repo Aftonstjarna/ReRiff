@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "game_sha256": "2d1af8a01ec6b1e3477ff6dbe4a44895828e2ac71449344fec9d7d99e87a58e2",
+  "method_bodies_changed": false,
+  "capture_sha256": "049286a7d822498702573652297c2f3fceb4530b6c3492374f5e34a0791f1b22",
+  "vehicle_config_sha256": "07a24c4db6af0fb998d9009a70caf7967719c20e65f189cce08ebfee023acacd",
+  "host_source_sha256": "104c8c5e7e03775fd3f06c1f0ee5395f0454306d5b5badf426e385255c6c3ab8",
+  "vehicle_host_source_sha256": "4d7bef5fcc9299d342c1523005c13e287d758a44434c88c75169c037d99e31a4",
+  "runtime": "MONO_RUNTIME=False CLR=4.0.30319.34209 LOADED_CLR=C:\\windows\\Microsoft.NET\\Framework\\v4.0.30319\\clr.dll POINTER_BYTES=4",
+  "scope": "Isolated unchanged original routines with supplied object state; not a rigid-body simulation"
+}

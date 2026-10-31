@@ -8,7 +8,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
 
-unsafe class OriginalSongCapture
+unsafe partial class OriginalSongCapture
 {
     const BindingFlags Flags = BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
     static Module module;
@@ -172,6 +172,51 @@ unsafe class OriginalSongCapture
             IntPtr managerPtr=Global("?s_instance@gaNodeManager@@0PAV1@A");int* manager=(int*)managerPtr;
             int bytes=manager[2]-manager[1];if(bytes%244!=0 || bytes<=0) throw new IOException("Invalid node vector");
             Directory.CreateDirectory(args[3]);Dump((IntPtr)manager[1],bytes,Path.Combine(args[3],"original-nodes.bin"));
+            // getSplineTForSongTime only reads this object's cached first-beat
+            // pointer. Provide that input without starting entity/game systems.
+            Console.WriteLine("CALL=gaNodeManager.fixupNetwork (timing context)");
+            Call("gaNodeManager.fixupNetwork",managerPtr);
+            IntPtr timingManager=Alloc(432),distanceOut=Alloc(4);
+            int firstNode=((int*)generator)[88];
+            *(int*)((byte*)timingManager+428)=manager[1]+firstNode*244;
+            var timing=new StringBuilder();float beatSpan=((float*)generator)[40];
+            for(int i=0;i<=100;i++)
+            {
+                float seconds=(float)((double)beatSpan*i/100.0);
+                float parameter=(float)Call("gaTrackEntityManager.getSplineTForSongTime",timingManager,seconds,IntPtr.Zero,distanceOut);
+                timing.Append(F(seconds)+"\t"+F(parameter)+"\t"+F(*(float*)distanceOut)+"\n");
+            }
+            File.WriteAllText(Path.Combine(args[3],"original-timing.tsv"),timing.ToString());
+            // Scalar vehicle helpers read only explicitly supplied plain data.
+            // This does not initialize a rigid body or certify full handling.
+            IntPtr parameters=Alloc(1024),vehicle=Alloc(2048),gearbox=Alloc(128);
+            float* values=(float*)parameters;
+            values[5]=30f;values[11]=6f;values[9]=0f;values[129]=8f;
+            Call("gaVehicleParams.updateInterpolatedValues",parameters);
+            *(int*)((byte*)vehicle+332)=(int)parameters;
+            var steering=new StringBuilder();
+            foreach(float speed in new float[] {-80f,0f,5f,10f,30f,100f})
+            foreach(float drift in new float[] {0f,.5f,1f})
+            foreach(float input in new float[] {-1f,1f})
+            foreach(float bias in new float[] {-.5f,0f,.5f})
+            {
+                ((float*)vehicle)[276]=drift;((float*)vehicle)[268]=input;((float*)vehicle)[284]=bias;
+                float result=(float)Call("gaVehiclePhys.phys_calcSteer",vehicle,speed);
+                steering.Append(F(speed)+"\t"+F(drift)+"\t"+F(input)+"\t"+F(bias)+"\t"+F(result)+"\n");
+            }
+            File.WriteAllText(Path.Combine(args[3],"original-steering.tsv"),steering.ToString());
+            var brakes=new StringBuilder();
+            foreach(bool toggle in new bool[] {false,true})
+            foreach(int gear in new int[] {-1,0,1})
+            foreach(float speed in new float[] {-2f,-.2f,0f,.2f,2f})
+            foreach(float input in new float[] {-1f,0f,1f})
+            {
+                ((byte*)gearbox)[24]=(byte)(toggle?1:0);((int*)gearbox)[7]=gear;((float*)gearbox)[8]=speed;
+                float result=(float)Call("gaVehicleGearbox.determineBrakeInput",gearbox,input);
+                brakes.Append((toggle?1:0)+"\t"+gear+"\t"+F(speed)+"\t"+F(input)+"\t"+F(result)+"\n");
+            }
+            File.WriteAllText(Path.Combine(args[3],"original-braking.tsv"),brakes.ToString());
+            CaptureVehicleBehavior(args[2],args[3]);
             int* sm=(int*)Global("?ms_pInstance@gaSegmentManager@@0PAV1@A");
             int segments=(sm[6]-sm[5])/80;
             var text=new StringBuilder();

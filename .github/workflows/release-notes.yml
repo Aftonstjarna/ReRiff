@@ -1,0 +1,36 @@
+name: Update latest release notes
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - RELEASE-NOTES.md
+      - packaging/release_notes.py
+      - .github/workflows/release-notes.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: latest-release-notes
+  cancel-in-progress: false
+
+jobs:
+  notes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Update only the latest published version's notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag=$(gh release view --json tagName --jq .tagName)
+          python packaging/release_notes.py --version "$tag" --output "$RUNNER_TEMP/RELEASE-NOTES.md"
+          gh release edit "$tag" --notes-file "$RUNNER_TEMP/RELEASE-NOTES.md"
+          gh release upload "$tag" "$RUNNER_TEMP/RELEASE-NOTES.md" --clobber

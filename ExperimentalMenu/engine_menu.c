@@ -9,6 +9,12 @@
 #include <string.h>
 #include <wchar.h>
 
+#define DllMain NotificationDllMain
+#define ReRiffShowServerToastW NativeServerToastW
+#include "../NativeLauncher/notification.c"
+#undef ReRiffShowServerToastW
+#undef DllMain
+
 typedef void (__thiscall *ScreenFn)(void *,void *,void *);
 typedef void (__thiscall *InputFn)(void *,int);
 typedef void (__thiscall *TickFn)(void *);
@@ -17,7 +23,7 @@ typedef void (__thiscall *ColourFn)(void *,int,const float *);
 typedef void (__thiscall *RawTextFn)(void *,const WCHAR *);
 typedef void (__thiscall *KeyTextFn)(void *,const char *);
 typedef const char *(__thiscall *TitleFn)(void *);
-typedef struct Settings { WCHAR external[2048], fallback[2048]; BOOL only; } Settings;
+typedef struct Settings { WCHAR external[2048], fallback[2048]; BOOL only, enabled; } Settings;
 static ScreenFn original_init, original_cleanup;
 static InputFn original_input;
 static TickFn original_tick;
@@ -47,6 +53,8 @@ static void load_settings(void) {
     GetPrivateProfileStringW(L"server",L"fallback_url",L"",pending.fallback,2048,config_path);
     GetPrivateProfileStringW(L"server",L"external_only",L"false",value,32,config_path);
     pending.only=!_wcsicmp(value,L"true") || !_wcsicmp(value,L"yes") || !wcscmp(value,L"1");
+    GetPrivateProfileStringW(L"server",L"networking_enabled",L"true",value,32,config_path);
+    pending.enabled=_wcsicmp(value,L"false") && _wcsicmp(value,L"no") && wcscmp(value,L"0");
 }
 
 static BOOL save_settings(void) {
@@ -61,7 +69,8 @@ static BOOL save_settings(void) {
     }
     BOOL ok=WritePrivateProfileStringW(L"server",L"external_url",pending.external,temp)
         && WritePrivateProfileStringW(L"server",L"fallback_url",pending.fallback,temp)
-        && WritePrivateProfileStringW(L"server",L"external_only",pending.only?L"true":L"false",temp);
+        && WritePrivateProfileStringW(L"server",L"external_only",pending.only?L"true":L"false",temp)
+        && WritePrivateProfileStringW(L"server",L"networking_enabled",pending.enabled?L"true":L"false",temp);
     if (ok) {
         WritePrivateProfileStringW(NULL,NULL,NULL,temp);
         ok=MoveFileExW(temp,config_path,MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH);
@@ -116,7 +125,7 @@ static void render(void *menu) {
     for (int id=1;id<=10;id++) {
         void *text=item_text(menu,id);
         if (!text) continue;
-        if (server_page) raw_text(text,id==4?only:labels[id]);
+        if (server_page) raw_text(text,id==4?only:id==5?(pending.enabled?L"Disable networking":L"Enable networking"):labels[id]);
         else if (id==SERVERS_ID) raw_text(text,L"Servers");
         else key_text(text,original_labels[id]);
         void *item=((void **)menu)[62+id];
@@ -155,18 +164,18 @@ static void __thiscall hook_input(void *menu,int selection) {
     }
     switch (selection) {
     case 2:
-        pending.external[0]=0; wcscpy(pending.fallback,L"http://127.0.0.1:5144"); pending.only=FALSE;
+        pending.external[0]=0; wcscpy(pending.fallback,L"http://127.0.0.1:5144"); pending.only=FALSE; pending.enabled=TRUE;
         wcscpy(heading,L"Local selected — Save to apply after restart"); break;
     case 3: {
         Settings selected=pending; load_settings();
-        wcscpy(selected.external,pending.external); pending=selected; pending.only=TRUE;
+        wcscpy(selected.external,pending.external); pending=selected; pending.only=TRUE; pending.enabled=TRUE;
         wcscpy(heading,*pending.external?L"External selected — Save to apply after restart":L"No external URL configured in server.ini");
         break;
     }
     case 4: pending.only=!pending.only; break;
     case 5:
-        pending.external[0]=pending.fallback[0]=0; pending.only=FALSE;
-        wcscpy(heading,L"Offline selected — Save to apply after restart"); break;
+        pending.enabled=!pending.enabled;
+        wcscpy(heading,pending.enabled?L"Networking enabled — Save to apply after restart":L"Networking disabled — addresses retained"); break;
     case 6: case 10:
         if (save_settings()) {
             wcscpy(heading,L"Saved — restart game to apply");
@@ -263,13 +272,11 @@ __declspec(dllexport) BOOL __cdecl ReRiffStartEngineMenu(void) {
     InterlockedExchange(&installed,2); log_line("Engine menu hooks installed."); return TRUE;
 }
 
-/* Existing patched client calls this export. No overlay/toast is created. */
+/* Menu startup and the optional existing server toast have separate jobs. */
 __declspec(dllexport) void __cdecl ReRiffShowServerToastW(const WCHAR *endpoint) {
-    (void)endpoint; ReRiffStartEngineMenu();
+    ReRiffStartEngineMenu(); NativeServerToastW(endpoint);
 }
 
 BOOL WINAPI DllMain(HINSTANCE instance,DWORD reason,LPVOID reserved) {
-    (void)reserved;
-    if (reason==DLL_PROCESS_ATTACH) DisableThreadLibraryCalls(instance);
-    return TRUE;
+    return NotificationDllMain(instance,reason,reserved);
 }

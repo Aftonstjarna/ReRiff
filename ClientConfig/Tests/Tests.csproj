@@ -1,4 +1,4 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings></PropertyGroup>
-  <ItemGroup><Reference Include="ReRiff.ClientConfig"><HintPath>../../build/ReRiff.ClientConfig.dll</HintPath></Reference></ItemGroup>
+  <ItemGroup><Compile Remove="NetworkingToggle.cs" /><Reference Include="ReRiff.ClientConfig"><HintPath>../../build/ReRiff.ClientConfig.dll</HintPath></Reference></ItemGroup>
 </Project>

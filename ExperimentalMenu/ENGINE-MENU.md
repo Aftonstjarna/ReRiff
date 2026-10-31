@@ -2,8 +2,8 @@
 
 This is the corrected experiment on `codex/experimental-ingame-menu`. It hooks
 the original `gaMainMenu` callbacks and edits existing `elUIItemText` objects
-through the game's native text functions. It creates no windows, polls no keys,
-and uses no overlay renderer. Original menu focus, mouse/keyboard/controller
+through the game's native text functions. The menu itself creates no windows,
+polls no keys, and uses no overlay renderer. Original menu focus, mouse/keyboard/controller
 selection dispatch and rendering remain responsible for interaction.
 
 The prototype temporarily replaces **Friends** with **Servers**. News retains
@@ -30,20 +30,30 @@ Close Game.exe before installing/restoring. From this workspace:
 
 ```sh
 distrobox enter development -- bash /var/home/afton/.dev/ReRiff/ExperimentalMenu/build-engine.sh
-distrobox enter development -- python3 /var/home/afton/.dev/ReRiff/ExperimentalMenu/install_engine.py --game-dir '/var/home/afton/.local/share/Steam/steamapps/common/Riff Racer'
+distrobox enter development -- python3 /var/home/afton/.dev/ReRiff/ExperimentalMenu/setup_client.py --game-dir '/var/home/afton/.local/share/Steam/steamapps/common/Riff Racer'
 ```
 
-The installer changes only `ReRiff.Notify.dll` and backs up the prior DLL with
-hash verification under `backups/experimental-engine-menu`. It does not change
-Game.exe, Parse patches, ClientConfig, server.ini or launcher files.
+Setup accepts the supported vanilla DLLs or an existing ReRiff client. It backs
+up the exact prior files under the game's **bak** folder, applies the endpoint/
+offline patches when missing, adds client-version reporting, and installs the
+engine menu and updated helper. An existing endpoint patch is preserved byte for
+byte. Unknown unsupported input DLLs are refused. Game.exe, server.ini, launcher
+files and saved data are preserved. An interrupted installation rolls back.
+
+Original DLL backups are in `bak/originals`; trial records and exact pre-trial
+snapshots are in `bak/experimental-engine-menu`. Older trial records and the
+active installer backup history are migrated there with verification. Explicit
+backup-directory overrides on the standard installer remain available.
 
 ```sh
-distrobox enter development -- python3 /var/home/afton/.dev/ReRiff/ExperimentalMenu/install_engine.py --game-dir '/var/home/afton/.local/share/Steam/steamapps/common/Riff Racer' --restore
+distrobox enter development -- python3 /var/home/afton/.dev/ReRiff/ExperimentalMenu/setup_client.py --game-dir '/var/home/afton/.local/share/Steam/steamapps/common/Riff Racer' --restore
 ```
 
-The existing patched ClientConfig must call its notification export to load the
-DLL, so `show_server_popup=true` remains the startup trigger. Despite that setting's
-name, this build displays no popup. Hook installation occurs at that call and
+The updated ClientConfig loads the menu through its dedicated startup export,
+independently of `show_server_popup`. It still supports ordinary notification
+DLLs by tolerating a missing menu export. The optional selected-server toast is
+preserved and follows `show_server_popup`; it is separate from the engine menu.
+Hook installation occurs during client initialization and
 the new label appears when the original main menu initializes. If initialization
 already happened, return to/recreate the main menu. The DLL stays loaded for the
 process lifetime. Installation and refusal reasons go to
@@ -103,5 +113,28 @@ and page-open log entries distinguish loading from successful menu use. A live
 failure should be investigated or rolled back; passing the harness is not a
 claim that the actual game screen works.
 
+Fresh vanilla and existing modified-client installation/restore tests use the
+actual supported DLLs in disposable game directories. They verify exact rollback,
+the game-local bak folder, preservation of the existing endpoint DLL, interrupted
+write rollback, and a separate backend extension which leaves the song library
+and unrelated server code intact.
+
 No matching-reconstruction credit: baseline remains 64,760 / 8,635,392 bytes
 (0.749937%). This DLL is an intentional mod, separate from `decomp` recovery.
+
+## Save and Play
+
+The launcher now has separate Save settings and Play actions. Play uses the
+settings already saved on disk; it never saves the launcher's unsaved fields.
+`--skip` and `--skip-launcher` are aliases for that direct Play path. After a game
+closes, launcher controls reload the saved settings so an explicit later Save
+cannot inadvertently restore stale values from before the game session.
+Local backend startup occurs only for a configured localhost:5144 fallback,
+so offline and external-only Play do not depend on a local server. The installed
+Linux start script's empty interpreter command was repaired; installer generation
+also resolves a native Python fallback when its own executable path is unavailable.
+
+Proton regressions verify atomically saved in-game settings survive this reload,
+Play leaves unsaved fields out of the INI, both skip aliases launch a disposable
+fake game without changing the INI, and the combined menu DLL's toast appears
+without taking focus and dismisses itself. Exact pre-trial backups remain in bak.

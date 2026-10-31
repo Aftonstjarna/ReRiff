@@ -21,6 +21,7 @@ namespace ReRiff {
                     string folder = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
                     selected = Select(folder);
                     initialized = true;
+                    StartEngineMenu();
                     bool showPopup = true;
                     try {
                         string setting;
@@ -37,6 +38,16 @@ namespace ReRiff {
         }
 
         public static bool CanSend() { return GetServer() != Disabled; }
+
+        [DllImport("ReRiff.Notify.dll", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        private static extern int ReRiffStartEngineMenu();
+
+        private static void StartEngineMenu() {
+            try { ReRiffStartEngineMenu(); }
+            catch (DllNotFoundException) { }
+            catch (EntryPointNotFoundException) { }
+            catch (BadImageFormatException) { }
+        }
 
         [DllImport("ReRiff.Notify.dll", CharSet = CharSet.Unicode,
                    CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
@@ -62,6 +73,12 @@ namespace ReRiff {
             int timeout = 5000;
             try {
                 var values = ReadIni(config);
+                string enabled;
+                if (values.TryGetValue("networking_enabled", out enabled)
+                    && (enabled.Equals("false", StringComparison.OrdinalIgnoreCase) || enabled == "0" || enabled.Equals("no", StringComparison.OrdinalIgnoreCase))) {
+                    Log(folder, Disabled, "networking_disabled");
+                    return Disabled;
+                }
                 values.TryGetValue("external_url", out external);
                 values.TryGetValue("fallback_url", out fallback);
                 string raw;
