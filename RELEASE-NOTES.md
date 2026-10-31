@@ -1,3 +1,15 @@
+# ReRiff 0.1.6 — Updater verification release
+
+This release provides a new version to test **Update from GitHub** from v0.1.5.
+It retains v0.1.5's updater and server-stop fixes without additional behavior
+changes. It is published as a normal release so the stable-release updater can
+find it.
+
+To verify: click **Update from GitHub**, allow the launcher to reopen, and confirm
+the title reads `ReRiff Launcher v0.1.6`. Settings and saved data should remain.
+An already stopped local server must not block the update; a running owned local
+backend is stopped before installation. Docker servers are left untouched.
+
 # ReRiff 0.1.5 — Proton update shutdown fix
 
 - Confirm local-server stop results through an atomic completion marker instead
