@@ -325,6 +325,18 @@ location. Existing installations continue using their recorded backup directory.
 
 ## Troubleshooting
 
+For a white-screen crash on Windows, install the complete package with
+`ReRiff-Setup.exe` first; copying the launcher alone leaves required helpers
+missing. If the crash persists, run the included collector from the game folder:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File ".\Collect-ReRiffStartup.ps1"
+```
+
+It prints the path to a report in your temporary folder. Review it before
+sharing: it includes local paths and recent client logs. It does not change
+game files or Windows settings. The white-screen crash remains under investigation.
+
 - **Game folder not found:** pass `--game-dir` with the folder containing
   `Game.exe`; use Steam's **Browse** button to locate it.
 - **Launcher does not open under Proton:** check the quoted bridge path and

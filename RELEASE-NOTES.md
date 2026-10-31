@@ -1,3 +1,18 @@
+# ReRiff 1.2.1 — Experimental Windows startup testing
+
+- Include the read-only Windows startup report collector beside Game.exe. It
+  gathers installed component hashes, client logs, display driver information,
+  and recent game crash events without changing game or Windows settings.
+- Accept Steam-forwarded game commands on native Windows.
+- Replace the launcher Servers placeholder with a saved skip-launcher option.
+- Refresh the experimental update channel to this build while retaining the
+  existing stable release.
+
+Extract the entire Windows ZIP and run ReRiff-Setup.exe, selecting Game.exe.
+Copying only the launcher does not install the required DLLs and helpers.
+The reported white-screen crash has not yet been diagnosed; this prerelease
+provides the startup report needed to investigate it.
+
 # ReRiff 1.2.0 — Experimental in-game server management
 
 This is an experimental prerelease. Stable releases remain on their existing channel.
