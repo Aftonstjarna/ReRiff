@@ -18,7 +18,7 @@ def safe_name(name):
     return path
 
 
-def prepare(archive, expected, work, game, platform):
+def prepare(archive, expected, work, game, platform, channel=None):
     if hashlib.sha256(archive.read_bytes()).hexdigest() != expected.lower():
         raise ValueError('Release checksum mismatch')
     target = work/'extracted'
@@ -66,6 +66,8 @@ def prepare(archive, expected, work, game, platform):
     manifest = json.loads(manifests[0].read_text())
     if manifest.get('platform') != platform or not manifest.get('update_only'):
         raise ValueError('Expected an update-only package for this platform')
+    if channel is not None and manifest.get("channel", "stable") != channel:
+        raise ValueError("Release channel mismatch")
     installer = load_installer(root)
     installer.install(root, game, None, platform, dry_run=True)
     if platform == 'windows':
@@ -102,6 +104,7 @@ def apply(work):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--work', type=Path, required=True)
+    parser.add_argument('--channel', choices=['stable', 'experimental'])
     parser.add_argument('--prepare', action='store_true')
     parser.add_argument('--archive', type=Path)
     parser.add_argument('--sha256')
@@ -111,7 +114,7 @@ def main():
     try:
         with (args.work/'update.log').open('a', encoding='utf-8') as log, contextlib.redirect_stdout(log), contextlib.redirect_stderr(log):
             if args.prepare:
-                prepare(args.archive, args.sha256, args.work, args.game_dir, args.platform)
+                prepare(args.archive, args.sha256, args.work, args.game_dir, args.platform, args.channel)
             else:
                 apply(args.work)
     except Exception as error:

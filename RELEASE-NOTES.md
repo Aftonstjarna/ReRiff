@@ -1,3 +1,11 @@
+# ReRiff 0.1.10 — Launcher release channels
+
+- Add a checkbox to switch between experimental builds and the stable release.
+- Uncheck it to restore stable, including when stable has the same or an older version.
+- Show Experimental beside the version in the title bar for installed experimental builds.
+- Verify release checksums and channel metadata before installing. Failed switches retain the installed channel and files.
+- Keep this release focused on the launcher; the experimental in-game menu is not included.
+
 # ReRiff 0.1.9 — Vanilla installation support
 
 - Install onto supported unmodified game files by patching the user's DLLs locally.

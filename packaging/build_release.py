@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import io
+import os
 import json
 from pathlib import Path
 import re
@@ -25,6 +26,9 @@ def copy(source, destination):
 
 
 def build(args):
+    channel = os.environ.get('RERIFF_RELEASE_CHANNEL', 'stable')
+    if channel not in ('stable', 'experimental'):
+        raise ValueError('Invalid release channel')
     version = (ROOT/'VERSION').read_text().strip()
     notes = release_notes((ROOT/'RELEASE-NOTES.md').read_text(encoding='utf-8'), version)
     if not re.fullmatch(r'\d+\.\d+\.\d+', version):
@@ -107,7 +111,7 @@ def build(args):
             with zipfile.ZipFile(args.python_zip) as archive:
                 archive.extractall(folder/'python')
             (folder/'python/python313._pth').write_text('python313.zip\n.\n..\nimport site\n')
-        manifest = {'version':version,'commit':commit,'platform':platform,'patches':patches,
+        manifest = {'channel':channel,'version':version,'commit':commit,'platform':platform,'patches':patches,
                     'update_only':update_only,
                     'required_existing':json.loads((ROOT/'packaging/required-client.json').read_text()) if update_only else {},
                     'vanilla_originals':json.loads((ROOT/'packaging/original-client.json').read_text()) if args.local_patching else {},
