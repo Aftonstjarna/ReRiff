@@ -19,20 +19,25 @@ Docker publishing are maintained here.
 
 ## Install or update
 
-**Public client releases are update-only.** An existing supported ReRiff
-installation is required; these downloads do not patch a clean game installation.
-They verify the supported patched DLL hashes and update ReRiff's own components.
-Original game executables, assets, and game-derived DLL patches are not included.
+**Installers support vanilla and existing ReRiff installations.** Setup checks
+the original DLL hashes and patches your local copies of `ParseOctane.dll` and
+`Parse.NetFx45.dll`, or keeps already-supported patched copies. Original game
+executables, assets, and game-derived binary patches are not included.
+Releases through v0.1.8 were update-only and cannot install onto a vanilla game.
 
 Close the game and launcher before a manual installation. Existing settings,
 scores, ghosts, and server data are preserved. Backups stay outside the game
 folder, using the installation's recorded backup location. Unknown game DLL
-modifications are rejected rather than overwritten.
+modifications are rejected rather than overwritten. Matching vanilla backups
+are checked by SHA256, kept unchanged, and skipped so installation can continue.
+A conflicting backup stops installation without overwriting it.
 
 **Windows:** download and extract `ReRiff-<version>-windows.zip`, run
 `ReRiff-Setup.exe`, and select the game's `Game.exe`. Keep the ZIP contents
 together until setup finishes. Portable Python and server dependencies are
-included. The package targets x64 Windows; the launcher is native x86 Win32.
+included. Local DLL patching uses .NET Framework 4.5 or newer, already required
+by the game's managed libraries; it does not need the .NET 8 SDK or runtime.
+The package targets x64 Windows; the launcher is native x86 Win32.
 
 **Linux/Proton (x86_64):** install Python 3.10 or newer, then run:
 
@@ -44,6 +49,8 @@ Replace `<version>` with the downloaded release number. Omit `--game-dir` to
 search common Steam libraries. Do not use `sudo`. The installer bundles the
 server libraries and places the backend in `localserver/` beside `Game.exe`.
 It does not change Steam's selected Proton version or launch options.
+For a vanilla installation, Mono must also be available on Linux to run the
+local DLL patcher. Updating an already-patched installation does not need Mono.
 
 ### Automatic client updates
 
@@ -284,8 +291,7 @@ python3 "/path/to/Riff Racer/localserver/trace-server.py" --report /path/to/sess
 
 ## Restore original DLLs
 
-Update-only releases do not modify or restore the game's patched DLLs. Use the
-original full installer and its backups with `--restore --game-dir '...'` to
+Use a current installer and its backups with `--restore --game-dir '...'` to
 restore original DLLs while retaining the server, settings, and saved data.
 Keep the recorded backup folder. Original game runtime dependencies still apply.
 
@@ -301,7 +307,7 @@ On Windows:
 ReRiff-Setup.exe --restore --game-dir "C:\path\to\Riff Racer"
 ```
 
-Current update-only packages reject restore mode. `--dry-run` validates a manual
+Older update-only packages reject restore mode. `--dry-run` validates a manual
 installation without writing files; `--backup-dir` selects an explicit backup
 location. Existing installations continue using their recorded backup directory.
 
@@ -350,6 +356,7 @@ Client source builds use .NET SDK 8 and Zig 0.14.1:
 
 ```sh
 dotnet build ClientConfig/ClientConfig.csproj -c Release -o build
+dotnet build Patcher/InstallerPatcher.csproj -c Release -o build/installer-patcher
 python3 scripts/build-windows-launcher.py --zig /path/to/zig
 python3 scripts/build-song-catalog.py --zig /path/to/zig
 ```
@@ -362,7 +369,7 @@ For installer builds, obtain the pinned wheels in `packaging/requirements.txt`
 and the verified Windows portable Python archive, then run:
 
 ```sh
-python3 packaging/build_release.py --update-only --wheels-dir /path/to/wheels --python-zip /path/to/python.zip
+python3 packaging/build_release.py --local-patching --wheels-dir /path/to/wheels --python-zip /path/to/python.zip
 ```
 
 Updating `VERSION` on `main` or `launcher` triggers GitHub's client release

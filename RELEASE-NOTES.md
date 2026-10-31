@@ -1,3 +1,16 @@
+# ReRiff 0.1.9 — Vanilla installation support
+
+- Install onto supported unmodified game files by patching the user's DLLs locally.
+  Packages include the source-built patcher, not game DLLs or binary deltas.
+- Verify both original and patched DLL hashes before changing the installation.
+- Keep matching vanilla backups unchanged and continue installation. Reject
+  conflicting backup hashes without overwriting them, and roll back game files
+  if installation fails.
+- Support restoring verified original backups with the current installer.
+- Fresh Windows installs use the game's .NET Framework runtime for patching;
+  fresh Linux installs require Mono. Existing patched installs need neither
+  patching step and retain their settings and saved data.
+
 # ReRiff 0.1.8 — Repository name alignment
 
 - Use Aftonstjarna/ReRiff as the primary combined server-and-launcher repository

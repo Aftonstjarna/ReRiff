@@ -9,6 +9,8 @@ import re
 import shlex
 import sys
 import tempfile
+import shutil
+import subprocess
 
 from shared_patch import apply_patch, digest
 
@@ -61,6 +63,57 @@ def replace(path, data):
         temporary.unlink(missing_ok=True)
 
 
+def patch_vanilla(bundle, game, backups, manifest, restore):
+    """Run the source-built patcher on private copies, before changing the game."""
+    supported = manifest['vanilla_originals']
+    expected = manifest['required_existing']
+    originals, plan, needs_patch = {}, {}, []
+    for name, original_hash in supported.items():
+        path = game/name
+        if not path.is_file():
+            raise ValueError('Required game DLL is missing: '+str(path))
+        current = path.read_bytes()
+        current_hash = digest(current)
+        if current_hash not in (original_hash, expected[name]):
+            raise ValueError('Unsupported game DLL; refusing to overwrite: '+str(path))
+        saved = backups/'originals'/name
+        if saved.exists():
+            data = saved.read_bytes()
+            if digest(data) != original_hash:
+                raise ValueError('Original backup hash mismatch; backup retained: '+str(saved))
+            originals[name] = data
+        elif current_hash == original_hash:
+            originals[name] = current
+        elif restore:
+            raise ValueError('Original backup missing: '+str(saved))
+        if restore:
+            plan[name] = originals[name]
+        elif current_hash == original_hash:
+            needs_patch.append(name)
+    if needs_patch:
+        patcher = bundle/'patcher/ReRiff-Patcher.exe'
+        command = [str(patcher)]
+        if os.name != 'nt':
+            mono = shutil.which('mono')
+            if not mono:
+                raise ValueError('A fresh Linux installation requires Mono to patch the original DLLs. Install Mono, then run setup again. Existing patched installations do not require Mono.')
+            command.insert(0, mono)
+        with tempfile.TemporaryDirectory(prefix='reriff-patch-') as temporary:
+            for name in needs_patch:
+                source, output = Path(temporary)/name, Path(temporary)/('patched-'+name)
+                source.write_bytes(originals[name])
+                mode = ['--offline-gate'] if name == 'Parse.NetFx45.dll' else []
+                result = subprocess.run(command+mode+[str(source), str(bundle/'payload/ReRiff.ClientConfig.dll'), str(output)],
+                                        capture_output=True, text=True, timeout=120)
+                if result.returncode:
+                    raise ValueError('Local DLL patching failed for '+name+': '+result.stdout+result.stderr)
+                data = output.read_bytes()
+                if digest(data) != expected[name]:
+                    raise ValueError('Local patch output hash mismatch: '+name)
+                plan[name] = data
+    return originals, plan
+
+
 def install(bundle, game, backups, platform, dry_run=False, restore=False):
     if not (game/'Game.exe').is_file():
         raise ValueError(f'Game.exe was not found in {game}')
@@ -73,7 +126,8 @@ def install(bundle, game, backups, platform, dry_run=False, restore=False):
             raise ValueError('Package integrity check failed: '+name)
     state_path = game/'localserver/install-state.json'
     state = json.loads(state_path.read_text()) if state_path.exists() else {}
-    if manifest.get('update_only'):
+    local_patching = bool(manifest.get('vanilla_originals'))
+    if manifest.get('update_only') and not local_patching:
         if restore:
             raise ValueError('This update does not modify game DLLs. Use the original full installer to restore them.')
         for name, expected in manifest['required_existing'].items():
@@ -85,6 +139,8 @@ def install(bundle, game, backups, platform, dry_run=False, restore=False):
         backups = Path(state['backup_dir'])
     backups = backups or backup_base(game)
     originals, plan = {}, {}
+    if local_patching:
+        originals, plan = patch_vanilla(bundle, game, backups, manifest, restore)
     for name, patch_info in manifest['patches'].items():
         current = (game/name).read_bytes()
         saved = backups/'originals'/name
@@ -126,17 +182,30 @@ def install(bundle, game, backups, platform, dry_run=False, restore=False):
         if not (game/'server.ini').exists():
             plan['server.ini'] = b'[server]\nexternal_url =\nfallback_url = http://127.0.0.1:5144\ntimeout_seconds = 5\nshow_server_popup = true\n'
         next_state = {'version': manifest['version'], 'backup_dir': str(backups),
-                      'patched': {n: digest(plan[n]) for n in originals} if originals else state.get('patched',manifest.get('required_existing',{}))}
+                      'patched': manifest.get('required_existing', {}) if local_patching else ({n: digest(plan[n]) for n in originals} if originals else state.get('patched',manifest.get('required_existing',{})))}
         plan['localserver/install-state.json'] = (json.dumps(next_state, indent=2)+'\n').encode()
     if dry_run:
         print(f'Validated ReRiff {manifest["version"]}: {len(plan)} files; backups: {backups}')
         return plan
+    # Check every existing backup before creating any backup or changing game files.
     for name, original in originals.items():
         saved = backups/'originals'/name
-        if saved.exists() and saved.read_bytes() != original:
+        if saved.exists() and digest(saved.read_bytes()) != digest(original):
             raise ValueError('Original backup conflict: '+str(saved))
+    for name, original in originals.items():
+        saved = backups/'originals'/name
         if not saved.exists():
-            replace(saved, original)
+            saved.parent.mkdir(parents=True, exist_ok=True)
+            # Exclusive creation also prevents a concurrently created backup
+            # from being overwritten between validation and writing.
+            try:
+                with saved.open('xb') as stream:
+                    stream.write(original)
+            except FileExistsError:
+                if digest(saved.read_bytes()) != digest(original):
+                    raise ValueError('Original backup conflict: '+str(saved))
+        else:
+            print('Verified original backup; kept unchanged: '+str(saved))
     previous, changed = {}, []
     try:
         for relative, data in plan.items():
