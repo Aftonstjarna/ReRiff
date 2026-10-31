@@ -71,13 +71,17 @@ static BOOL update_command(WCHAR *out,const WCHAR *work,const WCHAR *archive,con
         if(prepare)_snwprintf(out,CAP,L"\"%ls\" \"%ls\" --work \"%ls\" --prepare --archive \"%ls\" --sha256 %ls --game-dir \"%ls\" --platform windows",python,tool,work,archive,hash,folder);
         else _snwprintf(out,CAP,L"\"%ls\" \"%ls\" --work \"%ls\"",python,tool,work);
     }
+    if(prepare){
+        size_t length=wcslen(out);
+        _snwprintf(out+length,CAP-length,L" --channel %ls",requested_experimental?L"experimental":L"stable");
+    }
     out[CAP-1]=0;return TRUE;
 }
 
 static BOOL check_updates(void) {
     WCHAR temporary[CAP],work[CAP],api[CAP],sums[CAP],archive[CAP],url[CAP],filename[256],hash_w[65],command[CAP],name[CAP],source[CAP];
     BOOL ok=FALSE;PROCESS_INFORMATION process;char expected[65]="",body[65536],version[64];int a,b,c,x,y,z;char tail;
-    const WCHAR *failure=L"Could not read the GitHub release";
+    const WCHAR *failure=requested_experimental?L"No experimental client release is available, or GitHub could not be reached":L"Could not read the GitHub release";
     work[0]=0;
     HINTERNET session=InternetOpenW(L"ReRiffLauncher/" RERIFF_VERSION,INTERNET_OPEN_TYPE_PRECONFIG,NULL,NULL,0);
     if(!session){wcscpy(message,L"Could not connect to GitHub.");return FALSE;}
@@ -86,21 +90,28 @@ static BOOL check_updates(void) {
     if(!GetTempPathW(CAP,temporary)||!GetTempFileNameW(temporary,L"rru",0,work))goto done;
     DeleteFileW(work);if(!CreateDirectoryW(work,NULL))goto done;
     _snwprintf(api,CAP,L"%ls\\release.json",work);api[CAP-1]=0;
-    if(!update_download(session,L"https://api.github.com/repos/Aftonstjarna/ReRiff/releases/latest",api,65535))goto done;
+    if(!update_download(session,requested_experimental?L"https://api.github.com/repos/Aftonstjarna/ReRiff/releases/tags/experimental":L"https://api.github.com/repos/Aftonstjarna/ReRiff/releases/latest",api,65535))goto done;
     FILE *file=_wfopen(api,L"rb");if(!file)goto done;
     size_t n=fread(body,1,sizeof(body)-1,file);body[n]=0;fclose(file);
     char *tag=strstr(body,"\"tag_name\"");
     if(!tag||!(tag=strchr(tag,':'))||!(tag=strchr(tag,'"')))goto done;
     tag++;if(*tag=='v')tag++;size_t length=strcspn(tag,"\"");
     if(length>=sizeof(version))goto done;memcpy(version,tag,length);version[length]=0;
+    if(requested_experimental){
+        if(strcmp(version,"experimental"))goto done;
+        char *asset=strstr(body,"ReRiff-");
+        if(!asset||sscanf(asset,"ReRiff-%d.%d.%d-",&a,&b,&c)!=3)goto done;
+        snprintf(version,sizeof(version),"%d.%d.%d",a,b,c);
+    }
     if(sscanf(version,"%d.%d.%d%c",&a,&b,&c,&tail)!=3||a<0||a>9999||b<0||b>9999||c<0||c>9999
        ||sscanf(RERIFF_VERSION,"%d.%d.%d",&x,&y,&z)!=3)goto done;
-    if(a<x||(a==x&&(b<y||(b==y&&c<=z)))){wcscpy(message,L"You have the latest published release.");ok=TRUE;goto done;}
+    if(requested_experimental==installed_experimental && !requested_experimental && (a<x||(a==x&&(b<y||(b==y&&c<=z))))){wcscpy(message,L"You have the latest published release.");ok=TRUE;goto done;}
     failure=L"Could not read the release checksums";
-    WCHAR version_w[64];MultiByteToWideChar(CP_UTF8,0,version,-1,version_w,64);
+    WCHAR version_w[64],release_tag[80];MultiByteToWideChar(CP_UTF8,0,version,-1,version_w,64);
+    if(requested_experimental)wcscpy(release_tag,L"experimental");else _snwprintf(release_tag,80,L"v%ls",version_w);
     _snwprintf(filename,256,L"ReRiff-%ls-%ls",version_w,is_wine()?L"linux.run":L"windows.zip");filename[255]=0;
     _snwprintf(sums,CAP,L"%ls\\SHA256SUMS",work);sums[CAP-1]=0;
-    _snwprintf(url,CAP,L"https://github.com/Aftonstjarna/ReRiff/releases/download/v%ls/SHA256SUMS",version_w);url[CAP-1]=0;
+    _snwprintf(url,CAP,L"https://github.com/Aftonstjarna/ReRiff/releases/download/%ls/SHA256SUMS",release_tag);url[CAP-1]=0;
     SetWindowTextW(status,L"Downloading and verifying the latest ReRiff update...");
     if(!update_download(session,url,sums,65535))goto done;
     char filename_u8[256],line[1024],listed[512],sum[65];
@@ -110,7 +121,7 @@ static BOOL check_updates(void) {
         if(sscanf(line,"%64[0123456789abcdefABCDEF] %511s",sum,listed)==2&&strlen(sum)==64&&!strcmp(listed,filename_u8))strcpy(expected,sum);
     }fclose(file);if(!*expected)goto done;
     _snwprintf(archive,CAP,L"%ls\\%ls",work,filename);archive[CAP-1]=0;
-    _snwprintf(url,CAP,L"https://github.com/Aftonstjarna/ReRiff/releases/download/v%ls/%ls",version_w,filename);url[CAP-1]=0;
+    _snwprintf(url,CAP,L"https://github.com/Aftonstjarna/ReRiff/releases/download/%ls/%ls",release_tag,filename);url[CAP-1]=0;
     failure=L"Could not download the release package";
     if(!update_download(session,url,archive,64*1024*1024))goto done;
     failure=L"The release checksum did not match";

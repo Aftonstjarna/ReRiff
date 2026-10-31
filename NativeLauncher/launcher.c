@@ -23,16 +23,31 @@
 #endif
 #define WM_COMPLETE (WM_APP + 1)
 #define WM_GAME_RUNNING (WM_APP + 2)
-enum { EXTERNAL=101, FALLBACK, TIMEOUT, POPUP, SAVE, PLAY, LOCAL, EXTERNAL_ONLY, STOP, UPDATE };
+enum { EXTERNAL=101, FALLBACK, TIMEOUT, POPUP, SAVE, PLAY, LOCAL, EXTERNAL_ONLY, STOP, UPDATE, EXPERIMENTAL };
 static WCHAR folder[CAP], ini[CAP], message[1024];
 static HWND window, status, external, fallback, timeout_edit, popup, play_button, save_button;
 static HWND only_checkbox, stop_button, update_button;
 static BOOL busy = FALSE, playing = FALSE;
+static HWND experimental_checkbox;
+static BOOL installed_experimental=FALSE, requested_experimental=FALSE;
 static HFONT font;
 
 static void path(WCHAR *out, const WCHAR *relative) {
     _snwprintf(out, CAP, L"%ls\\%ls", folder, relative);
     out[CAP-1] = 0;
+}
+
+static void load_channel(void) {
+    WCHAR name[CAP],value[32];path(name,L"localserver\\client-channel.ini");
+    GetPrivateProfileStringW(L"client",L"channel",L"stable",value,32,name);
+    installed_experimental=!wcscmp(value,L"experimental");
+    requested_experimental=installed_experimental;
+}
+
+static void channel_title(void) {
+    SetWindowTextW(window,installed_experimental
+        ? L"ReRiff Launcher v" RERIFF_WIDE_LITERAL(RERIFF_VERSION) L" — Experimental"
+        : L"ReRiff Launcher v" RERIFF_WIDE_LITERAL(RERIFF_VERSION));
 }
 
 static void log_message(const WCHAR *text) {
@@ -217,11 +232,11 @@ static DWORD WINAPI worker(LPVOID parameter) {
 static void begin(int action) {
     if (busy) return;
     busy=TRUE;playing=action==1;
-    EnableWindow(play_button,FALSE);EnableWindow(save_button,FALSE);EnableWindow(stop_button,FALSE);EnableWindow(update_button,FALSE);
+    EnableWindow(play_button,FALSE);EnableWindow(save_button,FALSE);EnableWindow(stop_button,FALSE);EnableWindow(update_button,FALSE);EnableWindow(experimental_checkbox,FALSE);
     SetWindowTextW(status,action==3?L"Checking published GitHub releases...":action==2?L"Stopping this installation's local server...":L"Checking server settings...");
     HANDLE thread=CreateThread(NULL,4*1024*1024,worker,(LPVOID)(INT_PTR)action,STACK_SIZE_PARAM_IS_A_RESERVATION,NULL);
     if (thread) CloseHandle(thread);
-    else { busy=FALSE; EnableWindow(play_button,TRUE);EnableWindow(save_button,TRUE);EnableWindow(stop_button,TRUE);EnableWindow(update_button,TRUE);SetWindowTextW(status,L"Could not start launcher worker."); }
+    else { busy=FALSE; EnableWindow(play_button,TRUE);EnableWindow(save_button,TRUE);EnableWindow(stop_button,TRUE);EnableWindow(update_button,TRUE);EnableWindow(experimental_checkbox,TRUE);SetWindowTextW(status,L"Could not start launcher worker."); }
 }
 
 static HWND control(const WCHAR *cls,const WCHAR *text,DWORD style,int x,int y,int w,int h,int id) {
@@ -276,6 +291,9 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
         save_button=control(L"BUTTON",L"Save settings",WS_TABSTOP,345,409,130,34,SAVE);
         play_button=control(L"BUTTON",L"Save and play",WS_TABSTOP|BS_DEFPUSHBUTTON,490,409,130,34,PLAY);
         update_button=control(L"BUTTON",L"Update from GitHub",WS_TABSTOP,22,453,155,30,UPDATE);
+        experimental_checkbox=control(L"BUTTON",L"Use experimental builds",BS_AUTOCHECKBOX|WS_TABSTOP,195,453,420,30,EXPERIMENTAL);
+        SendMessageW(experimental_checkbox,BM_SETCHECK,installed_experimental?BST_CHECKED:BST_UNCHECKED,0);
+        channel_title();
         WCHAR value[4096];
         GetPrivateProfileStringW(L"server",L"external_url",L"",value,4096,ini);SetWindowTextW(external,value);
         GetPrivateProfileStringW(L"server",L"fallback_url",L"",value,4096,ini);SetWindowTextW(fallback,value);
@@ -290,7 +308,10 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
             case LOCAL:SendMessageW(only_checkbox,BM_SETCHECK,BST_UNCHECKED,0);EnableWindow(fallback,TRUE);SetWindowTextW(fallback,L"http://127.0.0.1:5144");break;
             case EXTERNAL_ONLY:EnableWindow(fallback,SendMessageW(only_checkbox,BM_GETCHECK,0,0)!=BST_CHECKED);break;
             case STOP:begin(2);break;
-            case UPDATE:if (save()) begin(3);break;
+            case EXPERIMENTAL:
+                requested_experimental=SendMessageW(experimental_checkbox,BM_GETCHECK,0,0)==BST_CHECKED;
+                begin(3);break;
+            case UPDATE:begin(3);break;
             case SAVE:save();break;
             case PLAY:if (save()) begin(TRUE);break;
         }return 0;
@@ -298,7 +319,9 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
     if (event==WM_GAME_RUNNING) { SetWindowTextW(status,L"Game running. Keep the launcher open until the game closes.");ShowWindow(window,SW_MINIMIZE);return 0; }
     if (event==WM_COMPLETE) {
         if (lp==2) { DestroyWindow(hwnd);return 0; }
-        busy=FALSE;playing=FALSE;EnableWindow(play_button,TRUE);EnableWindow(save_button,TRUE);EnableWindow(stop_button,TRUE);EnableWindow(update_button,TRUE);SetWindowTextW(status,message);
+        requested_experimental=installed_experimental;
+        SendMessageW(experimental_checkbox,BM_SETCHECK,installed_experimental?BST_CHECKED:BST_UNCHECKED,0);
+        busy=FALSE;playing=FALSE;EnableWindow(play_button,TRUE);EnableWindow(save_button,TRUE);EnableWindow(stop_button,TRUE);EnableWindow(update_button,TRUE);EnableWindow(experimental_checkbox,TRUE);SetWindowTextW(status,message);
         if (lp) ShowWindow(window,SW_RESTORE);return 0;
     }
     if (event==WM_CLOSE) {
@@ -312,7 +335,7 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
 int WINAPI wWinMain(HINSTANCE instance,HINSTANCE previous,LPWSTR command,int show) {
     (void)previous;(void)command;
     GetModuleFileNameW(NULL,folder,CAP);WCHAR *slash=wcsrchr(folder,L'\\');if (!slash) return 1;*slash=0;
-    path(ini,L"server.ini");
+    path(ini,L"server.ini");load_channel();
     BOOL skip=FALSE,selftest=FALSE;int count;LPWSTR *args=CommandLineToArgvW(GetCommandLineW(),&count);
     for (int i=1;i<count;i++) {
         if (!wcscmp(args[i],L"--skip-launcher")) skip=TRUE;

@@ -84,6 +84,13 @@ class ClientUpdateTest(unittest.TestCase):
         self.assertEqual((self.game/'ReRiff-Launcher.exe').read_bytes(), b'old launcher')
         self.assertFalse((self.work/'success').exists())
 
+    def test_channel_mismatch_leaves_game_untouched(self):
+        archive, digest = self.package('linux')
+        with self.assertRaisesRegex(ValueError, 'channel mismatch'):
+            update.prepare(archive, digest, self.work, self.game, 'linux', 'experimental')
+        self.assertFalse((self.work/'prepared.json').exists())
+        self.assertEqual((self.game/'ReRiff-Launcher.exe').read_bytes(), b'old launcher')
+
     def test_checksum_failure_leaves_game_untouched(self):
         archive, digest = self.package('linux')
         with self.assertRaisesRegex(ValueError, 'checksum'):
