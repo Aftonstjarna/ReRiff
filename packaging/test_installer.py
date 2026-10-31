@@ -73,7 +73,14 @@ class InstallerTests(unittest.TestCase):
         import os
         result=subprocess.run([sys.executable,'-c','import flask,click,markupsafe; assert markupsafe.escape("<") == "&lt;"; print(flask.Flask("test").test_client().get("/").status_code)'],env=dict(os.environ,**env),capture_output=True,text=True)
         self.assertEqual(result.returncode,0,result.stderr)
-        if json.loads((self.bundle/'manifest.json').read_text()).get('update_only'):
+        manifest=json.loads((self.bundle/'manifest.json').read_text())
+        if manifest.get('vanilla_originals') and os.environ.get('RERIFF_SYNTHETIC_TESTS')=='1':
+            # These synthetic inputs represent an already patched install,
+            # deliberately without original DLL backups. Local-patching
+            # packages can restore originals only when those backups exist.
+            with self.assertRaisesRegex(ValueError,'Original backup missing'):
+                self.install(restore=True)
+        elif manifest.get('update_only') and not manifest.get('vanilla_originals'):
             with self.assertRaisesRegex(ValueError,'original full installer'):
                 self.install(restore=True)
         else:
