@@ -4,7 +4,7 @@
 implemented separately in [ENGINE-MENU.md](ENGINE-MENU.md), built with
 `build-engine.sh`. The panel below does not satisfy the in-game menu requirement.
 
-Branch: `codex/experimental-ingame-menu` in ReRiff. Matching EXE recovery stays
+Branch: `codex/experimental-client` in ReRiff. Matching EXE recovery stays
 in the separate RiffRacer repository on `decomp`.
 
 This experiment replaces only the notification DLL in a test installation. The

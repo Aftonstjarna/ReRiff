@@ -30,3 +30,8 @@ subprocess.run([args.zig,'cc','-target','x86-windows-gnu','-shared','-O2','-Wall
 subprocess.run([args.zig,'cc','-target','x86-windows-gnu','-municode','-Wl,--subsystem,windows',
                 '-O2','-Wall','-Wextra','-Werror',str(root/'NativeLauncher/installer.c'),
                 '-o',str(root/'build/ReRiff-Setup.exe'),'-lcomdlg32','-luser32','-static'],check=True,env=env)
+
+if os.environ.get('RERIFF_RELEASE_CHANNEL') == 'experimental':
+    subprocess.run([args.zig,'cc','-target','x86-windows-gnu','-shared','-O2','-Wall','-Wextra','-Werror',
+                    str(root/'ExperimentalMenu/engine_menu.c'),'-o',str(root/'build/ReRiff.Notify.dll'),
+                    '-luser32','-lgdi32','-ladvapi32','-static'],check=True,env=env)

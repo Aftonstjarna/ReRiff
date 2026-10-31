@@ -1,6 +1,6 @@
 # Engine-rendered Servers experiment
 
-This is the corrected experiment on `codex/experimental-ingame-menu`. It hooks
+This is the corrected experiment on `codex/experimental-client`. It hooks
 the original `gaMainMenu` callbacks and edits existing `elUIItemText` objects
 through the game's native text functions. The menu itself creates no windows,
 polls no keys, and uses no overlay renderer. Original menu focus, mouse/keyboard/controller

@@ -33,7 +33,8 @@ def build(args):
     notes = release_notes((ROOT/'RELEASE-NOTES.md').read_text(encoding='utf-8'), version)
     if not re.fullmatch(r'\d+\.\d+\.\d+', version):
         raise ValueError('Invalid VERSION')
-    if args.update_only:
+    update_only = args.update_only or args.local_patching
+    if update_only:
         tracked=subprocess.check_output(['git','ls-tree','-r','--name-only','HEAD'],cwd=ROOT,text=True).splitlines()
         if any(name.endswith('.rrpatch') for name in tracked):
             raise ValueError('Remove game-derived deltas from the committed source tree before building a public update release.')
@@ -50,8 +51,12 @@ def build(args):
         copy(ROOT/'packaging'/name, common/name)
     copy(ROOT/'LICENSE', common/'LICENSE')
     (common/'RELEASE-NOTES.md').write_text(notes, encoding='utf-8')
+    if args.local_patching:
+        for name in ('ReRiff-Patcher.exe', 'ReRiff-Patcher.exe.config', 'dnlib.dll'):
+            copy(ROOT/'build/installer-patcher'/name, common/'patcher'/name)
+        copy(ROOT/'Patcher/dnlib-LICENSE.txt', common/'patcher/dnlib-LICENSE.txt')
     patches = {}
-    for name in (() if args.update_only else ('ParseOctane.dll', 'Parse.NetFx45.dll')):
+    for name in (() if update_only else ('ParseOctane.dll', 'Parse.NetFx45.dll')):
         if args.original_dir:
             original = (args.original_dir/name).read_bytes()
             patched = (ROOT/'build'/name).read_bytes()
@@ -111,8 +116,10 @@ def build(args):
                 archive.extractall(folder/'python')
             (folder/'python/python313._pth').write_text('python313.zip\n.\n..\nimport site\n')
         manifest = {'channel':channel,'version':version,'commit':commit,'platform':platform,'patches':patches,
-                    'update_only':args.update_only,
-                    'required_existing':json.loads((ROOT/'packaging/required-client.json').read_text()) if args.update_only else {},
+                    'update_only':update_only,
+                    'vanilla_originals':json.loads((ROOT/'packaging/original-client.json').read_text()) if args.local_patching else {},
+                    'compatible_existing':json.loads((ROOT/'packaging/compatible-client.json').read_text()) if args.local_patching else {},
+                    'required_existing':json.loads((ROOT/'packaging/required-client.json').read_text()) if update_only else {},
                     'files':{p.relative_to(folder).as_posix():digest(p.read_bytes()) for p in sorted(folder.rglob('*')) if p.is_file()}}
         (folder/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
         if platform=='windows':
@@ -156,6 +163,7 @@ if __name__=='__main__':
     inputs.add_argument('--original-dir',type=Path)
     inputs.add_argument('--patch-dir',type=Path,help='Use versioned deltas without accessing original game DLLs')
     inputs.add_argument('--update-only',action='store_true',help='Update only ReRiff components; include no game-derived binary patches')
+    inputs.add_argument('--local-patching',action='store_true',help='Patch supported vanilla DLLs locally; distribute no game binaries')
     parser.add_argument('--wheels-dir',type=Path,required=True)
     parser.add_argument('--python-zip',type=Path,required=True)
     build(parser.parse_args())

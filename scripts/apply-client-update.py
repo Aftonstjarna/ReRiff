@@ -8,6 +8,7 @@ import shutil
 from pathlib import Path, PurePosixPath
 import sys
 import tarfile
+import tempfile
 import zipfile
 
 
@@ -82,6 +83,30 @@ def load_installer(root):
     spec = importlib.util.spec_from_file_location('reriff_update_installer', root/'installer.py')
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    if hasattr(module, 'patch_vanilla'):
+        patch_vanilla = module.patch_vanilla
+        def compatible_patch(bundle, game, backups, manifest, restore):
+            # Older stable installers predate the experimental News hook.
+            # Rebuild only this exact known SDK from its verified original,
+            # privately; the stable installer's transaction applies the plan.
+            sdk = 'Parse.NetFx45.dll'
+            known = '4e476a40cb00f65e4f5c3ab761c2bdbfc138dfcd444d618c643d50c6eca0d96b'
+            current = game / sdk
+            if (manifest.get('channel', 'stable') == 'stable'
+                    and current.is_file()
+                    and hashlib.sha256(current.read_bytes()).hexdigest() == known
+                    and manifest.get('required_existing', {}).get(sdk) != known):
+                original = backups / 'originals' / sdk
+                expected = manifest.get('vanilla_originals', {}).get(sdk)
+                if not original.is_file() or hashlib.sha256(original.read_bytes()).hexdigest() != expected:
+                    raise ValueError('A verified original SDK backup is required to restore stable')
+                with tempfile.TemporaryDirectory(prefix='reriff-stable-restore-') as temporary:
+                    shadow = Path(temporary)
+                    for name in manifest['vanilla_originals']:
+                        shutil.copy2(original if name == sdk else game/name, shadow/name)
+                    return patch_vanilla(bundle, shadow, backups, manifest, restore)
+            return patch_vanilla(bundle, game, backups, manifest, restore)
+        module.patch_vanilla = compatible_patch
     return module
 
 

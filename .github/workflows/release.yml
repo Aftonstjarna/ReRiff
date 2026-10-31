@@ -2,7 +2,7 @@ name: Build and publish client release
 
 on:
   push:
-    branches: [main, launcher]
+    branches: [main, launcher, codex/experimental-client]
     paths: [VERSION]
   workflow_dispatch:
 
@@ -17,6 +17,8 @@ jobs:
   release:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      RERIFF_RELEASE_CHANNEL: ${{ github.ref_name == 'codex/experimental-client' && 'experimental' || 'stable' }}
     permissions:
       contents: write
     steps:
@@ -50,6 +52,8 @@ jobs:
         run: dotnet build ClientConfig/ClientConfig.csproj -c Release -o build
       - name: Build client version header adapter
         run: dotnet build NewsHeaders/NewsHeaders.csproj -c Release -o build
+      - name: Build local vanilla-install patcher
+        run: dotnet build Patcher/InstallerPatcher.csproj -c Release -o build/installer-patcher
       - name: Build native launcher, notification, and Windows setup
         run: python scripts/build-windows-launcher.py --zig "$RUNNER_TEMP/release-tools/zig-x86_64-linux-0.14.1/zig"
       - name: Build Linux and Windows server identity libraries
@@ -60,7 +64,7 @@ jobs:
           --zig "$RUNNER_TEMP/release-tools/zig-x86_64-linux-0.14.1/zig"
       - name: Package Windows and Linux installers
         run: >-
-          python packaging/build_release.py --update-only
+          python packaging/build_release.py --local-patching
           --wheels-dir "$RUNNER_TEMP/wheels"
           --python-zip "$RUNNER_TEMP/release-tools/python.zip"
       - name: Verify installer safety and rollback
@@ -71,16 +75,40 @@ jobs:
         run: python scripts/test_client_update.py
       - name: Validate Linux self-extractor
         run: sh "dist/v$(cat VERSION)/ReRiff-$(cat VERSION)-linux.run" --help
-      - name: Verify published archive checksums
-        run: cd "dist/v$(cat VERSION)" && sha256sum -c SHA256SUMS
+      - name: Verify published archive checksums and installed channel
+        run: |
+          python - <<'PYCODE'
+          import configparser, hashlib, json, os
+          from pathlib import Path
+          for platform in ('linux', 'windows'):
+              root = Path('build/release') / platform
+              manifest = json.loads((root / 'manifest.json').read_text())
+              name = 'payload/localserver/client-channel.ini'
+              marker = root / name
+              channel = configparser.ConfigParser()
+              channel.read(marker)
+              assert channel['client']['channel'] == manifest['channel'] == os.environ['RERIFF_RELEASE_CHANNEL']
+              assert hashlib.sha256(marker.read_bytes()).hexdigest() == manifest['files'][name]
+          PYCODE
+          cd "dist/v$(cat VERSION)" && sha256sum -c SHA256SUMS
       - name: Publish GitHub release and installers
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           version=$(cat VERSION)
           python packaging/release_notes.py --version "$version" --output "$RUNNER_TEMP/RELEASE-NOTES.md"
-          gh release create "v$version" \
+          flags=()
+          if [ "$RERIFF_RELEASE_CHANNEL" = experimental ]; then
+            flags+=(--prerelease --latest=false)
+          fi
+          gh release create "v$version" "${flags[@]}" \
             --target "$GITHUB_SHA" \
             --title "ReRiff $version" \
             --notes-file "$RUNNER_TEMP/RELEASE-NOTES.md" \
             "dist/v$version/"*
+          if [ "$RERIFF_RELEASE_CHANNEL" = experimental ]; then
+            # Compatibility alias for the channel picker shipped in v0.1.10.
+            gh release create experimental --prerelease --latest=false \
+              --target "$GITHUB_SHA" --title "ReRiff $version Experimental" \
+              --notes-file "$RUNNER_TEMP/RELEASE-NOTES.md" "dist/v$version/"*
+          fi

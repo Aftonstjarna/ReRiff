@@ -8,11 +8,9 @@ if (args.Length == 3 && args[0] == "--inspect-client") {
     bool Calls(ModuleDefMD source, string name) => source.GetTypes().SelectMany(t => t.Methods)
         .Where(m => m.HasBody).SelectMany(m => m.Body.Instructions)
         .Any(i => i.Operand is IMethod method && method.FullName.Contains(name));
-    File.WriteAllText(args[2], System.Text.Json.JsonSerializer.Serialize(new {
-        endpoint = Calls(endpoint, "ReRiff.ClientConfig::GetServer"),
-        offline = Calls(transport, "ReRiff.ClientConfig::CanSend"),
-        news = Calls(transport, "ReRiff.NewsHeaders::Add")
-    }));
+    File.WriteAllText(args[2], "{\"endpoint\":" + Calls(endpoint, "ReRiff.ClientConfig::GetServer").ToString().ToLowerInvariant()
+        + ",\"offline\":" + Calls(transport, "ReRiff.ClientConfig::CanSend").ToString().ToLowerInvariant()
+        + ",\"news\":" + Calls(transport, "ReRiff.NewsHeaders::Add").ToString().ToLowerInvariant() + "}");
     return;
 }
 

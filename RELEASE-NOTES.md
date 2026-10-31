@@ -1,3 +1,17 @@
+# ReRiff 1.2.0 — Experimental in-game server management
+
+This is an experimental prerelease. Stable releases remain on their existing channel.
+
+- Replace Friends with a native Servers screen; preserve normal News.
+- Save server settings separately from Play; support both --skip and --skip-launcher.
+- Disable networking without clearing the saved server addresses.
+- Restore the server notification popup alongside the engine menu.
+- Add an experimental-build checkbox and show Experimental beside the installed version.
+- Report the client version to News and ask the player to exit and update when the server software is newer.
+- Support verified vanilla and existing ReRiff installs through local source-built DLL patching. Keep backups in the game's bak folder.
+
+The original Game.exe is unchanged. Recovery and Linux-port sources are checkpointed on the branch; the release does not enable Linux driving.
+
 # ReRiff 0.1.6 — Updater verification release
 
 This release provides a new version to test **Update from GitHub** from v0.1.5.
