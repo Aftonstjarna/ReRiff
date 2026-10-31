@@ -16,6 +16,8 @@
 #ifndef RERIFF_VERSION
 #define RERIFF_VERSION "0.1.0"
 #endif
+#define RERIFF_WIDE_LITERAL_(value) L##value
+#define RERIFF_WIDE_LITERAL(value) RERIFF_WIDE_LITERAL_(value)
 #ifndef RERIFF_HEALTH_URL
 #define RERIFF_HEALTH_URL L"http://127.0.0.1:5144/"
 #endif
@@ -320,7 +322,7 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE previous,LPWSTR command,int sho
     WNDCLASSW cls;ZeroMemory(&cls,sizeof(cls));cls.lpfnWndProc=procedure;cls.hInstance=instance;cls.lpszClassName=L"ReRiffNativeLauncher";
     cls.hCursor=LoadCursorW(NULL,IDC_ARROW);cls.hbrBackground=(HBRUSH)(COLOR_WINDOW+1);
     RegisterClassW(&cls);
-    HWND handle=CreateWindowExW(0,cls.lpszClassName,L"ReRiff Launcher",WS_OVERLAPPED|WS_CAPTION|WS_SYSMENU|WS_MINIMIZEBOX,
+    HWND handle=CreateWindowExW(0,cls.lpszClassName,L"ReRiff Launcher v" RERIFF_WIDE_LITERAL(RERIFF_VERSION),WS_OVERLAPPED|WS_CAPTION|WS_SYSMENU|WS_MINIMIZEBOX,
         CW_USEDEFAULT,CW_USEDEFAULT,660,545,NULL,NULL,instance,NULL);
     if (!handle) return 1;
     ShowWindow(handle,show);UpdateWindow(handle);

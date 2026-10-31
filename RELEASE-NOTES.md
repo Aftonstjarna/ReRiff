@@ -1,3 +1,10 @@
+# ReRiff 0.1.4 — Launcher version display
+
+- Show the running launcher's compiled version in its window title, for example
+  `ReRiff Launcher v0.1.4`.
+
+Use **Update from GitHub** in launcher 0.1.3 or install this update manually.
+
 # ReRiff 0.1.3 — Automatic client updates
 
 - **Update from GitHub** now downloads and installs the latest stable client
