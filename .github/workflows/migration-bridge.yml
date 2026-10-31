@@ -1,0 +1,40 @@
+name: Publish legacy updater migration bridge
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Published canonical version to mirror for old launchers
+        required: true
+        default: '0.1.7'
+
+permissions:
+  contents: write
+
+jobs:
+  bridge:
+    if: github.repository == 'Aftonstjarna/ReRiff'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mirror verified canonical release assets for legacy launchers
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          canonical=Aftonstjarna/riffapi-local-extended
+          mkdir stage
+          gh release download "v$VERSION" --repo "$canonical" --dir stage
+          (cd stage && sha256sum -c SHA256SUMS)
+          {
+            echo "# ReRiff $VERSION — Repository migration"
+            echo
+            echo "ReRiff's server and launcher now live together at https://github.com/$canonical."
+            echo "This verified migration build changes the launcher's future release source."
+            echo "Settings and saved data are preserved."
+            echo
+            echo "Canonical release: https://github.com/$canonical/releases/tag/v$VERSION"
+          } > bridge-notes.md
+          gh release create "v$VERSION" --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" --title "ReRiff $VERSION — Repository migration" \
+            --notes-file bridge-notes.md stage/*

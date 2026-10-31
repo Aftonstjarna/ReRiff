@@ -1,3 +1,6 @@
+> Historical upstream tutorial retained for attribution and reference.
+> Current ReRiff setup and usage are maintained in the [main README](../README.md).
+
 # Rebuilding Riff Racer's online backend - a reverse-engineering tutorial
 
 This repository documents, step by step, how the online API of the 2015 Steam game

@@ -1,0 +1,22 @@
+name: reriff
+services:
+  server:
+    build: .
+    image: "${RERIFF_IMAGE:-reriff-server:local}"
+    ports:
+      - "${RERIFF_BIND_ADDRESS:-127.0.0.1}:${RERIFF_PORT:-5144}:5144"
+    volumes:
+      - reriff-data:/data
+    environment:
+      RERIFF_PUBLIC_URL: "${RERIFF_PUBLIC_URL:-}"
+    restart: unless-stopped
+    stop_grace_period: 30s
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+volumes:
+  reriff-data:

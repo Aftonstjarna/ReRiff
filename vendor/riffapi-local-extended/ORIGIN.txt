@@ -1,0 +1,2 @@
+Source: https://github.com/rumbadebu/riffapi-local-extended
+Revision: d6b98d2845bfbc8ee2888f805f8f0dc36bb73ede
