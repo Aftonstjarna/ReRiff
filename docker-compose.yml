@@ -1,7 +1,19 @@
-version: "3"
-
 services:
   app:
     build: .
     ports:
-      - "5144:5144"
+      - "${RIFFAPI_BIND_ADDRESS:-127.0.0.1}:${RIFFAPI_PORT:-5144}:5144"
+    volumes:
+      - riffapi-data:/data
+    restart: unless-stopped
+    stop_grace_period: 30s
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  riffapi-data:

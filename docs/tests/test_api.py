@@ -1,10 +1,11 @@
 """End-to-end tests for the extended riffapi-local server (Parse REST emulation)."""
 import json
+import os
 import urllib.request
 import urllib.error
 import urllib.parse
 
-BASE = "http://127.0.0.1:5144"
+BASE = os.environ.get("RIFFAPI_TEST_URL", "http://127.0.0.1:5144")
 HEADERS = {
     "X-Parse-Application-Id": "TEST_APP_ID",
     "X-Parse-Windows-Key": "TEST_WINDOWS_KEY",

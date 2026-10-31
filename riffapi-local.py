@@ -34,7 +34,7 @@ from flask import Flask, Response, jsonify, request, send_from_directory
 app = Flask(__name__)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.path.join(BASE_DIR, "data")
+DATA_DIR = os.environ.get("RIFFAPI_DATA_DIR") or os.path.join(BASE_DIR, "data")
 CLASSES_DIR = os.path.join(DATA_DIR, "classes")
 FILES_DIR = os.path.join(DATA_DIR, "files")
 LOG_FILE = os.path.join(DATA_DIR, "requests.log")

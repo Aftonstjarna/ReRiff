@@ -1,0 +1,22 @@
+name: Test container storage and API
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Build server image
+        run: docker build -t riffapi-local:ci .
+      - name: Test container recreation and existing API suites
+        run: python3 docs/tests/test_container.py --image riffapi-local:ci
