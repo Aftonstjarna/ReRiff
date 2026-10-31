@@ -76,6 +76,7 @@ def build(args):
         copy(ROOT/'build'/name, payload/name)
     for name in ('trace-server.py','server_routing.py','steam-launcher.sh','start-server-host.sh','stop-server-host.sh','server-control.py','apply-client-update.py'):
         copy(ROOT/'scripts'/name,payload/'localserver'/name)
+    (payload/'localserver/client-channel.ini').write_text('[client]\nchannel='+channel+'\n')
     for path in (ROOT/'vendor/riffapi-local-extended').iterdir():
         if path.is_file():
             copy(path,payload/'localserver/server'/path.name)
