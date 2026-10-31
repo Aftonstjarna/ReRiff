@@ -68,19 +68,28 @@ static BOOL stop_server(void) {
         typedef char * (__cdecl *unix_fn)(LPCWSTR);
         union {FARPROC address;unix_fn function;} conversion;
         conversion.address=GetProcAddress(GetModuleHandleW(L"kernel32.dll"),"wine_get_unix_file_name");
-        WCHAR script[CAP],host[CAP],system[CAP],command[CAP];path(script,L"localserver\\stop-server-host.sh");
+        WCHAR script[CAP],host[CAP],system[CAP],command[CAP],temporary[CAP],result[CAP],host_result[CAP];
+        path(script,L"localserver\\stop-server-host.sh");
         if(!conversion.address||GetFileAttributesW(script)==INVALID_FILE_ATTRIBUTES){wcscpy(message,L"The local stop-server helper is missing.");return FALSE;}
+        if(!GetTempPathW(CAP,temporary)||!GetTempFileNameW(temporary,L"rrs",0,result))return FALSE;
+        DeleteFileW(result);
         char *value=conversion.function(script);if(!value)return FALSE;
         MultiByteToWideChar(CP_UTF8,0,value,-1,host,CAP);HeapFree(GetProcessHeap(),0,value);
+        value=conversion.function(result);if(!value)return FALSE;
+        MultiByteToWideChar(CP_UTF8,0,value,-1,host_result,CAP);HeapFree(GetProcessHeap(),0,value);
         GetSystemDirectoryW(system,CAP);
-        _snwprintf(command,CAP,L"\"%ls\\start.exe\" /wait /unix /bin/sh \"%ls\"",system,host);command[CAP-1]=0;
+        _snwprintf(command,CAP,L"\"%ls\\start.exe\" /wait /unix /bin/sh \"%ls\" --result \"%ls\"",system,host,host_result);command[CAP-1]=0;
         PROCESS_INFORMATION process;if(!spawn(command,TRUE,&process)){wcscpy(message,L"Could not invoke the local stop helper.");return FALSE;}
-        CloseHandle(process.hThread);
-        DWORD waited=WaitForSingleObject(process.hProcess,15000),code=1;
-        if(waited==WAIT_OBJECT_0)GetExitCodeProcess(process.hProcess,&code);
-        CloseHandle(process.hProcess);
-        if(code){wcscpy(message,L"Server could not be stopped. Check localserver/server-console.log.");return FALSE;}
-        wcscpy(message,L"Local stop requested. Only this installation's Python backend was targeted; Docker is untouched.");return TRUE;
+        CloseHandle(process.hThread);CloseHandle(process.hProcess);
+        ULONGLONG deadline=GetTickCount64()+15000;
+        while(GetFileAttributesW(result)==INVALID_FILE_ATTRIBUTES&&GetTickCount64()<deadline)Sleep(100);
+        FILE *file=_wfopen(result,L"rb");char outcome[2048]="";
+        if(file){size_t count=fread(outcome,1,sizeof(outcome)-1,file);outcome[count]=0;fclose(file);DeleteFileW(result);}
+        if(strcmp(outcome,"ok\n")){
+            if(*outcome){WCHAR detail[2048];MultiByteToWideChar(CP_UTF8,0,outcome,-1,detail,2048);log_message(detail);}
+            wcscpy(message,L"Server shutdown was not confirmed. Check localserver/server-console.log.");return FALSE;
+        }
+        wcscpy(message,L"Local server stopped or already stopped. Docker and unrelated services were left untouched.");return TRUE;
     }
     WCHAR record[CAP],value[64];path(record,L"localserver\\server-process.ini");
     DWORD pid=GetPrivateProfileIntW(L"process",L"pid",0,record);

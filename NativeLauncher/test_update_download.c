@@ -1,5 +1,5 @@
 /* Exercise official GitHub download/checksum/preflight, aborting before install
- * because this disposable fixture deliberately has no server stop helper. */
+ * because this disposable fixture deliberately has no native updater helper. */
 #define wWinMain reriff_launcher_entry
 #include "launcher.c"
 #undef wWinMain

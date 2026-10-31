@@ -132,7 +132,9 @@ static BOOL check_updates(void) {
         if(GetFileAttributesW(name)!=INVALID_FILE_ATTRIBUTES)break;
         if(GetTickCount64()>deadline)goto done;Sleep(100);
     }
-    if(!stop_server()){log_message(message);failure=L"Could not stop this installation's local server";goto done;}
+    /* The Linux apply tool confirms owned-server shutdown directly. Wine's
+     * start.exe exit status cannot establish native Unix child completion. */
+    if(!is_wine()&&!stop_server()){log_message(message);failure=L"Could not stop this installation's local server";goto done;}
     failure=L"Could not start the separate updater";
     if(!update_command(command,work,archive,hash_w,FALSE))goto done;
     _snwprintf(name,CAP,L"%ls\\apply-command.txt",work);name[CAP-1]=0;
