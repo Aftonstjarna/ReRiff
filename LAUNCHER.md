@@ -59,11 +59,24 @@ On Windows it checks the backend's recorded PID and creation time before stoppin
 it. It does not stop Docker containers or arbitrary services on port 5144. Server
 controls are disabled while the game launched by this launcher is running.
 
-**Check for updates** queries published releases in Aftonstjarna/ReRiff. A newer
-release opens the GitHub release page so you can choose the correct installer.
-It does not replace running executables automatically. No published releases is
-reported separately from network/rate-limit errors. GitHub commits and container
-images alone do not count as client releases.
+**Update from GitHub** downloads the latest stable release from
+Aftonstjarna/ReRiff, verifies its published SHA256, and validates the package
+before closing the launcher. A temporary native updater waits for the launcher
+to exit, applies the existing installer with backups/rollback, and reopens the
+updated launcher. Settings and saved server data are preserved. Update controls
+are disabled while the launcher-managed game is running.
+
+Windows uses its bundled Python runtime, copied to a temporary folder so it can
+also update that runtime. Proton uses native `/usr/bin/python3` and the Linux
+release package through the existing Wine bridge. Only this installation's
+Python server is stopped for installation; Docker servers are managed separately.
+Download or preflight failure leaves the launcher open. Later installation
+failures report the temporary `update.log` and retain or roll back installed
+files. Temporary updater files remain available for diagnostics.
+
+Install 0.1.3 once to enable automatic updates. Earlier launcher versions open
+the release page and require that initial manual installation. GitHub commits
+and container images alone do not count as client releases.
 
 ## Builds and backups
 

@@ -65,6 +65,8 @@ jobs:
         env:
           RERIFF_SYNTHETIC_TESTS: '1'
         run: python -m unittest discover -s packaging -p test_installer.py -v
+      - name: Verify automatic update extraction and rollback
+        run: python scripts/test_client_update.py
       - name: Validate Linux self-extractor
         run: sh "dist/v$(cat VERSION)/ReRiff-$(cat VERSION)-linux.run" --help
       - name: Verify published archive checksums
