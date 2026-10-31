@@ -7,9 +7,9 @@ retains its existing .NET Framework requirements.
 
 This fork is the primary ReRiff repository and contains the server, launcher,
 client tools, and installers together. The previous
-[Aftonstjarna/ReRiff-test repository](https://github.com/Aftonstjarna/ReRiff-test) remains
-available for existing clients to receive the migration update. After that update,
-the launcher checks releases here.
+[Aftonstjarna/ReRiff-test repository](https://github.com/Aftonstjarna/ReRiff-test) is
+retained for legacy/test use and history. Current releases, instructions and
+Docker publishing are maintained here.
 
 [Download the latest release](https://github.com/Aftonstjarna/ReRiff/releases/latest)
 · [Install and update](#install-or-update)
