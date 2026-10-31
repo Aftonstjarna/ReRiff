@@ -31,7 +31,7 @@ def build(args):
         raise ValueError('Invalid release channel')
     version = (ROOT/'VERSION').read_text().strip()
     notes = release_notes((ROOT/'RELEASE-NOTES.md').read_text(encoding='utf-8'), version)
-    if not re.fullmatch(r'\d+\.\d+\.\d+', version):
+    if not re.fullmatch(r'\d+\.\d+\.\d+(?:-[1-9]\d*)?', version):
         raise ValueError('Invalid VERSION')
     update_only = args.update_only or args.local_patching
     if update_only:
@@ -120,6 +120,7 @@ def build(args):
                     'update_only':update_only,
                     'vanilla_originals':json.loads((ROOT/'packaging/original-client.json').read_text()) if args.local_patching else {},
                     'compatible_existing':json.loads((ROOT/'packaging/compatible-client.json').read_text()) if args.local_patching else {},
+                    'client_upgrades':json.loads((ROOT/'packaging/client-upgrades.json').read_text()) if args.local_patching else {},
                     'required_existing':json.loads((ROOT/'packaging/required-client.json').read_text()) if update_only else {},
                     'files':{p.relative_to(folder).as_posix():digest(p.read_bytes()) for p in sorted(folder.rglob('*')) if p.is_file()}}
         (folder/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')

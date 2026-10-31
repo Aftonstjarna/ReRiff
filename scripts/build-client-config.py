@@ -18,6 +18,7 @@ sdk = subprocess.check_output([a.dotnet,'--list-sdks'],text=True).splitlines()
 version, location = sdk[-1].split(' ',1)
 csc = Path(location.strip('[]'))/version/'Roslyn/bincore/csc.dll'
 subprocess.run([a.dotnet,str(csc),'/nologo','/target:library','/nostdlib+','/optimize+',
+                '/keyfile:'+str(root/'Managed/ReRiff.snk'),
                 '/out:'+str(build/'ReRiff.ClientConfig.dll'),
                 '/reference:'+str(a.framework_dir/'mscorlib.dll'),'/reference:'+str(a.framework_dir/'System.dll'),
                 str(root/'ClientConfig/ClientConfig.cs')],check=True)

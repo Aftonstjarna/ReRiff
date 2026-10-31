@@ -6,7 +6,7 @@ import re
 
 def release_notes(source, version):
     version = version.removeprefix('v')
-    headings = list(re.finditer(r'^# ReRiff (\d+\.\d+\.\d+)\b[^\n]*$', source, re.MULTILINE))
+    headings = list(re.finditer(r'^# ReRiff (\d+\.\d+\.\d+(?:-[1-9]\d*)?)\b[^\n]*$', source, re.MULTILINE))
     matches = [i for i, heading in enumerate(headings) if heading.group(1) == version]
     if len(matches) != 1:
         raise ValueError('Expected exactly one notes section for '+version)

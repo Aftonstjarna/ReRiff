@@ -14,7 +14,22 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  windows-loader:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '8.0.x'
+      - name: Test signed helpers on Microsoft .NET Framework x86
+        shell: pwsh
+        run: |
+          dotnet build Managed/SigningSmoke.csproj -c Release -o build/signing-smoke
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & .\build\signing-smoke\SigningSmoke.exe
+          exit $LASTEXITCODE
   release:
+    needs: windows-loader
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -36,7 +51,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           version=$(cat VERSION)
-          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[1-9][0-9]*)?$ ]]
+          if [[ "$version" == *-* && "$RERIFF_RELEASE_CHANNEL" != experimental ]]; then
+            echo 'Revision suffixes are reserved for experimental prereleases.'
+            exit 1
+          fi
           if gh release view "v$version" >/dev/null 2>&1; then
             echo "Release v$version already exists; bump VERSION instead of replacing it."
             exit 1
@@ -70,7 +89,9 @@ jobs:
       - name: Verify installer safety and rollback
         env:
           RERIFF_SYNTHETIC_TESTS: '1'
-        run: python -m unittest discover -s packaging -p test_installer.py -v
+        run: |
+          python -m unittest discover -s packaging -p test_installer.py -v
+          python -m unittest discover -s packaging -p test_helper_upgrade.py -v
       - name: Verify automatic update extraction and rollback
         run: python scripts/test_client_update.py
       - name: Validate Linux self-extractor
@@ -108,14 +129,25 @@ jobs:
             "dist/v$version/"*
           if [ "$RERIFF_RELEASE_CHANNEL" = experimental ]; then
             # Compatibility alias for the channel picker shipped in v0.1.10.
+            alias_dir="$RUNNER_TEMP/experimental-assets"
+            mkdir -p "$alias_dir"
+            cp "dist/v$version/"* "$alias_dir/"
+            base_version="${version%%-*}"
+            if [ "$base_version" != "$version" ]; then
+              # Older launchers parse only three numeric components. Offer
+              # aliases of the exact same packages so they can upgrade too.
+              cp "$alias_dir/ReRiff-$version-linux.run" "$alias_dir/ReRiff-$base_version-linux.run"
+              cp "$alias_dir/ReRiff-$version-windows.zip" "$alias_dir/ReRiff-$base_version-windows.zip"
+              (cd "$alias_dir" && sha256sum ReRiff-*.run ReRiff-*.zip ReRiff-*.tar.gz > SHA256SUMS)
+            fi
             if gh release view experimental >/dev/null 2>&1; then
-              gh release upload experimental "dist/v$version/"* --clobber
+              gh release upload experimental "$alias_dir/"* --clobber
               # Keep only this build's archives: older launchers infer the
               # experimental version from the first ReRiff-* asset name.
               gh release view experimental --json assets --jq '.assets[].name' |
                 while IFS= read -r asset; do
                   case "$asset" in
-                    ReRiff-"$version"-*) ;;
+                    ReRiff-"$version"-*|ReRiff-"$base_version"-linux.run|ReRiff-"$base_version"-windows.zip) ;;
                     ReRiff-*) gh release delete-asset experimental "$asset" --yes ;;
                   esac
                 done
@@ -127,6 +159,6 @@ jobs:
             else
               gh release create experimental --prerelease --latest=false \
                 --target "$GITHUB_SHA" --title "ReRiff $version Experimental" \
-                --notes-file "$RUNNER_TEMP/RELEASE-NOTES.md" "dist/v$version/"*
+                --notes-file "$RUNNER_TEMP/RELEASE-NOTES.md" "$alias_dir/"*
             fi
           fi

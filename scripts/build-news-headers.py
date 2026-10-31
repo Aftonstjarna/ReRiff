@@ -16,6 +16,7 @@ version, location = sdks[-1].split(' ', 1)
 csc = Path(location.strip('[]'))/version/'Roslyn/bincore/csc.dll'
 helper = root/'build/ReRiff.NewsHeaders.dll'
 subprocess.run([args.dotnet, str(csc), '/nologo', '/target:library', '/nostdlib+', '/optimize+',
+                '/keyfile:'+str(root/'Managed/ReRiff.snk'),
                 '/out:'+str(helper), '/reference:'+str(args.framework_dir/'mscorlib.dll'),
                 '/reference:'+str(args.framework_dir/'System.dll'), str(root/'NewsHeaders/Headers.cs')], check=True)
 subprocess.run([args.dotnet, 'build', str(root/'Patcher/Patcher.csproj'), '-c', 'Release',

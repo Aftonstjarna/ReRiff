@@ -362,6 +362,11 @@ game files or Windows settings. The white-screen crash remains under investigati
 
 Client source builds use .NET SDK 8 and Zig 0.14.1:
 
+Managed helpers use the committed `Managed/ReRiff.snk` development key for a
+reproducible strong-name identity required by the Windows .NET Framework loader.
+This public development key is not a publisher certificate or an authentication
+secret. Update the patched Parse DLL references together with the helpers.
+
 ```sh
 dotnet build ClientConfig/ClientConfig.csproj -c Release -o build
 dotnet build NewsHeaders/NewsHeaders.csproj -c Release -o build

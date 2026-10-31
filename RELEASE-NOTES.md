@@ -1,3 +1,21 @@
+# ReRiff 1.2.1-2 — Windows assembly loading fix
+
+- Fix the assembly-loading failure identified in the supplied Windows crash
+  dump: ReRiff.ClientConfig was unsigned while the Parse transport required a
+  strongly named dependency (HRESULT 0x80131044).
+- Strong-name sign both ReRiff managed helpers and update their injected
+  references. Verify fresh and upgraded DLL outputs against known SHA256 hashes.
+- Repair supported older patched clients even when original backups are absent;
+  preserve existing verified vanilla backups and game settings.
+- Test helper loading on Microsoft .NET Framework x86 before publishing.
+- Use numbered prerelease revisions and preserve compatibility with older
+  experimental-channel updaters.
+
+Install the complete package with ReRiff-Setup.exe or the experimental updater.
+Both the patched Parse DLLs and matching helpers must be updated together.
+The identified loader error is addressed; the affected Windows client still
+needs to confirm that the game reaches its menu.
+
 # ReRiff 1.2.1 — Experimental Windows startup testing
 
 - Include the read-only Windows startup report collector beside Game.exe. It

@@ -3,6 +3,8 @@
     <TargetFramework>net40</TargetFramework>
     <AssemblyName>ReRiff.ClientConfig</AssemblyName>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <SignAssembly>true</SignAssembly>
+    <AssemblyOriginatorKeyFile>../Managed/ReRiff.snk</AssemblyOriginatorKeyFile>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
   </PropertyGroup>
   <ItemGroup>

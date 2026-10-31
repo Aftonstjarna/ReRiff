@@ -2,6 +2,33 @@ using dnlib.DotNet;
 using dnlib.DotNet.Emit;
 using dnlib.DotNet.Writer;
 
+if (args.Length == 4 && args[0] == "--retarget-helpers") {
+    using var source = ModuleDefMD.Load(args[1]);
+    int updated = 0;
+    foreach (var reference in source.GetAssemblyRefs()) {
+        string name = reference.Name.String;
+        if (name != "ReRiff.ClientConfig" && name != "ReRiff.NewsHeaders") continue;
+        using var target = ModuleDefMD.Load(Path.Combine(args[2], name + ".dll"));
+        if (!target.Assembly.HasPublicKey)
+            throw new InvalidOperationException("Helper must be fully strong-name signed: " + name);
+        reference.PublicKeyOrToken = target.Assembly.PublicKey.Token;
+        reference.Attributes &= ~AssemblyAttributes.PublicKey;
+        updated++;
+    }
+    if (updated == 0) throw new InvalidOperationException("No existing helper references found.");
+    if (source.IsILOnly) {
+        var writer = new ModuleWriterOptions(source);
+        writer.MetadataOptions.Flags |= MetadataFlags.PreserveAll;
+        source.Write(args[3], writer);
+    } else {
+        var writer = new NativeModuleWriterOptions(source, optimizeImageSize: false);
+        writer.MetadataOptions.Flags |= MetadataFlags.PreserveAll;
+        source.NativeWrite(args[3], writer);
+    }
+    Console.WriteLine("Retargeted existing client hooks to signed ReRiff helpers.");
+    return;
+}
+
 if (args.Length == 3 && args[0] == "--inspect-client") {
     using var endpoint = ModuleDefMD.Load(Path.Combine(args[1], "ParseOctane.dll"));
     using var transport = ModuleDefMD.Load(Path.Combine(args[1], "Parse.NetFx45.dll"));

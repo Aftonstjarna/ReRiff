@@ -12,7 +12,7 @@ parser.add_argument('--zig', default='zig')
 args = parser.parse_args()
 root = Path(__file__).resolve().parent.parent
 version = (root/'VERSION').read_text().strip()
-if not re.fullmatch(r'\d+\.\d+\.\d+', version):
+if not re.fullmatch(r'\d+\.\d+\.\d+(?:-[1-9]\d*)?', version):
     raise ValueError('Invalid VERSION')
 (root/'build').mkdir(exist_ok=True)
 env = dict(os.environ)

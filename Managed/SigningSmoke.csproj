@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net45</TargetFramework>
+    <PlatformTarget>x86</PlatformTarget>
+    <SignAssembly>true</SignAssembly>
+    <AssemblyOriginatorKeyFile>ReRiff.snk</AssemblyOriginatorKeyFile>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <WarningsAsErrors>CS8002</WarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="SigningSmoke.cs" />
+    <ProjectReference Include="../ClientConfig/ClientConfig.csproj" />
+    <ProjectReference Include="../NewsHeaders/NewsHeaders.csproj" />
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net45" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+</Project>
