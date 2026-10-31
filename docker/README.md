@@ -27,6 +27,11 @@ The `reriff-data` named volume stores everything under `/data`:
 - `classes/`: profiles, tracks, scores, and other Parse records.
 - `files/`: uploaded ghosts and track binaries.
 - `traces/`: structured, credential-redacted request/response logs.
+- `song-catalog.json`: exact-source identities registered by updated launchers.
+
+For automatic sharing across old cached song IDs, update both the server image
+and each client launcher to 0.1.2 or newer. Launch once on each client with the
+source audio files accessible. See [song identity details](SONG-ALIASES.md).
 
 `docker compose down` stops/removes the container but keeps the volume. Avoid
 `docker compose down -v` unless you intend to delete the saved data. No game

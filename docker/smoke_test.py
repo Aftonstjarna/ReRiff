@@ -55,6 +55,17 @@ def main():
         assert status==201
         assert json.loads(data)['url']==base+'/files/container.ghost'
         assert request('/files/container.ghost')[1]==binary
+        # Two clients have cached the same source under different server IDs.
+        request('/classes/Score','POST',{'Score':54321,'SongID':'second-cache','Owner':'second'})
+        manifest={'songs':[{'song_id':song,'sha256':'a'*64,'title':'Shared','artist':'Test'}
+                           for song in ('container-smoke','second-cache')]}
+        assert json.loads(request('/reriff/songs/register','POST',manifest)[1])['registered']==2
+        def shared_scores():
+            for song in ('container-smoke','second-cache'):
+                where=urllib.parse.urlencode({'where':json.dumps({'SongID':song}),'order':'-Score'})
+                scores=json.loads(request('/classes/Score?'+where)[1])['results']
+                assert [row['Score'] for row in scores]==[54321,12345]
+        shared_scores()
         request('/login?username=container-test&password=TRACE_SECRET')
         engine('exec',name,'python','/app/docker/healthcheck.py')
         engine('restart',name)
@@ -63,6 +74,7 @@ def main():
         base='http://127.0.0.1:'+port
         ready()
         assert json.loads(request('/classes/Score/'+oid)[1])['Score']==12345
+        shared_scores()
         assert request('/files/container.ghost')[1]==binary
         trace=engine('exec',name,'python','-c',"from pathlib import Path; print(''.join(p.read_text() for p in Path('/data/traces').glob('*.jsonl')))")
         assert 'TRACE_SECRET' not in trace
