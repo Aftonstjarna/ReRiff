@@ -34,7 +34,7 @@ jobs:
           echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
           publish=false
           if [[ "$GITHUB_EVENT_NAME" != pull_request ]] && \
-             { [[ "$GITHUB_REF" == "refs/heads/$DEFAULT_BRANCH" ]] || [[ "$GITHUB_REF" == refs/tags/v* ]]; }; then
+             { [[ "$GITHUB_REF" == "refs/heads/$DEFAULT_BRANCH" ]] || [[ "$GITHUB_REF" == refs/heads/codex/server-experimental ]] || [[ "$GITHUB_REF" == refs/tags/v* ]]; }; then
             publish=true
           fi
           echo "publish=$publish" >> "$GITHUB_OUTPUT"
@@ -65,6 +65,7 @@ jobs:
           images: ${{ steps.image.outputs.name }}
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=experimental,enable=${{ github.ref == 'refs/heads/codex/server-experimental' }}
             type=ref,event=tag
             type=sha
 

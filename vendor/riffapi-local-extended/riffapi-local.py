@@ -58,7 +58,7 @@ responses = {
 }
 
 # Classes that always return the canned response above.
-CANNED_CLASSES = ("Configuration", "News", "Version")
+CANNED_CLASSES = ("Configuration", "Version")
 
 LOG_LOCK = threading.Lock()
 
@@ -548,6 +548,9 @@ def query_class(cls):
     with STORAGE_LOCK:
         objs = load_all_objects(cls)
 
+    if cls == "News":
+        objs = news_response(objs)
+
     views, match_where = song_query_view(cls, objs, where)
     filtered = [o for o, view in zip(objs, views) if matches_where(view, match_where)]
     # A player may already have records under several equivalent cached IDs.
@@ -956,6 +959,12 @@ _catalog_spec = importlib.util.spec_from_file_location(
 _catalog_module = importlib.util.module_from_spec(_catalog_spec)
 _catalog_spec.loader.exec_module(_catalog_module)
 _catalog_module.install(globals())
+
+_news_spec = importlib.util.spec_from_file_location(
+    'reriff_news_adapter', os.path.join(BASE_DIR, 'news_adapter.py'))
+_news_module = importlib.util.module_from_spec(_news_spec)
+_news_spec.loader.exec_module(_news_module)
+_news_module.install(globals())
 
 if __name__ == "__main__":
     ensure_dirs()

@@ -75,6 +75,7 @@ def build(args):
     for path in (ROOT/'vendor/riffapi-local-extended').iterdir():
         if path.is_file():
             copy(path,payload/'localserver/server'/path.name)
+    copy(ROOT/'VERSION',payload/'localserver/server/VERSION')
     copy(ROOT/'LICENSE',payload/'localserver/licenses/ReRiff.txt')
     copy(ROOT/'ServerSync/third_party/LICENSE.MIT',payload/'localserver/licenses/nlohmann-json.txt')
     libs = payload/'localserver/python-libs'
@@ -102,6 +103,8 @@ def build(args):
         shutil.copytree(common,folder)
         library = 'reriff-catalog.dll' if platform == 'windows' else 'libreriff-catalog.so'
         copy(ROOT/'build/server-sync'/library, folder/'payload/localserver/server'/library)
+        news_library = library.replace('catalog', 'news')
+        copy(ROOT/'build/server-sync'/news_library, folder/'payload/localserver/server'/news_library)
         if platform == 'windows':
             copy(ROOT/'build/ReRiff-Setup.exe',folder/'ReRiff-Setup.exe')
             with zipfile.ZipFile(args.python_zip) as archive:

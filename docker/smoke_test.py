@@ -23,9 +23,9 @@ def main():
 
     opener=urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
-    def request(path,method='GET',body=None,mime='application/json'):
+    def request(path,method='GET',body=None,mime='application/json',headers=None):
         if isinstance(body,dict):body=json.dumps(body).encode()
-        req=urllib.request.Request(base+path,data=body,method=method,headers={'Content-Type':mime})
+        req=urllib.request.Request(base+path,data=body,method=method,headers={'Content-Type':mime,**(headers or {})})
         with opener.open(req,timeout=5) as response:
             data=response.read()
             return response.status,data
@@ -48,6 +48,17 @@ def main():
         ready()
         assert engine('exec',name,'id','-u')=='10001'
         assert request('/admin')[0]==200
+        request('/classes/News','POST',{'ID':17,'Status':'Active','enTitle':'Normal news','en':'Announcement survives'})
+        news=json.loads(request('/classes/News',headers={'X-ReRiff-Client-Version':'0.0.0'})[1])['results']
+        assert news[0]['objectId']=='ReRiffServerStatus'
+        assert news[0]['enTitle']=='Exit to update ReRiff'
+        assert any(row.get('en')=='Announcement survives' for row in news)
+        assert not any(row['objectId']=='RiffApiLocalNews' for row in news)
+        version=(Path(__file__).resolve().parents[1]/'VERSION').read_text().strip()
+        same=json.loads(request('/classes/News',headers={'X-ReRiff-Client-Version':version})[1])['results'][0]
+        assert same['enTitle']=='ReRiff server'
+        unknown=json.loads(request('/classes/News')[1])['results'][0]
+        assert 'unknown' in unknown['en']
         _,data=request('/classes/Score','POST',{'Score':12345,'SongID':'container-smoke'})
         oid=json.loads(data)['objectId']
         binary=b'\x00\xffghost-smoke'*128
@@ -90,7 +101,7 @@ with tempfile.TemporaryDirectory() as tmp:
  assert response.json['url']=='https://riff.example.test/files/public.ghost'
 """
         engine('exec',name,'python','-c',public_test)
-        print('PASS: non-root/read-only image, admin page, healthcheck, scores and ghosts across restart, credential redaction, public file URL')
+        print('PASS: version-aware News and normal announcements, non-root/read-only image, admin page, healthcheck, scores and ghosts across restart, credential redaction, public file URL')
     except Exception:
         subprocess.run([args.engine,'logs',name],check=False)
         raise
