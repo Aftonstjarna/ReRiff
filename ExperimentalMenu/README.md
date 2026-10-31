@@ -1,5 +1,9 @@
 # Experimental in-process server menu
 
+**Superseded Windows-panel prototype.** The requested engine-rendered menu is
+implemented separately in [ENGINE-MENU.md](ENGINE-MENU.md), built with
+`build-engine.sh`. The panel below does not satisfy the in-game menu requirement.
+
 Branch: `codex/experimental-ingame-menu` in ReRiff. Matching EXE recovery stays
 in the separate RiffRacer repository on `decomp`.
 
