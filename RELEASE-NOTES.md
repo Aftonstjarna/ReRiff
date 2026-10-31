@@ -1,3 +1,22 @@
+# ReRiff 0.1.3 — Automatic client updates
+
+- **Update from GitHub** now downloads and installs the latest stable client
+  release, then reopens the launcher, on Windows and Linux/Proton.
+- Verify the official release SHA256 and package integrity before closing the
+  launcher. Apply through the existing installer with backups and rollback;
+  preserve server.ini and saved server data.
+- Use a separate temporary native updater to wait for the launcher to exit.
+  Windows applies from a private Python runtime; Proton uses native Linux Python.
+- Stop only this installation's local Python server before replacement. Docker
+  servers are not updated or stopped by the client update button.
+- Keep the launcher open on download, checksum or preflight failures, with log
+  details. Updates remain disabled during a launcher-managed game session.
+
+Install 0.1.3 once using the release installer to enable this feature. Older
+launchers still open the release page; they cannot gain automatic updating
+without that initial launcher update. An existing supported ReRiff installation
+is required. This release includes only ReRiff components, not game DLL patches.
+
 # ReRiff 0.1.2 — Shared song identity
 
 - Automatically register cached song IDs with audio-file SHA256 identities when

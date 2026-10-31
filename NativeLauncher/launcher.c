@@ -59,42 +59,7 @@ static BOOL external_only(void) {
     return !_wcsicmp(value,L"true")||!wcscmp(value,L"1")||!_wcsicmp(value,L"yes");
 }
 
-static BOOL check_updates(void) {
-    HINTERNET session=InternetOpenW(L"ReRiffLauncher/" RERIFF_VERSION,INTERNET_OPEN_TYPE_PRECONFIG,NULL,NULL,0);
-    if(!session){wcscpy(message,L"Could not check GitHub releases.");return FALSE;}
-    DWORD limit=5000;
-    InternetSetOptionW(session,INTERNET_OPTION_CONNECT_TIMEOUT,&limit,sizeof(limit));
-    InternetSetOptionW(session,INTERNET_OPTION_RECEIVE_TIMEOUT,&limit,sizeof(limit));
-    const WCHAR *headers=L"Accept: application/vnd.github+json\r\n";
-    HINTERNET request=InternetOpenUrlW(session,L"https://api.github.com/repos/Aftonstjarna/ReRiff/releases/latest",headers,(DWORD)-1,
-        INTERNET_FLAG_RELOAD|INTERNET_FLAG_NO_CACHE_WRITE|INTERNET_FLAG_NO_UI,0);
-    BOOL ok=FALSE;DWORD code=0,size=sizeof(code),count=0;
-    if(request && HttpQueryInfoW(request,HTTP_QUERY_STATUS_CODE|HTTP_QUERY_FLAG_NUMBER,&code,&size,NULL)){
-        if(code==404){wcscpy(message,L"No GitHub release has been published yet. Your installed files were not changed.");ok=TRUE;}
-        else if(code==200){
-            char body[65536];DWORD total=0;
-            while(total<sizeof(body)-1 && InternetReadFile(request,body+total,sizeof(body)-1-total,&count) && count)total+=count;
-            body[total]=0;char *tag=strstr(body,"\"tag_name\"");
-            if(tag && (tag=strchr(tag,':')) && (tag=strchr(tag,'\"'))){
-                char version[128];size_t length=strcspn(++tag,"\"");
-                if(length<sizeof(version)){
-                    memcpy(version,tag,length);version[length]=0;
-                    int a=0,b=0,c=0,x=0,y=0,z=0;
-                    const char *number=version[0]=='v'?version+1:version;
-                    BOOL newer=sscanf(number,"%d.%d.%d",&a,&b,&c)!=3 || sscanf(RERIFF_VERSION,"%d.%d.%d",&x,&y,&z)!=3
-                        || a>x || (a==x && (b>y || (b==y && c>z)));
-                    if(newer){
-                        HINSTANCE opened=ShellExecuteW(window,L"open",L"https://github.com/Aftonstjarna/ReRiff/releases/latest",NULL,NULL,SW_SHOWNORMAL);
-                        wcscpy(message,(INT_PTR)opened>32?L"Update available. The GitHub release page is open; download the installer for your operating system.":L"Update available at github.com/Aftonstjarna/ReRiff/releases/latest; browser could not be opened.");
-                    }else wcscpy(message,L"You have the latest published release. Installed files were not changed.");
-                    ok=TRUE;
-                }
-            }
-        }
-    }
-    if(!ok)wcscpy(message,L"Could not check releases (network error or GitHub rate limit). Try again later.");
-    if(request)InternetCloseHandle(request);InternetCloseHandle(session);return ok;
-}
+#include "auto_update.h"
 
 static BOOL stop_server(void) {
     if (is_wine()) {
@@ -234,7 +199,7 @@ static DWORD WINAPI worker(LPVOID parameter) {
     if (ok && play) ok=launch_game();
     if (ok && action<2) wcscpy(message,only?(play?L"Game closed. External-only mode did not start a local server.":L"External-only mode: local autostart and fallback are disabled."):(play?L"Game closed. Local server remains running.":L"Local server is ready."));
     log_message(message);
-    PostMessageW(window,WM_COMPLETE,ok,play);
+    PostMessageW(window,WM_COMPLETE,ok,update_handoff?2:play);
     return 0;
 }
 
@@ -243,7 +208,7 @@ static void begin(int action) {
     busy=TRUE;playing=action==1;
     EnableWindow(play_button,FALSE);EnableWindow(save_button,FALSE);EnableWindow(stop_button,FALSE);EnableWindow(update_button,FALSE);
     SetWindowTextW(status,action==3?L"Checking published GitHub releases...":action==2?L"Stopping this installation's local server...":L"Checking server settings...");
-    HANDLE thread=CreateThread(NULL,0,worker,(LPVOID)(INT_PTR)action,0,NULL);
+    HANDLE thread=CreateThread(NULL,4*1024*1024,worker,(LPVOID)(INT_PTR)action,STACK_SIZE_PARAM_IS_A_RESERVATION,NULL);
     if (thread) CloseHandle(thread);
     else { busy=FALSE; EnableWindow(play_button,TRUE);EnableWindow(save_button,TRUE);EnableWindow(stop_button,TRUE);EnableWindow(update_button,TRUE);SetWindowTextW(status,L"Could not start launcher worker."); }
 }
@@ -299,7 +264,7 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
         stop_button=control(L"BUTTON",L"Stop local server",WS_TABSTOP,180,409,150,34,STOP);
         save_button=control(L"BUTTON",L"Save settings",WS_TABSTOP,345,409,130,34,SAVE);
         play_button=control(L"BUTTON",L"Save and play",WS_TABSTOP|BS_DEFPUSHBUTTON,490,409,130,34,PLAY);
-        update_button=control(L"BUTTON",L"Check for updates",WS_TABSTOP,22,453,155,30,UPDATE);
+        update_button=control(L"BUTTON",L"Update from GitHub",WS_TABSTOP,22,453,155,30,UPDATE);
         WCHAR value[4096];
         GetPrivateProfileStringW(L"server",L"external_url",L"",value,4096,ini);SetWindowTextW(external,value);
         GetPrivateProfileStringW(L"server",L"fallback_url",L"",value,4096,ini);SetWindowTextW(fallback,value);
@@ -314,13 +279,14 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
             case LOCAL:SendMessageW(only_checkbox,BM_SETCHECK,BST_UNCHECKED,0);EnableWindow(fallback,TRUE);SetWindowTextW(fallback,L"http://127.0.0.1:5144");break;
             case EXTERNAL_ONLY:EnableWindow(fallback,SendMessageW(only_checkbox,BM_GETCHECK,0,0)!=BST_CHECKED);break;
             case STOP:begin(2);break;
-            case UPDATE:begin(3);break;
+            case UPDATE:if (save()) begin(3);break;
             case SAVE:save();break;
             case PLAY:if (save()) begin(TRUE);break;
         }return 0;
     }
     if (event==WM_GAME_RUNNING) { SetWindowTextW(status,L"Game running. Keep the launcher open until the game closes.");ShowWindow(window,SW_MINIMIZE);return 0; }
     if (event==WM_COMPLETE) {
+        if (lp==2) { DestroyWindow(hwnd);return 0; }
         busy=FALSE;playing=FALSE;EnableWindow(play_button,TRUE);EnableWindow(save_button,TRUE);EnableWindow(stop_button,TRUE);EnableWindow(update_button,TRUE);SetWindowTextW(status,message);
         if (lp) ShowWindow(window,SW_RESTORE);return 0;
     }

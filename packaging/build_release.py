@@ -59,9 +59,9 @@ def build(args):
         patches[name] = {'file': path.relative_to(common).as_posix(), 'original': metadata['original'], 'patched': metadata['patched']}
         print(name, 'delta:',len(encoded),'bytes')
     payload = common/'payload'
-    for name in ('ReRiff.ClientConfig.dll','ReRiff.Notify.dll','ReRiff-Launcher.exe'):
+    for name in ('ReRiff.ClientConfig.dll','ReRiff.Notify.dll','ReRiff-Launcher.exe','ReRiff-Updater.exe'):
         copy(ROOT/'build'/name, payload/name)
-    for name in ('trace-server.py','server_routing.py','steam-launcher.sh','start-server-host.sh','stop-server-host.sh','server-control.py'):
+    for name in ('trace-server.py','server_routing.py','steam-launcher.sh','start-server-host.sh','stop-server-host.sh','server-control.py','apply-client-update.py'):
         copy(ROOT/'scripts'/name,payload/'localserver'/name)
     for path in (ROOT/'vendor/riffapi-local-extended').iterdir():
         if path.is_file():
