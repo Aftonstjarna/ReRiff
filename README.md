@@ -27,7 +27,49 @@ sed -i "s/https:\\/\\/parseapi.back4app.com/http:\\/\\/127.000000000.0.1:5144/g"
 4. Launch the game; watch the console / `data/requests.log`.
 5. Open <http://127.0.0.1:5144/admin> to manage stored data.
 
-Docker alternative: `docker compose up --build`
+Docker alternative: `docker compose up -d --build`.
+
+### Docker storage and networking
+
+Compose stores records, uploaded files, and logs in the persistent `riffapi-data`
+volume mounted at `/data`. Recreating the container retains that volume;
+`docker compose down -v` deletes it. Outside Docker, `python riffapi-local.py`
+continues to use `data/` beside the script. Set `RIFFAPI_DATA_DIR` to choose another
+storage directory.
+
+The container uses one threaded Waitress process listening on `0.0.0.0:5144`
+inside the container. Compose publishes it to `127.0.0.1:5144` on the host by
+default. For trusted LAN access, put this in `.env` beside `docker-compose.yml`:
+
+```ini
+RIFFAPI_BIND_ADDRESS=0.0.0.0
+RIFFAPI_PORT=5144
+```
+
+Allow the chosen TCP port through the host firewall and point clients at the
+host's reachable address. The API and admin interface retain their existing
+permissive access behavior; these container settings do not add authentication.
+
+**Existing Docker users:** back up `/app/data` from the old container before
+recreating it. The new volume is not populated from an old container's writable
+layer automatically. Copy saved data into `/data` with the backend stopped. A
+host bind mount must be writable by UID/GID 10001; a new named volume uses the
+image's prepared data directory.
+
+The image has a healthcheck, runs as UID/GID 10001, and the Compose configuration
+uses a read-only root filesystem with writable data and temporary storage.
+The build context excludes local data, logs, and repository metadata.
+
+To test with isolated storage and an automatically allocated host port:
+
+```sh
+docker build -t riffapi-local:test .
+python3 docs/tests/test_container.py --image riffapi-local:test
+```
+
+The test runs the existing API/auth/operation suites, checks binary downloads
+and non-root writes, then recreates the container with the same volume and checks
+that records and uploaded files survived. `--engine podman` is also supported.
 
 > `data/` (ghosts, scores, logs) is gitignored and never published — back it up by copying the folder.
 
