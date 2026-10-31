@@ -18,3 +18,6 @@ for target, name in [('x86_64-linux-gnu.2.28', 'libreriff-catalog.so'), ('x86_64
     subprocess.run([args.zig, 'c++', '-target', target, '-std=c++17', '-O2', '-shared',
                     '-fPIC', str(root/'ServerSync/catalog.cpp'), '-o', str(output/name),
                     '-static-libstdc++'], check=True, env=env)
+    subprocess.run([args.zig, 'c++', '-target', target, '-std=c++17', '-O2', '-shared',
+                    '-fPIC', str(root/'ServerSync/news.cpp'), '-o', str(output/name.replace('catalog', 'news')),
+                    '-static-libstdc++'], check=True, env=env)

@@ -47,7 +47,7 @@ def check(name, cond, extra=""):
 st, body = req("GET", "/classes/Configuration")
 check("canned Configuration", st == 200 and b"OnTrackCoinValue" in body)
 st, body = req("GET", "/classes/News")
-check("canned News", st == 200 and b"RiffApiLocalNews" in body)
+check("ReRiff News status", st == 200 and b"ReRiffServerStatus" in body and b"RiffApiLocalNews" not in body)
 st, body = req("GET", "/classes/Version")
 check("canned Version", st == 200 and b'"Ver":100' in body)
 st, body = req("GET", "/events/AppOpened")
