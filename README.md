@@ -60,6 +60,18 @@ Client updates do not update the Docker server.
 On Windows, run `ReRiff-Launcher.exe` beside `Game.exe`. Add `--skip-launcher`
 to start the game without the settings window.
 
+For the experimental client on native Windows, Steam launch options can use:
+
+```text
+"C:\Steam\steamapps\common\Riff Racer\ReRiff-Launcher.exe" %command%
+```
+
+Use your actual game folder and do not surround the whole line with single
+quotes. Steam's forwarded command must point to `Game.exe` beside the launcher.
+Put launcher flags such as `--skip-launcher` before `%command%`; game arguments
+forwarded after `Game.exe` are retained. This requires the experimental client's
+Steam command-forwarding fix.
+
 On Linux, set Steam launch options to the installed bridge, using your game path:
 
 ```text

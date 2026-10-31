@@ -25,6 +25,7 @@
 #define WM_GAME_RUNNING (WM_APP + 2)
 enum { EXTERNAL=101, FALLBACK, TIMEOUT, POPUP, SAVE, PLAY, LOCAL, EXTERNAL_ONLY, STOP, UPDATE, EXPERIMENTAL, NETWORKING };
 static WCHAR folder[CAP], ini[CAP], message[1024];
+static WCHAR game_arguments[CAP];
 static HWND window, status, external, fallback, timeout_edit, popup, play_button, save_button;
 static HWND only_checkbox, stop_button, update_button;
 static BOOL busy = FALSE, playing = FALSE;
@@ -72,6 +73,58 @@ static BOOL spawn(WCHAR *command, BOOL hidden, PROCESS_INFORMATION *process) {
 
 static BOOL is_wine(void) {
     return GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "wine_get_version") != NULL;
+}
+
+static BOOL append_command_character(WCHAR *out,size_t *used,WCHAR value) {
+    if(*used>=CAP-1)return FALSE;
+    out[(*used)++]=value;out[*used]=0;return TRUE;
+}
+
+/* Windows command-line quoting: backslashes before quotes (including the
+ * closing quote) must be doubled so the game's argv retains the input. */
+static BOOL append_game_argument(const WCHAR *argument) {
+    size_t used=wcslen(game_arguments);
+    if(used&&!append_command_character(game_arguments,&used,L' '))return FALSE;
+    if(!append_command_character(game_arguments,&used,L'"'))return FALSE;
+    const WCHAR *cursor=argument;
+    for(;;){
+        size_t slashes=0;while(*cursor==L'\\'){slashes++;cursor++;}
+        size_t copies=(*cursor==L'"'||!*cursor)?slashes*2:slashes;
+        for(size_t i=0;i<copies;i++)if(!append_command_character(game_arguments,&used,L'\\'))return FALSE;
+        if(!*cursor)break;
+        if(*cursor==L'"'&&!append_command_character(game_arguments,&used,L'\\'))return FALSE;
+        if(!append_command_character(game_arguments,&used,*cursor++))return FALSE;
+    }
+    return append_command_character(game_arguments,&used,L'"');
+}
+
+static BOOL is_forwarded_game(const WCHAR *argument) {
+    WCHAR expected[CAP],resolved[CAP];path(expected,L"Game.exe");
+    if(!_wcsicmp(argument,L"Game.exe"))return TRUE;
+    DWORD length=GetFullPathNameW(argument,CAP,resolved,NULL);
+    return length&&length<CAP&&!_wcsicmp(expected,resolved);
+}
+
+static BOOL parse_launcher_arguments(int count,LPWSTR *args,BOOL *skip,BOOL *selftest) {
+    *skip=FALSE;*selftest=FALSE;game_arguments[0]=0;
+    for(int i=1;i<count;i++){
+        if(!wcscmp(args[i],L"--skip-launcher")||!wcscmp(args[i],L"--skip"))*skip=TRUE;
+        else if(!wcscmp(args[i],L"--self-test"))*selftest=TRUE;
+        else {
+            if(!wcscmp(args[i],L"--")&&++i>=count)return FALSE;
+            if(!is_forwarded_game(args[i]))return FALSE;
+            for(i++;i<count;i++)if(!append_game_argument(args[i]))return FALSE;
+            return TRUE;
+        }
+    }
+    return TRUE;
+}
+
+static BOOL game_command(WCHAR *command) {
+    WCHAR game[CAP];path(game,L"Game.exe");
+    int length=_snwprintf(command,CAP,L"\"%ls\"%ls%ls",game,*game_arguments?L" ":L"",game_arguments);
+    command[CAP-1]=0;
+    return length>=0&&length<CAP;
 }
 
 static BOOL external_only(void) {
@@ -222,9 +275,8 @@ finish:
 
 static BOOL launch_game(void) {
     sync_cached_songs(ini);
-    WCHAR game[CAP],command[CAP]; PROCESS_INFORMATION process;
-    path(game,L"Game.exe");
-    _snwprintf(command,CAP,L"\"%ls\"",game);command[CAP-1]=0;
+    WCHAR command[CAP]; PROCESS_INFORMATION process;
+    if(!game_command(command)){wcscpy(message,L"The forwarded game command is too long.");return FALSE;}
     if (!spawn(command,FALSE,&process)) { wcscpy(message,L"Could not start Game.exe beside the launcher."); return FALSE; }
     if (window) PostMessageW(window,WM_GAME_RUNNING,0,0);
     CloseHandle(process.hThread);
@@ -401,10 +453,9 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE previous,LPWSTR command,int sho
     GetModuleFileNameW(NULL,folder,CAP);WCHAR *slash=wcsrchr(folder,L'\\');if (!slash) return 1;*slash=0;
     path(ini,L"server.ini");load_channel();
     BOOL skip=FALSE,selftest=FALSE;int count;LPWSTR *args=CommandLineToArgvW(GetCommandLineW(),&count);
-    for (int i=1;i<count;i++) {
-        if (!wcscmp(args[i],L"--skip-launcher") || !wcscmp(args[i],L"--skip")) skip=TRUE;
-        else if (!wcscmp(args[i],L"--self-test")) selftest=TRUE;
-        else { log_message(L"Unknown launcher argument.");LocalFree(args);return 2; }
+    if(!args||!parse_launcher_arguments(count,args,&skip,&selftest)) {
+        log_message(L"Unknown launcher argument. Steam may forward only the Game.exe beside this launcher and its arguments.");
+        if(args)LocalFree(args);return 2;
     }
     LocalFree(args);
     if (selftest) {
