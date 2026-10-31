@@ -13,6 +13,7 @@ import zipfile
 import zlib
 
 from shared_patch import make_patch, digest
+from release_notes import release_notes
 
 ROOT = Path(__file__).resolve().parent.parent
 PYTHON_SHA = '9e35319bffedab8b36ad44d8f377cb4f1733bcec257a0b6d04d94f01486ddb38'
@@ -25,6 +26,7 @@ def copy(source, destination):
 
 def build(args):
     version = (ROOT/'VERSION').read_text().strip()
+    notes = release_notes((ROOT/'RELEASE-NOTES.md').read_text(encoding='utf-8'), version)
     if not re.fullmatch(r'\d+\.\d+\.\d+', version):
         raise ValueError('Invalid VERSION')
     if args.update_only:
@@ -42,8 +44,9 @@ def build(args):
     common.mkdir()
     for name in ('installer.py', 'shared_patch.py'):
         copy(ROOT/'packaging'/name, common/name)
-    for name in ('README.md', 'README-LINUX.md', 'LICENSE', 'RELEASE-NOTES.md', 'SERVER-CONFIG.md', 'LAUNCHER.md'):
+    for name in ('README.md', 'README-LINUX.md', 'LICENSE', 'SERVER-CONFIG.md', 'LAUNCHER.md'):
         copy(ROOT/name, common/name)
+    (common/'RELEASE-NOTES.md').write_text(notes, encoding='utf-8')
     patches = {}
     for name in (() if args.update_only else ('ParseOctane.dll', 'Parse.NetFx45.dll')):
         if args.original_dir:
@@ -132,7 +135,7 @@ __RERIFF_PAYLOAD__
     artifacts = sorted(p for p in output.iterdir() if p.suffix in ('.run','.zip','.gz'))
     (output/'SHA256SUMS').write_text(''.join(digest(p.read_bytes())+'  '+p.name+'\n' for p in artifacts))
     (output/'release.json').write_text(json.dumps({'version':version,'commit':commit,'artifacts':[p.name for p in artifacts]},indent=2)+'\n')
-    copy(ROOT/'RELEASE-NOTES.md',output/'RELEASE-NOTES.md')
+    (output/'RELEASE-NOTES.md').write_text(notes, encoding='utf-8')
     copy(ROOT/'README-LINUX.md',output/'README-LINUX.md')
     print('Release artifacts:',output)
 
