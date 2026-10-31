@@ -76,8 +76,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           version=$(cat VERSION)
+          python packaging/release_notes.py --version "$version" --output "$RUNNER_TEMP/RELEASE-NOTES.md"
           gh release create "v$version" \
             --target "$GITHUB_SHA" \
             --title "ReRiff $version" \
-            --notes-file RELEASE-NOTES.md \
+            --notes-file "$RUNNER_TEMP/RELEASE-NOTES.md" \
             "dist/v$version/"*
