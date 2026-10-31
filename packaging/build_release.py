@@ -107,6 +107,10 @@ def build(args):
     for platform in ('linux','windows'):
         folder = stage/platform
         shutil.copytree(common,folder)
+        if args.local_patching and platform == 'linux':
+            copy(ROOT/'build/linux-patcher/Patcher', folder/'patcher/ReRiff-Patcher')
+            for name in ('LICENSE.TXT', 'THIRD-PARTY-NOTICES.TXT'):
+                copy(ROOT/'build/linux-patcher'/name, folder/'patcher'/('dotnet-'+name))
         library = 'reriff-catalog.dll' if platform == 'windows' else 'libreriff-catalog.so'
         copy(ROOT/'build/server-sync'/library, folder/'payload/localserver/server'/library)
         news_library = library.replace('catalog', 'news')

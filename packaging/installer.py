@@ -88,10 +88,15 @@ def patch_vanilla(bundle, game, backups, manifest, restore):
         patcher = bundle/'patcher/ReRiff-Patcher.exe'
         command = [str(patcher)]
         if os.name != 'nt':
-            mono = shutil.which('mono')
-            if not mono:
-                raise ValueError('Installing or updating client DLL hooks on Linux requires Mono. Install Mono and retry; no game files have been changed.')
-            command.insert(0, mono)
+            native = bundle/'patcher/ReRiff-Patcher'
+            if native.is_file():
+                native.chmod(native.stat().st_mode | 0o100)
+                command = [str(native)]
+            else:
+                mono = shutil.which('mono')
+                if not mono:
+                    raise ValueError('The Linux patcher is missing from this package. Download the complete current Linux installer; no game files have been changed.')
+                command.insert(0, mono)
         with tempfile.TemporaryDirectory(prefix='reriff-patch-') as temporary:
             for name, vanilla, input_hash in needs_patch:
                 source, output = Path(temporary)/name, Path(temporary)/('patched-'+name)

@@ -57,6 +57,19 @@ class HelperUpgradeTests(unittest.TestCase):
         self.assertFalse((self.backups/'originals').exists())
         self.assertEqual((self.game/'server.ini').read_bytes(),b'keep settings')
 
+    @unittest.skipIf(installer.os.name == 'nt', 'Linux patcher selection')
+    def test_bundled_linux_patcher_works_without_mono(self):
+        native=self.bundle/'patcher/ReRiff-Patcher';native.parent.mkdir()
+        native.write_bytes(b'native patcher fixture');native.chmod(0o600)
+        self.manifest['files']['patcher/ReRiff-Patcher']=digest(native.read_bytes())
+        (self.bundle/'manifest.json').write_text(json.dumps(self.manifest))
+        with patch.object(installer.shutil,'which',return_value=None) as which:
+            self.install()
+            which.assert_not_called()
+        for call in self.mock_run.call_args_list:
+            self.assertEqual(call.args[0][0],str(native))
+        self.assertTrue(native.stat().st_mode & 0o100)
+
     def test_verified_backups_rebuild_fresh_and_remain_unchanged(self):
         stamps={}
         for n,data in self.original.items():

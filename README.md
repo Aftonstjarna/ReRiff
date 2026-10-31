@@ -43,7 +43,15 @@ Replace `<version>` with the downloaded release number. Omit `--game-dir` to
 search common Steam libraries. Do not use `sudo`. The installer bundles the
 server libraries and places the backend in `localserver/` beside `Game.exe`.
 It does not change Steam's selected Proton version or launch options.
-Mono is also required on Linux when installing or updating client DLL hooks.
+The Linux installer includes the DLL patcher's runtime; a separate Mono or .NET
+installation is not required. If an older package reports that Mono is required,
+download the current complete Linux installer or retry after the experimental
+channel has been refreshed.
+
+If Windows selects an external server but game features stay offline, include
+`ReRiff-network.log` from the game folder when reporting the failure. It records
+bounded network and assembly-loading exception details. The startup report
+collector includes it automatically.
 
 ### Automatic client updates
 
@@ -371,6 +379,7 @@ secret. Update the patched Parse DLL references together with the helpers.
 dotnet build ClientConfig/ClientConfig.csproj -c Release -o build
 dotnet build NewsHeaders/NewsHeaders.csproj -c Release -o build
 dotnet build Patcher/InstallerPatcher.csproj -c Release -o build/installer-patcher
+python3 scripts/build-linux-patcher.py
 RERIFF_RELEASE_CHANNEL=experimental python3 scripts/build-windows-launcher.py --zig /path/to/zig
 python3 scripts/build-song-catalog.py --zig /path/to/zig
 ```

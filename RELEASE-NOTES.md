@@ -1,3 +1,17 @@
+# ReRiff 1.2.1-3 — Linux update patcher runtime
+
+- Include the Linux DLL patcher's runtime in the installer so fresh installs and
+  updates no longer require Mono or a host .NET installation.
+- Keep the signed-helper loading fix from revision -2, including verified DLL
+  repair and preservation of existing vanilla backups.
+- Record bounded network and assembly-loading exception details in
+  ReRiff-network.log, and include that log in the startup report collector.
+
+The Linux update failure was confirmed in update.log. The separately reported
+Windows external-server connection failure remains under investigation; the
+Windows selects the external address successfully; its subsequent game-request
+failure still needs the new network log to identify the cause.
+
 # ReRiff 1.2.1-2 — Windows assembly loading fix
 
 - Fix the assembly-loading failure identified in the supplied Windows crash

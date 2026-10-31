@@ -73,6 +73,8 @@ jobs:
         run: dotnet build NewsHeaders/NewsHeaders.csproj -c Release -o build
       - name: Build local vanilla-install patcher
         run: dotnet build Patcher/InstallerPatcher.csproj -c Release -o build/installer-patcher
+      - name: Build self-contained Linux patcher
+        run: python scripts/build-linux-patcher.py
       - name: Build native launcher, notification, and Windows setup
         run: python scripts/build-windows-launcher.py --zig "$RUNNER_TEMP/release-tools/zig-x86_64-linux-0.14.1/zig"
       - name: Build Linux and Windows server identity libraries
