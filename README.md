@@ -5,11 +5,9 @@ Linux/Proton. ReRiff provides a local or shared server, a native Windows launche
 and client configuration tools. The game still runs through Proton on Linux and
 retains its existing .NET Framework requirements.
 
-This fork is the primary ReRiff repository and contains the server, launcher,
-client tools, and installers together. The previous
-[Aftonstjarna/ReRiff-test repository](https://github.com/Aftonstjarna/ReRiff-test) is
-retained for legacy/test use and history. Current releases, instructions and
-Docker publishing are maintained here.
+This repository contains the server, launcher, client tools, and installers
+together. Current releases, instructions, and Docker publishing are maintained
+here.
 
 [Download the latest release](https://github.com/Aftonstjarna/ReRiff/releases/latest)
 · [Install and update](#install-or-update)
@@ -23,12 +21,11 @@ Docker publishing are maintained here.
 the original DLL hashes and patches your local copies of `ParseOctane.dll` and
 `Parse.NetFx45.dll`, or keeps already-supported patched copies. Original game
 executables, assets, and game-derived binary patches are not included.
-Releases through v0.1.8 were update-only and cannot install onto a vanilla game.
 
 Close the game and launcher before a manual installation. Existing settings,
-scores, ghosts, and server data are preserved. Backups stay outside the game
-folder, using the installation's recorded backup location. Unknown game DLL
-modifications are rejected rather than overwritten. Matching vanilla backups
+scores, ghosts, and server data are preserved. Keep the installation's recorded
+backup folder. Unknown game DLL modifications are rejected rather than
+overwritten. Matching vanilla backups
 are checked by SHA256, kept unchanged, and skipped so installation can continue.
 A conflicting backup stops installation without overwriting it.
 
@@ -59,9 +56,8 @@ the latest stable release for your platform, verifies its SHA256 and package
 contents, applies the update with backups and rollback, then reopens itself.
 The title bar shows the running version. Settings and saved data are retained.
 
-Install v0.1.5 or newer manually if an older launcher only opens the release
-page or fails with "Could not stop this installation's local server." Subsequent
-updates use the corrected updater. Client updates do not update the Docker server.
+If your launcher cannot apply an update, install the current release manually.
+Client updates do not update the Docker server.
 
 ## Launch through Steam
 
@@ -295,7 +291,7 @@ Use a current installer and its backups with `--restore --game-dir '...'` to
 restore original DLLs while retaining the server, settings, and saved data.
 Keep the recorded backup folder. Original game runtime dependencies still apply.
 
-With a full installer capable of restoring original DLLs:
+On Linux/Proton:
 
 ```sh
 sh ReRiff-<version>-linux.run --restore --game-dir '/path/to/Riff Racer'
@@ -307,7 +303,7 @@ On Windows:
 ReRiff-Setup.exe --restore --game-dir "C:\path\to\Riff Racer"
 ```
 
-Older update-only packages reject restore mode. `--dry-run` validates a manual
+`--dry-run` validates a manual
 installation without writing files; `--backup-dir` selects an explicit backup
 location. Existing installations continue using their recorded backup directory.
 
