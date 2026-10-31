@@ -73,7 +73,21 @@ jobs:
       - name: Validate Linux self-extractor
         run: sh "dist/v$(cat VERSION)/ReRiff-$(cat VERSION)-linux.run" --help
       - name: Verify published archive checksums
-        run: cd "dist/v$(cat VERSION)" && sha256sum -c SHA256SUMS
+        run: |
+          python - <<'PY'
+          import configparser, hashlib, json
+          from pathlib import Path
+          for platform in ('linux', 'windows'):
+              root = Path('build/release') / platform
+              manifest = json.loads((root / 'manifest.json').read_text())
+              name = 'payload/localserver/client-channel.ini'
+              marker = root / name
+              channel = configparser.ConfigParser()
+              channel.read(marker)
+              assert channel['client']['channel'] == manifest['channel'] == 'stable'
+              assert hashlib.sha256(marker.read_bytes()).hexdigest() == manifest['files'][name]
+          PY
+          cd "dist/v$(cat VERSION)" && sha256sum -c SHA256SUMS
       - name: Publish GitHub release and installers
         env:
           GH_TOKEN: ${{ github.token }}
