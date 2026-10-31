@@ -2,7 +2,7 @@ name: reriff
 services:
   server:
     build: .
-    image: "${RERIFF_IMAGE:-reriff-server:local}"
+    image: "${RERIFF_IMAGE:-ghcr.io/aftonstjarna/reriff:latest}"
     ports:
       - "${RERIFF_BIND_ADDRESS:-127.0.0.1}:${RERIFF_PORT:-5144}:5144"
     volumes:

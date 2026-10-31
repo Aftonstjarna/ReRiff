@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   release:
-    if: github.repository == 'Aftonstjarna/riffapi-local-extended'
+    if: github.repository == 'Aftonstjarna/ReRiff'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
