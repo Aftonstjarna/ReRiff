@@ -11,12 +11,17 @@
 
 typedef void (__thiscall *ScreenFn)(void *,void *,void *);
 typedef void (__thiscall *InputFn)(void *,int);
+typedef void (__thiscall *TickFn)(void *);
+typedef void (__thiscall *EnableFn)(void *,BYTE);
+typedef void (__thiscall *ColourFn)(void *,int,const float *);
 typedef void (__thiscall *RawTextFn)(void *,const WCHAR *);
 typedef void (__thiscall *KeyTextFn)(void *,const char *);
 typedef const char *(__thiscall *TitleFn)(void *);
 typedef struct Settings { WCHAR external[2048], fallback[2048]; BOOL only; } Settings;
 static ScreenFn original_init, original_cleanup;
 static InputFn original_input;
+static TickFn original_tick;
+static EnableFn enable_input;
 static RawTextFn raw_text;
 static KeyTextFn key_text;
 static const char **original_labels;
@@ -26,6 +31,7 @@ static void *page_owner;
 static BOOL server_page;
 static WCHAR heading[96]=L"Servers — applies after restart";
 static volatile LONG installed;
+#define SERVERS_ID 8
 
 static void log_line(const char *line) {
     HANDLE file=CreateFileW(log_path,FILE_APPEND_DATA,FILE_SHARE_READ,NULL,OPEN_ALWAYS,FILE_ATTRIBUTE_NORMAL,NULL);
@@ -83,6 +89,23 @@ static void *item_text(void *menu,int id) {
     return readable(*begin,484)?*begin:NULL;
 }
 
+static void keep_servers_available(void *menu) {
+    void *item=((void **)menu)[62+SERVERS_ID];
+    if (!readable(item,404)) return;
+    /* Original main-menu tick gates Friends on Parse connectivity. The server
+     * settings entry must remain usable after that connectivity gate runs. */
+    enable_input(item,TRUE);
+    static const float focus[4]={0.0f,1.0f,1.0f,0.8f};
+    static const float normal[4]={1.0f,1.0f,1.0f,0.9f};
+    ColourFn colour=(ColourFn)(*(void ***)menu)[26];
+    colour(menu,SERVERS_ID,((int *)menu)[88]==SERVERS_ID?focus:normal);
+}
+
+static void __thiscall hook_tick(void *menu) {
+    original_tick(menu);
+    keep_servers_available(menu);
+}
+
 static void render(void *menu) {
     static const WCHAR *labels[11]={L"", L"Settings apply after restart",
         L"Use local server", L"Use configured external server", L"",
@@ -94,7 +117,7 @@ static void render(void *menu) {
         void *text=item_text(menu,id);
         if (!text) continue;
         if (server_page) raw_text(text,id==4?only:labels[id]);
-        else if (id==4) raw_text(text,L"Servers");
+        else if (id==SERVERS_ID) raw_text(text,L"Servers");
         else key_text(text,original_labels[id]);
         void *item=((void **)menu)[62+id];
         /* Original initScreens: selectable width = half row height + text width. */
@@ -108,12 +131,14 @@ static void render(void *menu) {
             key_text(title,get_title(menu));
         }
     }
+    keep_servers_available(menu);
 }
 
 static void __thiscall hook_init(void *menu,void *screen,void *lower) {
     original_init(menu,screen,lower);
     page_owner=menu; server_page=FALSE; render(menu);
-    log_line("Engine main menu initialized; News replaced with Servers.");
+    log_line(item_text(menu,SERVERS_ID)?"Engine main menu initialized; Friends replaced with Servers."
+        :"Engine main menu has no Friends item; Servers entry unavailable.");
 }
 
 static void __thiscall hook_cleanup(void *menu,void *screen,void *lower) {
@@ -123,7 +148,7 @@ static void __thiscall hook_cleanup(void *menu,void *screen,void *lower) {
 
 static void __thiscall hook_input(void *menu,int selection) {
     if (!server_page || page_owner!=menu) {
-        if (selection!=4) { original_input(menu,selection); return; }
+        if (selection!=SERVERS_ID) { original_input(menu,selection); return; }
         page_owner=menu; load_settings(); server_page=TRUE;
         wcscpy(heading,L"Servers — applies after restart"); render(menu);
         log_line("Engine Servers page opened."); return;
@@ -190,17 +215,20 @@ static BOOL validate_image_at(BYTE *base,uintptr_t address_base) {
     if (!readable(base+0x7a7470,sizeof(entries))) return FALSE;
     void **table=(void **)(base+0x7a7470);
     for (int i=0;i<27;i++) if ((uintptr_t)table[i]!=address_base+entries[i]) return FALSE;
-    const DWORD slots[3]={15,16,24}, targets[3]={0x7a74f0,0x7a74ec,0x7a74e0};
-    for (int i=0;i<3;i++) {
+    const DWORD slots[4]={3,15,16,24}, targets[4]={0x7a74f8,0x7a74f0,0x7a74ec,0x7a74e0};
+    for (int i=0;i<4;i++) {
         BYTE *thunk=base+entries[slots[i]];
         if (!readable(thunk,6) || thunk[0]!=0xff || thunk[1]!=0x25
             || *(DWORD *)(thunk+2)!=(DWORD)(address_base+targets[i])) return FALSE;
     }
     static const BYTE raw_start[]={0x55,0x8b,0xec,0x83,0xe4,0xf8,0x83,0xec,0x08};
     static const BYTE key_start[]={0x55,0x8b,0xec,0x53,0x56,0x8b,0x75,0x08};
+    static const BYTE enable_start[]={0x55,0x8b,0xec,0x83,0xec,0x08,0x53,0x8a,0x5d,0x08};
     return readable(base+0x50930,sizeof(raw_start)) && readable(base+0x508a0,sizeof(key_start))
+        && readable(base+0x4b4a0,sizeof(enable_start))
         && !memcmp(base+0x50930,raw_start,sizeof(raw_start))
-        && !memcmp(base+0x508a0,key_start,sizeof(key_start));
+        && !memcmp(base+0x508a0,key_start,sizeof(key_start))
+        && !memcmp(base+0x4b4a0,enable_start,sizeof(enable_start));
 }
 
 static BOOL validate_image(BYTE *base) { return validate_image_at(base,(uintptr_t)base); }
@@ -224,8 +252,10 @@ __declspec(dllexport) BOOL __cdecl ReRiffStartEngineMenu(void) {
     void **table=(void **)(base+0x7a7470); DWORD protection;
     if (!VirtualProtect(table,27*sizeof(void *),PAGE_READWRITE,&protection)) return FALSE;
     original_init=(ScreenFn)table[15]; original_cleanup=(ScreenFn)table[16]; original_input=(InputFn)table[24];
+    original_tick=(TickFn)table[3]; enable_input=(EnableFn)(base+0x4b4a0);
     raw_text=(RawTextFn)(base+0x50930); key_text=(KeyTextFn)(base+0x508a0);
     original_labels=(const char **)(base+0x7a7434);
+    InterlockedExchangePointer(&table[3],(void *)&hook_tick);
     InterlockedExchangePointer(&table[15],(void *)&hook_init);
     InterlockedExchangePointer(&table[16],(void *)&hook_cleanup);
     InterlockedExchangePointer(&table[24],(void *)&hook_input);

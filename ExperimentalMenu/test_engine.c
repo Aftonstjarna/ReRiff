@@ -5,6 +5,15 @@ static BYTE menu[512],items[11][512],texts[12][1024];
 static void *children[11][1];
 static void *vtable[27];
 static int delegated, initialized, cleaned;
+static int ticked, enable_calls;
+static BOOL friends_enabled;
+static void __thiscall mock_tick(void *self) { (void)self; ticked++; friends_enabled=FALSE; }
+static void __thiscall mock_enable(void *self,BYTE enabled) {
+    if (self==items[SERVERS_ID]) { friends_enabled=enabled; enable_calls++; }
+}
+static void __thiscall mock_colour(void *self,int id,const float *colour) {
+    (void)self; (void)id; (void)colour;
+}
 
 static void __thiscall mock_raw(void *text,const WCHAR *value) {
     wcsncpy((WCHAR *)((BYTE *)text+512),value,250);
@@ -30,6 +39,7 @@ static const WCHAR *label(int id) { return (const WCHAR *)(texts[id]+512); }
 static InputFn volatile input_entry=&hook_input;
 static ScreenFn volatile init_entry=&hook_init;
 static ScreenFn volatile cleanup_entry=&hook_cleanup;
+static TickFn volatile tick_entry=&hook_tick;
 static void select_item(int id) { input_entry(menu,id); }
 
 int main(int argc,char **argv) {
@@ -66,7 +76,9 @@ int main(int argc,char **argv) {
     raw_text=&mock_raw; key_text=&mock_key;
     original_init=&mock_init; original_cleanup=&mock_cleanup;
     original_input=&mock_input;
+    original_tick=&mock_tick; enable_input=&mock_enable;
     *(void ***)menu=vtable; vtable[13]=(void *)&mock_title;
+    vtable[26]=(void *)&mock_colour;
     ((void **)menu)[36]=texts[11];
     for (int i=1;i<=10;i++) {
         ((void **)menu)[62+i]=items[i]; children[i][0]=texts[i];
@@ -75,9 +87,15 @@ int main(int argc,char **argv) {
     }
     init_entry(menu,NULL,NULL);
     puts("PASS: original init callback returned"); fflush(stdout);
-    CHECK(initialized==1 && !wcscmp(label(4),L"Servers"));
+    CHECK(initialized==1 && !wcscmp(label(8),L"Servers") && !wcscmp(label(4),L"four"));
+    CHECK(friends_enabled);
+    tick_entry(menu); CHECK(ticked==1 && friends_enabled);
+    ((void **)menu)[70]=NULL;
+    int before=enable_calls; tick_entry(menu); CHECK(enable_calls==before);
+    ((void **)menu)[70]=items[8];
+    select_item(4); CHECK(delegated==4 && !server_page);
     select_item(9); CHECK(delegated==9);
-    select_item(4); CHECK(server_page && !wcscmp(label(2),L"Use local server"));
+    select_item(8); CHECK(server_page && !wcscmp(label(2),L"Use local server"));
     select_item(2); CHECK(!pending.only && !wcscmp(pending.fallback,L"http://127.0.0.1:5144"));
     select_item(3); CHECK(pending.only && !wcscmp(pending.external,L"https://example.com"));
     select_item(4); CHECK(!pending.only);
@@ -86,9 +104,10 @@ int main(int argc,char **argv) {
     CHECK(!wcscmp(value,L"value"));
     select_item(5); CHECK(!*pending.external && !*pending.fallback);
     select_item(7); CHECK(!wcscmp(pending.external,L"https://example.com"));
-    select_item(2000); CHECK(!server_page && !wcscmp(label(2),L"two") && !wcscmp(label(4),L"Servers"));
+    select_item(2000); CHECK(!server_page && !wcscmp(label(2),L"two")
+        && !wcscmp(label(8),L"Servers") && !wcscmp(label(4),L"four"));
     CHECK(delegated==9);
-    select_item(4); select_item(5); select_item(10); CHECK(!server_page);
+    select_item(8); select_item(5); select_item(10); CHECK(!server_page);
     GetPrivateProfileStringW(L"server",L"external_url",L"missing",value,2048,config_path); CHECK(!*value);
     cleanup_entry(menu,NULL,NULL); CHECK(cleaned==1 && !page_owner);
     DeleteFileW(config_path); DeleteFileW(log_path);
