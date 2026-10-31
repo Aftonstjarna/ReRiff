@@ -1,5 +1,8 @@
 # ReRiff — Linux installation and use
 
+For version 0.1.1, the download is an **update-only installer**. It requires an
+existing supported ReRiff installation; it does not patch a clean game install.
+
 ## Install
 
 1. Download the Linux installer (`ReRiff-<version>-linux.run`). Close Riff Racer

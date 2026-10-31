@@ -73,6 +73,14 @@ def install(bundle, game, backups, platform, dry_run=False, restore=False):
             raise ValueError('Package integrity check failed: '+name)
     state_path = game/'localserver/install-state.json'
     state = json.loads(state_path.read_text()) if state_path.exists() else {}
+    if manifest.get('update_only'):
+        if restore:
+            raise ValueError('This update does not modify game DLLs. Use the original full installer to restore them.')
+        for name, expected in manifest['required_existing'].items():
+            if not (game/name).is_file() or digest((game/name).read_bytes()) != expected:
+                raise ValueError('This is an update-only package. A supported existing ReRiff installation is required: '+name)
+        if not (game/'ReRiff.ClientConfig.dll').is_file():
+            raise ValueError('This update requires an existing ReRiff client helper.')
     if state.get('backup_dir') and backups is None:
         backups = Path(state['backup_dir'])
     backups = backups or backup_base(game)
@@ -117,7 +125,8 @@ def install(bundle, game, backups, platform, dry_run=False, restore=False):
             plan['localserver/start-server.sh'] = script.encode()
         if not (game/'server.ini').exists():
             plan['server.ini'] = b'[server]\nexternal_url =\nfallback_url = http://127.0.0.1:5144\ntimeout_seconds = 5\nshow_server_popup = true\n'
-        next_state = {'version': manifest['version'], 'backup_dir': str(backups), 'patched': {n: digest(plan[n]) for n in originals}}
+        next_state = {'version': manifest['version'], 'backup_dir': str(backups),
+                      'patched': {n: digest(plan[n]) for n in originals} if originals else state.get('patched',manifest.get('required_existing',{}))}
         plan['localserver/install-state.json'] = (json.dumps(next_state, indent=2)+'\n').encode()
     if dry_run:
         print(f'Validated ReRiff {manifest["version"]}: {len(plan)} files; backups: {backups}')

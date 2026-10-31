@@ -210,7 +210,10 @@ finish:
     ReleaseMutex(mutex); CloseHandle(mutex); return ok;
 }
 
+#include "song_sync.h"
+
 static BOOL launch_game(void) {
+    sync_cached_songs(ini);
     WCHAR game[CAP],command[CAP]; PROCESS_INFORMATION process;
     path(game,L"Game.exe");
     _snwprintf(command,CAP,L"\"%ls\"",game);command[CAP-1]=0;
@@ -219,6 +222,7 @@ static BOOL launch_game(void) {
     CloseHandle(process.hThread);
     WaitForSingleObject(process.hProcess,INFINITE);
     CloseHandle(process.hProcess);
+    sync_cached_songs(ini);
     return TRUE;
 }
 
