@@ -49,6 +49,8 @@ jobs:
           --implementation cp --abi cp313 -r packaging/requirements.txt
       - name: Build client helper
         run: dotnet build ClientConfig/ClientConfig.csproj -c Release -o build
+      - name: Build local vanilla-install patcher
+        run: dotnet build Patcher/InstallerPatcher.csproj -c Release -o build/installer-patcher
       - name: Build native launcher, notification, and Windows setup
         run: python scripts/build-windows-launcher.py --zig "$RUNNER_TEMP/release-tools/zig-x86_64-linux-0.14.1/zig"
       - name: Build Linux and Windows server identity libraries
@@ -59,7 +61,7 @@ jobs:
           --zig "$RUNNER_TEMP/release-tools/zig-x86_64-linux-0.14.1/zig"
       - name: Package Windows and Linux installers
         run: >-
-          python packaging/build_release.py --update-only
+          python packaging/build_release.py --local-patching
           --wheels-dir "$RUNNER_TEMP/wheels"
           --python-zip "$RUNNER_TEMP/release-tools/python.zip"
       - name: Verify installer safety and rollback
