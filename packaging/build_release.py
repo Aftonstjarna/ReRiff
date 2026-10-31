@@ -44,8 +44,7 @@ def build(args):
     common.mkdir()
     for name in ('installer.py', 'shared_patch.py'):
         copy(ROOT/'packaging'/name, common/name)
-    for name in ('README.md', 'README-LINUX.md', 'LICENSE', 'SERVER-CONFIG.md', 'LAUNCHER.md'):
-        copy(ROOT/name, common/name)
+    copy(ROOT/'LICENSE', common/'LICENSE')
     (common/'RELEASE-NOTES.md').write_text(notes, encoding='utf-8')
     patches = {}
     for name in (() if args.update_only else ('ParseOctane.dll', 'Parse.NetFx45.dll')):
@@ -136,7 +135,8 @@ __RERIFF_PAYLOAD__
     (output/'SHA256SUMS').write_text(''.join(digest(p.read_bytes())+'  '+p.name+'\n' for p in artifacts))
     (output/'release.json').write_text(json.dumps({'version':version,'commit':commit,'artifacts':[p.name for p in artifacts]},indent=2)+'\n')
     (output/'RELEASE-NOTES.md').write_text(notes, encoding='utf-8')
-    copy(ROOT/'README-LINUX.md',output/'README-LINUX.md')
+    # User documentation lives on the main repository README, not per release.
+    (output/'README-LINUX.md').unlink(missing_ok=True)
     print('Release artifacts:',output)
 
 
