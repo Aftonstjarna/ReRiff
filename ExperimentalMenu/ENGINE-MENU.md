@@ -16,10 +16,10 @@ localized main-menu labels, with Friends continuing to read Servers.
 Commands select localhost, select the external URL already saved in server.ini,
 toggle external-only mode, disable networking, save, reload, or return. Changes
 are pending until Save; Back discards them on the next opening. They take effect
-after restarting the game. Both disabled/offline addresses remain blank.
+after restarting the game. Disabling networking retains both saved addresses.
 Arbitrary URL text entry, backend start/stop, live endpoint switching and new
-menu artwork are not implemented. The replacement Friends row is re-enabled
-after the original tick's Parse-connectivity gate and receives the original
+menu artwork are not implemented. The replacement Friends row is enabled
+when its input mask is disabled and receives the original
 focused/normal menu colours. New Track still uses its original connection gate.
 If the native online interface is absent, the original constructor omits Friends
 entirely; this experiment logs that absence instead of constructing a new row.
@@ -95,6 +95,12 @@ and input-enable routine verify the Friends availability path. Focus is the
 original menu's field at +352; slot 26 is the original updateItemColour callback.
 Its focus/normal RGBA values come from gaMenu's original static colour data.
 
+The native `elUIItem.enableInput` routine must not be called every frame on an
+already enabled row. Original bytes at `0x0044B50C` clear the interaction latch
+at item offset `+356`; `0x0044B518` writes the enabled mask at `+76`. Repeated
+calls erased mouse interaction between press and release. The hook now checks
+for the original all-input mask (`0xffffffff`) before enabling the row.
+
 ## Validation and remaining trial
 
 Both x86 builds pass `-Wall -Wextra -Werror` inside development. Proton Hotfix
@@ -104,8 +110,11 @@ dispatch, menu text routing, original-selection forwarding, preset selection,
 save/reload, unrelated-key preservation, Back and cleanup. Regression checks
 also verify News forwarding, Friends replacement/restoration, re-enabling after
 an offline tick, and harmless handling of an absent Friends row. The test uses the
-unrelocated original image as a read-only byte reference and stand-in menu/text
-objects for behavior. It does **not** execute original rendering methods.
+unrelocated original image as a byte reference and stand-in menu/text objects
+for behavior. It also executes the original native enable-input TRUE branch,
+which calls no engine services, and verifies that an enabled row retains its
+interaction latch across several hooked ticks. It does **not** execute original
+rendering methods.
 
 Actual Game.exe rendering, CLR-to-native callback transitions, all controller
 paths and focus behavior still require a live game trial. Hook initialization

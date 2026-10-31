@@ -101,9 +101,10 @@ static void *item_text(void *menu,int id) {
 static void keep_servers_available(void *menu) {
     void *item=((void **)menu)[62+SERVERS_ID];
     if (!readable(item,404)) return;
-    /* Original main-menu tick gates Friends on Parse connectivity. The server
-     * settings entry must remain usable after that connectivity gate runs. */
-    enable_input(item,TRUE);
+    /* enableInput always clears the interaction latch at +356, even when
+     * already enabled. Calling it every frame breaks mouse press/release.
+     * Its original enabled input mask at +76 is 0xffffffff. */
+    if (*(DWORD *)((BYTE *)item+76)!=0xffffffffu) enable_input(item,TRUE);
     static const float focus[4]={0.0f,1.0f,1.0f,0.8f};
     static const float normal[4]={1.0f,1.0f,1.0f,0.9f};
     ColourFn colour=(ColourFn)(*(void ***)menu)[26];

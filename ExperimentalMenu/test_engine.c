@@ -7,9 +7,23 @@ static void *vtable[27];
 static int delegated, initialized, cleaned;
 static int ticked, enable_calls;
 static BOOL friends_enabled;
-static void __thiscall mock_tick(void *self) { (void)self; ticked++; friends_enabled=FALSE; }
+static BOOL disable_during_tick=TRUE;
+static EnableFn native_enable;
+static void __thiscall mock_tick(void *self) {
+    (void)self; ticked++;
+    if(disable_during_tick){
+        friends_enabled=FALSE;
+        *(DWORD *)(items[SERVERS_ID]+76)=0;
+        *(DWORD *)(items[SERVERS_ID]+356)=0;
+    }
+}
 static void __thiscall mock_enable(void *self,BYTE enabled) {
-    if (self==items[SERVERS_ID]) { friends_enabled=enabled; enable_calls++; }
+    if (self==items[SERVERS_ID]) {
+        /* The original native TRUE branch has no engine calls. Exercise its
+         * real mask/latch writes, rather than a mock that hides the reset. */
+        native_enable(self,enabled);
+        friends_enabled=enabled; enable_calls++;
+    }
 }
 static void __thiscall mock_colour(void *self,int id,const float *colour) {
     (void)self; (void)id; (void)colour;
@@ -64,7 +78,8 @@ int main(int argc,char **argv) {
     CHECK(VirtualProtect(actual,108,PAGE_READWRITE,&protection));
     void *saved=actual[24]; actual[24]=NULL;
     CHECK(!validate_image_at((BYTE *)image,nt->OptionalHeader.ImageBase)); actual[24]=saved;
-    VirtualProtect(actual,108,protection,&ignored); FreeLibrary(image);
+    VirtualProtect(actual,108,protection,&ignored);
+    native_enable=(EnableFn)((BYTE *)image+0x4b4a0);
     puts("PASS: altered-vtable refusal"); fflush(stdout);
     CHECK(GetTempPathW(MAX_PATH,config_path));
     wcscat(config_path,L"reriff-engine-settings-test.ini"); DeleteFileW(config_path);
@@ -90,6 +105,16 @@ int main(int argc,char **argv) {
     CHECK(initialized==1 && !wcscmp(label(8),L"Servers") && !wcscmp(label(4),L"four"));
     CHECK(friends_enabled);
     tick_entry(menu); CHECK(ticked==1 && friends_enabled);
+    disable_during_tick=FALSE;
+    /* Hold a pending mouse interaction over several frames. The original
+     * enableInput routine would clear it if called again on an enabled row. */
+    *(DWORD *)(items[SERVERS_ID]+356)=0x12345678;
+    int enabled_before=enable_calls;
+    tick_entry(menu); tick_entry(menu); tick_entry(menu);
+    CHECK(enable_calls==enabled_before);
+    CHECK(*(DWORD *)(items[SERVERS_ID]+356)==0x12345678);
+    keep_servers_available(menu);
+    CHECK(enable_calls==enabled_before && *(DWORD *)(items[SERVERS_ID]+356)==0x12345678);
     ((void **)menu)[70]=NULL;
     int before=enable_calls; tick_entry(menu); CHECK(enable_calls==before);
     ((void **)menu)[70]=items[8];
@@ -113,7 +138,8 @@ int main(int argc,char **argv) {
         && !wcscmp(pending.fallback,L"http://127.0.0.1:5144"));
     select_item(8); select_item(5); select_item(10); load_settings(); CHECK(pending.enabled);
     cleanup_entry(menu,NULL,NULL); CHECK(cleaned==1 && !page_owner);
+    FreeLibrary(image);
     DeleteFileW(config_path); DeleteFileW(log_path);
-    puts("PASS: original hash/image guards, foreign-host refusal, corrupted-vtable refusal, x86 callback ABI, engine text routing, navigation, presets, save/reload, cleanup");
+    puts("PASS: original image guards, native input mask/latch behavior, mouse state across frames, x86 callbacks, routing, navigation, presets, save/reload, cleanup");
     return 0;
 }
