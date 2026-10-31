@@ -26,6 +26,7 @@
 enum { EXTERNAL=101, FALLBACK, TIMEOUT, POPUP, SAVE, PLAY, LOCAL, EXTERNAL_ONLY, STOP, UPDATE, EXPERIMENTAL, NETWORKING };
 static WCHAR folder[CAP], ini[CAP], message[1024];
 static WCHAR game_arguments[CAP];
+static BOOL force_show_launcher;
 static HWND window, status, external, fallback, timeout_edit, popup, play_button, save_button;
 static HWND only_checkbox, stop_button, update_button;
 static BOOL busy = FALSE, playing = FALSE;
@@ -106,9 +107,12 @@ static BOOL is_forwarded_game(const WCHAR *argument) {
 }
 
 static BOOL parse_launcher_arguments(int count,LPWSTR *args,BOOL *skip,BOOL *selftest) {
-    *skip=FALSE;*selftest=FALSE;game_arguments[0]=0;
+    *skip=FALSE;*selftest=FALSE;force_show_launcher=FALSE;game_arguments[0]=0;
     for(int i=1;i<count;i++){
-        if(!wcscmp(args[i],L"--skip-launcher")||!wcscmp(args[i],L"--skip"))*skip=TRUE;
+        if(!wcscmp(args[i],L"--skip-launcher")||!wcscmp(args[i],L"--launcher-skip")||!wcscmp(args[i],L"--skip")){
+            *skip=TRUE;force_show_launcher=FALSE;
+        }
+        else if(!wcscmp(args[i],L"--show-launcher")){*skip=FALSE;force_show_launcher=TRUE;}
         else if(!wcscmp(args[i],L"--self-test"))*selftest=TRUE;
         else {
             if(!wcscmp(args[i],L"--")&&++i>=count)return FALSE;
@@ -118,6 +122,12 @@ static BOOL parse_launcher_arguments(int count,LPWSTR *args,BOOL *skip,BOOL *sel
         }
     }
     return TRUE;
+}
+
+static BOOL should_skip_launcher(BOOL requested) {
+    WCHAR value[32];
+    GetPrivateProfileStringW(L"launcher",L"skip_launcher",L"false",value,32,ini);
+    return !force_show_launcher&&(requested||!_wcsicmp(value,L"true")||!_wcsicmp(value,L"yes")||!wcscmp(value,L"1"));
 }
 
 static BOOL game_command(WCHAR *command) {
@@ -462,7 +472,7 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE previous,LPWSTR command,int sho
         WCHAR value[4096];GetPrivateProfileStringW(L"server",L"fallback_url",L"",value,4096,ini);
         log_message(L"SELFTEST: native launcher initialized; no game or server started.");log_message(ini);log_message(value);return 0;
     }
-    if (skip) {
+    if (should_skip_launcher(skip)) {
         if ((needs_local_server()&&!start_server())||!launch_game()) {log_message(message);return 1;}
         return 0;
     }

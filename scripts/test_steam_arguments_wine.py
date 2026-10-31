@@ -32,11 +32,16 @@ def main():
                 raise AssertionError((options, result.returncode, result.stdout, result.stderr))
             assert (game/'server.ini').read_bytes() == settings
         run(['--self-test', forwarded], 0)
-        for flag in ('--skip', '--skip-launcher'):
+        for flag in ('--skip', '--skip-launcher', '--launcher-skip'):
             marker = game/'Game.exe.played'
             marker.unlink(missing_ok=True)
             run([flag, forwarded, '--windowed', 'value with spaces'], 0)
             assert marker.read_bytes() == b'play invoked'
+        settings += b'\n[launcher]\nskip_launcher=true\n'
+        (game/'server.ini').write_bytes(settings)
+        marker.unlink()
+        run([forwarded], 0)
+        assert marker.read_bytes() == b'play invoked'
         run(['--skip', 'Z:\\another-installation\\Game.exe'], 2)
         run(['%command%'], 2)
         print('PASS: Steam-forwarded entry point, both Play aliases, invalid paths, and unchanged settings')

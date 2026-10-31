@@ -16,6 +16,16 @@ int main(void) {
     LocalFree(decoded);
     LPWSTR direct[]={L"ReRiff-Launcher.exe",L"--skip"};
     CHECK(parse_launcher_arguments(2,direct,&skip,&selftest)&&skip&&!*game_arguments);
+    path(ini,L"skip-preference-test.ini");DeleteFileW(ini);
+    CHECK(!should_skip_launcher(FALSE));
+    CHECK(WritePrivateProfileStringW(L"launcher",L"skip_launcher",L"true",ini));
+    CHECK(should_skip_launcher(FALSE));
+    LPWSTR show[]={L"ReRiff-Launcher.exe",L"--show-launcher"};
+    CHECK(parse_launcher_arguments(2,show,&skip,&selftest)&&!should_skip_launcher(skip));
+    LPWSTR alias[]={L"ReRiff-Launcher.exe",L"--launcher-skip"};
+    CHECK(parse_launcher_arguments(2,alias,&skip,&selftest)&&should_skip_launcher(skip));
+    CHECK(WritePrivateProfileStringW(L"launcher",L"skip_launcher",L"false",ini));
+    CHECK(!should_skip_launcher(FALSE));DeleteFileW(ini);
     LPWSTR bridge[]={L"ReRiff-Launcher.exe",L"--skip-launcher",L"--",game,L"--game-option"};
     CHECK(parse_launcher_arguments(5,bridge,&skip,&selftest)&&skip&&!selftest);
     LPWSTR unknown[]={L"ReRiff-Launcher.exe",L"C:\\another-installation\\Game.exe"};

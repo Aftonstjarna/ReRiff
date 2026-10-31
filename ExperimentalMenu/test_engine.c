@@ -9,6 +9,8 @@ static int ticked, enable_calls;
 static BOOL friends_enabled;
 static BOOL disable_during_tick=TRUE;
 static EnableFn native_enable;
+static int base_ticked;
+static void __thiscall mock_base_tick(void *self) { (void)self;base_ticked++; }
 static void __thiscall mock_tick(void *self) {
     (void)self; ticked++;
     if(disable_during_tick){
@@ -18,10 +20,11 @@ static void __thiscall mock_tick(void *self) {
     }
 }
 static void __thiscall mock_enable(void *self,BYTE enabled) {
+    if(enabled)native_enable(self,TRUE);
+    else{*(DWORD *)((BYTE *)self+76)=0;*(DWORD *)((BYTE *)self+356)=0;}
     if (self==items[SERVERS_ID]) {
         /* The original native TRUE branch has no engine calls. Exercise its
          * real mask/latch writes, rather than a mock that hides the reset. */
-        native_enable(self,enabled);
         friends_enabled=enabled; enable_calls++;
     }
 }
@@ -92,6 +95,7 @@ int main(int argc,char **argv) {
     original_init=&mock_init; original_cleanup=&mock_cleanup;
     original_input=&mock_input;
     original_tick=&mock_tick; enable_input=&mock_enable;
+    base_tick=&mock_base_tick;
     *(void ***)menu=vtable; vtable[13]=(void *)&mock_title;
     vtable[26]=(void *)&mock_colour;
     ((void **)menu)[36]=texts[11];
@@ -121,10 +125,23 @@ int main(int argc,char **argv) {
     select_item(4); CHECK(delegated==4 && !server_page);
     select_item(9); CHECK(delegated==9);
     select_item(8); CHECK(server_page && !wcscmp(label(2),L"Use local server"));
+    CHECK(!wcscmp(label(1),L"Skip launcher: Off"));
+    CHECK(*(DWORD *)(items[1]+76)==0xffffffffu);
+    *(DWORD *)(items[1]+356)=0x12345678;
+    int main_ticks=ticked;tick_entry(menu);
+    CHECK(base_ticked==1&&ticked==main_ticks&&*(DWORD *)(items[1]+356)==0x12345678);
+    select_item(1);CHECK(pending.skip_launcher&&!wcscmp(label(1),L"Skip launcher: On"));
+    select_item(9);CHECK(!server_page&&*(DWORD *)(items[1]+76)==0);
+    select_item(8);CHECK(!pending.skip_launcher);
+    select_item(1);CHECK(pending.skip_launcher);
     select_item(2); CHECK(!pending.only && !wcscmp(pending.fallback,L"http://127.0.0.1:5144"));
     select_item(3); CHECK(pending.only && !wcscmp(pending.external,L"https://example.com"));
     select_item(4); CHECK(!pending.only);
     select_item(6);
+    GetPrivateProfileStringW(L"launcher",L"skip_launcher",L"missing",heading,96,config_path);
+    CHECK(!wcscmp(heading,L"true"));
+    select_item(1);CHECK(!pending.skip_launcher);
+    select_item(7);CHECK(pending.skip_launcher);
     WCHAR value[2048]; GetPrivateProfileStringW(L"keep",L"key",L"",value,2048,config_path);
     CHECK(!wcscmp(value,L"value"));
     select_item(5); CHECK(!pending.enabled && !wcscmp(pending.external,L"https://example.com")
@@ -137,9 +154,10 @@ int main(int argc,char **argv) {
     load_settings(); CHECK(!pending.enabled && !wcscmp(pending.external,L"https://example.com")
         && !wcscmp(pending.fallback,L"http://127.0.0.1:5144"));
     select_item(8); select_item(5); select_item(10); load_settings(); CHECK(pending.enabled);
+    select_item(8);select_item(1);select_item(10);load_settings();CHECK(!pending.skip_launcher);
     cleanup_entry(menu,NULL,NULL); CHECK(cleaned==1 && !page_owner);
     FreeLibrary(image);
     DeleteFileW(config_path); DeleteFileW(log_path);
-    puts("PASS: original image guards, native input mask/latch behavior, mouse state across frames, x86 callbacks, routing, navigation, presets, save/reload, cleanup");
+    puts("PASS: original image guards, native mouse state, offline base-menu tick, input-mask restore, skip preference save/reload/back, controller routing, cleanup");
     return 0;
 }

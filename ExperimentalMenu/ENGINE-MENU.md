@@ -14,13 +14,18 @@ It reuses the existing layout and icons. Back/Escape restores the original
 localized main-menu labels, with Friends continuing to read Servers.
 
 Commands select localhost, select the external URL already saved in server.ini,
-toggle external-only mode, disable networking, save, reload, or return. Changes
+toggle external-only mode, disable networking, choose whether to skip the
+launcher on future starts, save, reload, or return. Changes
 are pending until Save; Back discards them on the next opening. They take effect
 after restarting the game. Disabling networking retains both saved addresses.
 Arbitrary URL text entry, backend start/stop, live endpoint switching and new
 menu artwork are not implemented. The replacement Friends row is enabled
 when its input mask is disabled and receives the original
 focused/normal menu colours. New Track still uses its original connection gate.
+While the Servers page is open, it uses the original `gaMenu.tick` UI callback
+instead of the main-menu tick's New Track/Charts availability gates. This keeps
+the replacement controls usable offline. Original row input masks are saved
+on entry and restored on return to the main menu.
 If the native online interface is absent, the original constructor omits Friends
 entirely; this experiment logs that absence instead of constructing a new row.
 
@@ -100,6 +105,12 @@ already enabled row. Original bytes at `0x0044B50C` clear the interaction latch
 at item offset `+356`; `0x0044B518` writes the enabled mask at `+76`. Repeated
 calls erased mouse interaction between press and release. The hook now checks
 for the original all-input mask (`0xffffffff`) before enabling the row.
+
+The base-menu tick is slot 3 of the original `gaMenu` vtable at `0x00BA56C4`.
+Its native thunk at `0x006E28F0` is `FF 25 34 57 BA 00`, jumping through the
+CLR fixup at `0x00BA5734`; these original bytes and the vtable entry are checked
+before installation. ILSpy identifies the managed body as `gaMenu.tick` at
+RVA `0x002E21FC`; Ghidra independently confirms the native indirect jump.
 
 ## Validation and remaining trial
 

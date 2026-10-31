@@ -2,10 +2,13 @@
 # Use Steam's selected Proton and prefix, replacing only the game executable.
 set -euo pipefail
 launcher_flags=()
-if [[ ${1:-} == --skip-launcher || ${1:-} == --skip ]]; then
-    launcher_flags+=(--skip-launcher)
-    shift
-fi
+while :; do
+    case ${1:-} in
+        --skip-launcher|--launcher-skip|--skip) launcher_flags+=(--skip-launcher); shift ;;
+        --show-launcher) launcher_flags+=(--show-launcher); shift ;;
+        *) break ;;
+    esac
+done
 if [[ ${1:-} == -- ]]; then shift; fi
 command_args=("$@")
 found=false

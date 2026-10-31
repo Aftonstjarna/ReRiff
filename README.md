@@ -55,6 +55,18 @@ The title bar shows the running version. Settings and saved data are retained.
 If your launcher cannot apply an update, install the current release manually.
 Client updates do not update the Docker server.
 
+### Skip the launcher by default (experimental client)
+
+In the game's **Servers** menu, toggle **Skip launcher: On/Off**, then choose
+**Save settings** or **Save and return**. The next start uses this preference;
+Back without saving discards the change. The preference is stored in
+`server.ini` as `[launcher] skip_launcher=true` or `false`.
+
+Use `--show-launcher` to open the launcher even when this preference is on.
+`--skip-launcher`, `--launcher-skip`, and `--skip` explicitly skip it. Launcher
+flags override the saved preference, so remove a forced skip flag from Steam's
+launch options if you want the in-game toggle to control the next start.
+
 ## Launch through Steam
 
 On Windows, run `ReRiff-Launcher.exe` beside `Game.exe`. Add `--skip-launcher`

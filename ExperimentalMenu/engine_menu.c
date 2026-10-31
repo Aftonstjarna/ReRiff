@@ -23,10 +23,10 @@ typedef void (__thiscall *ColourFn)(void *,int,const float *);
 typedef void (__thiscall *RawTextFn)(void *,const WCHAR *);
 typedef void (__thiscall *KeyTextFn)(void *,const char *);
 typedef const char *(__thiscall *TitleFn)(void *);
-typedef struct Settings { WCHAR external[2048], fallback[2048]; BOOL only, enabled; } Settings;
+typedef struct Settings { WCHAR external[2048], fallback[2048]; BOOL only, enabled, skip_launcher; } Settings;
 static ScreenFn original_init, original_cleanup;
 static InputFn original_input;
-static TickFn original_tick;
+static TickFn original_tick, base_tick;
 static EnableFn enable_input;
 static RawTextFn raw_text;
 static KeyTextFn key_text;
@@ -35,6 +35,7 @@ static WCHAR config_path[MAX_PATH], log_path[MAX_PATH];
 static Settings pending;
 static void *page_owner;
 static BOOL server_page;
+static DWORD original_input_masks[11];
 static WCHAR heading[96]=L"Servers — applies after restart";
 static volatile LONG installed;
 #define SERVERS_ID 8
@@ -55,6 +56,8 @@ static void load_settings(void) {
     pending.only=!_wcsicmp(value,L"true") || !_wcsicmp(value,L"yes") || !wcscmp(value,L"1");
     GetPrivateProfileStringW(L"server",L"networking_enabled",L"true",value,32,config_path);
     pending.enabled=_wcsicmp(value,L"false") && _wcsicmp(value,L"no") && wcscmp(value,L"0");
+    GetPrivateProfileStringW(L"launcher",L"skip_launcher",L"false",value,32,config_path);
+    pending.skip_launcher=!_wcsicmp(value,L"true") || !_wcsicmp(value,L"yes") || !wcscmp(value,L"1");
 }
 
 static BOOL save_settings(void) {
@@ -70,7 +73,8 @@ static BOOL save_settings(void) {
     BOOL ok=WritePrivateProfileStringW(L"server",L"external_url",pending.external,temp)
         && WritePrivateProfileStringW(L"server",L"fallback_url",pending.fallback,temp)
         && WritePrivateProfileStringW(L"server",L"external_only",pending.only?L"true":L"false",temp)
-        && WritePrivateProfileStringW(L"server",L"networking_enabled",pending.enabled?L"true":L"false",temp);
+        && WritePrivateProfileStringW(L"server",L"networking_enabled",pending.enabled?L"true":L"false",temp)
+        && WritePrivateProfileStringW(L"launcher",L"skip_launcher",pending.skip_launcher?L"true":L"false",temp);
     if (ok) {
         WritePrivateProfileStringW(NULL,NULL,NULL,temp);
         ok=MoveFileExW(temp,config_path,MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH);
@@ -99,12 +103,17 @@ static void *item_text(void *menu,int id) {
 }
 
 static void keep_servers_available(void *menu) {
+    BOOL settings=server_page&&page_owner==menu;
+    for(int id=settings?1:SERVERS_ID;id<=(settings?10:SERVERS_ID);id++){
+        void *row=((void **)menu)[62+id];
+        if(readable(row,404)&&*(DWORD *)((BYTE *)row+76)!=0xffffffffu)enable_input(row,TRUE);
+    }
+    if(settings)return; /* The original base menu handles focus/pressed colours. */
     void *item=((void **)menu)[62+SERVERS_ID];
     if (!readable(item,404)) return;
     /* enableInput always clears the interaction latch at +356, even when
      * already enabled. Calling it every frame breaks mouse press/release.
      * Its original enabled input mask at +76 is 0xffffffff. */
-    if (*(DWORD *)((BYTE *)item+76)!=0xffffffffu) enable_input(item,TRUE);
     static const float focus[4]={0.0f,1.0f,1.0f,0.8f};
     static const float normal[4]={1.0f,1.0f,1.0f,0.9f};
     ColourFn colour=(ColourFn)(*(void ***)menu)[26];
@@ -112,12 +121,27 @@ static void keep_servers_available(void *menu) {
 }
 
 static void __thiscall hook_tick(void *menu) {
-    original_tick(menu);
+    if(server_page&&page_owner==menu){
+        keep_servers_available(menu);
+        /* Use the real menu UI tick without main-menu New Track/Charts gates
+         * resetting the replacement controls while the server page is open. */
+        base_tick(menu);
+    }else original_tick(menu);
     keep_servers_available(menu);
 }
 
+static void leave_server_page(void *menu) {
+    for(int id=1;id<=10;id++){
+        void *item=((void **)menu)[62+id];
+        if(!readable(item,404))continue;
+        enable_input(item,original_input_masks[id]!=0);
+        *(DWORD *)((BYTE *)item+76)=original_input_masks[id];
+    }
+    server_page=FALSE;
+}
+
 static void render(void *menu) {
-    static const WCHAR *labels[11]={L"", L"Settings apply after restart",
+    static const WCHAR *labels[11]={L"", L"Skip launcher",
         L"Use local server", L"Use configured external server", L"",
         L"Disable networking", L"Save settings", L"Reload saved settings",
         L"Server settings", L"Back without saving", L"Save and return"};
@@ -126,7 +150,7 @@ static void render(void *menu) {
     for (int id=1;id<=10;id++) {
         void *text=item_text(menu,id);
         if (!text) continue;
-        if (server_page) raw_text(text,id==4?only:id==5?(pending.enabled?L"Disable networking":L"Enable networking"):labels[id]);
+        if (server_page) raw_text(text,id==1?(pending.skip_launcher?L"Skip launcher: On":L"Skip launcher: Off"):id==4?only:id==5?(pending.enabled?L"Disable networking":L"Enable networking"):labels[id]);
         else if (id==SERVERS_ID) raw_text(text,L"Servers");
         else key_text(text,original_labels[id]);
         void *item=((void **)menu)[62+id];
@@ -159,11 +183,18 @@ static void __thiscall hook_cleanup(void *menu,void *screen,void *lower) {
 static void __thiscall hook_input(void *menu,int selection) {
     if (!server_page || page_owner!=menu) {
         if (selection!=SERVERS_ID) { original_input(menu,selection); return; }
+        for(int id=1;id<=10;id++){
+            void *item=((void **)menu)[62+id];
+            original_input_masks[id]=readable(item,404)?*(DWORD *)((BYTE *)item+76):0;
+        }
         page_owner=menu; load_settings(); server_page=TRUE;
         wcscpy(heading,L"Servers — applies after restart"); render(menu);
         log_line("Engine Servers page opened."); return;
     }
     switch (selection) {
+    case 1:
+        pending.skip_launcher=!pending.skip_launcher;
+        wcscpy(heading,pending.skip_launcher?L"Skip launcher enabled — Save to apply":L"Show launcher enabled — Save to apply"); break;
     case 2:
         pending.external[0]=0; wcscpy(pending.fallback,L"http://127.0.0.1:5144"); pending.only=FALSE; pending.enabled=TRUE;
         wcscpy(heading,L"Local selected — Save to apply after restart"); break;
@@ -180,12 +211,12 @@ static void __thiscall hook_input(void *menu,int selection) {
     case 6: case 10:
         if (save_settings()) {
             wcscpy(heading,L"Saved — restart game to apply");
-            if (selection==10) server_page=FALSE;
+            if (selection==10) leave_server_page(menu);
             log_line("Server settings saved; active endpoint unchanged.");
         } else { wcscpy(heading,L"Save failed — original settings retained"); log_line("Server settings save failed."); }
         break;
     case 7: load_settings(); wcscpy(heading,L"Reloaded — applies after restart"); break;
-    case 9: case 2000: server_page=FALSE; break;
+    case 9: case 2000: leave_server_page(menu); break;
     default: return; /* Do not forward page selections into gameplay/quit handlers. */
     }
     render(menu);
@@ -218,6 +249,10 @@ static BOOL supported_file(const WCHAR *path) {
 
 /* All addresses are RVAs from original bytes, not Ghidra's inferred prototypes. */
 static BOOL validate_image_at(BYTE *base,uintptr_t address_base) {
+    static const BYTE base_tick_start[]={0xff,0x25};
+    if(!readable(base+0x7a56d0,4)||*(DWORD *)(base+0x7a56d0)!=(DWORD)(address_base+0x2e28f0)
+        ||!readable(base+0x2e28f0,6)||memcmp(base+0x2e28f0,base_tick_start,2)
+        ||*(DWORD *)(base+0x2e28f2)!=(DWORD)(address_base+0x7a5734))return FALSE;
     static const DWORD entries[27]={0x340aa4,0x33de0a,0x33eddc,0x340a54,0x1f5891,
         0x340358,0x33ee99,0x33de10,0x1f58a5,0x2da614,0x2dd174,0x1f58b9,0x1f58cd,
         0x340abe,0x2da506,0x33fd14,0x33f23c,0x2d970f,0x2d979e,0x2d97f8,0x2d97fe,
@@ -263,6 +298,7 @@ __declspec(dllexport) BOOL __cdecl ReRiffStartEngineMenu(void) {
     if (!VirtualProtect(table,27*sizeof(void *),PAGE_READWRITE,&protection)) return FALSE;
     original_init=(ScreenFn)table[15]; original_cleanup=(ScreenFn)table[16]; original_input=(InputFn)table[24];
     original_tick=(TickFn)table[3]; enable_input=(EnableFn)(base+0x4b4a0);
+    base_tick=(TickFn)(base+0x2e28f0);
     raw_text=(RawTextFn)(base+0x50930); key_text=(KeyTextFn)(base+0x508a0);
     original_labels=(const char **)(base+0x7a7434);
     InterlockedExchangePointer(&table[3],(void *)&hook_tick);
