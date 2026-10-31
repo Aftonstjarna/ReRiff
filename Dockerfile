@@ -6,6 +6,8 @@ RUN mkdir /out && g++ -std=c++17 -O2 -shared -fPIC -static-libstdc++ -static-lib
 
 FROM docker.io/library/python:3.13-slim-bookworm
 
+LABEL org.opencontainers.image.source="https://github.com/Aftonstjarna/ReRiff"
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     RERIFF_DATA_DIR=/data

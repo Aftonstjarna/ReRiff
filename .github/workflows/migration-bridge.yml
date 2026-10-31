@@ -6,14 +6,14 @@ on:
       version:
         description: Published canonical version to mirror for old launchers
         required: true
-        default: '0.1.7'
+        default: '0.1.8'
 
 permissions:
   contents: write
 
 jobs:
   bridge:
-    if: github.repository == 'Aftonstjarna/ReRiff'
+    if: github.repository == 'Aftonstjarna/ReRiff-test'
     runs-on: ubuntu-latest
     steps:
       - name: Mirror verified canonical release assets for legacy launchers
@@ -22,7 +22,7 @@ jobs:
           VERSION: ${{ inputs.version }}
         run: |
           [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
-          canonical=Aftonstjarna/riffapi-local-extended
+          canonical=Aftonstjarna/ReRiff
           mkdir stage
           gh release download "v$VERSION" --repo "$canonical" --dir stage
           (cd stage && sha256sum -c SHA256SUMS)

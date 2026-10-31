@@ -7,11 +7,11 @@ retains its existing .NET Framework requirements.
 
 This fork is the primary ReRiff repository and contains the server, launcher,
 client tools, and installers together. The previous
-[Aftonstjarna/ReRiff repository](https://github.com/Aftonstjarna/ReRiff) remains
+[Aftonstjarna/ReRiff-test repository](https://github.com/Aftonstjarna/ReRiff-test) remains
 available for existing clients to receive the migration update. After that update,
 the launcher checks releases here.
 
-[Download the latest release](https://github.com/Aftonstjarna/riffapi-local-extended/releases/latest)
+[Download the latest release](https://github.com/Aftonstjarna/ReRiff/releases/latest)
 · [Install and update](#install-or-update)
 · [Steam launch options](#launch-through-steam)
 · [Docker server](#docker-server)
@@ -147,14 +147,15 @@ removes the need to maintain those groups. Never join IDs solely by song title.
 
 ## Docker server
 
-The published image is `ghcr.io/aftonstjarna/riffapi-local-extended:latest`.
-Existing `ghcr.io/aftonstjarna/reriff` containers retain their data and can be
-recreated with the new image while keeping their existing environment and data
-mount. From this repository,
+The published image is `ghcr.io/aftonstjarna/reriff:latest`.
+If an existing deployment uses `ghcr.io/aftonstjarna/riffapi-local-extended`,
+change its image to `ghcr.io/aftonstjarna/reriff:latest` while retaining the
+existing environment and data volume or bind mount. Existing `reriff` deployments
+can continue using the same image address. From this repository,
 use the supplied Compose configuration:
 
 ```sh
-export RERIFF_IMAGE=ghcr.io/aftonstjarna/riffapi-local-extended:latest
+export RERIFF_IMAGE=ghcr.io/aftonstjarna/reriff:latest
 docker compose pull server
 docker compose up -d --no-build server
 ```
@@ -176,7 +177,7 @@ you intend to delete saved data.
 Put persistent settings in a `.env` file beside `compose.yaml`:
 
 ```ini
-RERIFF_IMAGE=ghcr.io/aftonstjarna/riffapi-local-extended:latest
+RERIFF_IMAGE=ghcr.io/aftonstjarna/reriff:latest
 RERIFF_BIND_ADDRESS=0.0.0.0
 RERIFF_PORT=5144
 RERIFF_PUBLIC_URL=http://your-server:5144
@@ -203,7 +204,7 @@ docker run -d --name reriff-server --restart unless-stopped \
   --network host --user "$(id -u):$(id -g)" \
   --env-file "$HOME/Applications/docker/ReRiff-Server/server.env" \
   --mount "type=bind,source=$HOME/Applications/docker/ReRiff-Server/data,target=/data" \
-  ghcr.io/aftonstjarna/riffapi-local-extended:latest
+  ghcr.io/aftonstjarna/reriff:latest
 ```
 
 Do not add `-p` with host networking. The user override makes the container write

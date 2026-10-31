@@ -1,3 +1,14 @@
+# ReRiff 0.1.8 — Repository name alignment
+
+- Use Aftonstjarna/ReRiff as the primary combined server-and-launcher repository
+  after the fork rename. The previous repository is now Aftonstjarna/ReRiff-test.
+- Point the launcher directly at the current release source and enable publishing
+  workflows under the new canonical name.
+- Use ghcr.io/aftonstjarna/reriff:latest in Docker instructions and by default in
+  Compose. Existing deployments should retain their environment and data mount.
+
+Settings, saved records, ghosts and recorded backup locations are preserved.
+
 # ReRiff 0.1.7 — Unified server and launcher repository
 
 - Make Aftonstjarna/riffapi-local-extended the primary combined ReRiff project,

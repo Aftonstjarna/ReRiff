@@ -86,7 +86,7 @@ static BOOL check_updates(void) {
     if(!GetTempPathW(CAP,temporary)||!GetTempFileNameW(temporary,L"rru",0,work))goto done;
     DeleteFileW(work);if(!CreateDirectoryW(work,NULL))goto done;
     _snwprintf(api,CAP,L"%ls\\release.json",work);api[CAP-1]=0;
-    if(!update_download(session,L"https://api.github.com/repos/Aftonstjarna/riffapi-local-extended/releases/latest",api,65535))goto done;
+    if(!update_download(session,L"https://api.github.com/repos/Aftonstjarna/ReRiff/releases/latest",api,65535))goto done;
     FILE *file=_wfopen(api,L"rb");if(!file)goto done;
     size_t n=fread(body,1,sizeof(body)-1,file);body[n]=0;fclose(file);
     char *tag=strstr(body,"\"tag_name\"");
@@ -100,7 +100,7 @@ static BOOL check_updates(void) {
     WCHAR version_w[64];MultiByteToWideChar(CP_UTF8,0,version,-1,version_w,64);
     _snwprintf(filename,256,L"ReRiff-%ls-%ls",version_w,is_wine()?L"linux.run":L"windows.zip");filename[255]=0;
     _snwprintf(sums,CAP,L"%ls\\SHA256SUMS",work);sums[CAP-1]=0;
-    _snwprintf(url,CAP,L"https://github.com/Aftonstjarna/riffapi-local-extended/releases/download/v%ls/SHA256SUMS",version_w);url[CAP-1]=0;
+    _snwprintf(url,CAP,L"https://github.com/Aftonstjarna/ReRiff/releases/download/v%ls/SHA256SUMS",version_w);url[CAP-1]=0;
     SetWindowTextW(status,L"Downloading and verifying the latest ReRiff update...");
     if(!update_download(session,url,sums,65535))goto done;
     char filename_u8[256],line[1024],listed[512],sum[65];
@@ -110,7 +110,7 @@ static BOOL check_updates(void) {
         if(sscanf(line,"%64[0123456789abcdefABCDEF] %511s",sum,listed)==2&&strlen(sum)==64&&!strcmp(listed,filename_u8))strcpy(expected,sum);
     }fclose(file);if(!*expected)goto done;
     _snwprintf(archive,CAP,L"%ls\\%ls",work,filename);archive[CAP-1]=0;
-    _snwprintf(url,CAP,L"https://github.com/Aftonstjarna/riffapi-local-extended/releases/download/v%ls/%ls",version_w,filename);url[CAP-1]=0;
+    _snwprintf(url,CAP,L"https://github.com/Aftonstjarna/ReRiff/releases/download/v%ls/%ls",version_w,filename);url[CAP-1]=0;
     failure=L"Could not download the release package";
     if(!update_download(session,url,archive,64*1024*1024))goto done;
     failure=L"The release checksum did not match";
