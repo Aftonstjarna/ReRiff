@@ -1,3 +1,14 @@
+# ReRiff 0.1.5 — Proton update shutdown fix
+
+- Confirm local-server stop results through an atomic completion marker instead
+  of Wine start.exe's exit code. Stopping an already stopped server succeeds.
+- Let the Linux update tool verify owned-server shutdown directly, fixing updates
+  blocked at "Could not stop this installation's local server" in external-only
+  mode. Docker and unrelated processes remain untouched.
+
+Launchers affected by the old stop failure need this update installed manually
+once. Subsequent updates use the corrected handoff.
+
 # ReRiff 0.1.4 — Launcher version display
 
 - Show the running launcher's compiled version in its window title, for example
