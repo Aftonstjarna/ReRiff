@@ -39,6 +39,12 @@ static void *__thiscall mock_sprite(void *ui,int id,const float *pos,int origin,
     (void)ui;if(sprites_created>=64)abort();void *sprite=sprites[sprites_created++];*(void ***)sprite=item_vtable;
     ((int *)sprite)[2]=item_id;((float *)sprite)[12]=300;((float *)sprite)[13]=1;mock_def(sprite,id);mock_origin(sprite,origin);mock_position(sprite,pos);return sprite;
 }
+static void *__thiscall mock_button_sprite(void *ui,int sprite,int id,DWORD mask,const float *point,int origin){
+    void *button=mock_sprite(ui,sprite,point,origin,id);*(DWORD *)((BYTE *)button+64)=mask;return button;
+}
+static void __thiscall mock_graphics_input(void *menu,int selection){
+    delegated=selection;if(selection==4)*((BYTE *)menu+305)=!*((BYTE *)menu+305);
+}
 static void *__thiscall mock_blank(void *ui,int id,DWORD shortcut,const float *pos,const float *size){
     void *button=mock_sprite(ui,0,pos,4,id);((float *)button)[12]=size[0];((float *)button)[13]=size[1];
     *(DWORD *)((BYTE *)button+64)=shortcut;return button;
@@ -320,7 +326,7 @@ int main(int argc,char **argv){
     ((int *)graphics_test_items[2])[38]=((int *)graphics_test_items[3])[38]=1;
     ((int *)graphics_test_items[2])[39]=((int *)graphics_test_items[3])[39]=4;
     ((int *)graphics_test_items[2])[40]=((int *)graphics_test_items[3])[40]=4;
-    graphics_init_original=mock_init;graphics_cleanup_original=mock_cleanup;graphics_tick_original=mock_tick;graphics_input_original=mock_input;graphics_colour_original=mock_menu_colour;
+    graphics_init_original=mock_init;graphics_cleanup_original=mock_cleanup;graphics_tick_original=mock_tick;graphics_input_original=mock_graphics_input;graphics_button_sprite=mock_button_sprite;graphics_colour_original=mock_menu_colour;
     attach_antialiasing=mock_aa_attach;aa_requested=aa_fault=0;aa_graphics_init(gm,NULL,NULL);
     CHECK(aa_label&&aa_bar&&aa_knob&&!aa_pending&&((int *)aa_label)[2]==AA_CONTROL_ID);
     CHECK(resolution_hover&&((int *)resolution_hover)[2]==RESOLUTION_FOCUS_ID);
@@ -328,25 +334,30 @@ int main(int argc,char **argv){
     CHECK(((float *)resolution_hover)[12]==520&&((float *)resolution_hover)[13]==56);
     /* Exercise multiple complete native row loops in both directions, including
      * both resolution arrows and escape from the mouse-focused Apply button. */
-    void *nav_items[7]={graphics_test_items[2],graphics_test_items[3],graphics_test_items[0],aa_label,graphics_test_items[6],borderless_label,ui_slider_label};
-    const int down_cycle[]={4,BORDERLESS_CONTROL_ID,AA_CONTROL_ID,UI_SCALE_CONTROL_ID,1,4,BORDERLESS_CONTROL_ID,AA_CONTROL_ID,UI_SCALE_CONTROL_ID,1};
-    const int up_cycle[]={UI_SCALE_CONTROL_ID,AA_CONTROL_ID,BORDERLESS_CONTROL_ID,4,1,UI_SCALE_CONTROL_ID,AA_CONTROL_ID,BORDERLESS_CONTROL_ID,4,1};
-    CHECK(graphics_cycle(nav_items,7,1,40,down_cycle,10));
-    CHECK(graphics_cycle(nav_items,7,2,40,down_cycle,10));
-    CHECK(graphics_cycle(nav_items,7,1,39,up_cycle,10));
-    CHECK(graphics_cycle(nav_items,7,2,39,up_cycle,10));
-    CHECK(((int *)graphics_test_items[2])[40]==((int *)graphics_test_items[0])[2]);
-    CHECK(((int *)graphics_test_items[3])[40]==((int *)graphics_test_items[0])[2]);
-    CHECK(((int *)graphics_test_items[0])[40]==BORDERLESS_CONTROL_ID);
-    CHECK(((int *)aa_label)[38]==1&&((int *)aa_label)[40]==UI_SCALE_CONTROL_ID);
-    CHECK(((int *)graphics_test_items[6])[38]==1&&((int *)graphics_test_items[6])[39]==UI_SCALE_CONTROL_ID);
-    CHECK(((int *)graphics_test_items[6])[40]==1);
-    CHECK(((int *)aa_label)[39]==BORDERLESS_CONTROL_ID&&((int *)graphics_test_items[0])[39]==1);
-    CHECK(((float *)aa_label)[9]==660);
-    CHECK(((float *)borderless_label)[9]==580);
-    CHECK(((float *)graphics_test_items[0])[9]==500);
-    CHECK(((float *)graphics_test_items[5])[9]==420);
-
+    void *nav_items[8]={graphics_test_items[2],graphics_test_items[3],borderless_label,borderless_bar,borderless_knob,aa_label,graphics_test_items[6],ui_slider_label};
+    const int down_cycle[]={BORDERLESS_CONTROL_ID,AA_CONTROL_ID,UI_SCALE_CONTROL_ID,1,BORDERLESS_CONTROL_ID,AA_CONTROL_ID,UI_SCALE_CONTROL_ID,1};
+    const int up_cycle[]={UI_SCALE_CONTROL_ID,AA_CONTROL_ID,BORDERLESS_CONTROL_ID,1,UI_SCALE_CONTROL_ID,AA_CONTROL_ID,BORDERLESS_CONTROL_ID,1};
+    CHECK(graphics_cycle(nav_items,8,1,40,down_cycle,8));
+    CHECK(graphics_cycle(nav_items,8,2,40,down_cycle,8));
+    CHECK(graphics_cycle(nav_items,8,1,39,up_cycle,8));
+    CHECK(graphics_cycle(nav_items,8,2,39,up_cycle,8));
+    CHECK(((int *)borderless_bar)[2]==DISPLAY_LEFT_ID&&((int *)borderless_knob)[2]==DISPLAY_RIGHT_ID);
+    CHECK(((unsigned *)borderless_bar)[100]==59&&((unsigned *)borderless_knob)[100]==60);
+    CHECK(((float *)aa_label)[9]==580&&((float *)borderless_label)[9]==500);
+    CHECK(!graphics_test_items[0][372]&&!graphics_test_items[4][372]);
+    display_installed=graphics_bridge_ready=TRUE;borderless_pending=FALSE;*((BYTE *)gm+305)=FALSE;
+    aa_graphics_input(gm,DISPLAY_RIGHT_ID);CHECK(borderless_pending&&!*((BYTE *)gm+305));
+    aa_graphics_input(gm,DISPLAY_RIGHT_ID);CHECK(!borderless_pending&&*((BYTE *)gm+305));
+    aa_graphics_input(gm,DISPLAY_RIGHT_ID);CHECK(!borderless_pending&&!*((BYTE *)gm+305));
+    aa_graphics_input(gm,DISPLAY_LEFT_ID);CHECK(!borderless_pending&&*((BYTE *)gm+305));
+    aa_graphics_input(gm,DISPLAY_LEFT_ID);CHECK(borderless_pending&&!*((BYTE *)gm+305));
+    aa_graphics_input(gm,DISPLAY_LEFT_ID);CHECK(!borderless_pending&&!*((BYTE *)gm+305));
+    display_installed=graphics_bridge_ready=FALSE;
+    /* Native showResolutionText returns early for an unchanged selection.
+     * Scrolling must restore that selected label itself, without exposing all modes. */
+    int saved_visible=graphics_visible;graphics_visible=2;graphics_scroll_to(gm,1,FALSE);
+    CHECK(!graphics_test_items[5][372]);graphics_scroll_to(gm,0,FALSE);
+    CHECK(graphics_test_items[5][372]);graphics_visible=saved_visible;graphics_layout(gm);
     aa_graphics_input(gm,AA_CONTROL_ID);CHECK(aa_pending&&!aa_requested&&((unsigned *)aa_knob)[100]==74);
     CHECK(((float *)aa_label)[12]==820&&((float *)aa_label)[13]==80);
     aa_graphics_input(gm,3);CHECK(aa_requested&&aa_attach_calls==1&&delegated==3);
@@ -369,8 +380,8 @@ int main(int argc,char **argv){
     ((float *)graphics_test_items[2])[9]=((float *)graphics_test_items[3])[9]=500;((float *)graphics_test_items[4])[9]=580;
     UiCanvas short_canvas={1920,720};ui_scope_tls=TlsAlloc();CHECK(ui_scope_tls!=TLS_OUT_OF_INDEXES);ui_scope_set(&short_canvas);
     aa_graphics_init(gm,NULL,NULL);CHECK(graphics_reel&&graphics_visible==3&&graphics_first==0);
-    CHECK((*((BYTE *)aa_label+372)&1)==0&&*(DWORD *)((BYTE *)aa_label+76)==0);
-    graphics_scroll_to(gm,2,FALSE);CHECK(graphics_first==2&&(*((BYTE *)ui_slider_label+372)&1));
+    CHECK((*((BYTE *)aa_label+372)&1)&&!(*((BYTE *)ui_slider_label+372)&1));
+    graphics_scroll_to(gm,1,FALSE);CHECK(graphics_first==1&&(*((BYTE *)ui_slider_label+372)&1));
     CHECK(!(*((BYTE *)graphics_test_items[2]+372)&1));
     graphics_scroll_to(gm,0,FALSE);CHECK((*((BYTE *)graphics_test_items[2]+372)&1)&&!(*((BYTE *)ui_slider_label+372)&1));
     aa_graphics_cleanup(gm,NULL,NULL);CHECK(!graphics_reel&&constructed==destroyed);

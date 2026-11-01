@@ -1,6 +1,10 @@
 #define AA_CONTROL_ID 1601
 #define RESOLUTION_FOCUS_ID 1604
 #define BORDERLESS_CONTROL_ID 1602
+#define DISPLAY_LEFT_ID 1605
+#define DISPLAY_RIGHT_ID 1606
+typedef void *(__thiscall *ButtonSpriteFn)(void *,int,int,DWORD,const float *,int);
+static ButtonSpriteFn graphics_button_sprite;
 static ScreenFn graphics_init_original,graphics_cleanup_original;
 static TickFn graphics_tick_original;
 static InputFn graphics_input_original;
@@ -25,11 +29,14 @@ static void aa_connect_navigation(void *menu){
      * Up/Down. Extend vanilla's closed row loop in both directions. */
     for(int i=2;i<4;i++){
         ((int *)items[i])[38]=1;((int *)items[i])[39]=UI_SCALE_CONTROL_ID;
-        ((int *)items[i])[40]=((int *)full)[2];
+        ((int *)items[i])[40]=BORDERLESS_CONTROL_ID;
     }
     ((int *)full)[38]=1;((int *)full)[40]=BORDERLESS_CONTROL_ID;
-    ((int *)borderless_label)[38]=1;((int *)borderless_label)[39]=((int *)full)[2];
+    ((int *)borderless_label)[38]=1;((int *)borderless_label)[39]=((int *)left)[2];
     ((int *)borderless_label)[40]=AA_CONTROL_ID;((int *)borderless_label)[41]=((int *)borderless_label)[42]=-1;
+    void *mode_arrows[2]={borderless_bar,borderless_knob};
+    for(int i=0;i<2;i++){((int *)mode_arrows[i])[38]=1;((int *)mode_arrows[i])[39]=((int *)left)[2];((int *)mode_arrows[i])[40]=AA_CONTROL_ID;((int *)mode_arrows[i])[41]=DISPLAY_LEFT_ID;((int *)mode_arrows[i])[42]=DISPLAY_RIGHT_ID;}
+    ((int *)borderless_label)[41]=DISPLAY_LEFT_ID;((int *)borderless_label)[42]=DISPLAY_RIGHT_ID;
     ((int *)aa_label)[38]=1;((int *)aa_label)[39]=BORDERLESS_CONTROL_ID;
     ((int *)aa_label)[40]=UI_SCALE_CONTROL_ID;
     if(ui_slider_label){((int *)ui_slider_label)[38]=1;((int *)ui_slider_label)[39]=AA_CONTROL_ID;((int *)ui_slider_label)[40]=((int *)left)[2];((int *)ui_slider_label)[41]=((int *)ui_slider_label)[42]=-1;}
@@ -51,11 +58,9 @@ static void aa_sync_art(void *menu){
     float scale=((float *)menu)[15],pos[2]={((float *)aa_bar)[8],((float *)aa_bar)[9]};
     if(!aa_pending)pos[0]-=((float *)aa_bar)[12]*scale;
     pos[0]+=(aa_pending?-25:25)*scale;sprite_position(aa_knob,pos);
-    if(borderless_bar&&borderless_knob){
-        sprite_def(borderless_knob,borderless_pending?74:75);sprite_origin(borderless_knob,borderless_pending?5:3);
-        pos[0]=((float *)borderless_bar)[8];pos[1]=((float *)borderless_bar)[9];
-        if(!borderless_pending)pos[0]-=((float *)borderless_bar)[12]*scale;
-        pos[0]+=(borderless_pending?-25:25)*scale;sprite_position(borderless_knob,pos);
+    if(borderless_label){
+        raw_text(borderless_label,borderless_pending?L"FULLSCREEN: BORDERLESS":*((BYTE *)menu+305)?L"FULLSCREEN: EXCLUSIVE":L"FULLSCREEN: OFF (WINDOWED)");
+        ((float *)borderless_label)[12]=aa_hit_width;((float *)borderless_label)[13]=aa_hit_height;
     }
 }
 static void aa_graphics_input_state(void *menu){
@@ -63,14 +68,16 @@ static void aa_graphics_input_state(void *menu){
     DWORD mask=*(DWORD *)((BYTE *)((void **)menu)[46]+40);
     row_visible(aa_label,TRUE,mask);row_visible(aa_bar,TRUE,0);row_visible(aa_knob,TRUE,0);
     row_visible(resolution_hover,TRUE,mask);
-    row_visible(borderless_label,TRUE,mask);row_visible(borderless_bar,TRUE,0);row_visible(borderless_knob,TRUE,0);
+    row_visible(borderless_label,TRUE,mask);row_visible(borderless_bar,TRUE,mask);row_visible(borderless_knob,TRUE,mask);
     row_visible(ui_slider_label,TRUE,mask);row_visible(ui_slider_rail,TRUE,0);row_visible(ui_slider_knob,TRUE,0);
     if(ui_slider_label)*(DWORD *)((BYTE *)ui_slider_label+64)=((int *)menu)[11]==UI_SCALE_CONTROL_ID?768:0;
     BOOL focused=((int *)menu)[11]==AA_CONTROL_ID;
-    BOOL borderless=((int *)menu)[11]==BORDERLESS_CONTROL_ID;
+    BOOL borderless=((int *)menu)[11]==BORDERLESS_CONTROL_ID||((int *)menu)[11]==DISPLAY_LEFT_ID||((int *)menu)[11]==DISPLAY_RIGHT_ID;
     BOOL resolution=((int *)menu)[11]==RESOLUTION_FOCUS_ID;
     BOOL scaling=((int *)menu)[11]==UI_SCALE_CONTROL_ID;
     if(resolution)((int *)menu)[77]=0;
+    if(borderless){*(DWORD *)((BYTE *)borderless_bar+64)=256;*(DWORD *)((BYTE *)borderless_knob+64)=512;}
+    else{*(DWORD *)((BYTE *)borderless_bar+64)=0;*(DWORD *)((BYTE *)borderless_knob+64)=0;}
     *(DWORD *)((BYTE *)aa_label+64)=focused?768:0;
     if(borderless_label)*(DWORD *)((BYTE *)borderless_label+64)=borderless?768:0;
     if(focused||borderless||scaling)for(int i=62;i<=65;i++)if(((void **)menu)[i])*(DWORD *)((BYTE *)((void **)menu)[i]+64)=0;
@@ -105,7 +112,7 @@ static void __thiscall aa_graphics_init(void *menu,void *screen,void *lower){
     if(!readable(full,404)||!readable(left,404)||!readable(((void **)menu)[65],404)||!readable(label,484)||!readable(((void **)menu)[66],404))return;
     float original_gap=((float *)full)[9]-((float *)left)[9];if(original_gap<=0)return;
     float gap=original_gap,resolution_y=((float *)left)[9]-original_gap;
-    float border_y=resolution_y+gap*2,y=resolution_y+gap*3,x=((float *)label)[8],right=((float *)full)[8];
+    float border_y=resolution_y+gap,y=resolution_y+gap*2,x=((float *)label)[8],right=((float *)full)[8];
     for(int i=62;i<=65;i++)if(((void **)menu)[i]){void *item=((void **)menu)[i];move_item(item,((float *)item)[8],i<=63?resolution_y+gap:resolution_y);}
     move_item(label,x,resolution_y+gap);
     void **begin=((void ***)menu)[70],**end=((void ***)menu)[71];
@@ -115,9 +122,21 @@ static void __thiscall aa_graphics_init(void *menu,void *screen,void *lower){
     borderless_pending=borderless_active;
     aa_hit_width=right-x;aa_hit_height=gap;
     make_graphics_toggle(menu,AA_CONTROL_ID,L"ANTIALIASING",x,y,right,gap,&aa_label,&aa_bar,&aa_knob);
-    make_graphics_toggle(menu,BORDERLESS_CONTROL_ID,L"BORDERLESS FULLSCREEN",x,border_y,right,gap,&borderless_label,&borderless_bar,&borderless_knob);
+    /* Match gaGraphicsOptions.initScreens: original arrow sprites 59/60,
+     * createButtonSprite, origins 3/5 and native directional input. */
+    borderless_label=create_text(L"",(x+right)*0.5f,border_y,3,1,1,-1,FALSE,-1,FALSE,TRUE);
+    if(borderless_label){
+        ((int *)borderless_label)[2]=BORDERLESS_CONTROL_ID;((int *)borderless_label)[15]=100;menu_item(borderless_label,TRUE);
+        ((int *)borderless_label)[1]++;add_screen(((void **)menu)[46],borderless_label);
+    }
+    for(int i=0;i<2;i++){
+        void *source=((void **)menu)[64+i];float pos[2]={((float *)source)[8],border_y};
+        void *arrow=graphics_button_sprite(*ui_instance,i?60:59,i?DISPLAY_RIGHT_ID:DISPLAY_LEFT_ID,0,pos,i?5:3);
+        if(i)borderless_knob=arrow;else borderless_bar=arrow;
+        if(arrow){scale_item(arrow,((float *)menu)[14],((float *)menu)[15]);((int *)arrow)[1]++;add_screen(((void **)menu)[46],arrow);}
+    }
     if(!aa_label||!borderless_label)return;
-    ui_slider_create(menu,x,resolution_y+gap*4,right,gap);
+    ui_slider_create(menu,x,resolution_y+gap*3,right,gap);
     aa_connect_navigation(menu);
     float hit_pos[2]={(((float *)left)[8]+((float *)((void **)menu)[65])[8])*0.5f,((float *)left)[9]};
     float hit_size[2]={((float *)((void **)menu)[65])[8]-((float *)left)[8]-((float *)left)[12]*((float *)menu)[14]*2,gap*0.7f};
@@ -125,7 +144,7 @@ static void __thiscall aa_graphics_init(void *menu,void *screen,void *lower){
     if(resolution_hover){
         sprite_origin(resolution_hover,4);
         ((int *)resolution_hover)[38]=1;((int *)resolution_hover)[39]=UI_SCALE_CONTROL_ID;
-        ((int *)resolution_hover)[40]=((int *)full)[2];
+        ((int *)resolution_hover)[40]=BORDERLESS_CONTROL_ID;
         ((int *)resolution_hover)[1]++;add_screen(((void **)menu)[46],resolution_hover);
     }
     aa_sync_art(menu);graphics_scroll_init(menu,gap);
@@ -147,13 +166,15 @@ static void __thiscall aa_graphics_cleanup(void *menu,void *screen,void *lower){
 static void __thiscall aa_graphics_input_scoped(void *menu,int selection){
     if(aa_menu_owner==menu&&aa_label){
         if(selection==RESOLUTION_FOCUS_ID||selection==UI_SCALE_CONTROL_ID)return;
-        if(selection==BORDERLESS_CONTROL_ID){
-            if(!display_installed||!graphics_bridge_ready){log_line("Borderless requires the matching client helper.");return;}
-            borderless_pending=!borderless_pending;
-            if(borderless_pending&&*((BYTE *)menu+305))graphics_input_original(menu,4);
-            aa_sync_art(menu);return;
+        if(selection==BORDERLESS_CONTROL_ID||selection==DISPLAY_LEFT_ID||selection==DISPLAY_RIGHT_ID){
+            int mode=borderless_pending?1:*((BYTE *)menu+305)?2:0;
+            mode=(mode+(selection==DISPLAY_LEFT_ID?2:1))%3;
+            if(mode==1&&(!display_installed||!graphics_bridge_ready)){log_line("Borderless requires the matching client helper.");return;}
+            BOOL exclusive=mode==2;
+            if(exclusive!=(*((BYTE *)menu+305)!=0))graphics_input_original(menu,4);
+            borderless_pending=mode==1;aa_sync_art(menu);return;
         }
-        if(selection==4){graphics_input_original(menu,selection);if(*((BYTE *)menu+305))borderless_pending=FALSE;aa_sync_art(menu);return;}
+        if(selection==4)return; /* Hidden vanilla switch is driven by selector only. */
         if(selection==AA_CONTROL_ID){aa_pending=!aa_pending;InterlockedExchange(&aa_fault,0);aa_sync_art(menu);return;}
         if(selection==3){
             ui_slider_save();
@@ -175,7 +196,7 @@ static void __thiscall aa_graphics_colour(void *menu,int id,const float *colour)
     graphics_colour_original(menu,id,colour);
     if(menu==aa_menu_owner&&id==UI_SCALE_CONTROL_ID){if(ui_slider_label)colour_item(ui_slider_label,colour);if(ui_slider_rail)colour_item(ui_slider_rail,colour);if(ui_slider_knob)colour_item(ui_slider_knob,colour);if(ui_slider_min)colour_item(ui_slider_min,colour);if(ui_slider_max)colour_item(ui_slider_max,colour);}
     if(menu==aa_menu_owner&&id==AA_CONTROL_ID){if(aa_label)colour_item(aa_label,colour);if(aa_bar)colour_item(aa_bar,colour);if(aa_knob)colour_item(aa_knob,colour);}
-    if(menu==aa_menu_owner&&id==BORDERLESS_CONTROL_ID){if(borderless_label)colour_item(borderless_label,colour);if(borderless_bar)colour_item(borderless_bar,colour);if(borderless_knob)colour_item(borderless_knob,colour);}
+    if(menu==aa_menu_owner&&(id==BORDERLESS_CONTROL_ID||id==DISPLAY_LEFT_ID||id==DISPLAY_RIGHT_ID)){if(borderless_label)colour_item(borderless_label,colour);if(borderless_bar)colour_item(borderless_bar,colour);if(borderless_knob)colour_item(borderless_knob,colour);}
 }
 static void __thiscall aa_graphics_tick(void *menu){
     if(menu==aa_menu_owner)ui_slider_tick(menu);
@@ -187,7 +208,7 @@ static void __thiscall aa_graphics_tick(void *menu){
         if(begin&&end&&end>=begin&&end-begin<256&&readable(begin,(size_t)(end-begin)*sizeof(void *)))
             for(void **it=begin;it!=end;it++)if(readable(*it,484))colour_item(*it,graphics_focus_colour);
     }
-    if(aa_menu_owner==menu&&(((int *)menu)[11]==AA_CONTROL_ID||((int *)menu)[11]==BORDERLESS_CONTROL_ID||((int *)menu)[11]==UI_SCALE_CONTROL_ID)){
+    if(aa_menu_owner==menu&&(((int *)menu)[11]==AA_CONTROL_ID||((int *)menu)[11]==BORDERLESS_CONTROL_ID||((int *)menu)[11]==DISPLAY_LEFT_ID||((int *)menu)[11]==DISPLAY_RIGHT_ID||((int *)menu)[11]==UI_SCALE_CONTROL_ID)){
         static const float normal[4]={1,1,1,0.9f};
         colour_item(((void **)menu)[73],normal);
         void **begin=((void ***)menu)[70],**end=((void ***)menu)[71];
@@ -207,6 +228,7 @@ static BOOL validate_graphics_aa_menu(BYTE *base,uintptr_t address){
 static BOOL install_graphics_aa_menu(BYTE *base){
     if(!validate_graphics_aa_menu(base,(uintptr_t)base))return FALSE;
     void **table=(void **)(base+0x7a59c0);DWORD old;
+    graphics_button_sprite=(ButtonSpriteFn)(base+0x222c0);
     graphics_focus_colour=(const float *)(base+0x7a5644);
     if(!VirtualProtect(table,27*sizeof(void *),PAGE_READWRITE,&old))return FALSE;
     graphics_tick_original=(TickFn)table[3];graphics_init_original=(ScreenFn)table[15];graphics_cleanup_original=(ScreenFn)table[16];graphics_input_original=(InputFn)table[24];graphics_colour_original=(ColourFn)table[26];

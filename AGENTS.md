@@ -11,3 +11,7 @@
   styling. Check the available space at supported resolutions and UI scales;
   reuse the native scrolling solution when entries overflow. Do not compress
   entries or allow controls to crowd, overlap, or become unreachable.
+- Consult the RiffRacerDecomp recovery project for reverse-engineering work and
+  contribute verified new findings there. Preserve original hashes, exact bytes,
+  metadata tokens and provenance; keep intentional ReRiff patches separate from
+  byte-for-byte original reconstruction and do not claim matching without comparison.

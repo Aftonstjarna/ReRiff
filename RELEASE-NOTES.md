@@ -9,6 +9,9 @@
 - Simplify Settings → Servers by removing duplicate plaintext mode buttons while
   retaining native graphical toggles, scrolling and wraparound navigation.
   Add SAVE AND EXIT, which saves settings before requesting a normal game close.
+- Replace separate fullscreen switches with a resolution-style selector using
+  original arrow sprites and input: OFF (WINDOWED), BORDERLESS and EXCLUSIVE.
+  Restore the selected resolution value after scrolling away and back.
 - Improve native menu hover, icon alignment and graphics navigation. Add a
   volume-style UI SCALE slider: 0 uses the game's built-in Auto scaling; 25 is
   Small, 50 is the 1080p reference, 75 is Large and 100 is Very Large.

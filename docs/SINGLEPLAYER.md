@@ -29,9 +29,10 @@ cross-database retry. URLs remain saved when singleplayer is selected.
 The launcher no longer starts Python. Its existing local button selects
 singleplayer; the server fields become Primary and Secondary. The old stop
 button remains solely for shutting down a previously installed backend.
-The in-game page retains its ten rows, original switches and native scrolling.
-Use Local becomes Use Singleplayer; Force Offline becomes Singleplayer.
-Save/Play and restart behavior are unchanged.
+The in-game page keeps the original graphical switches and native scrolling.
+Redundant plaintext mode buttons are removed. Singleplayer replaces Force
+Offline; Save and exit saves preferences before requesting a normal game close.
+Save/Play and restart behavior are retained.
 
 ## Data
 
