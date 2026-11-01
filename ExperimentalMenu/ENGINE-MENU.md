@@ -1,9 +1,9 @@
 # Native Settings > Servers integration
 
 The experimental client hooks the original `gaOptionsMenu` callbacks, adding
-Servers above its existing options. It does not patch the main-menu vtable,
-change Friends, replace settings entries, or move original rows, arrows,
-dividers, or audio sliders. New rows use the original `elUIItemText.createRaw`,
+Servers after its existing options. It does not patch the main-menu vtable,
+change Friends, replace settings entries, or change audio sliders. Main Settings
+rows, their arrows and dividers scroll together at the original row interval. New rows use the original `elUIItemText.createRaw`,
 font 3, centered alignment, menu-item flags, native colours and engine input.
 
 The entry is a child of the existing Settings group. The server page's ten rows
@@ -28,6 +28,34 @@ both graphics. Cleanup removes all six graphics as well as the ten text rows.
 Server settings, save/reload, skip-launcher, and Save and restart retain the
 existing behavior. No endpoint, DLL, or online Friends behavior changes here.
 The module creates no menu windows and uses no independent input polling.
+
+## Scrolling and vanilla spacing
+
+`settings_scroll.h` lays out both lists using the original Settings +264 row
+interval and first-row Y. Text uses the same vertical anchor for switches and
+ordinary actions. Divider sprite 51 follows the vanilla +half-gap +50×scale
+placement and 1650×scale width. Servers gets the original sprite 52 arrow.
+Only complete rows fit in the viewport; all remaining text, switches and lines
+are hidden and have zero input masks. Save/reload preserve the viewport.
+
+The native screen owns a track, proportional thumb, two small arrow controls,
+and ten submenu lines. The Settings group owns the new root arrow and any
+missing root divider. Wheel notches scroll a row; Page Up/Down scroll a viewport;
+Home/End jump to the limits; clicking or dragging the track moves the thumb.
+A subclassed game-window procedure only queues integer requests. All engine
+object changes run in the existing menu tick, and events outside Settings are
+forwarded to the retained window procedure. The pinned DLL keeps the callback
+valid; input is disabled at cleanup and while Audio settings/modal screens are
+active.
+
+Controller edge scrolling uses the original UI item shortcut mask at +64, as
+used in Graphics settings, with Up=64 and Down=128 verified by the original
+`gaFileSelectInterface.tickInput`. Shortcuts are armed only at a visible list
+edge with more rows in that direction. Arrow activation reveals the next row
+and gives it native focus. Returning from vanilla Audio/Graphics reveals the
+originally focused row if it lies outside the old viewport. Cleanup removes
+all 30 screen-owned added objects; group-owned additions follow original group
+cleanup.
 
 ## Build, install, restore
 
@@ -93,8 +121,11 @@ ILSpy `analysis/native-port/decompiled/Module.cs` establishes Settings state at
 +248, main/audio groups +268/+332, original setting text pointers +272 (five),
 title +144 and screen +184. Text-item position is +32/+36, extents +48/+52;
 visibility bit 0 at +372, enable mask +76, and interaction latch +356. The new
-entry is positioned from the original first row and spacing. The ten submenu
-rows occupy 22%–79% of screen height. No invented settings object layout is used.
+entry is positioned from the original first row and spacing. The submenu
+uses the original first-row position, +264 row interval, +292 arrow references
+and +312 divider references. A bounded viewport hides overflow rows and disables
+their input masks instead of shrinking the gap. No invented settings object
+layout is used.
 
 Ghidra read-only exports are retained at `build/settings-evidence`; native
 instructions and original metadata signatures resolve Ghidra's incomplete
