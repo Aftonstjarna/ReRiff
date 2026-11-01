@@ -209,6 +209,23 @@ def patch_supported_client(bundle, game, backups, manifest, restore, previous_ba
     return originals, plan
 
 
+def unattended_update_context(bundle, game, platform):
+    # Older native updaters already leave an explicit auto-resume command in
+    # their private work directory. Recognize that exact, prepared invocation
+    # so its first upgrade can receive the new notice too.
+    if Path(sys.argv[0]).name != 'apply-client-update.py' or '--prepare' in sys.argv:
+        return False
+    try:
+        work = Path(sys.argv[sys.argv.index('--work')+1]).resolve()
+        prepared = json.loads((work/'prepared.json').read_text())
+        return ((work/'resume-command.txt').is_file()
+                and Path(prepared['bundle']).resolve() == bundle.resolve()
+                and Path(prepared['game']).resolve() == game.resolve()
+                and prepared['platform'] == platform)
+    except (ValueError, IndexError, KeyError, TypeError, OSError):
+        return False
+
+
 def install(bundle, game, backups, platform, dry_run=False, restore=False, music_dir=None, music_link=None):
     if not (game/'Game.exe').is_file():
         raise ValueError(f'Game.exe was not found in {game}')
@@ -287,6 +304,8 @@ def install(bundle, game, backups, platform, dry_run=False, restore=False, music
             chosen_music = music_dir or (Path(state['music_dir']) if state.get('music_dir') else default_music_dir())
             next_state.update(music_link=enabled, music_dir=str(chosen_music.expanduser().resolve()))
         plan['localserver/install-state.json'] = (json.dumps(next_state, indent=2)+'\n').encode()
+        if unattended_update_context(bundle, game, platform):
+            plan['localserver/update-notification.ini'] = ('[update]\nversion='+manifest['version']+'\n').encode('utf-8')
     if dry_run:
         print(f'Validated ReRiff {manifest["version"]}: {len(plan)} files; backups: {backups}')
         return plan

@@ -7,6 +7,8 @@ from pathlib import Path
 import tarfile
 import tempfile
 import unittest
+from unittest import mock
+import sys
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -39,7 +41,7 @@ class ClientUpdateTest(unittest.TestCase):
         files['payload/localserver/client-version.txt'] = b'9.0.0-2\n'
         if platform == 'windows':
             files['python/python.exe'] = b'fixture runtime'
-        manifest = {'platform': platform, 'version': '9.0.0', 'update_only': True, 'required_existing': {},
+        manifest = {'platform': platform, 'version': '9.0.0-2', 'update_only': True, 'required_existing': {},
                     'patches': {}, 'files': {name: hashlib.sha256(data).hexdigest() for name, data in files.items()}}
         files['manifest.json'] = json.dumps(manifest).encode()
         if bad_member:
@@ -108,6 +110,36 @@ class ClientUpdateTest(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, 'Unsafe'):
                     update.prepare(archive, digest, work, self.game, platform)
                 self.assertFalse((work/'prepared.json').exists())
+
+    def test_older_unattended_updater_gets_transactional_notice(self):
+        archive, digest = self.package('linux')
+        update.prepare(archive, digest, self.work, self.game, 'linux')
+        (self.work/'resume-command.txt').write_bytes(b'auto resume')
+        with mock.patch.object(sys, 'argv', [str(self.work/'apply-client-update.py'), '--work', str(self.work)]):
+            update.apply(self.work)
+        self.assertIn(b'version=9.0.0-2', (self.game/'localserver/update-notification.ini').read_bytes())
+        self.assertEqual((self.game/'server.ini').read_bytes(), b'external settings\n')
+
+    def test_failed_unattended_install_rolls_back_notice(self):
+        archive, digest = self.package('linux')
+        update.prepare(archive, digest, self.work, self.game, 'linux')
+        (self.work/'resume-command.txt').write_bytes(b'auto resume')
+        original_loader = update.load_installer
+        def loader(root):
+            module = original_loader(root)
+            replace = module.replace
+            def failing(path, data):
+                if path.name == 'update-notification.ini':
+                    raise OSError('Simulated notice write failure')
+                replace(path, data)
+            module.replace = failing
+            return module
+        with mock.patch.object(update, 'load_installer', loader), mock.patch.object(sys, 'argv', [str(self.work/'apply-client-update.py'), '--work', str(self.work)]):
+            with self.assertRaises(OSError):
+                update.apply(self.work)
+        self.assertFalse((self.game/'localserver/update-notification.ini').exists())
+        self.assertEqual((self.game/'ReRiff-Launcher.exe').read_bytes(), b'old launcher')
+        self.assertFalse((self.work/'success').exists())
 
     def test_apply_rolls_back_if_a_write_fails(self):
         archive, digest = self.package('linux')

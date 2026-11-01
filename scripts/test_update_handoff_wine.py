@@ -14,6 +14,7 @@ parser.add_argument('--wine', required=True)
 parser.add_argument('--prefix', required=True)
 parser.add_argument('--platform', choices=['linux', 'windows'], default='linux')
 parser.add_argument('--automatic', action='store_true')
+parser.add_argument('--updater', type=Path, default=ROOT/'build/ReRiff-Updater.exe')
 args = parser.parse_args()
 spec = importlib.util.spec_from_file_location('updater_fixture', ROOT/'scripts/test_client_update.py')
 fixture = importlib.util.module_from_spec(spec)
@@ -32,25 +33,25 @@ assert display != ':', 'Temporary display did not start'
 wine_prefix = ['/usr/bin/distrobox-host-exec', 'env', 'DISPLAY='+display, 'WINEPREFIX='+args.prefix, 'WINEDEBUG=-all']
 try:
     archive, digest = case.package(args.platform, launcher=(ROOT/'build/test-update-relaunch.exe').read_bytes())
-    shutil.copyfile(ROOT/'scripts/apply-client-update.py', case.work/'apply.py')
+    shutil.copyfile(ROOT/'scripts/apply-client-update.py', case.work/'apply-client-update.py')
     if args.platform == 'linux':
         fixture.update.prepare(archive, digest, case.work, case.game, 'linux')
-        command = '"C:\\windows\\system32\\start.exe" /wait /unix /usr/bin/python3 "'+str(case.work/'apply.py')+'" --work "'+str(case.work)+'"'
+        command = '"C:\\windows\\system32\\start.exe" /wait /unix /usr/bin/python3 "'+str(case.work/'apply-client-update.py')+'" --work "'+str(case.work)+'"'
     else:
         runtime = case.game/'localserver/windows-python'
         shutil.rmtree(runtime)
         shutil.copytree(ROOT/'build/release/windows/python', runtime)
         subprocess.run(wine_prefix+[args.wine,
-                        str(runtime/'python.exe'), 'Z:'+str(case.work/'apply.py'), '--prepare', '--work', 'Z:'+str(case.work),
+                        str(runtime/'python.exe'), 'Z:'+str(case.work/'apply-client-update.py'), '--prepare', '--work', 'Z:'+str(case.work),
                         '--archive', 'Z:'+str(archive), '--sha256', digest, '--game-dir', 'Z:'+str(case.game), '--platform', 'windows'], check=True, timeout=30)
         assert (case.work/'prepared.json').exists()
-        command = '"Z:'+str(case.work/'runtime/python.exe')+'" "Z:'+str(case.work/'apply.py')+'" --work "Z:'+str(case.work)+'"'
+        command = '"Z:'+str(case.work/'runtime/python.exe')+'" "Z:'+str(case.work/'apply-client-update.py')+'" --work "Z:'+str(case.work)+'"'
     (case.work/'apply-command.txt').write_bytes(command.encode('utf-16-le'))
     if args.automatic:
         resume = '"Z:'+str(case.game/'ReRiff-Launcher.exe')+'" --skip-launcher --no-auto-update -- "Z:'+str(case.game/'Game.exe')+'" "space value"'
         (case.work/'resume-command.txt').write_bytes(resume.encode('utf-16-le'))
     subprocess.run(wine_prefix+[args.wine,
-                    str(ROOT/'build/test-update-parent.exe'), 'Z:'+str(ROOT/'build/ReRiff-Updater.exe'),
+                    str(ROOT/'build/test-update-parent.exe'), 'Z:'+str(args.updater),
                     'Z:'+str(case.work), 'Z:'+str(case.game)], check=True, timeout=30)
     deadline = time.monotonic()+30
     while time.monotonic()<deadline and not (case.game/'reopened').exists():

@@ -6,7 +6,8 @@
 - After a successful unattended installation, show "ReRiff has updated to …"
   once on the next main menu. Keep server and update notifications independent,
   non-interactive and automatically dismissed. Failed/manual updates do not
-  create notices. Test this with --test-auto-update after installing this build.
+  create notices. Support upgrades started by older unattended updaters too.
+  Test this with --test-auto-update after installing this build.
 - Add Antialiasing to the original Graphics menu with the native fullscreen
   switch artwork. Apply saves the setting; Back discards pending changes.
 - Implement optional post-process edge smoothing on the original D3D9 device,
