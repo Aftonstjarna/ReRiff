@@ -32,18 +32,40 @@ static TickFn original_tick, base_tick;
 static EnableFn enable_input;
 static RawTextFn raw_text;
 static KeyTextFn key_text;
-static const char **original_labels;
+/* createRaw is cdecl. add/screen.add take an owning SSP by VALUE: their
+ * native bodies read the object at [ebp+8], release it, and return with RET 4. */
+typedef void *(__cdecl *CreateTextFn)(const WCHAR *,float,float,unsigned,int,int,float,BOOL,float,BOOL,BOOL);
+typedef void (__thiscall *AddFn)(void *,void *);
+typedef void (__thiscall *FocusFn)(void *,int);
+static CreateTextFn create_text;
+static AddFn add_item, add_screen, remove_screen;
+static EnableFn menu_item;
+static FocusFn set_focus;
+typedef void *(__thiscall *SpriteFn)(void *,int,const float *,int,int);
+typedef void (__thiscall *SpriteDefFn)(void *,unsigned);
+typedef void (__thiscall *PositionFn)(void *,const float *);
+static SpriteFn create_sprite;
+static SpriteDefFn sprite_def, sprite_origin;
+static PositionFn sprite_position;
+static void **ui_instance;
+static ColourFn original_colour;
+static void *toggles[3][2];
+static const int toggle_actions[3]={1,4,5};
+static void *server_rows[11]; /* borrowed; the original screen owns every row */
+static BYTE settings_visible, audio_visible;
+static float server_row_width, server_row_height;
 static WCHAR config_path[MAX_PATH], log_path[MAX_PATH];
 static Settings pending;
 static void *page_owner;
 static BOOL server_page;
-static DWORD original_input_masks[11];
+
 static WCHAR heading[96]=L"Servers — applies after restart";
 static volatile LONG installed;
 static BOOL restarting;
 static DWORD restart_started;
 #include "../NativeLauncher/restart_protocol.h"
-#define SERVERS_ID 8
+#define SERVERS_ID 1500
+#define SERVER_ACTION_BASE 1500
 
 static void log_line(const char *line) {
     HANDLE file=CreateFileW(log_path,FILE_APPEND_DATA,FILE_SHARE_READ,NULL,OPEN_ALWAYS,FILE_ATTRIBUTE_NORMAL,NULL);
@@ -134,32 +156,51 @@ static BOOL readable(const void *p,size_t count) {
     return start<=end && count<=end-start;
 }
 
-static void *item_text(void *menu,int id) {
-    /* ILSpy: gaMainMenu.initScreens/tick; getChild reads its vector at +376. */
-    void *item=((void **)menu)[62+id];
-    if (!readable(item,384)) return NULL;
-    void **begin=*(void ***)((BYTE *)item+376);
-    void **end=*(void ***)((BYTE *)item+380);
-    if ((uintptr_t)end<=(uintptr_t)begin || !readable(begin,sizeof(void *))) return NULL;
-    return readable(*begin,484)?*begin:NULL;
+static void show_item(void *item,BYTE visible) {
+    if(readable(item,404))((EnableFn)(*(void ***)item)[3])(item,visible);
 }
-
+static void focus_row(void *menu,int id) {
+    void *screen=((void **)menu)[46];
+    if(readable(screen,16))set_focus(screen,id);
+}
+static void *item_text(void *menu,int id) {
+    return page_owner==menu&&id>=0&&id<=10?server_rows[id]:NULL;
+}
 static void keep_servers_available(void *menu) {
-    BOOL settings=server_page&&page_owner==menu;
-    for(int id=settings?1:SERVERS_ID;id<=(settings?10:SERVERS_ID);id++){
-        void *row=((void **)menu)[62+id];
+    if(!server_page||page_owner!=menu)return;
+    for(int id=1;id<=10;id++){
+        void *row=server_rows[id];
+        /* Never clear a live mouse/controller interaction latch each frame. */
         if(readable(row,404)&&*(DWORD *)((BYTE *)row+76)!=0xffffffffu)enable_input(row,TRUE);
     }
-    if(settings)return; /* The original base menu handles focus/pressed colours. */
-    void *item=((void **)menu)[62+SERVERS_ID];
-    if (!readable(item,404)) return;
-    /* enableInput always clears the interaction latch at +356, even when
-     * already enabled. Calling it every frame breaks mouse press/release.
-     * Its original enabled input mask at +76 is 0xffffffff. */
-    static const float focus[4]={0.0f,1.0f,1.0f,0.8f};
-    static const float normal[4]={1.0f,1.0f,1.0f,0.9f};
-    ColourFn colour=(ColourFn)(*(void ***)menu)[26];
-    colour(menu,SERVERS_ID,((int *)menu)[88]==SERVERS_ID?focus:normal);
+}
+
+static void toggle_visibility(BYTE visible) {
+    for(int i=0;i<3;i++)for(int part=0;part<2;part++)show_item(toggles[i][part],visible);
+}
+static void update_toggles(void *menu) {
+    const BOOL values[3]={pending.skip_launcher,pending.only,pending.enabled};
+    for(int i=0;i<3;i++){
+        void *bar=toggles[i][0],*knob=toggles[i][1];
+        if(!bar||!knob)continue;
+        BOOL on=values[i];
+        /* Original gaGraphicsOptions.setTogglebarVars: assets 74/75,
+         * right/left origin, bar-width displacement and 25*scale inset. */
+        sprite_def(knob,on?74:75);sprite_origin(knob,on?5:3);
+        float pos[2]={((float *)bar)[8],((float *)bar)[9]},scale=((float *)menu)[15];
+        if(!on)pos[0]-=((float *)bar)[12]*scale;
+        pos[0]+=(on?-25.0f:25.0f)*scale;
+        sprite_position(knob,pos);
+    }
+}
+static void __thiscall hook_colour(void *menu,int id,const float *colour) {
+    original_colour(menu,id,colour);
+    if(!server_page||page_owner!=menu)return;
+    for(int i=0;i<3;i++)if(id==SERVER_ACTION_BASE+toggle_actions[i])
+        for(int part=0;part<2;part++){
+            void *item=toggles[i][part];
+            if(item)((void (__thiscall *)(void *,const float *))(*(void ***)item)[4])(item,colour);
+        }
 }
 
 static void render(void *menu);
@@ -173,74 +214,147 @@ static void __thiscall hook_tick(void *menu) {
     }
     if(server_page&&page_owner==menu){
         keep_servers_available(menu);
-        /* Use the real menu UI tick without main-menu New Track/Charts gates
-         * resetting the replacement controls while the server page is open. */
+        /* The native base menu handles server-page input and focus without
+         * running Settings audio-slider updates on these controls. */
         base_tick(menu);
     }else original_tick(menu);
     keep_servers_available(menu);
 }
 
 static void leave_server_page(void *menu) {
-    for(int id=1;id<=10;id++){
-        void *item=((void **)menu)[62+id];
-        if(!readable(item,404))continue;
-        enable_input(item,original_input_masks[id]!=0);
-        *(DWORD *)((BYTE *)item+76)=original_input_masks[id];
-    }
+    for(int id=1;id<=10;id++)show_item(server_rows[id],FALSE);
+    toggle_visibility(FALSE);
+    show_item(((void **)menu)[67],settings_visible);
+    show_item(((void **)menu)[83],audio_visible);
     server_page=FALSE;
+    focus_row(menu,SERVERS_ID);
 }
 
 static void render(void *menu) {
     static const WCHAR *labels[11]={L"", L"Skip launcher",
-        L"Use local server", L"Use configured external server", L"",
-        L"Disable networking", L"Save settings", L"Reload saved settings",
+        L"Use local server", L"Use configured external server", L"External only",
+        L"Networking", L"Save settings", L"Reload saved settings",
         L"Save and restart", L"Back without saving", L"Save and return"};
-    WCHAR only[64];
-    swprintf(only,64,L"External only: %ls",pending.only?L"On":L"Off");
-    for (int id=1;id<=10;id++) {
+    for(int id=1;id<=10;id++) {
         void *text=item_text(menu,id);
-        if (!text) continue;
-        if (server_page) raw_text(text,id==1?(pending.skip_launcher?L"Skip launcher: On":L"Skip launcher: Off"):id==4?only:id==5?(pending.enabled?L"Disable networking":L"Enable networking"):labels[id]);
-        else if (id==SERVERS_ID) raw_text(text,L"Servers");
-        else key_text(text,original_labels[id]);
-        void *item=((void **)menu)[62+id];
-        /* Original initScreens: selectable width = half row height + text width. */
-        ((float *)item)[12]=((float *)item)[13]*0.5f+((float *)text)[12];
+        if(!text)continue;
+        raw_text(text,labels[id]);
+        /* replaceTextRaw recomputes glyph bounds. Keep the original Settings
+         * hit area so clicking the switch also activates its labelled row. */
+        ((float *)text)[12]=server_row_width;((float *)text)[13]=server_row_height;
     }
     void *title=((void **)menu)[36];
-    if (readable(title,484)) {
-        if (server_page) raw_text(title,heading);
+    if(readable(title,484)) {
+        if(server_page)raw_text(title,heading);
         else {
             TitleFn get_title=(TitleFn)(*(void ***)menu)[13];
             key_text(title,get_title(menu));
         }
     }
+    update_toggles(menu);
     keep_servers_available(menu);
 }
 
+static void *make_row(void *parent,BOOL screen,int id,float x,float y,float width,float height,BOOL visible) {
+    BOOL toggle=id==1501||id==1504||id==1505;
+    void *row=create_text(id==SERVERS_ID?L"Servers":L"",toggle?x-width*0.5f:x,toggle?y+height*0.5f:y,3,toggle?0:1,toggle?1:0,-1.0f,FALSE,-1.0f,FALSE,TRUE);
+    if(!row)return NULL;
+    ((int *)row)[2]=id;((int *)row)[15]=100;
+    menu_item(row,TRUE);
+    static const float normal[4]={1,1,1,0.9f};
+    ((void (__thiscall *)(void *,const float *))(*(void ***)row)[4])(row,normal);
+    ((float *)row)[12]=width;((float *)row)[13]=height;
+    show_item(row,visible);
+    /* Match ILSpy toItem and native add's consuming SSP argument. */
+    ((int *)row)[1]++;
+    (screen?add_screen:add_item)(parent,row);
+    return row;
+}
+static BOOL make_toggles(void *menu,void *screen,float x,float width,float height) {
+    if(!readable(ui_instance,sizeof(void *))||!*ui_instance)return FALSE;
+    for(int i=0;i<3;i++){
+        void *text=server_rows[toggle_actions[i]];
+        float pos[2]={x+width*0.5f,((float *)text)[9]};
+        for(int part=0;part<2;part++){
+            void *item=create_sprite(*ui_instance,part?74:73,pos,part?0:5,-1);
+            if(!item)return FALSE;
+            toggles[i][part]=item;
+            if(!part){
+                /* Fullscreen bar uses frame 1 for every interaction state. */
+                ((int *)item)[18]=0;((int *)item)[38]=1;
+                ((int *)item)[39]=1;((int *)item)[40]=1;
+            }
+            ((void (__thiscall *)(void *,const float *))(*(void ***)item)[9])(item,(const float *)menu+14);
+            ((int *)item)[15]=100;
+            static const float normal[4]={1,1,1,0.9f};
+            ((void (__thiscall *)(void *,const float *))(*(void ***)item)[4])(item,normal);
+            menu_item(item,FALSE);enable_input(item,FALSE);show_item(item,FALSE);
+            ((int *)item)[1]++;add_screen(screen,item);
+        }
+        /* The whole labelled row accepts mouse/controller activation. The
+         * original toggle graphics cannot steal focus or dispatch a second click. */
+        ((float *)text)[12]=width;((float *)text)[13]=height;
+    }
+    return TRUE;
+}
 static void __thiscall hook_init(void *menu,void *screen,void *lower) {
     original_init(menu,screen,lower);
-    page_owner=menu; server_page=FALSE; render(menu);
-    log_line(item_text(menu,SERVERS_ID)?"Engine main menu initialized; Friends replaced with Servers."
-        :"Engine main menu has no Friends item; Servers entry unavailable.");
+    page_owner=menu;server_page=FALSE;ZeroMemory(server_rows,sizeof(server_rows));ZeroMemory(toggles,sizeof(toggles));
+    void *group=((void **)menu)[67],*ui=((void **)menu)[46],*sample=NULL;
+    for(int id=0;id<5&&!sample;id++)sample=((void **)menu)[68+id];
+    if(!readable(group,404)||!readable(ui,16)||!readable(sample,484)){
+        log_line("Settings menu has no supported row layout; Servers entry not added.");return;
+    }
+    float x=((float *)sample)[8],height=((float *)sample)[9]/0.3f;
+    float gap=((float *)menu)[66],width=((float *)sample)[12],row_height=((float *)sample)[13];
+    server_row_width=width;server_row_height=row_height;
+    /* Add above existing options: no original row, slider or divider moves. */
+    for(int id=1;id<=10;id++){
+        server_rows[id]=make_row(ui,TRUE,SERVER_ACTION_BASE+id,x,height*(0.22f+(id-1)*0.063f),width,row_height,FALSE);
+        if(!server_rows[id]){log_line("Could not create complete Servers page; original Settings retained.");return;}
+    }
+    if(!make_toggles(menu,ui,x,width,row_height)){
+        log_line("Could not create native fullscreen toggles; original Settings retained.");return;
+    }
+    server_rows[0]=make_row(group,FALSE,SERVERS_ID,x,((float *)sample)[9]-gap*0.65f,width,row_height,TRUE);
+    log_line(server_rows[0]?"Native Settings initialized; Servers added; Friends unchanged.":"Could not add Servers row.");
 }
-
 static void __thiscall hook_cleanup(void *menu,void *screen,void *lower) {
-    if (page_owner==menu) { server_page=FALSE; page_owner=NULL; }
+    if(page_owner==menu){
+        /* gaMenu can retain its screen across visits. Remove screen-owned
+         * controls explicitly so re-entry cannot leave duplicate IDs behind. */
+        void *ui=((void **)menu)[46];
+        for(int id=1;id<=10;id++)if(server_rows[id]){
+            ((int *)server_rows[id])[1]++;
+            remove_screen(ui,server_rows[id]);
+        }
+        for(int i=0;i<3;i++)for(int part=0;part<2;part++)if(toggles[i][part]){
+            ((int *)toggles[i][part])[1]++;remove_screen(ui,toggles[i][part]);
+        }
+        server_page=FALSE;page_owner=NULL;ZeroMemory(server_rows,sizeof(server_rows));ZeroMemory(toggles,sizeof(toggles));
+    }
     original_cleanup(menu,screen,lower);
 }
 
 static void __thiscall hook_input(void *menu,int selection) {
     if(restarting)return;
     if (!server_page || page_owner!=menu) {
-        if (selection!=SERVERS_ID) { original_input(menu,selection); return; }
-        for(int id=1;id<=10;id++){
-            void *item=((void **)menu)[62+id];
-            original_input_masks[id]=readable(item,404)?*(DWORD *)((BYTE *)item+76):0;
+        if(selection!=SERVERS_ID||page_owner!=menu||!server_rows[0]||((int *)menu)[62]!=0||((int *)menu)[102]!=0){
+            original_input(menu,selection);return;
         }
-        page_owner=menu; load_settings(); server_page=TRUE;
-        wcscpy(heading,L"Servers — applies after restart"); render(menu);
-        log_line("Engine Servers page opened."); return;
+        void *group=((void **)menu)[67],*audio=((void **)menu)[83];
+        settings_visible=readable(group,404)?*((BYTE *)group+372)&1:0;
+        audio_visible=readable(audio,404)?*((BYTE *)audio+372)&1:0;
+        show_item(group,FALSE);show_item(audio,FALSE);
+        load_settings();server_page=TRUE;
+        for(int id=1;id<=10;id++)show_item(server_rows[id],TRUE);
+        toggle_visibility(TRUE);
+        wcscpy(heading,L"Servers — applies after restart");render(menu);focus_row(menu,SERVER_ACTION_BASE+1);
+        log_line("Native Settings > Servers opened.");return;
+    }
+    if(selection!=2000){
+        selection-=SERVER_ACTION_BASE;
+        if(selection<1||selection>10)return;
     }
     switch (selection) {
     case 1:
@@ -314,19 +428,40 @@ static BOOL validate_image_at(BYTE *base,uintptr_t address_base) {
     if(!readable(base+0x7a56d0,4)||*(DWORD *)(base+0x7a56d0)!=(DWORD)(address_base+0x2e28f0)
         ||!readable(base+0x2e28f0,6)||memcmp(base+0x2e28f0,base_tick_start,2)
         ||*(DWORD *)(base+0x2e28f2)!=(DWORD)(address_base+0x7a5734))return FALSE;
-    static const DWORD entries[27]={0x340aa4,0x33de0a,0x33eddc,0x340a54,0x1f5891,
-        0x340358,0x33ee99,0x33de10,0x1f58a5,0x2da614,0x2dd174,0x1f58b9,0x1f58cd,
-        0x340abe,0x2da506,0x33fd14,0x33f23c,0x2d970f,0x2d979e,0x2d97f8,0x2d97fe,
-        0x2d9e24,0x2d9e84,0x2d9dc4,0x33e88c,0x33de16,0x33e504};
-    if (!readable(base+0x7a7470,sizeof(entries))) return FALSE;
-    void **table=(void **)(base+0x7a7470);
+    static const DWORD entries[27]={0x2f10f4,0x2eea7a,0x2f0730,0x2f10a4,0x1f5891,
+        0x2d96a2,0x2eea74,0x2eea80,0x1f58a5,0x2da614,0x2dd174,0x1f58b9,0x1f58cd,
+        0x2f10fa,0x2da506,0x2eff50,0x2f0408,0x2d970f,0x2d979e,0x2d97f8,0x2d97fe,
+        0x2d9e24,0x2d9e84,0x2d9dc4,0x2f08e3,0x2eea86,0x2ef1e0};
+    if (!readable(base+0x7a5a7c,sizeof(entries))) return FALSE;
+    void **table=(void **)(base+0x7a5a7c);
     for (int i=0;i<27;i++) if ((uintptr_t)table[i]!=address_base+entries[i]) return FALSE;
-    const DWORD slots[4]={3,15,16,24}, targets[4]={0x7a74f8,0x7a74f0,0x7a74ec,0x7a74e0};
-    for (int i=0;i<4;i++) {
+    const DWORD slots[5]={3,15,16,24,26}, targets[5]={0x7a5afc,0x7a5aec,0x7a5af0,0x7a5af8,0x7a5ae8};
+    for (int i=0;i<5;i++) {
         BYTE *thunk=base+entries[slots[i]];
         if (!readable(thunk,6) || thunk[0]!=0xff || thunk[1]!=0x25
             || *(DWORD *)(thunk+2)!=(DWORD)(address_base+targets[i])) return FALSE;
     }
+    /* Original native entry bytes for newly used Settings UI routines. */
+    static const BYTE entry_0[]={0x55,0x8b,0xec,0x6a,0xff,0x68,0xfc,0xfb,0x8f,0x00,0x64,0xa1};
+    if(!readable(base+0x50af0,sizeof(entry_0))||memcmp(base+0x50af0,entry_0,sizeof(entry_0)))return FALSE;
+    static const BYTE entry_1[]={0x55,0x8b,0xec,0x6a,0xff,0x68,0x08,0xf4,0x8f,0x00,0x64,0xa1};
+    if(!readable(base+0x43800,sizeof(entry_1))||memcmp(base+0x43800,entry_1,sizeof(entry_1)))return FALSE;
+    static const BYTE entry_2[]={0x55,0x8b,0xec,0x6a,0xff,0x68,0x18,0x19,0x90,0x00,0x64,0xa1};
+    if(!readable(base+0x8e8d0,sizeof(entry_2))||memcmp(base+0x8e8d0,entry_2,sizeof(entry_2)))return FALSE;
+    static const BYTE entry_3[]={0x55,0x8b,0xec,0x83,0xe4,0xf8,0x6a,0xff,0x68,0x46,0xf7,0x8f};
+    if(!readable(base+0x4b530,sizeof(entry_3))||memcmp(base+0x4b530,entry_3,sizeof(entry_3)))return FALSE;
+    static const BYTE entry_4[]={0x55,0x8b,0xec,0x6a,0xff,0x68,0x08,0xf4,0x8f,0x00,0x64,0xa1};
+    if(!readable(base+0x8f580,sizeof(entry_4))||memcmp(base+0x8f580,entry_4,sizeof(entry_4)))return FALSE;
+    static const BYTE remove_start[]={0x55,0x8b,0xec,0x6a,0xff,0x68,0x38,0xf4,0x8f,0x00,0x64,0xa1};
+    if(!readable(base+0x8e9d0,sizeof(remove_start))||memcmp(base+0x8e9d0,remove_start,sizeof(remove_start)))return FALSE;
+    static const BYTE toggle_0[]={0x55,0x8b,0xec,0x6a,0xff,0x68,0x74,0xdf,0x8f,0x00,0x64,0xa1};
+    if(!readable(base+0x22030,sizeof(toggle_0))||memcmp(base+0x22030,toggle_0,sizeof(toggle_0)))return FALSE;
+    static const BYTE toggle_1[]={0x55,0x8b,0xec,0xa1,0xa4,0xba,0xbf,0x00,0x8b,0x55,0x08,0x56};
+    if(!readable(base+0x48830,sizeof(toggle_1))||memcmp(base+0x48830,toggle_1,sizeof(toggle_1)))return FALSE;
+    static const BYTE toggle_2[]={0x55,0x8b,0xec,0x6a,0xff,0x68,0xa8,0xf5,0x8f,0x00,0x64,0xa1};
+    if(!readable(base+0x482b0,sizeof(toggle_2))||memcmp(base+0x482b0,toggle_2,sizeof(toggle_2)))return FALSE;
+    static const BYTE toggle_3[]={0x55,0x8b,0xec,0x8b,0x55,0x08,0x8b,0x02,0x89,0x41,0x20,0x8b};
+    if(!readable(base+0x48280,sizeof(toggle_3))||memcmp(base+0x48280,toggle_3,sizeof(toggle_3)))return FALSE;
     static const BYTE raw_start[]={0x55,0x8b,0xec,0x83,0xe4,0xf8,0x83,0xec,0x08};
     static const BYTE key_start[]={0x55,0x8b,0xec,0x53,0x56,0x8b,0x75,0x08};
     static const BYTE enable_start[]={0x55,0x8b,0xec,0x83,0xec,0x08,0x53,0x8a,0x5d,0x08};
@@ -355,17 +490,24 @@ __declspec(dllexport) BOOL __cdecl ReRiffStartEngineMenu(void) {
     HMODULE pinned;
     if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_PIN,
         (const WCHAR *)(uintptr_t)&ReRiffStartEngineMenu,&pinned)) return FALSE;
-    void **table=(void **)(base+0x7a7470); DWORD protection;
+    void **table=(void **)(base+0x7a5a7c); DWORD protection;
     if (!VirtualProtect(table,27*sizeof(void *),PAGE_READWRITE,&protection)) return FALSE;
     original_init=(ScreenFn)table[15]; original_cleanup=(ScreenFn)table[16]; original_input=(InputFn)table[24];
+    original_colour=(ColourFn)table[26];
     original_tick=(TickFn)table[3]; enable_input=(EnableFn)(base+0x4b4a0);
     base_tick=(TickFn)(base+0x2e28f0);
     raw_text=(RawTextFn)(base+0x50930); key_text=(KeyTextFn)(base+0x508a0);
-    original_labels=(const char **)(base+0x7a7434);
+    create_text=(CreateTextFn)(base+0x50af0);
+    create_sprite=(SpriteFn)(base+0x22030);ui_instance=(void **)(base+0x7fbaa4);
+    sprite_def=(SpriteDefFn)(base+0x48830);sprite_origin=(SpriteDefFn)(base+0x482b0);
+    sprite_position=(PositionFn)(base+0x48280);
+    add_item=(AddFn)(base+0x43800);add_screen=(AddFn)(base+0x8e8d0);remove_screen=(AddFn)(base+0x8e9d0);
+    menu_item=(EnableFn)(base+0x4b530);set_focus=(FocusFn)(base+0x8f580);
     InterlockedExchangePointer(&table[3],(void *)&hook_tick);
     InterlockedExchangePointer(&table[15],(void *)&hook_init);
     InterlockedExchangePointer(&table[16],(void *)&hook_cleanup);
     InterlockedExchangePointer(&table[24],(void *)&hook_input);
+    InterlockedExchangePointer(&table[26],(void *)&hook_colour);
     DWORD ignored; VirtualProtect(table,27*sizeof(void *),protection,&ignored);
     InterlockedExchange(&installed,2); log_line("Engine menu hooks installed."); return TRUE;
 }
