@@ -125,7 +125,7 @@ Hook installation occurs during client initialization and
 the new label appears when the original Settings menu initializes. If initialization
 already happened, return to/recreate Settings. The DLL stays loaded for the
 process lifetime. Installation and refusal reasons go to
-`ReRiff-engine-menu.log` beside Game.exe; no URLs or account data are logged.
+`logs/ReRiff-engine-menu.log` under the game folder; no URLs or account data are logged.
 
 ## Evidence and guards
 
@@ -454,3 +454,26 @@ entry. A scrolling adapter that hides that entry must explicitly restore only
 that selected entry when it becomes visible again. Calling the original function
 with the unchanged selection cannot restore it. These semantics were checked
 against the original IL; this integration is an intentional mod, not recovery credit.
+
+### Native Apply focus
+
+Original `gaGraphicsOptions.initScreens` explicitly clears menu-item flag bit 1
+at Apply item +372 (IL offsets 0x0ABD..0x0AD4, AND 253). This excludes the existing
+button from the normal directional-focus lifecycle. ReRiff uses original
+`elUIItem.setMenuItem` at RVA 0x4B530 to opt it in, retaining its original sprite,
+highlight/activation handlers and Apply action. The native Up/Down ID loop now
+runs Resolution → Fullscreen mode → AA → UI Scale → Apply → Resolution.
+Cleanup restores the original flag and navigation fields.
+
+### Back with unsaved changes
+
+Servers and Graphics compare pending values against their loaded/saved baseline.
+Back (selection 2000) opens the original `gaQuitConfirmMenu` yes/no overlay,
+state 9, through original `gaStateManager.setOverlayState` / `popOverlayState`
+(tokens 0x0600129B/0x0600129C). Its native artwork, focus, Escape/controller Back,
+transitions and cleanup are retained. There is no general original unsaved-settings
+handler; the integration supplies dirty tracking and save/discard callbacks only.
+During this use, selection 2 applies and selection 1 discards. The original
+quit action is never forwarded. Escape/Back inside the overlay cancels the prompt
+and keeps editing. Callbacks run only after the native overlay is removed.
+The actual timed display Keep/Revert overlay remains separate.

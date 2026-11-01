@@ -53,7 +53,7 @@ namespace ReRiff {
             recordingException = true;
             try {
                 string folder = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-                File.AppendAllText(Path.Combine(folder, "ReRiff-network.log"),
+                File.AppendAllText(LogPath(folder, "ReRiff-network.log"),
                     DateTime.UtcNow.ToString("o") + Environment.NewLine + error.ToString() + Environment.NewLine);
             } catch (Exception) {
                 // Diagnostics must never change exception propagation or fail startup.
@@ -64,10 +64,14 @@ namespace ReRiff {
         private static extern int ReRiffStartEngineMenu();
 
         private static void StartEngineMenu() {
-            try { NativeReelBridge.Configure(); ReRiffStartEngineMenu(); }
-            catch (DllNotFoundException) { }
-            catch (EntryPointNotFoundException) { }
-            catch (BadImageFormatException) { }
+            try {
+                NativeReelBridge.Configure();
+                int result=ReRiffStartEngineMenu();
+                NativeReelBridge.Log("Engine menu startup result="+result+"; CLR="+Environment.Version+"; process bits="+(IntPtr.Size*8));
+            }
+            catch (DllNotFoundException error) { NativeReelBridge.Log(error.ToString()); }
+            catch (EntryPointNotFoundException error) { NativeReelBridge.Log(error.ToString()); }
+            catch (BadImageFormatException error) { NativeReelBridge.Log(error.ToString()); }
         }
 
         [DllImport("ReRiff.Notify.dll", CharSet = CharSet.Unicode,
@@ -179,9 +183,13 @@ namespace ReRiff {
               catch (IOException) { return false; }
         }
 
+        internal static string LogPath(string folder,string name) {
+            string logs=Path.Combine(folder,"logs");Directory.CreateDirectory(logs);
+            return Path.Combine(logs,name);
+        }
         private static void Log(string folder, string endpoint, string reason) {
             try {
-                File.AppendAllText(Path.Combine(folder, "ReRiff-client.log"),
+                File.AppendAllText(LogPath(folder, "ReRiff-client.log"),
                     DateTime.UtcNow.ToString("o") + " endpoint=" + endpoint + " reason=" + reason + Environment.NewLine);
             } catch (IOException) { }
               catch (UnauthorizedAccessException) { }

@@ -163,7 +163,7 @@ installed game; it is disabled once installation is committed, so replacement
 or rollback can finish safely. It is Off by default, follows
 the installed stable/experimental channel, and resumes the game after an update
 with the original arguments. A failed check starts the installed version and
-records details in `ReRiff-launcher.log`. Existing settings and saved data are
+records details in `logs/ReRiff-launcher.log`. Existing settings and saved data are
 preserved. To test this path without a duplicate GitHub release, close the game
 and run `ReRiff-Launcher.exe --skip-launcher --test-auto-update`. This one launch
 can reinstall the same published version using the normal verified updater,
@@ -244,6 +244,11 @@ The launcher edits `server.ini` beside `Game.exe`:
 - **Use servers:** enables primary → secondary → singleplayer selection.
 - **Stop local server:** retained to stop an older installation's Python backend;
   Docker and unrelated services are untouched.
+
+When backing out of Servers or Graphics with unsaved changes, a native confirmation
+asks whether to apply or discard them. Back inside that prompt keeps editing.
+Fresh installs show the launcher; Skip launcher and automatic updating start off.
+GitHub prereleases are offered through **Use experimental releases (prereleases)**.
 
 In-game **Settings → Servers** keeps graphical mode toggles and offers
 **Save and exit** to save settings and close the game, alongside **Save and restart**.
@@ -354,13 +359,13 @@ If a different failure persists, send the generated startup report.
   once. Updated launchers distinguish actual host-helper completion from Wine's
   wrapper exit status, including when no local backend is running.
 - **Cannot connect over LAN:** check the saved external URL and port, container
-  port mapping/host networking, TCP firewall rule, and `ReRiff-client.log`. A
+  port mapping/host networking, TCP firewall rule, and `logs/ReRiff-client.log`. A
   public-URL setting alone does not expose a port. Restart the game to reselect.
 - **Same song has separate leaderboards:** update the server and both launchers,
   ensure the exact source files are accessible, and relaunch each client. Metadata
   alone cannot recover unknown cached identities.
 - **Server will not start:** check `localserver/server-console.log` and
-  `ReRiff-launcher.log`; another service may already occupy port 5144.
+  `logs/ReRiff-launcher.log`; another service may already occupy port 5144.
 - **Update fails:** inspect the temporary `update.log` reported by the launcher.
   Download or preflight failure keeps the old launcher open; installation errors
   retain or roll back files. Keep the game's original runtime dependencies.
@@ -481,10 +486,13 @@ override it explicitly. Normal stored News announcements are retained.
 For a local server, open `http://127.0.0.1:5144/admin`. For a shared server, use
 its configured address with `/admin`.
 
-- Client selection: `ReRiff-client.log` beside `Game.exe`.
-- Launcher and updates: `ReRiff-launcher.log`; update errors also identify a
-  temporary folder containing `update.log`.
-- Local backend: `localserver/server-console.log` and
+- Client selection: `logs/ReRiff-client.log` under the game folder.
+- Launcher and updates: `logs/ReRiff-launcher.log`; update errors also identify a
+  working folder for extracted update files. The update log is `logs/update.log`.
+- Native menu startup: `logs/ReRiff-engine-menu.log`; network errors: `logs/ReRiff-network.log`.
+- Setup: `logs/installer.log` on Windows and `logs/installer-*.log` on Linux.
+  Startup collection reports are also saved under `logs/`.
+- Legacy local backend: `localserver/server-console.log` and
   `localserver/server/data/traces/`.
 - Docker: `docker logs reriff-server` and `/data/traces/` inside the container.
 

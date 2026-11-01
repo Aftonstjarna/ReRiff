@@ -1,3 +1,25 @@
+# ReRiff 1.2.3-2 — Experimental launcher, save prompts and diagnostics
+
+- Treat numbered GitHub prereleases as experimental launcher updates. Select
+  the newest supported prerelease by its full version, skip drafts and stable
+  releases, and use that release's own assets and checksums.
+- Add Apply to native Graphics navigation and highlighting, retaining the
+  original Apply sprite and save handler.
+- Prompt to apply or discard unsaved Servers and Graphics changes when backing
+  out. Reuse the original game's yes/no overlay and its input lifecycle;
+  pressing Back on the prompt keeps editing.
+- Write launcher, client, network, menu, updater and setup diagnostics under
+  `logs/` in the game folder. Preserve legacy root logs when updating; startup
+  collection reports use the same folder. Add explicit native-menu startup errors.
+- Keep Skip launcher and automatic updates off on fresh installs. Preserve
+  existing preferences when updating.
+
+This remains experimental. Apply hover/controller navigation and save prompts
+need in-game validation on Windows and Proton. Missing native menus on one
+Windows install are under investigation; collect `logs/ReRiff-engine-menu.log`
+and `logs/ReRiff-client.log` for diagnosis. Borderless focus, restart and manual
+UI scaling retain the testing limitations documented for 1.2.3-1.
+
 # ReRiff 1.2.3-1 — Experimental singleplayer and native menu updates
 
 - Replace the client-managed Python server with in-process singleplayer storage.

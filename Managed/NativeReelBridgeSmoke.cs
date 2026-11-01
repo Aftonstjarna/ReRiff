@@ -6,6 +6,7 @@ using System.Runtime.InteropServices;
 internal static class NativeReelBridgeSmoke {
     private delegate IntPtr CtorCaller(IntPtr function,IntPtr memory,IntPtr parent,float spacing,int direction);
     private delegate void AddCaller(IntPtr function,IntPtr memory,IntPtr option,IntPtr screen);
+    private delegate void OverlayCaller(IntPtr function,IntPtr instance,int value);
     private delegate void TickCaller(IntPtr function,IntPtr instance);
     private static DynamicMethod Caller(string name,Type result,Type[] arguments) {
         Type[] wrapper=new Type[arguments.Length+1];wrapper[0]=typeof(IntPtr);Array.Copy(arguments,0,wrapper,1,arguments.Length);
@@ -34,6 +35,9 @@ internal static class NativeReelBridgeSmoke {
         MethodBuilder resize=module.DefineGlobalMethod("GraphicsResizeFixture",MethodAttributes.Public|MethodAttributes.Static,
             typeof(void),new Type[]{pointer});
         il=resize.GetILGenerator();il.Emit(OpCodes.Ldarg_0);il.Emit(OpCodes.Ldc_I4,31415);il.Emit(OpCodes.Stind_I4);il.Emit(OpCodes.Ret);
+        MethodBuilder overlay=module.DefineGlobalMethod("OverlayFixture",MethodAttributes.Public|MethodAttributes.Static,
+            typeof(void),new Type[]{pointer,typeof(bool)});
+        il=overlay.GetILGenerator();il.Emit(OpCodes.Ldarg_0);il.Emit(OpCodes.Ldarg_1);il.Emit(OpCodes.Stind_I4);il.Emit(OpCodes.Ret);
         module.CreateGlobalFunctions();
         Type bridge=typeof(ReRiff.ClientConfig).Assembly.GetType("ReRiff.NativeReelBridge",true);
         MethodInfo factory=bridge.GetMethod("CreateCall",BindingFlags.NonPublic|BindingFlags.Static);
@@ -56,6 +60,13 @@ internal static class NativeReelBridgeSmoke {
             tickCaller(Marshal.GetFunctionPointerForDelegate(resizeAdapter),memory);
             if(Marshal.ReadInt32(memory)!=31415)throw new Exception("Original graphics pointer callback transport failed");
             GC.KeepAlive(resizeAdapter);
+            Delegate overlayAdapter=(Delegate)factory.Invoke(null,new object[]{module.GetMethod("OverlayFixture"),bridge.GetNestedType("Overlay",BindingFlags.NonPublic),false});
+            var overlayCaller=(OverlayCaller)Caller("OverlayCdeclRoundtrip",typeof(void),new Type[]{typeof(IntPtr),typeof(int)}).CreateDelegate(typeof(OverlayCaller));
+            overlayCaller(Marshal.GetFunctionPointerForDelegate(overlayAdapter),memory,1);
+            if(Marshal.ReadInt32(memory)!=1)throw new Exception("Original overlay bool transport failed");
+            overlayCaller(Marshal.GetFunctionPointerForDelegate(overlayAdapter),memory,0);
+            if(Marshal.ReadInt32(memory)!=0)throw new Exception("Original overlay false transport failed");
+            GC.KeepAlive(overlayAdapter);
         } finally {Marshal.FreeHGlobal(memory);}
         Console.WriteLine("PASS: original-style global pointer methods through cdecl callbacks, float arguments and owning SSP indirection.");
     }

@@ -45,7 +45,7 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE previous,LPWSTR arguments,int s
             _snwprintf(name,CAP,L"%ls\\failure",work);name[CAP-1]=0;
             if(GetFileAttributesW(name)!=INVALID_FILE_ATTRIBUTES)break;
             if(GetTickCount64()>deadline){
-                MessageBoxW(NULL,L"The updater has not reported completion. Check update.log before reopening the launcher.",L"ReRiff update pending",MB_OK|MB_ICONERROR);return 5;
+                MessageBoxW(NULL,L"The updater has not reported completion. Check logs\\update.log in the game folder before reopening the launcher.",L"ReRiff update pending",MB_OK|MB_ICONERROR);return 5;
             }
             progress_wait(NULL,100);
         }
@@ -53,7 +53,7 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE previous,LPWSTR arguments,int s
     _snwprintf(name,CAP,L"%ls\\success",work);name[CAP-1]=0;
     ok=ok&&GetFileAttributesW(name)!=INVALID_FILE_ATTRIBUTES;
     if(!ok&&!automatic){
-        _snwprintf(command,CAP,L"The update could not finish. Existing files were retained or rolled back. Details: %ls\\update.log",work);
+        _snwprintf(command,CAP,L"The update could not finish. Existing files were retained or rolled back. Details: %ls\\logs\\update.log",game);
         MessageBoxW(NULL,command,L"ReRiff update failed",MB_OK|MB_ICONERROR);
     }
     if(ok&&automatic)record_update_notice(game);

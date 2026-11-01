@@ -17,6 +17,7 @@ namespace ReRiff {
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void Move(IntPtr reel, int first, IntPtr time);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int Selection(IntPtr reel);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void Scrollbar(IntPtr reel, float x, float top, float bottom, int pcScale, IntPtr width);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void Overlay(IntPtr manager,int state);
         private static readonly List<Delegate> Roots = new List<Delegate>();
         private static bool attempted;
         [DllImport("ReRiff.Notify.dll", CallingConvention=CallingConvention.Cdecl, ExactSpelling=true)]
@@ -25,6 +26,9 @@ namespace ReRiff {
         private static extern int ReRiffConfigureNativeGraphics([In] IntPtr[] methods, int count);
         [DllImport("ReRiff.Notify.dll", CallingConvention=CallingConvention.Cdecl, ExactSpelling=true)]
         private static extern int ReRiffConfigureNativeUiScale([In] IntPtr[] methods, int count);
+
+        [DllImport("ReRiff.Notify.dll", CallingConvention=CallingConvention.Cdecl, ExactSpelling=true)]
+        private static extern int ReRiffConfigureNativePrompt([In] IntPtr[] methods,int count);
 
         // addOption consumes an SSP passed by address in IL. Its C ABI adapter
         // accepts an owning object reference and supplies the temporary SSP.
@@ -46,6 +50,9 @@ namespace ReRiff {
             return method.CreateDelegate(delegateType);
         }
 
+        internal static void Log(string message) {
+            try {File.AppendAllText(ClientConfig.LogPath(Path.GetDirectoryName(typeof(ClientConfig).Assembly.Location),"ReRiff-engine-menu.log"),DateTime.UtcNow.ToString("o")+" "+message+Environment.NewLine);}catch(Exception) { }
+        }
         internal static void Configure() {
             if(attempted)return;attempted=true;
             try {
@@ -54,10 +61,10 @@ namespace ReRiff {
                     if(assembly.IsDynamic)continue;
                     if(string.Equals(Path.GetFileName(assembly.Location),"Game.exe",StringComparison.OrdinalIgnoreCase)) {game=assembly.ManifestModule;break;}
                 }
-                if(game==null)return;
+                if(game==null){Log("Original Game.exe module not found; native bridge unavailable.");return;}
                 using(var hash=SHA256.Create())using(var file=File.OpenRead(game.FullyQualifiedName)) {
                     string value=BitConverter.ToString(hash.ComputeHash(file)).Replace("-","").ToLowerInvariant();
-                    if(value!="2d1af8a01ec6b1e3477ff6dbe4a44895828e2ac71449344fec9d7d99e87a58e2")return;
+                    if(value!="2d1af8a01ec6b1e3477ff6dbe4a44895828e2ac71449344fec9d7d99e87a58e2"){Log("Unsupported Game.exe SHA256="+value);return;}
                 }
                 int[] tokens={0x06001138,0x0600113b,0x0600113c,0x0600113d,0x0600113e,0x06001140,0x06001142};
                 string[] names={"gaMenuReel.{ctor}","gaMenuReel.addOption","gaMenuReel.restrictScrolling","gaMenuReel.tick","gaMenuReel.moveToSelection","gaMenuReel.getCurrentSelection","gaMenuReel.addScrollbar"};
@@ -84,11 +91,20 @@ namespace ReRiff {
                 if(fontSetup==null||fontSetup.Name!="gaUI.setupFontScale")throw new InvalidOperationException("Unexpected original font-scale method");
                 Delegate fontCallback=CreateCall(fontSetup,typeof(Tick),false);Roots.Add(fontCallback);
                 ReRiffConfigureNativeUiScale(new IntPtr[]{Marshal.GetFunctionPointerForDelegate(fontCallback)},1);
+                int[] overlayTokens={0x0600129b,0x0600129c};
+                string[] overlayNames={"gaStateManager.setOverlayState","gaStateManager.popOverlayState"};
+                IntPtr[] overlayPointers=new IntPtr[2];
+                for(int i=0;i<2;i++){
+                    MethodInfo original=game.ResolveMethod(overlayTokens[i]) as MethodInfo;
+                    if(original==null||original.Name!=overlayNames[i])throw new InvalidOperationException("Unexpected original overlay method");
+                    Delegate callback=CreateCall(original,typeof(Overlay),false);Roots.Add(callback);overlayPointers[i]=Marshal.GetFunctionPointerForDelegate(callback);
+                }
+                ReRiffConfigureNativePrompt(overlayPointers,2);
             } catch(DllNotFoundException) { }
               catch(EntryPointNotFoundException) { }
               catch(BadImageFormatException) { }
               catch(Exception error) {
-                try {File.AppendAllText(Path.Combine(Path.GetDirectoryName(typeof(ClientConfig).Assembly.Location),"ReRiff-engine-menu.log"),"Native file-picker bridge: "+error+Environment.NewLine);}catch(Exception) { }
+                Log("Native file-picker bridge: "+error);
             }
         }
     }

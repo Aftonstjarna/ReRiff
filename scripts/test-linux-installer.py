@@ -52,4 +52,4 @@ print('GUI install succeeded: '+str(game), flush=True)
                NO_AT_BRIDGE='1', GDK_BACKEND='x11', GTK_MODULES='')
     env.pop('WAYLAND_DISPLAY', None)
     subprocess.run(['xvfb-run', '-a', str(exe), str(work), str(game), str(invalid)], check=True, env=env, timeout=20)
-    assert len(list((work/'state/reriff').glob('installer-*.log'))) == 2
+    assert len(list((game/'logs').glob('installer-*.log'))) == 2
