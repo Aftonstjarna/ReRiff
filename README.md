@@ -39,6 +39,10 @@ Close the game and launcher before a manual installation. Existing settings,
 scores, ghosts, and server data are preserved. Client backups are
 kept in the game's `bak` folder. Keep this folder when updating. Unknown game DLL
 modifications are rejected rather than overwritten.
+Matching vanilla backups are checked by SHA256 and kept unchanged. Verified
+originals from an older recorded backup folder are copied into `bak` without
+changing that older folder. A conflicting backup hash stops installation
+without overwriting the backup.
 
 **Windows:** download and extract `ReRiff-<version>-windows.zip`, run
 `ReRiff-Setup.exe`, and select the game's `Game.exe`. Keep the ZIP contents
@@ -218,7 +222,8 @@ ReRiff-Setup.exe --restore --game-dir "C:\path\to\Riff Racer"
 
 `--dry-run` validates a manual
 installation without writing files; `--backup-dir` selects an explicit backup
-location. Existing installations continue using their recorded backup directory.
+location. By default, verified originals from the previously recorded backup
+directory are copied into the game's `bak` folder; the previous copies are kept.
 
 ## Troubleshooting
 
