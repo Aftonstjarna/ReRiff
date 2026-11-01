@@ -9,6 +9,9 @@
   Steam/Proton game, alongside the edge-smoothing and Present/Reset tests.
   Player testing confirms AA stays enabled after Apply and reopening Graphics.
 - Retain the half-size main-menu watermark from revision 9.
+- Connect AA to the original keyboard/controller focus links between Fullscreen
+  and Apply. Keep native key repeat, mouse input, activation and resolution
+  controls; restore the original links during cleanup.
 
 AA remains experimental and Off by default on new installations. Enable it in
 Settings → Graphics → Antialiasing and select Apply. Physical Windows drivers

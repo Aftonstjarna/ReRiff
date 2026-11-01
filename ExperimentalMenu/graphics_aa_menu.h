@@ -6,7 +6,23 @@ static ColourFn graphics_colour_original;
 static void *aa_menu_owner,*aa_label,*aa_bar,*aa_knob;
 static BOOL aa_pending;
 static float aa_hit_width,aa_hit_height;
+static struct {void *item;int links[5];} aa_navigation[2];
 static BOOL (*attach_antialiasing)(void)=aa_attach;
+static void aa_connect_navigation(void *menu){
+    void *full=((void **)menu)[62],*apply=((void **)menu)[66];
+    void *items[2]={full,apply};
+    for(int i=0;i<2;i++){
+        aa_navigation[i].item=items[i];
+        memcpy(aa_navigation[i].links,(BYTE *)items[i]+0x98,sizeof(aa_navigation[i].links));
+    }
+    /* Native direction handler 0x44AA60: mode 1 uses IDs at +9C/+A0 for
+     * Up/Down. Vanilla resolution/fullscreen links omit dynamically added rows. */
+    ((int *)full)[38]=1;((int *)full)[40]=AA_CONTROL_ID;
+    ((int *)aa_label)[38]=1;((int *)aa_label)[39]=((int *)full)[2];
+    ((int *)aa_label)[40]=((int *)apply)[2];
+    ((int *)aa_label)[41]=((int *)aa_label)[42]=-1;
+    ((int *)apply)[38]=1;((int *)apply)[39]=AA_CONTROL_ID;
+}
 static void aa_load_preference(void){
     WCHAR value[16];GetPrivateProfileStringW(L"graphics",L"antialiasing",L"false",value,16,config_path);
     InterlockedExchange(&aa_requested,!_wcsicmp(value,L"true")||!wcscmp(value,L"1")||!_wcsicmp(value,L"yes"));
@@ -31,8 +47,9 @@ static void aa_graphics_input_state(void *menu){
 }
 static void __thiscall aa_graphics_init(void *menu,void *screen,void *lower){
     graphics_init_original(menu,screen,lower);aa_menu_owner=menu;aa_label=aa_bar=aa_knob=NULL;
+    ZeroMemory(aa_navigation,sizeof(aa_navigation));
     void *full=((void **)menu)[62],*left=((void **)menu)[64],*label=((void **)menu)[73];
-    if(!readable(full,404)||!readable(left,404)||!readable(label,484))return;
+    if(!readable(full,404)||!readable(left,404)||!readable(label,484)||!readable(((void **)menu)[66],404))return;
     float gap=((float *)full)[9]-((float *)left)[9];if(gap<=0)return;
     float y=((float *)full)[9]+gap*0.5f,x=((float *)label)[8],right=((float *)full)[8];
     for(int i=62;i<=65;i++)if(((void **)menu)[i]){void *item=((void **)menu)[i];move_item(item,((float *)item)[8],((float *)item)[9]-gap*0.5f);}
@@ -48,6 +65,7 @@ static void __thiscall aa_graphics_init(void *menu,void *screen,void *lower){
     ((float *)aa_label)[12]=right-x;((float *)aa_label)[13]=gap;
     static const float normal[4]={1,1,1,0.9f};colour_item(aa_label,normal);
     ((int *)aa_label)[1]++;add_screen(((void **)menu)[46],aa_label);
+    aa_connect_navigation(menu);
     float pos[2]={right,y};
     aa_bar=create_sprite(*ui_instance,73,pos,5,-1);aa_knob=create_sprite(*ui_instance,75,pos,3,-1);
     void *parts[2]={aa_bar,aa_knob};
@@ -61,6 +79,10 @@ static void __thiscall aa_graphics_init(void *menu,void *screen,void *lower){
 }
 static void __thiscall aa_graphics_cleanup(void *menu,void *screen,void *lower){
     if(aa_menu_owner==menu){
+        for(int i=0;i<2;i++)if(aa_navigation[i].item){
+            memcpy((BYTE *)aa_navigation[i].item+0x98,aa_navigation[i].links,sizeof(aa_navigation[i].links));
+            aa_navigation[i].item=NULL;
+        }
         void *items[3]={aa_label,aa_bar,aa_knob};
         for(int i=0;i<3;i++)if(items[i]){((int *)items[i])[1]++;remove_screen(((void **)menu)[46],items[i]);}
         aa_menu_owner=aa_label=aa_bar=aa_knob=NULL;

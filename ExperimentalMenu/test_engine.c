@@ -241,9 +241,23 @@ int main(int argc,char **argv){
     ((float *)graphics_test_items[0])[8]=1370;((float *)graphics_test_items[0])[9]=580;
     ((float *)graphics_test_items[2])[9]=500;((float *)graphics_test_items[3])[9]=500;
     ((float *)graphics_test_items[4])[8]=550;((float *)graphics_test_items[4])[9]=580;((float *)graphics_test_items[5])[9]=500;
+    ((int *)graphics_test_items[0])[2]=4;((int *)graphics_test_items[6])[2]=3;
+    ((int *)graphics_test_items[2])[2]=1;((int *)graphics_test_items[3])[2]=2;
+    for(int i=0;i<7;i++)for(int field=39;field<=42;field++)((int *)graphics_test_items[i])[field]=-1;
+    ((int *)graphics_test_items[0])[38]=1;((int *)graphics_test_items[0])[39]=1;((int *)graphics_test_items[0])[40]=1;
+    ((int *)graphics_test_items[2])[38]=((int *)graphics_test_items[3])[38]=1;
+    ((int *)graphics_test_items[2])[40]=((int *)graphics_test_items[3])[40]=4;
     graphics_init_original=mock_init;graphics_cleanup_original=mock_cleanup;graphics_tick_original=mock_tick;graphics_input_original=mock_input;graphics_colour_original=mock_menu_colour;
     attach_antialiasing=mock_aa_attach;aa_requested=aa_fault=0;aa_graphics_init(gm,NULL,NULL);
     CHECK(aa_label&&aa_bar&&aa_knob&&!aa_pending&&((int *)aa_label)[2]==AA_CONTROL_ID);
+    /* Follow the native Down IDs through resolution -> fullscreen -> AA -> Apply,
+     * then Up through AA -> fullscreen -> resolution. No second input poller. */
+    CHECK(((int *)graphics_test_items[2])[40]==((int *)graphics_test_items[0])[2]);
+    CHECK(((int *)graphics_test_items[3])[40]==((int *)graphics_test_items[0])[2]);
+    CHECK(((int *)graphics_test_items[0])[40]==((int *)aa_label)[2]);
+    CHECK(((int *)aa_label)[38]==1&&((int *)aa_label)[40]==((int *)graphics_test_items[6])[2]);
+    CHECK(((int *)graphics_test_items[6])[38]==1&&((int *)graphics_test_items[6])[39]==AA_CONTROL_ID);
+    CHECK(((int *)aa_label)[39]==4&&((int *)graphics_test_items[0])[39]==1);
     CHECK(((float *)aa_label)[9]==620&&((float *)graphics_test_items[0])[9]==540&&((float *)graphics_test_items[5])[9]==460);
     aa_graphics_input(gm,AA_CONTROL_ID);CHECK(aa_pending&&!aa_requested&&((unsigned *)aa_knob)[100]==74);
     CHECK(((float *)aa_label)[12]==820&&((float *)aa_label)[13]==80);
@@ -253,6 +267,8 @@ int main(int argc,char **argv){
     ((int *)gm)[11]=AA_CONTROL_ID;aa_graphics_tick(gm);CHECK(*(DWORD *)((BYTE *)aa_label+64)==768&&*(DWORD *)((BYTE *)graphics_test_items[2]+64)==0);
     CHECK(*(DWORD *)((BYTE *)aa_bar+76)==0&&*(DWORD *)((BYTE *)aa_knob+76)==0);
     aa_graphics_input(gm,3);CHECK(!aa_requested);aa_graphics_cleanup(gm,NULL,NULL);CHECK(!aa_label&&!aa_bar&&!aa_knob&&removed==31);
+    CHECK(((int *)graphics_test_items[0])[38]==1&&((int *)graphics_test_items[0])[40]==1);
+    CHECK(((int *)graphics_test_items[6])[38]==0&&((int *)graphics_test_items[6])[39]==-1);
     FreeLibrary(image);DeleteFileW(config_path);DeleteFileW(log_path);
     puts("PASS: original guards, Servers first, native reel lifecycle, one navigation owner, held-repeat/boundaries, deferred focus, pointer forwarding, original mask reset, vanilla hover/click/controller activation, Audio isolation, press latches, save/restart, version branding, one-time update notice, Graphics AA control and cleanup");return 0;
 }
