@@ -514,3 +514,21 @@ instruction byte and its exact adjusted operand. The regression fixture protects
 the mapped relocation region with `PAGE_NOACCESS` and verifies that valid entry
 checks pass while opcode/operand mutations still fail. The log now reports the
 specific failed guard line and build version for remaining runtime differences.
+
+### Live-header independence
+
+1.2.3-5 Windows logs reach the first prologue guard (`RVA 0x50AF0`) after
+vtable/thunk validation, with all 200,596 verified relocation bytes available.
+The prior helper still read the live optional header and required its ImageBase
+and relocation directory to match unmodified PE32 file metadata. That condition
+is unnecessary: preferred-base metadata and bounds now come from the same
+hash-verified file as the relocation records. Every live prologue byte and adjusted
+absolute operand is still checked, with an original HIGHLOW entry required.
+
+The added fixture changes live ImageBase/relocation-directory fields while live
+relocation pages are inaccessible; valid instructions pass and an altered operand
+fails. This models a loader state, not proof that those specific header values
+occurred on the affected PC. Failure diagnostics now record the live PE magic,
+base field and prologue bytes so any remaining difference can be identified.
+Microsoft documents that CLR validation may modify an in-memory managed image:
+https://learn.microsoft.com/en-us/dotnet/framework/unmanaged-api/hosting/corvalidateimage-function

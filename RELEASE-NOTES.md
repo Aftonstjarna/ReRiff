@@ -1,3 +1,19 @@
+# ReRiff 1.2.3-6 — Experimental live-image guard correction
+
+- Stop interpreting the live Windows PE header as unchanged file metadata when
+  validating native UI prologues. Use the preferred base, image bounds and
+  relocation records from the same hash-verified original executable instead.
+- Retain exact live opcode and relocated-operand comparisons. Add regression
+  coverage for adjusted header metadata with discarded relocation pages, including
+  rejection of an altered operand under those conditions.
+- Log live PE header details and bytes at the first guarded function if native
+  menu validation still fails on the affected Windows installation.
+
+The 1.2.3-5 Windows logs confirm client notes are being delivered to native News
+results, but menu injection still fails at the first native prologue guard.
+This correction passes the modeled loader-state tests; in-game Windows success
+still needs confirmation. No server update is required for client News delivery.
+
 # ReRiff 1.2.3-5 — Experimental Windows guard and client News fixes
 
 - Preserve relocation records from the same hash-verified original executable

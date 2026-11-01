@@ -462,7 +462,7 @@ static void server_save_prompt_result(void *menu,int choice){
 }
 
 static BYTE *verified_relocations;
-static DWORD verified_relocations_size;
+static DWORD verified_relocations_size,verified_image_size,verified_preferred_base;
 static BOOL supported_file(const WCHAR *path) {
     static const char expected[]="2d1af8a01ec6b1e3477ff6dbe4a44895828e2ac71449344fec9d7d99e87a58e2";
     HANDLE file=CreateFileW(path,GENERIC_READ,FILE_SHARE_READ,NULL,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,NULL);
@@ -503,7 +503,7 @@ static BOOL supported_file(const WCHAR *path) {
                     ||section->PointerToRawData>(DWORD)bytes.QuadPart||offset>(DWORD)bytes.QuadPart-section->PointerToRawData
                     ||reloc.Size>(DWORD)bytes.QuadPart-section->PointerToRawData-offset)continue;
                 verified_relocations=HeapAlloc(GetProcessHeap(),0,reloc.Size);
-                if(verified_relocations){memcpy(verified_relocations,raw+section->PointerToRawData+offset,reloc.Size);verified_relocations_size=reloc.Size;}
+                if(verified_relocations){memcpy(verified_relocations,raw+section->PointerToRawData+offset,reloc.Size);verified_relocations_size=reloc.Size;verified_image_size=nt->OptionalHeader.SizeOfImage;verified_preferred_base=nt->OptionalHeader.ImageBase;}
                 break;
             }
             UnmapViewOfFile(raw);
@@ -523,34 +523,44 @@ static BOOL supported_file(const WCHAR *path) {
 /* The supported PE's HIGHLOW relocation table identifies absolute operands.
  * Compare exact instructions and their expected relocated value; never mask bytes. */
 static BOOL relocated_entry_matches(BYTE *base,uintptr_t address,DWORD rva,const BYTE *expected,size_t length,size_t operand){
-    if(operand+4>length||!readable(base+rva,length)||!readable(base,sizeof(IMAGE_DOS_HEADER)))return FALSE;
-    IMAGE_DOS_HEADER *dos=(IMAGE_DOS_HEADER *)base;
-    if(dos->e_magic!=IMAGE_DOS_SIGNATURE||dos->e_lfanew<0||!readable(base+dos->e_lfanew,sizeof(IMAGE_NT_HEADERS32)))return FALSE;
-    IMAGE_NT_HEADERS32 *nt=(IMAGE_NT_HEADERS32 *)(base+dos->e_lfanew);
-    if(nt->Signature!=IMAGE_NT_SIGNATURE||nt->OptionalHeader.ImageBase!=0x400000)return FALSE;
-    IMAGE_DATA_DIRECTORY directory=nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC];
-    if(!directory.Size||directory.VirtualAddress>=nt->OptionalHeader.SizeOfImage||directory.Size>nt->OptionalHeader.SizeOfImage-directory.VirtualAddress)return FALSE;
-    BYTE *records=verified_relocations;
-    if(!records||verified_relocations_size!=directory.Size){
-        records=base+directory.VirtualAddress;
-        if(!readable(records,directory.Size))return FALSE;
-    }
+    /* CLR may normalize the live PE header. Its preferred base/directory are
+     * file metadata, not runtime identity checks: use the same verified source
+     * as the relocation records, then compare every live instruction byte. */
+    if(!verified_relocations||verified_preferred_base!=0x400000||operand+4>length
+        ||rva>=verified_image_size||length>verified_image_size-rva||!readable(base+rva,length))return FALSE;
+    BYTE *records=verified_relocations;DWORD record_size=verified_relocations_size;
     DWORD offset=0;BOOL found=FALSE;
-    while(offset<directory.Size){
-        if(directory.Size-offset<sizeof(IMAGE_BASE_RELOCATION))return FALSE;
+    while(offset<record_size){
+        if(record_size-offset<sizeof(IMAGE_BASE_RELOCATION))return FALSE;
         IMAGE_BASE_RELOCATION *block=(IMAGE_BASE_RELOCATION *)(records+offset);
-        if(block->SizeOfBlock<8||block->SizeOfBlock>directory.Size-offset||(block->SizeOfBlock&1))return FALSE;
+        if(block->SizeOfBlock<8||block->SizeOfBlock>record_size-offset||(block->SizeOfBlock&1))return FALSE;
         WORD *entries=(WORD *)(block+1);DWORD count=(block->SizeOfBlock-8)/2;
         for(DWORD j=0;j<count;j++)if((entries[j]>>12)==IMAGE_REL_BASED_HIGHLOW&&block->VirtualAddress+(entries[j]&4095)==rva+operand)found=TRUE;
         offset+=block->SizeOfBlock;
     }
     if(!found)return FALSE;
-    DWORD original;memcpy(&original,expected+operand,4);DWORD relocated=original+(DWORD)(address-0x400000);
+    DWORD original;memcpy(&original,expected+operand,4);DWORD relocated=original+(DWORD)(address-verified_preferred_base);
     return !memcmp(base+rva,expected,operand)&&!memcmp(base+rva+operand,&relocated,4)
         &&!memcmp(base+rva+operand+4,expected+operand+4,length-operand-4);
 }
 
-static BOOL guard_refused(int line){char message[160];snprintf(message,sizeof(message),"Menu guard failed at engine_menu.c:%d; build=" RERIFF_VERSION "; original relocation bytes=%lu.",line,(unsigned long)verified_relocations_size);log_line(message);return FALSE;}
+static BOOL guard_refused(int line){
+    char message[320];snprintf(message,sizeof(message),"Menu guard failed at engine_menu.c:%d; build=" RERIFF_VERSION "; original relocation bytes=%lu.",line,(unsigned long)verified_relocations_size);log_line(message);
+    BYTE *base=(BYTE *)GetModuleHandleW(NULL);
+    if(readable(base,sizeof(IMAGE_DOS_HEADER))){
+        IMAGE_DOS_HEADER *dos=(IMAGE_DOS_HEADER *)base;
+        if(dos->e_magic==IMAGE_DOS_SIGNATURE&&dos->e_lfanew>0&&readable(base+dos->e_lfanew,sizeof(IMAGE_NT_HEADERS32))){
+            IMAGE_NT_HEADERS32 *nt=(IMAGE_NT_HEADERS32 *)(base+dos->e_lfanew);
+            snprintf(message,sizeof(message),"Live PE magic=%04x, base field=%08lx; verified file base=%08lx, image bytes=%lu.",nt->OptionalHeader.Magic,(unsigned long)nt->OptionalHeader.ImageBase,(unsigned long)verified_preferred_base,(unsigned long)verified_image_size);log_line(message);
+        }
+    }
+    if(readable(base+0x50af0,16)){
+        strcpy(message,"Live RVA 00050af0:");size_t cursor=strlen(message);
+        for(int i=0;i<16;i++)cursor+=(size_t)snprintf(message+cursor,sizeof(message)-cursor," %02x",base[0x50af0+i]);
+        log_line(message);
+    }
+    return FALSE;
+}
 
 /* All addresses are RVAs from original bytes, not Ghidra's inferred prototypes. */
 static BOOL validate_image_at(BYTE *base,uintptr_t address_base) {
