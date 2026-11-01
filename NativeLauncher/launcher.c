@@ -196,6 +196,7 @@ static BOOL needs_local_server(void) {
         && (!_wcsicmp(host,L"localhost") || !wcscmp(host,L"127.0.0.1"));
 }
 
+#include "update_progress.h"
 #include "auto_update.h"
 
 static BOOL stop_server(void) {
@@ -539,10 +540,11 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE previous,LPWSTR command,int sho
     }
     if (should_skip_launcher(skip)) {
         if(!restart_parent_pid&&!suppress_auto_update&&(force_auto_reinstall||launcher_preference(L"auto_update_on_skip"))){
-            automatic_update=TRUE;
+            automatic_update=TRUE;progress_open(TRUE);progress_report(PROGRESS_CHECK,-1);
             HANDLE update=CreateThread(NULL,4*1024*1024,automatic_update_worker,NULL,STACK_SIZE_PARAM_IS_A_RESERVATION,NULL);
-            if(update){WaitForSingleObject(update,INFINITE);CloseHandle(update);}
+            if(update){while(progress_wait(update,1000)==WAIT_TIMEOUT){}CloseHandle(update);}
             else log_message(L"Could not start automatic update check; starting installed game.");
+            progress_close();
             if(update_handoff)return 0;
             /* Network/preflight failures leave installed files intact. Play
              * the existing version rather than blocking a skipped launch. */

@@ -5,20 +5,26 @@
 #include <ctype.h>
 static BOOL update_handoff=FALSE;
 static BOOL stop_server(void);
+static int automatic_progress_stage=PROGRESS_CHECK;
 
 static BOOL update_download(HINTERNET session,const WCHAR *url,const WCHAR *destination,DWORD maximum) {
+    if(automatic_update&&progress_cancelled())return FALSE;
     HINTERNET req=InternetOpenUrlW(session,url,L"Accept: application/vnd.github+json\r\n",(DWORD)-1,
         INTERNET_FLAG_RELOAD|INTERNET_FLAG_NO_CACHE_WRITE|INTERNET_FLAG_NO_UI|INTERNET_FLAG_NO_COOKIES,0);
     DWORD code=0,size=sizeof(code),read=0,written=0,total=0;BOOL ok=FALSE;
     if(req&&HttpQueryInfoW(req,HTTP_QUERY_STATUS_CODE|HTTP_QUERY_FLAG_NUMBER,&code,&size,NULL)&&code==200){
+        DWORD expected_bytes=0,expected_size=sizeof(expected_bytes);
+        HttpQueryInfoW(req,HTTP_QUERY_CONTENT_LENGTH|HTTP_QUERY_FLAG_NUMBER,&expected_bytes,&expected_size,NULL);
         HANDLE file=CreateFileW(destination,GENERIC_WRITE,0,NULL,CREATE_NEW,FILE_ATTRIBUTE_NORMAL,NULL);
         if(file!=INVALID_HANDLE_VALUE){
             char block[65536];ok=TRUE;
             for(;;){
+                if(automatic_update&&progress_cancelled()){ok=FALSE;break;}
                 if(!InternetReadFile(req,block,sizeof(block),&read)){ok=FALSE;break;}
                 if(!read)break;
                 if(read>maximum-total||!WriteFile(file,block,read,&written,NULL)||written!=read){ok=FALSE;break;}
                 total+=read;
+                if(automatic_update)progress_report(automatic_progress_stage,expected_bytes?(int)((ULONGLONG)total*100/expected_bytes):-1);
             }
             CloseHandle(file);
         }
@@ -172,12 +178,16 @@ static BOOL check_updates(void) {
     _snwprintf(archive,CAP,L"%ls\\%ls",work,filename);archive[CAP-1]=0;
     _snwprintf(url,CAP,L"https://github.com/Aftonstjarna/ReRiff/releases/download/%ls/%ls",release_tag,filename);url[CAP-1]=0;
     failure=L"Could not download the release package";
+    if(automatic_update){automatic_progress_stage=PROGRESS_DOWNLOAD;progress_report(PROGRESS_DOWNLOAD,0);}
     if(!update_download(session,url,archive,64*1024*1024))goto done;
     failure=L"The release checksum did not match";
+    if(automatic_update){if(progress_cancelled())goto done;progress_report(PROGRESS_VERIFY,-1);}
     if(!update_digest(archive,expected))goto done;
+    if(automatic_update&&progress_cancelled())goto done;
     MultiByteToWideChar(CP_UTF8,0,expected,-1,hash_w,65);
     path(source,L"localserver\\apply-client-update.py");
     failure=L"Could not start installer preflight";
+    if(automatic_update)progress_report(PROGRESS_PREPARE,-1);
     _snwprintf(name,CAP,L"%ls\\apply-client-update.py",work);name[CAP-1]=0;
     if(!CopyFileW(source,name,TRUE)||!update_command(command,work,archive,hash_w,TRUE)||!spawn(command,TRUE,&process))goto done;
     CloseHandle(process.hThread);CloseHandle(process.hProcess);
@@ -186,12 +196,14 @@ static BOOL check_updates(void) {
     ULONGLONG deadline=GetTickCount64()+120000;
     failure=L"Installer preflight failed; see update.log";
     for(;;){
+        if(automatic_update&&progress_cancelled())goto done;
         _snwprintf(name,CAP,L"%ls\\failure",work);name[CAP-1]=0;
         if(GetFileAttributesW(name)!=INVALID_FILE_ATTRIBUTES)goto done;
         _snwprintf(name,CAP,L"%ls\\prepared.json",work);name[CAP-1]=0;
         if(GetFileAttributesW(name)!=INVALID_FILE_ATTRIBUTES)break;
         if(GetTickCount64()>deadline)goto done;Sleep(100);
     }
+    if(automatic_update&&progress_cancelled())goto done;
     /* The Linux apply tool confirms owned-server shutdown directly. Wine's
      * start.exe exit status cannot establish native Unix child completion. */
     if(!is_wine()&&!stop_server()){log_message(message);failure=L"Could not stop this installation's local server";goto done;}
@@ -206,11 +218,13 @@ static BOOL check_updates(void) {
     if(!CopyFileW(source,name,TRUE))goto done;
     if(automatic_update&&!save_auto_resume(work))goto done;
     _snwprintf(command,CAP,L"\"%ls\" %lu \"%ls\" \"%ls\"",name,(unsigned long)GetCurrentProcessId(),work,folder);command[CAP-1]=0;
+    if(automatic_update){if(!progress_commit())goto done;progress_report(PROGRESS_INSTALL,-1);}
     if(!spawn(command,TRUE,&process))goto done;
     CloseHandle(process.hThread);CloseHandle(process.hProcess);
-    update_handoff=TRUE;wcscpy(message,L"Installing the verified update. The launcher will reopen automatically.");ok=TRUE;
+    update_handoff=TRUE;wcscpy(message,automatic_update?L"Installing the verified update. The game will start automatically.":L"Installing the verified update. The launcher will reopen automatically.");ok=TRUE;
 done:
     InternetCloseHandle(session);
+    if(automatic_update&&progress_cancelled()){wcscpy(message,L"Update canceled; starting the installed game.");return FALSE;}
     if(!ok){_snwprintf(message,1024,L"%ls. Installed files were retained. Details: %ls",failure,work);message[1023]=0;}
     return ok;
 }

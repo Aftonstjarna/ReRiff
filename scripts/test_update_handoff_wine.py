@@ -2,6 +2,7 @@
 import argparse
 import hashlib
 import importlib.util
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -19,6 +20,16 @@ fixture = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(fixture)
 case = fixture.ClientUpdateTest()
 case.setUp()
+# The updater now owns a progress window after the launcher exits. Keep the
+# test display alive for the whole handoff, not just the short-lived parent.
+reader, writer = os.pipe()
+display_process = subprocess.Popen(['Xvfb', '-displayfd', str(writer), '-screen', '0', '1024x768x24', '-nolisten', 'tcp', '-ac'],
+                                  pass_fds=(writer,), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+os.close(writer)
+with os.fdopen(reader) as stream:
+    display = ':'+stream.readline().strip()
+assert display != ':', 'Temporary display did not start'
+wine_prefix = ['/usr/bin/distrobox-host-exec', 'env', 'DISPLAY='+display, 'WINEPREFIX='+args.prefix, 'WINEDEBUG=-all']
 try:
     archive, digest = case.package(args.platform, launcher=(ROOT/'build/test-update-relaunch.exe').read_bytes())
     shutil.copyfile(ROOT/'scripts/apply-client-update.py', case.work/'apply.py')
@@ -29,7 +40,7 @@ try:
         runtime = case.game/'localserver/windows-python'
         shutil.rmtree(runtime)
         shutil.copytree(ROOT/'build/release/windows/python', runtime)
-        subprocess.run(['/usr/bin/distrobox-host-exec', 'xvfb-run', '-a', 'env', 'WINEPREFIX='+args.prefix, 'WINEDEBUG=-all', args.wine,
+        subprocess.run(wine_prefix+[args.wine,
                         str(runtime/'python.exe'), 'Z:'+str(case.work/'apply.py'), '--prepare', '--work', 'Z:'+str(case.work),
                         '--archive', 'Z:'+str(archive), '--sha256', digest, '--game-dir', 'Z:'+str(case.game), '--platform', 'windows'], check=True, timeout=30)
         assert (case.work/'prepared.json').exists()
@@ -38,7 +49,7 @@ try:
     if args.automatic:
         resume = '"Z:'+str(case.game/'ReRiff-Launcher.exe')+'" --skip-launcher --no-auto-update -- "Z:'+str(case.game/'Game.exe')+'" "space value"'
         (case.work/'resume-command.txt').write_bytes(resume.encode('utf-16-le'))
-    subprocess.run(['/usr/bin/distrobox-host-exec', 'xvfb-run', '-a', 'env', 'WINEPREFIX='+args.prefix, 'WINEDEBUG=-all', args.wine,
+    subprocess.run(wine_prefix+[args.wine,
                     str(ROOT/'build/test-update-parent.exe'), 'Z:'+str(ROOT/'build/ReRiff-Updater.exe'),
                     'Z:'+str(case.work), 'Z:'+str(case.game)], check=True, timeout=30)
     deadline = time.monotonic()+30
@@ -55,4 +66,6 @@ try:
     assert (case.game/'localserver/save.json').read_bytes() == b'saved scores'
     print('PASS: native updater waited for parent exit, applied '+args.platform+' package, preserved settings/data and relaunched')
 finally:
+    display_process.terminate()
+    display_process.wait(timeout=10)
     case.doCleanups()

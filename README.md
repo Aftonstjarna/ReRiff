@@ -136,7 +136,10 @@ Back without saving discards the change. The preference is stored in
 save it in-game. Choose **Save settings** in the launcher to save checkbox edits.
 
 Beside it, **Auto-update when skipping launcher** enables an update check before
-starting the game without the launcher window. It is Off by default, follows
+starting the game without the launcher window. A small progress window shows
+checking, downloading, verification and installation. **Cancel** starts the
+installed game; it is disabled once installation is committed, so replacement
+or rollback can finish safely. It is Off by default, follows
 the installed stable/experimental channel, and resumes the game after an update
 with the original arguments. A failed check starts the installed version and
 records details in `ReRiff-launcher.log`. Existing settings and saved data are
