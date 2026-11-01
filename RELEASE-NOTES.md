@@ -1,3 +1,13 @@
+# ReRiff 1.2.3-3 — Experimental Servers action order
+
+- Order the final Servers actions as RETURN WITHOUT SAVING, SAVE AND RETURN,
+  SAVE AND RESTART, then SAVE AND EXIT.
+- Rename BACK WITHOUT SAVING to RETURN WITHOUT SAVING, retaining native
+  scrolling and wraparound navigation.
+
+This is a debugging build. The missing native menus reported on Windows remain
+under investigation; menu startup details are in `logs/ReRiff-engine-menu.log`.
+
 # ReRiff 1.2.3-2 — Experimental launcher, save prompts and diagnostics
 
 - Treat numbered GitHub prereleases as experimental launcher updates. Select
