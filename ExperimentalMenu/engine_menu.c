@@ -51,6 +51,8 @@ typedef void *(__thiscall *SpriteFn)(void *,int,const float *,int,int);
 typedef void (__thiscall *SpriteDefFn)(void *,unsigned);
 typedef void (__thiscall *PositionFn)(void *,const float *);
 static SpriteFn create_sprite;
+typedef void *(__thiscall *BlankButtonFn)(void *,int,DWORD,const float *,const float *);
+static BlankButtonFn create_blank_button;
 static SpriteDefFn sprite_def, sprite_origin;
 static PositionFn sprite_position;
 static void **ui_instance;
@@ -252,10 +254,10 @@ static void leave_server_page(void *menu) {
 }
 
 static void render(void *menu) {
-    static const WCHAR *labels[11]={L"", L"Skip launcher",
-        L"Use local server", L"Use configured external server", L"External only",
-        L"Force Offline", L"Save settings", L"Reload saved settings",
-        L"Save and restart", L"Back without saving", L"Save and return"};
+    static const WCHAR *labels[11]={L"", L"SKIP LAUNCHER",
+        L"USE LOCAL SERVER", L"USE CONFIGURED EXTERNAL SERVER", L"EXTERNAL ONLY",
+        L"FORCE OFFLINE", L"SAVE SETTINGS", L"RELOAD SAVED SETTINGS",
+        L"SAVE AND RESTART", L"BACK WITHOUT SAVING", L"SAVE AND RETURN"};
     for(int id=1;id<=10;id++) {
         void *text=item_text(menu,id);
         if(!text)continue;
@@ -460,6 +462,7 @@ static BOOL supported_file(const WCHAR *path) {
 }
 
 #include "antialiasing.h"
+#include "display_modes.h"
 #include "graphics_aa_menu.h"
 #include "main_branding.h"
 
@@ -527,6 +530,13 @@ __declspec(dllexport) BOOL __cdecl ReRiffConfigureNativeReel(void **methods,int 
     bridge_ready=TRUE;return TRUE;
 }
 
+__declspec(dllexport) BOOL __cdecl ReRiffConfigureNativeGraphics(void **methods,int count){
+    WCHAR path[MAX_PATH];DWORD length=GetModuleFileNameW(NULL,path,MAX_PATH);
+    if(!length||length>=MAX_PATH||!supported_file(path)||count!=2||!readable(methods,2*sizeof(void *))||!methods[0]||!methods[1])return FALSE;
+    graphics_resize=(GraphicsBridgeFn)methods[0];graphics_rescale=(GraphicsBridgeFn)methods[1];
+    graphics_bridge_ready=TRUE;return TRUE;
+}
+
 __declspec(dllexport) BOOL __cdecl ReRiffStartEngineMenu(void) {
     if (InterlockedCompareExchange(&installed,1,0)) return installed==2;
     WCHAR path[MAX_PATH]; DWORD length=GetModuleFileNameW(NULL,path,MAX_PATH);
@@ -555,6 +565,7 @@ __declspec(dllexport) BOOL __cdecl ReRiffStartEngineMenu(void) {
     game_allocate=*(void *(__cdecl **)(size_t))(base+0x52d4b4);
     reel_vtable=(void **)(base+0x7a5740);input_manager=(void **)(base+0x80d410);
     create_sprite=(SpriteFn)(base+0x22030);ui_instance=(void **)(base+0x7fbaa4);
+    create_blank_button=(BlankButtonFn)(base+0x222f0);
     sprite_def=(SpriteDefFn)(base+0x48830);sprite_origin=(SpriteDefFn)(base+0x482b0);
     sprite_position=(PositionFn)(base+0x48280);
     add_item=(AddFn)(base+0x43800);add_screen=(AddFn)(base+0x8e8d0);remove_screen=(AddFn)(base+0x8e9d0);
@@ -565,6 +576,7 @@ __declspec(dllexport) BOOL __cdecl ReRiffStartEngineMenu(void) {
     InterlockedExchangePointer(&table[24],(void *)&hook_input);
     InterlockedExchangePointer(&table[26],(void *)&hook_colour);
     DWORD ignored; VirtualProtect(table,27*sizeof(void *),protection,&ignored);
+    if(!install_display_modes(base))log_line("Native display-mode extension could not be installed.");
     if(!install_graphics_aa_menu(base))log_line("Native antialiasing control could not be installed.");
     if(!install_main_branding(base))log_line("Main-menu branding could not be installed.");
     InterlockedExchange(&installed,2); log_line("Engine menu hooks installed."); return TRUE;

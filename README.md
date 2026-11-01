@@ -5,16 +5,16 @@ ReRiff includes a launcher, automatic updates, and a **native in-game Servers
 menu** with controller navigation. Choose a server, keep or disable networking,
 save settings, or use **Save and restart** to apply changes immediately.
 
-[Download stable 1.2.1](https://github.com/Aftonstjarna/ReRiff/releases/latest)
+[Download stable 1.2.2](https://github.com/Aftonstjarna/ReRiff/releases/latest)
 · [Install and update](#install-or-update)
 · [Steam launch options](#launch-through-steam)
 · [Server settings](#server-settings)
 · [Troubleshooting](#troubleshooting)
 · [Server administration and technical details](#server-administration-and-technical-details)
 
-**Experimental client: Settings → Servers**
+**Settings → Servers**
 
-The experimental client adds **Servers** as the first entry in the original **Settings** screen.
+ReRiff 1.2.2 adds **Servers** as the first entry in the original **Settings** screen.
 Existing settings entries remain available with their original actions. Both
 Settings lists keep vanilla row spacing and separator lines; scroll to reach
 additional entries. The scrollbar reuses the game’s local-track file picker
@@ -25,19 +25,28 @@ selected entry into view. Friends
 keeps its original place on the main menu; restoring its online features is the
 next stage of work.
 
-The experimental main menu shows the running **ReRiff version** in its bottom-right
+The main menu shows the running **ReRiff version** in its bottom-right
 corner, at half the font size of the menu entries. After a successful unattended
 update, a click-through notification says
 **ReRiff has updated to …**, including the experimental revision. It appears once
 at the next main menu, independently of the server-address notification.
 
-**Settings → Graphics → Antialiasing** adds an experimental on/off switch using
+**Settings → Graphics → Antialiasing** adds an optional on/off switch using
 the original fullscreen-toggle artwork. Choose **Apply** to save it and enable
 post-process edge smoothing. It is Off by default and uses the original
 Direct3D 9 renderer on Windows and Proton; unsupported devices fall back to Off.
 Back without Apply discards the pending change.
 
-**Native in-game Servers menu — including Save and restart** (stable 1.2.1 shown)
+**Unreleased experimental display work:** unlocked render resolutions, borderless
+fullscreen and the 10-second Keep/Revert path are retained on
+`codex/experimental-client`, and are **not included in stable 1.2.2**.
+Controller confirmation has sometimes worked, but keyboard/mouse input can stop
+after borderless applies. Confirmation or timeout reversion can freeze. Using
+Servers → Save and restart after borderless may leave audio playing with no
+visible game window; whether this is an old process or an invisible restarted
+window is not yet established. These features are held for further testing.
+
+**Native in-game Servers menu — including Save and restart** (earlier layout shown; open Settings → Servers in 1.2.2)
 
 ![ReRiff native in-game Servers menu with Save and restart, server selection, and controller navigation](docs/images/reriff-in-game-menu.png)
 
@@ -45,8 +54,7 @@ Back without Apply discards the pending change.
 
 ![ReRiff launcher with server addresses, networking settings, and GitHub updates](docs/images/reriff-launcher.png)
 
-In the experimental client, open **Settings → Servers**. Stable 1.2.1 uses a
-**Servers** entry in place of Friends. **Save settings** keeps the page open;
+Open **Settings → Servers**. The original Friends entry remains on the main menu. **Save settings** keeps the page open;
 **Save and return** returns to the parent menu, and **Save and
 restart** saves and restarts the game without another launcher window. Changes
 to the active server otherwise apply on the next game start. The launcher's
@@ -76,7 +84,7 @@ together until setup finishes. Portable Python and server dependencies are
 included. Local DLL patching uses the game's .NET Framework runtime.
 The package targets x64 Windows; the launcher is native x86 Win32.
 
-**Linux/Proton (x86_64):** install Python 3.10 or newer. The experimental Linux
+**Linux/Proton (x86_64):** install Python 3.10 or newer. The Linux
 installer opens a native folder picker and setup window when run without
 arguments in a desktop session:
 
@@ -98,7 +106,7 @@ The installer shows progress and details, keeps a log under
 verification, and rollback checks as Windows. Choosing a folder alone changes
 nothing. A failed installation can be retried from the window.
 
-For a terminal install, a machine without GTK, or the current stable installer:
+For a terminal install or a machine without GTK:
 
 
 ```sh
@@ -107,7 +115,7 @@ sh ReRiff-<version>-linux.run --game-dir '/path/to/steamapps/common/Riff Racer'
 
 Replace `<version>` with the downloaded release number. Omit `--game-dir` to
 search common Steam libraries (including Flatpak Steam). Use `--cli` to force
-terminal mode in the experimental installer, or `--gui` to request the window.
+terminal mode, or `--gui` to request the window.
 Explicit options such as `--game-dir`, `--dry-run`, `--restore`, and `--help`
 keep their terminal behavior for scripts and automatic updates. Do not use `sudo`. The installer bundles the
 server libraries and places the backend in `localserver/` beside `Game.exe`.
@@ -129,8 +137,8 @@ contents, applies the update with backups and rollback, then reopens itself.
 The title bar shows the running version. Settings and saved data are retained.
 
 If you are using a prerelease, **uncheck Use experimental builds** while the
-game is closed to install stable 1.2.1. This works even when your installed
-version has a revision suffix such as `1.2.1-4`. Superseded prereleases are
+game is closed to install stable 1.2.2. This works even when your installed
+version has a revision suffix such as `1.2.2-12`. Superseded prereleases are
 archived; they are not offered as current updates.
 
 If your launcher cannot apply an update, install the current release manually.
@@ -138,11 +146,10 @@ Client updates do not update the Docker server.
 
 ### In-game Servers menu and launcher skipping
 
-In the experimental client, open **Settings → Servers** and use the original
+Open **Settings → Servers** and use the original
 fullscreen-style on/off switches for **Skip launcher**, **External only**, and
 **Force Offline** (Off enables networking; On disables it without clearing server
-addresses). Stable 1.2.1 uses the **Servers** entry on the main menu and text
-toggles. After changing Skip launcher, choose
+addresses). After changing Skip launcher, choose
 **Save settings** or **Save and return**. The next start uses this preference;
 Back without saving discards the change. The preference is stored in
 `server.ini` as `[launcher] skip_launcher=true` or `false`. The launcher's
@@ -241,7 +248,7 @@ The launcher edits `server.ini` beside `Game.exe`:
 Both addresses blank disables Parse networking. Server selection is fixed for
 the game session, so restart the game after changing settings. The optional
 server notification fades automatically and does not take controller focus.
-Borderless/windowed mode gives the most reliable overlay visibility.
+Windowed mode gives the most reliable overlay visibility.
 
 Example client configuration:
 
@@ -347,7 +354,7 @@ If a different failure persists, send the generated startup report.
 - **Update fails:** inspect the temporary `update.log` reported by the launcher.
   Download or preflight failure keeps the old launcher open; installation errors
   retain or roll back files. Keep the game's original runtime dependencies.
-- **Notification hidden in fullscreen:** use borderless/windowed mode. The
+- **Notification hidden in fullscreen:** use windowed mode. The
   notification fades automatically and requires no input.
 
 ## Server administration and technical details
