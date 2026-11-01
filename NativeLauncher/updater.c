@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #define CAP 32768
 #include "update_progress.h"
+#include "update_notice.h"
 
 int WINAPI wWinMain(HINSTANCE instance,HINSTANCE previous,LPWSTR arguments,int show) {
     (void)instance;(void)previous;(void)arguments;(void)show;
@@ -55,6 +56,7 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE previous,LPWSTR arguments,int s
         _snwprintf(command,CAP,L"The update could not finish. Existing files were retained or rolled back. Details: %ls\\update.log",work);
         MessageBoxW(NULL,command,L"ReRiff update failed",MB_OK|MB_ICONERROR);
     }
+    if(ok&&automatic)record_update_notice(game);
     if(automatic){progress_report(PROGRESS_RESUME,100);progress_pump();wcscpy(command,resume);}
     else _snwprintf(command,CAP,L"\"%ls\\ReRiff-Launcher.exe\" --show-launcher",game);
     command[CAP-1]=0;

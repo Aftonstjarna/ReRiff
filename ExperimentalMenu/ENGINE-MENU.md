@@ -201,3 +201,55 @@ Proton regressions verify atomically saved in-game settings survive this reload,
 Play leaves unsaved fields out of the INI, both skip aliases launch a disposable
 fake game without changing the INI, and the combined menu DLL's toast appears
 without taking focus and dismisses itself. Exact pre-trial backups remain in bak.
+
+## Main-menu branding and update notices
+
+`main_branding.h` guards the original gaMainMenu table at RVA 0x7A7470 and hooks
+init/tick/cleanup. The watermark is a screen-owned, right-aligned native text
+item with no menu ID, shortcuts or input mask. Its compiled version includes
+the numbered experimental revision. Position follows elUI.getResolution
+(RVA 0x1FA50), so it stays in the bottom-right corner. Late transport startup
+can attach it during the first observed main-menu tick. Cleanup releases its
+borrowed reference through the original screen API.
+
+After a completed unattended installation, the temporary native updater writes
+`localserver/update-notification.ini` using the installed client-version.txt.
+Manual updates and failed installations create no notice. The next main menu
+queues a matching-version toast and consumes the marker only if queuing works.
+Server and update toasts have independent lifetime gates and stack vertically;
+both are non-activating, click-through, control-free and dismiss automatically.
+The new notification is testable by same-version unattended reinstall after
+installing this updated updater; older updaters cannot write its notice marker.
+
+## Experimental graphics antialiasing
+
+`graphics_aa_menu.h` adds ID 1601 to the original gaGraphicsOptions screen,
+retaining resolution, fullscreen and Apply actions. Three rows are centered
+using the measured vanilla row interval. Native fullscreen sprites render the
+new switch. Left/right shortcuts belong to the focused row; Apply persists
+`[graphics] antialiasing=true/false`, while Back discards pending changes.
+
+The original renderer was cross-checked with the separate RiffRacer recovery
+sources and original bytes: wsGraphicsDevice primary vtable RVA 0x5FBF44,
+renderer singleton RVA 0x80D408, actual D3D9 device at +0x78, and optional Ex
+interface at +0x7C. The native getPC adjustment at VA 0x4910D0 returns +0x18;
+it must not be mistaken for the primary renderer layout. Device creation and
+presentation evidence is in that recovery's FRAME.md/device_create.S and
+application_frame.S; local Ghidra resolution evidence is under build/graphics-evidence.
+No new matching reconstruction credit is claimed for these intentional changes.
+
+`antialiasing.h` attaches a private copy of the actual device's COM method table,
+chaining Present/Reset and their Ex variants. It creates no competing device and
+does not change display modes or multisample settings. With AA enabled, an
+edge-directed pixel shader filters a copy of the completed back buffer. GPU
+resources, drawing and cleanup execute on the original render thread. A state
+block plus explicit render-target/depth/viewport restoration preserve the game's
+state; Reset releases default-pool resources and the next frame recreates them.
+Disabling AA releases its resources. Shader model 3 and successful allocation
+are required; failures retain original presentation, disable AA and log a reason.
+This is post-process AA, not a multisample-count setting.
+
+The real software-rendered D3D9 fixture verifies changed/smoothed edge pixels,
+state restoration, enabled-AA reset/recreation and Off cleanup. Live gameplay,
+physical Windows drivers, Ex reset paths and arbitrary third-party renderer
+wrappers remain experimental validation targets.

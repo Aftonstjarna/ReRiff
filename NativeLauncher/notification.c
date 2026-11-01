@@ -8,10 +8,11 @@
 #define CLASS_NAME L"ReRiffServerToast"
 #define VISIBLE_MS 6000
 static HINSTANCE module;
-static volatile LONG active;
+static volatile LONG active,update_active;
 
 typedef struct Toast {
     WCHAR endpoint[2048];
+    BOOL update;
     HWND game;
     HWND window;
     HFONT title_font;
@@ -52,7 +53,7 @@ static LRESULT CALLBACK procedure(HWND window,UINT message,WPARAM wp,LPARAM lp) 
         RECT stripe={0,0,4,rect.bottom};HBRUSH accent=CreateSolidBrush(RGB(183,107,233));FillRect(dc,&stripe,accent);DeleteObject(accent);
         SetBkMode(dc,TRANSPARENT);SetTextColor(dc,RGB(230,219,244));
         HGDIOBJ old=SelectObject(dc,toast->title_font);
-        RECT title={18,12,rect.right-16,36};DrawTextW(dc,L"ReRiff — Server",-1,&title,DT_SINGLELINE|DT_NOPREFIX);
+        RECT title={18,12,rect.right-16,36};DrawTextW(dc,toast->update?L"ReRiff — Updated":L"ReRiff — Server",-1,&title,DT_SINGLELINE|DT_NOPREFIX);
         SelectObject(dc,toast->body_font);SetTextColor(dc,RGB(200,199,210));
         RECT body={18,41,rect.right-16,rect.bottom-10};
         DrawTextW(dc,toast->endpoint,-1,&body,DT_SINGLELINE|DT_END_ELLIPSIS|DT_NOPREFIX);
@@ -71,7 +72,7 @@ static LRESULT CALLBACK procedure(HWND window,UINT message,WPARAM wp,LPARAM lp) 
         if (client.right<480 || client.bottom<240) {ShowWindow(window,SW_HIDE);return 0;}
         POINT origin={0,0};ClientToScreen(toast->game,&origin);
         int width=420;if (width>client.right-40) width=client.right-40;
-        SetWindowPos(window,HWND_TOPMOST,origin.x+client.right-width-24,origin.y+24,width,86,
+        SetWindowPos(window,HWND_TOPMOST,origin.x+client.right-width-24,origin.y+24+(toast->update?100:0),width,86,
                      SWP_NOACTIVATE|SWP_SHOWWINDOW);
         toast->elapsed+=100;
         BYTE alpha=toast->elapsed>5200?(BYTE)((VISIBLE_MS-toast->elapsed)*240/800):240;
@@ -108,18 +109,22 @@ static DWORD WINAPI show_toast(LPVOID parameter) {
         }
         DeleteObject(toast->title_font);DeleteObject(toast->body_font);
     }
-    HeapFree(GetProcessHeap(),0,toast);InterlockedExchange(&active,0);return 0;
+    volatile LONG *gate=toast->update?&update_active:&active;
+    HeapFree(GetProcessHeap(),0,toast);InterlockedExchange(gate,0);return 0;
 }
 
-__declspec(dllexport) void __cdecl ReRiffShowServerToastW(const WCHAR *endpoint) {
-    if (InterlockedCompareExchange(&active,1,0)) return;
+static BOOL queue_toast(const WCHAR *text,BOOL update) {
+    volatile LONG *gate=update?&update_active:&active;
+    if (InterlockedCompareExchange(gate,1,0)) return FALSE;
     Toast *toast=(Toast *)HeapAlloc(GetProcessHeap(),HEAP_ZERO_MEMORY,sizeof(Toast));
-    if (!toast) {InterlockedExchange(&active,0);return;}
-    lstrcpynW(toast->endpoint,endpoint?endpoint:L"Networking disabled",2048);
+    if (!toast) {InterlockedExchange(gate,0);return FALSE;}
+    toast->update=update;lstrcpynW(toast->endpoint,text?text:L"Networking disabled",2048);
     HANDLE thread=CreateThread(NULL,0,show_toast,toast,0,NULL);
-    if (thread) CloseHandle(thread);
-    else {HeapFree(GetProcessHeap(),0,toast);InterlockedExchange(&active,0);}
+    if (thread) {CloseHandle(thread);return TRUE;}
+    HeapFree(GetProcessHeap(),0,toast);InterlockedExchange(gate,0);return FALSE;
 }
+__declspec(dllexport) void __cdecl ReRiffShowServerToastW(const WCHAR *endpoint) {queue_toast(endpoint,FALSE);}
+__declspec(dllexport) BOOL __cdecl ReRiffShowUpdateToastW(const WCHAR *text) {return queue_toast(text,TRUE);}
 
 BOOL WINAPI DllMain(HINSTANCE instance,DWORD reason,LPVOID reserved) {
     (void)reserved;

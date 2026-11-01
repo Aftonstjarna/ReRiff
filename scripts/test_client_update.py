@@ -36,6 +36,7 @@ class ClientUpdateTest(unittest.TestCase):
     def package(self, platform, bad_member=None, launcher=b'new launcher'):
         files = {name: (ROOT/'packaging'/name).read_bytes() for name in ['installer.py', 'shared_patch.py']}
         files['payload/ReRiff-Launcher.exe'] = launcher
+        files['payload/localserver/client-version.txt'] = b'9.0.0-2\n'
         if platform == 'windows':
             files['python/python.exe'] = b'fixture runtime'
         manifest = {'platform': platform, 'version': '9.0.0', 'update_only': True, 'required_existing': {},

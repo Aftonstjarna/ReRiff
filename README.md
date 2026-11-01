@@ -23,6 +23,17 @@ or navigate up/down with the controller. Friends
 keeps its original place on the main menu; restoring its online features is the
 next stage of work.
 
+The experimental main menu shows the running **ReRiff version** in its bottom-right
+corner. After a successful unattended update, a click-through notification says
+**ReRiff has updated to …**, including the experimental revision. It appears once
+at the next main menu, independently of the server-address notification.
+
+**Settings → Graphics → Antialiasing** adds an experimental on/off switch using
+the original fullscreen-toggle artwork. Choose **Apply** to save it and enable
+post-process edge smoothing. It is Off by default and uses the original
+Direct3D 9 renderer on Windows and Proton; unsupported devices fall back to Off.
+Back without Apply discards the pending change.
+
 **Native in-game Servers menu — including Save and restart** (stable 1.2.1 shown)
 
 ![ReRiff native in-game Servers menu with Save and restart, server selection, and controller navigation](docs/images/reriff-in-game-menu.png)

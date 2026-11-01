@@ -78,6 +78,12 @@ static void open_servers(void){if(((int *)menu)[62]==0&&!server_page)scroll_to(m
 typedef struct FakeReel {BYTE object[532];void *children[16];int count,maximum,selection;} FakeReel;
 static void *fake_reel_table[37];static int constructed,destroyed,bars,ticks,forwarded;
 static DWORD held_input;
+static int aa_attach_calls;
+static BOOL mock_aa_attach(void){aa_attach_calls++;return TRUE;}
+static BYTE graphics_test_menu[512],graphics_test_items[7][1024];
+static BOOL notice_accept;static int notices;static WCHAR notice_text[128];
+static BOOL mock_notice(const WCHAR *text){notices++;wcsncpy(notice_text,text,127);return notice_accept;}
+static float * __cdecl mock_resolution(float *out,int screen_id){if(screen_id)abort();out[0]=1920;out[1]=1080;return out;}
 static DWORD mock_direction(void){return held_input;}
 static void *__cdecl mock_allocate(size_t size){if(size!=532)abort();return calloc(1,sizeof(FakeReel));}
 static void *__cdecl mock_reel_ctor(void *self,void *parent,float spacing,int direction){
@@ -205,6 +211,40 @@ int main(int argc,char **argv){
     open_servers();request_restart=mock_restart;restart_ok=FALSE;select_action(8);CHECK(restart_calls==1&&!restarting);
     restart_ok=TRUE;select_action(8);CHECK(restart_calls==2&&restarting);restart_started=GetTickCount()-15001;tick_entry(menu);CHECK(!restarting);
     cleanup_entry(menu,NULL,NULL);CHECK(cleaned==1&&!page_owner&&!native_reel&&destroyed==constructed&&removed==26);
+    main_init_original=mock_init;main_cleanup_original=mock_cleanup;main_tick_original=mock_tick;native_resolution=mock_resolution;queue_update_notice=mock_notice;
+    wcscpy(update_notice_path,config_path);wcscat(update_notice_path,L".update.ini");
+    CHECK(WritePrivateProfileStringW(L"update",L"version",MENU_WIDE(RERIFF_VERSION),update_notice_path));
+    notice_accept=FALSE;deliver_update_notice();CHECK(notices==1&&GetFileAttributesW(update_notice_path)!=INVALID_FILE_ATTRIBUTES);
+    notice_accept=TRUE;branded_main_init(menu,NULL,NULL);
+    CHECK(watermark&&watermark_owner==menu&&((int *)watermark)[2]==-1&&*(DWORD *)((BYTE *)watermark+76)==0);
+    CHECK(!wcscmp((const WCHAR *)((BYTE *)watermark+512),L"ReRiff v" MENU_WIDE(RERIFF_VERSION)));
+    CHECK(notices==2&&!wcscmp(notice_text,L"ReRiff has updated to " MENU_WIDE(RERIFF_VERSION))&&GetFileAttributesW(update_notice_path)==INVALID_FILE_ATTRIBUTES);
+    deliver_update_notice();CHECK(notices==2);
+    ((float *)watermark)[13]=64;branded_main_tick(menu);
+    CHECK(((float *)watermark)[8]==1908&&((float *)watermark)[9]==1052);
+    branded_main_cleanup(menu,NULL,NULL);CHECK(!watermark&&!watermark_owner&&removed==27);
+    branded_main_tick(menu);CHECK(watermark&&notices==2);branded_main_cleanup(menu,NULL,NULL);CHECK(!watermark&&removed==28);
+    CHECK(validate_graphics_aa_menu((BYTE *)image,nt->OptionalHeader.ImageBase));
+    void *gm=graphics_test_menu;*(void ***)gm=vtable;((void **)gm)[46]=screen;
+    ((float *)gm)[14]=((float *)gm)[15]=0.5f;
+    for(int i=0;i<7;i++){*(void ***)graphics_test_items[i]=item_vtable;((float *)graphics_test_items[i])[12]=300;((float *)graphics_test_items[i])[13]=64;graphics_test_items[i][372]=1;}
+    for(int i=0;i<4;i++)((void **)gm)[62+i]=graphics_test_items[i];
+    ((void **)gm)[66]=graphics_test_items[6];((void **)gm)[73]=graphics_test_items[4];
+    void *resolution_text=graphics_test_items[5];((void **)gm)[70]=&resolution_text;((void **)gm)[71]=&resolution_text+1;
+    ((float *)graphics_test_items[0])[8]=1370;((float *)graphics_test_items[0])[9]=580;
+    ((float *)graphics_test_items[2])[9]=500;((float *)graphics_test_items[3])[9]=500;
+    ((float *)graphics_test_items[4])[8]=550;((float *)graphics_test_items[4])[9]=580;((float *)graphics_test_items[5])[9]=500;
+    graphics_init_original=mock_init;graphics_cleanup_original=mock_cleanup;graphics_tick_original=mock_tick;graphics_input_original=mock_input;graphics_colour_original=mock_menu_colour;
+    attach_antialiasing=mock_aa_attach;aa_requested=aa_fault=0;aa_graphics_init(gm,NULL,NULL);
+    CHECK(aa_label&&aa_bar&&aa_knob&&!aa_pending&&((int *)aa_label)[2]==AA_CONTROL_ID);
+    CHECK(((float *)aa_label)[9]==620&&((float *)graphics_test_items[0])[9]==540&&((float *)graphics_test_items[5])[9]==460);
+    aa_graphics_input(gm,AA_CONTROL_ID);CHECK(aa_pending&&!aa_requested&&((unsigned *)aa_knob)[100]==74);
+    aa_graphics_input(gm,3);CHECK(aa_requested&&aa_attach_calls==1&&delegated==3);
+    GetPrivateProfileStringW(L"graphics",L"antialiasing",L"",value,32,config_path);CHECK(!wcscmp(value,L"true"));
+    aa_graphics_input(gm,AA_CONTROL_ID);CHECK(!aa_pending&&aa_requested);
+    ((int *)gm)[11]=AA_CONTROL_ID;aa_graphics_tick(gm);CHECK(*(DWORD *)((BYTE *)aa_label+64)==768&&*(DWORD *)((BYTE *)graphics_test_items[2]+64)==0);
+    CHECK(*(DWORD *)((BYTE *)aa_bar+76)==0&&*(DWORD *)((BYTE *)aa_knob+76)==0);
+    aa_graphics_input(gm,3);CHECK(!aa_requested);aa_graphics_cleanup(gm,NULL,NULL);CHECK(!aa_label&&!aa_bar&&!aa_knob&&removed==31);
     FreeLibrary(image);DeleteFileW(config_path);DeleteFileW(log_path);
-    puts("PASS: original guards, Servers first, native reel lifecycle, one navigation owner, held-repeat/boundaries, deferred focus, pointer forwarding, original mask reset, vanilla hover/click/controller activation, Audio isolation, press latches, save/restart and cleanup");return 0;
+    puts("PASS: original guards, Servers first, native reel lifecycle, one navigation owner, held-repeat/boundaries, deferred focus, pointer forwarding, original mask reset, vanilla hover/click/controller activation, Audio isolation, press latches, save/restart, version branding, one-time update notice, Graphics AA control and cleanup");return 0;
 }
