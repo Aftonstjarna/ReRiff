@@ -1,3 +1,20 @@
+# ReRiff 1.2.3-5 — Experimental Windows guard and client News fixes
+
+- Preserve relocation records from the same hash-verified original executable
+  instead of requiring its discardable `.reloc` section to remain mapped. Add
+  a regression test with that section inaccessible and detailed menu-guard errors.
+- Install the current client revision's patch notes and merge them into the
+  original Parse News result. Retain native News rendering and custom server posts;
+  replace built-in placeholder/status posts with the current client's notes.
+- Preserve the complete experimental revision in the client version header.
+  Verify upgrades from the current transport and older signed client variants.
+- Add `logs/ReRiff-news.log` for client-note delivery diagnostics.
+
+This remains an experimental debugging build. Native and original-SDK regressions
+pass locally; the Windows menu fix still needs confirmation on the affected PC.
+The release popup depends on native menu startup and a successful unattended update.
+Existing display/manual-scale experiments retain their testing limitations.
+
 # ReRiff 1.2.3-4 — Experimental Windows menu loading and optional server
 
 - Fix native-menu startup guards for the original Windows executable when Windows

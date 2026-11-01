@@ -175,6 +175,13 @@ int main(int argc,char **argv){
         cursor+=block->SizeOfBlock;
     }
     CHECK(validate_image_at(rebased,relocated_base));CHECK(validate_display_modes(rebased,relocated_base));CHECK(validate_aa_backend(rebased,relocated_base));
+    /* Windows may discard .reloc after fixups. Retain exact guards using the
+     * relocation records read from the same SHA-256-verified original file. */
+    DWORD reloc_protection,reloc_ignored;
+    CHECK(verified_relocations&&verified_relocations_size==reloc.Size);
+    CHECK(VirtualProtect(rebased+reloc.VirtualAddress,reloc.Size,PAGE_NOACCESS,&reloc_protection));
+    CHECK(validate_image_at(rebased,relocated_base));
+    CHECK(VirtualProtect(rebased+reloc.VirtualAddress,reloc.Size,reloc_protection,&reloc_ignored));
     rebased[0x4b530]^=1;CHECK(!validate_image_at(rebased,relocated_base));rebased[0x4b530]^=1;
     rebased[0x48834]^=1;CHECK(!validate_image_at(rebased,relocated_base));rebased[0x48834]^=1;
     CHECK(validate_image_at(rebased,relocated_base));CHECK(VirtualFree(rebased,0,MEM_RELEASE));
