@@ -107,24 +107,37 @@ static HRESULT WINAPI aa_present(IDirect3DDevice9 *self,const RECT *a,const RECT
 static HRESULT WINAPI aa_reset(IDirect3DDevice9 *self,D3DPRESENT_PARAMETERS *params){aa_release_resources();return aa_reset_original(self,params);}
 static HRESULT WINAPI aa_present_ex(IDirect3DDevice9Ex *self,const RECT *a,const RECT *b,HWND window,const RGNDATA *dirty,DWORD flags){aa_draw((IDirect3DDevice9 *)self);return aa_present_ex_original(self,a,b,window,dirty,flags);}
 static HRESULT WINAPI aa_reset_ex(IDirect3DDevice9Ex *self,D3DPRESENT_PARAMETERS *params,D3DDISPLAYMODEEX *mode){aa_release_resources();return aa_reset_ex_original(self,params,mode);}
-static BOOL aa_attach_renderer(BYTE *base,void *graphics){
-    /* wsGraphicsDevice embeds wsGraphicsDevicePC at +0x18 (getPC, VA
-     * 0x4910D0). Device creation's +0x78/+0x7C offsets are PC-relative. */
-    if(!readable(graphics,0x98)||*(void **)graphics!=base+0x5fbf44)return FALSE;
-    BYTE *pc=(BYTE *)graphics+0x18;
-    if(*(void **)pc!=base+0x5fc178)return FALSE;
+static BOOL aa_attach_problem(const char *stage,const void *pointer){
+    char text[256];snprintf(text,sizeof(text),"AA attachment failed: %s (address=%p).",stage,pointer);log_line(text);return FALSE;
+}
+static BOOL validate_aa_backend(BYTE *base,uintptr_t address){
+    /* Original lazy construction stores the separate render-thread backend
+     * in 0xBFCC44. The public wrapper's PC interface forwards to this global;
+     * it does not embed the backend. Validate both original references. */
+    static const BYTE create[]={0xe8,0x81,0x01,0xed,0xff,0xa3};
+    return readable(base+0x1cfbaa,10)&&!memcmp(base+0x1cfbaa,create,sizeof(create))
+        &&*(DWORD *)(base+0x1cfbb0)==address+0x7fcc44
+        &&readable(base+0x97020,5)&&base[0x97020]==0xa1
+        &&*(DWORD *)(base+0x97021)==address+0x7fcc44;
+}
+static BOOL aa_attach_renderer(void *renderer){
+    /* Native backend created at VA 0x49FD30; +0x78/+0x7C are its COM
+     * device/Ex pointers. This object has no C++ vtable at offset zero. */
+    if(!readable(renderer,0x80))return aa_attach_problem("render backend is unreadable",renderer);
+    BYTE *pc=(BYTE *)renderer;
     IDirect3DDevice9 *device=*(IDirect3DDevice9 **)(pc+0x78);
-    if(!readable(device,4))return FALSE;
-    if(aa_device)return aa_device==device;
+    if(!readable(device,4))return aa_attach_problem("D3D9 device is unreadable",device);
+    if(aa_device)return aa_device==device?TRUE:aa_attach_problem("D3D9 device was replaced",device);
     BOOL extended=*(void **)(pc+0x7c)!=NULL;unsigned entries=extended?134:119;
-    void **table=*(void ***)device;if(!readable(table,entries*sizeof(void *)))return FALSE;
-    HMODULE owner=NULL;if(!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,(const WCHAR *)table[0],&owner)||owner!=GetModuleHandleW(L"d3d9.dll"))return FALSE;
+    void **table=*(void ***)device;if(!readable(table,entries*sizeof(void *)))return aa_attach_problem("COM method table is unreadable",table);
+    HMODULE owner=NULL;if(!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,(const WCHAR *)table[0],&owner)||owner!=GetModuleHandleW(L"d3d9.dll"))return aa_attach_problem("COM QueryInterface is outside d3d9.dll",table[0]);
     memcpy(aa_methods,table,entries*sizeof(void *));
     aa_present_original=(void *)table[17];aa_reset_original=(void *)table[16];aa_methods[17]=(void *)aa_present;aa_methods[16]=(void *)aa_reset;
     if(extended){aa_present_ex_original=(void *)table[121];aa_reset_ex_original=(void *)table[132];aa_methods[121]=(void *)aa_present_ex;aa_methods[132]=(void *)aa_reset_ex;}
     InterlockedExchangePointer((void *volatile *)device,aa_methods);aa_device=device;log_line("Post-process antialiasing attached to the original D3D9 device.");return TRUE;
 }
 static BOOL aa_attach(void){
-    BYTE *base=(BYTE *)GetModuleHandleW(NULL);void **graphics=(void **)(base+0x80d408);
-    return readable(graphics,4)&&aa_attach_renderer(base,*graphics);
+    BYTE *base=(BYTE *)GetModuleHandleW(NULL);void **renderer=(void **)(base+0x7fcc44);
+    if(!validate_aa_backend(base,(uintptr_t)base))return aa_attach_problem("original backend references differ",base);
+    return readable(renderer,4)?aa_attach_renderer(*renderer):aa_attach_problem("backend singleton is unreadable",renderer);
 }
