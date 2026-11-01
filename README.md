@@ -566,7 +566,9 @@ bundled dependencies retain their licenses.
 
 For original-game reconstruction work, the required baseline is a byte-for-byte
 matching source rebuild of the original Windows executable. That baseline has
-**not yet been achieved**. See [matching reconstruction status and tools](Decomp/README.md).
+**not yet been achieved**. Matching reconstruction is tracked separately in
+[RiffRacerDecomp](https://github.com/Aftonstjarna/RiffRacerDecomp), which contains
+the recovered source, verification tools, and current byte-matching progress.
 The separate native Linux port's behavior tests do not establish a matching decompilation.
 
 The source recovery and separate native Linux port remain research work. They
