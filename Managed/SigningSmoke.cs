@@ -18,7 +18,7 @@ class SigningSmoke {
             throw new Exception("Expected in-process singleplayer fixture");
         try { throw new WebException("ReRiff network diagnostic fixture"); }
         catch (WebException) { }
-        string diagnostic = Path.Combine(root, "ReRiff-network.log");
+        string diagnostic = Path.Combine(root, "logs", "ReRiff-network.log");
         if (Type.GetType("Mono.Runtime") == null
             && (!File.Exists(diagnostic) || !File.ReadAllText(diagnostic).Contains("ReRiff network diagnostic fixture")))
             throw new Exception("First-chance network diagnostic was not recorded");
