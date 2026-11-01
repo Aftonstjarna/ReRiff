@@ -360,3 +360,11 @@ reset. Servers Save and restart after borderless may leave audio playing with
 no visible window; it is not yet established whether the old process remains
 or a restarted window is invisible. Preserve this evidence for further native
 input, window-thread and shutdown investigation; fixture success is insufficient.
+
+Latest restart evidence (2026-11-01 local test): the native menu logs
+`Save and restart requested.` followed by the 15-second fallback
+`Save and restart: game did not close; request canceled.` The launcher log does
+not show a corresponding new completed restart handoff for that latest attempt.
+This identifies failure to exit the old game for that attempt; it does not
+establish the window/process state of every earlier report. A later process
+check found no remaining Game.exe, after the test instance had been closed.
