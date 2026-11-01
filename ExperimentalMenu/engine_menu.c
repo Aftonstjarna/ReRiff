@@ -224,7 +224,7 @@ static void __thiscall hook_tick(void *menu) {
         log_line("Save and restart: game did not close; request canceled.");render(menu);
     }
     prepare_scroll(menu);
-    BOOL navigating=navigate_direction(menu,direction_input(),GetTickCount());
+    BOOL navigating=!(server_page&&server_native_navigation)&&navigate_direction(menu,direction_input(),GetTickCount());
     dispatching_menu=TRUE;
     if(!navigating){
         if(active_list(menu)){
@@ -341,6 +341,7 @@ static void __thiscall hook_init(void *menu,void *screen,void *lower) {
     if(server_rows[0]&&!init_scroll(menu,sample)){
         show_item(server_rows[0],FALSE);log_line("Could not initialize Settings scrolling.");return;
     }
+    if(server_rows[0]&&!connect_server_navigation())log_line("Could not attach native Servers direction handling.");
     log_line(server_rows[0]?"Native Settings initialized; Servers added; Friends unchanged.":"Could not add Servers row.");
 }
 static void __thiscall hook_cleanup(void *menu,void *screen,void *lower) {

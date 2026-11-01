@@ -19,7 +19,9 @@ Existing settings entries remain available with their original actions. Both
 Settings lists keep vanilla row spacing and separator lines; scroll to reach
 additional entries. The scrollbar reuses the game’s local-track file picker
 control. Use the wheel, drag the scrollbar, press Page Up/Down or Home/End,
-or navigate up/down with the controller. Friends
+or navigate up/down with the controller. The Servers list wraps between its
+first and last entries using the game's native navigation, scrolling the
+selected entry into view. Friends
 keeps its original place on the main menu; restoring its online features is the
 next stage of work.
 
