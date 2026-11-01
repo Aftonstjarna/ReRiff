@@ -182,7 +182,7 @@ static void toggle_visibility(BYTE visible) {
     for(int i=0;i<3;i++)for(int part=0;part<2;part++)show_item(toggles[i][part],visible);
 }
 static void update_toggles(void *menu) {
-    const BOOL values[3]={pending.skip_launcher,pending.only,pending.enabled};
+    const BOOL values[3]={pending.skip_launcher,pending.only,!pending.enabled};
     for(int i=0;i<3;i++){
         void *bar=toggles[i][0],*knob=toggles[i][1];
         if(!bar||!knob)continue;
@@ -248,7 +248,7 @@ static void leave_server_page(void *menu) {
 static void render(void *menu) {
     static const WCHAR *labels[11]={L"", L"Skip launcher",
         L"Use local server", L"Use configured external server", L"External only",
-        L"Networking", L"Save settings", L"Reload saved settings",
+        L"Force Offline", L"Save settings", L"Reload saved settings",
         L"Save and restart", L"Back without saving", L"Save and return"};
     for(int id=1;id<=10;id++) {
         void *text=item_text(menu,id);
@@ -402,7 +402,7 @@ static void __thiscall hook_input(void *menu,int selection) {
     case 4: pending.only=!pending.only; break;
     case 5:
         pending.enabled=!pending.enabled;
-        wcscpy(heading,pending.enabled?L"Networking enabled — Save to apply after restart":L"Networking disabled — addresses retained"); break;
+        wcscpy(heading,pending.enabled?L"Force Offline off — networking enabled after restart":L"Force Offline on — addresses retained; Save to apply"); break;
     case 6: case 10:
         if (save_settings()) {
             wcscpy(heading,L"Saved — restart game to apply");

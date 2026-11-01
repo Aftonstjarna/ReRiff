@@ -17,7 +17,7 @@ The original `gaOptionsMenu.tick` runs on Audio, where its slider hit tests and
 drag latches belong; stale slider latches are cleared before root activation. Cleanup removes the added screen rows
 before original cleanup so repeated visits cannot accumulate controls or IDs.
 
-Skip launcher, External only and Networking use the original fullscreen switch
+Skip launcher, External only and Force Offline use the original fullscreen switch
 artwork: sprite 73 is the bar, 74/75 the on/off thumb. The thumb uses the same
 right/left origins, bar-width displacement and 25×scale inset established by
 ILSpy `gaGraphicsOptions.setTogglebarVars` (0x0600117D). The guarded original
@@ -25,7 +25,9 @@ sprite creation, sprite-definition, origin and position routines create/update
 them. Their six screen-owned sprites have no input masks or menu IDs; the whole
 labelled row remains the only mouse/controller activation target. The original
 Settings colour callback is forwarded and its focus/pressed colour also tints
-both graphics. Cleanup removes all six graphics as well as the ten text rows.
+both graphics. Force Offline displays the inverse of the saved
+`networking_enabled` value: Off by default, with networking enabled. Existing
+preferences retain their meaning. Cleanup removes all six graphics as well as the ten text rows.
 
 Server settings, save/reload, skip-launcher, and Save and restart retain the
 existing behavior. No endpoint, DLL, or online Friends behavior changes here.
@@ -37,7 +39,8 @@ and held-button masks as the original file picker.
 `settings_scroll.h` lays out both lists using the original Settings +264 row
 interval and first-row Y. Text uses the same vertical anchor for switches and
 ordinary actions. Divider sprite 51 follows the vanilla +half-gap +50×scale
-placement and 1650×scale width. Servers gets the original sprite 52 arrow.
+placement and 1650×scale width. Servers gets the original sprite 52 arrow. The scrollbar keeps its viewport
+height and right-side position, centered vertically on the screen.
 Only complete rows fit in the viewport; all remaining text, switches and lines
 are hidden and have zero input masks. Save/reload preserve the viewport.
 

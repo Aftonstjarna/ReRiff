@@ -126,7 +126,8 @@ Client updates do not update the Docker server.
 
 In the experimental client, open **Settings → Servers** and use the original
 fullscreen-style on/off switches for **Skip launcher**, **External only**, and
-**Networking**. Stable 1.2.1 uses the **Servers** entry on the main menu and text
+**Force Offline** (Off enables networking; On disables it without clearing server
+addresses). Stable 1.2.1 uses the **Servers** entry on the main menu and text
 toggles. After changing Skip launcher, choose
 **Save settings** or **Save and return**. The next start uses this preference;
 Back without saving discards the change. The preference is stored in
