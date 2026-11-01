@@ -1,3 +1,19 @@
+# ReRiff 1.2.2-10 — Attach antialiasing to the render-thread backend
+
+- Fix AA still becoming unavailable in revision 9. The public graphics wrapper
+  and its PC interface forward to a separate renderer; use that backend's
+  original global address and its D3D9 device pointers directly.
+- Verify both original references to the backend global and the constructor's
+  device offsets. Log the specific attachment stage if lookup fails.
+- Confirm attachment and successful AA image-resource creation in the actual
+  Steam/Proton game, alongside the edge-smoothing and Present/Reset tests.
+  Player testing confirms AA stays enabled after Apply and reopening Graphics.
+- Retain the half-size main-menu watermark from revision 9.
+
+AA remains experimental and Off by default on new installations. Enable it in
+Settings → Graphics → Antialiasing and select Apply. Physical Windows drivers
+and full-race visual/performance testing remain to be checked.
+
 # ReRiff 1.2.2-9 — Antialiasing device lookup and watermark size
 
 - Fix Antialiasing becoming unavailable on Apply: locate the D3D9 device through

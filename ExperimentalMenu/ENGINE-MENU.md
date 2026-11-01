@@ -235,17 +235,23 @@ using the measured vanilla row interval. Native fullscreen sprites render the
 new switch. Left/right shortcuts belong to the focused row; Apply persists
 `[graphics] antialiasing=true/false`, while Back discards pending changes.
 
-The original renderer was cross-checked with the separate RiffRacer recovery
-sources and original bytes: wsGraphicsDevice primary vtable RVA 0x5FBF44,
-renderer singleton RVA 0x80D408, embedded PC vtable RVA 0x5FC178. The native
-getPC adjustment at VA 0x4910D0 returns +0x18. Device creation's +0x78 and
-optional Ex +0x7C offsets are relative to that PC subobject, so the complete
-wrapper offsets are +0x90 and +0x94. Revision 8 incorrectly read wrapper
-+0x78, a vector, and rejected attachment. Tests verify the original adjustment
-and constructor bytes, then attach through this layout to a real D3D9 fixture.
-Device creation and
-presentation evidence is in that recovery's FRAME.md/device_create.S and
-application_frame.S; local Ghidra resolution evidence is under build/graphics-evidence.
+The original renderer was cross-checked with Ghidra, the separate RiffRacer
+recovery sources and original bytes. wsGraphicsDevice (primary vtable RVA
+0x5FBF44, public singleton RVA 0x80D408) is a command wrapper. Its PC interface
+at +0x18 (vtable RVA 0x5FC178) forwards to a separate render-thread backend:
+VA 0x497020 reads global 0xBFCC44. The original lazy initializer at 0x5CFB60
+allocates 0xBBC bytes, calls constructor 0x49FD30 and stores that backend in
+0xBFCC44 (RVA 0x7FCC44). This backend is non-polymorphic. Its device pointers
+are +0x78 and optional Ex +0x7C. Revision 8 used wrapper +0x78 and revision 9
+incorrectly treated the forwarding interface as an embedded backend.
+
+Tests validate both original backend-global references and constructor offsets,
+then attach a real D3D9 fixture through that non-polymorphic backend layout.
+Attachment failures log the exact stage. Live Steam/Proton testing confirmed
+device attachment and AA image-resource creation/recreation. Device creation
+and presentation evidence is in that recovery's FRAME.md/device_create.S and
+application_frame.S; local Ghidra exports for the initializer, forwarding method
+and constructor are under build/graphics-evidence.
 No new matching reconstruction credit is claimed for these intentional changes.
 
 `antialiasing.h` attaches a private copy of the actual device's COM method table,
@@ -260,6 +266,6 @@ are required; failures retain original presentation, disable AA and log a reason
 This is post-process AA, not a multisample-count setting.
 
 The real software-rendered D3D9 fixture verifies changed/smoothed edge pixels,
-state restoration, enabled-AA reset/recreation and Off cleanup. Live gameplay,
-physical Windows drivers, Ex reset paths and arbitrary third-party renderer
+state restoration, enabled-AA reset/recreation and Off cleanup. Full-race visual
+and performance checks, physical Windows drivers, Ex reset paths and third-party renderer
 wrappers remain experimental validation targets.
