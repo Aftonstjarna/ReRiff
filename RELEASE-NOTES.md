@@ -1,3 +1,18 @@
+# ReRiff 1.2.2-2 — Vanilla spacing and scrolling Settings
+
+- Give Settings and Servers the original row spacing, text anchor and divider
+  lines. Add the vanilla arrow beside Servers, after the existing settings.
+- Add a proportional scrollbar with wheel, track-click and thumb-drag support,
+  plus Page Up/Down, Home/End and controller edge scrolling.
+- Keep every entry reachable without squeezing all rows onto one screen. Hidden
+  rows and switches cannot accept input. Focus follows the viewport and returns
+  correctly from the original Audio/Graphics settings.
+- Preserve server selections, fullscreen-style switches, save/reload and restart,
+  plus the Linux installer and optional music-folder link from revision 1.
+
+Experimental: the native input and layout harness passes; the revised spacing,
+scrollbar and controller feel still need a live game trial.
+
 # ReRiff 1.2.2-1 — Native Settings integration and Linux GUI setup
 
 - Add Servers to the original Settings screen using the game's own text,

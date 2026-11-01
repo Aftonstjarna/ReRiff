@@ -171,7 +171,7 @@ static void keep_servers_available(void *menu) {
     for(int id=1;id<=10;id++){
         void *row=server_rows[id];
         /* Never clear a live mouse/controller interaction latch each frame. */
-        if(readable(row,404)&&*(DWORD *)((BYTE *)row+76)!=0xffffffffu)enable_input(row,TRUE);
+        if(readable(row,404)&&(*((BYTE *)row+372)&1)&&*(DWORD *)((BYTE *)row+76)!=0xffffffffu)enable_input(row,TRUE);
     }
 }
 
@@ -193,6 +193,8 @@ static void update_toggles(void *menu) {
         sprite_position(knob,pos);
     }
 }
+#include "settings_scroll.h"
+
 static void __thiscall hook_colour(void *menu,int id,const float *colour) {
     original_colour(menu,id,colour);
     if(!server_page||page_owner!=menu)return;
@@ -218,6 +220,7 @@ static void __thiscall hook_tick(void *menu) {
          * running Settings audio-slider updates on these controls. */
         base_tick(menu);
     }else original_tick(menu);
+    sync_scroll(menu);attach_scroll_window();
     keep_servers_available(menu);
 }
 
@@ -227,6 +230,8 @@ static void leave_server_page(void *menu) {
     show_item(((void **)menu)[67],settings_visible);
     show_item(((void **)menu)[83],audio_visible);
     server_page=FALSE;
+    InterlockedExchange(&scroll_delta,0);InterlockedExchange(&scroll_requested,-1);
+    root_first=clamp_index(root_count-visible_rows,0,root_count);layout_scroll(menu);
     focus_row(menu,SERVERS_ID);
 }
 
@@ -251,13 +256,13 @@ static void render(void *menu) {
             key_text(title,get_title(menu));
         }
     }
-    update_toggles(menu);
+    layout_scroll(menu);
     keep_servers_available(menu);
 }
 
 static void *make_row(void *parent,BOOL screen,int id,float x,float y,float width,float height,BOOL visible) {
     BOOL toggle=id==1501||id==1504||id==1505;
-    void *row=create_text(id==SERVERS_ID?L"Servers":L"",toggle?x-width*0.5f:x,toggle?y+height*0.5f:y,3,toggle?0:1,toggle?1:0,-1.0f,FALSE,-1.0f,FALSE,TRUE);
+    void *row=create_text(id==SERVERS_ID?L"Servers":L"",toggle?x-width*0.5f:x,y,3,toggle?0:1,0,-1.0f,FALSE,-1.0f,FALSE,TRUE);
     if(!row)return NULL;
     ((int *)row)[2]=id;((int *)row)[15]=100;
     menu_item(row,TRUE);
@@ -305,24 +310,28 @@ static void __thiscall hook_init(void *menu,void *screen,void *lower) {
     if(!readable(group,404)||!readable(ui,16)||!readable(sample,484)){
         log_line("Settings menu has no supported row layout; Servers entry not added.");return;
     }
-    float x=((float *)sample)[8],height=((float *)sample)[9]/0.3f;
+    float x=((float *)sample)[8];
     float gap=((float *)menu)[66],width=((float *)sample)[12],row_height=((float *)sample)[13];
     server_row_width=width;server_row_height=row_height;
-    /* Add above existing options: no original row, slider or divider moves. */
+    /* Submenu positions are laid out at the original Settings row interval. */
     for(int id=1;id<=10;id++){
-        server_rows[id]=make_row(ui,TRUE,SERVER_ACTION_BASE+id,x,height*(0.22f+(id-1)*0.063f),width,row_height,FALSE);
+        server_rows[id]=make_row(ui,TRUE,SERVER_ACTION_BASE+id,x,((float *)sample)[9]+(id-1)*gap,width,row_height,FALSE);
         if(!server_rows[id]){log_line("Could not create complete Servers page; original Settings retained.");return;}
     }
     if(!make_toggles(menu,ui,x,width,row_height)){
         log_line("Could not create native fullscreen toggles; original Settings retained.");return;
     }
-    server_rows[0]=make_row(group,FALSE,SERVERS_ID,x,((float *)sample)[9]-gap*0.65f,width,row_height,TRUE);
+    server_rows[0]=make_row(group,FALSE,SERVERS_ID,x,((float *)sample)[9],width,row_height,FALSE);
+    if(server_rows[0]&&!init_scroll(menu,sample)){
+        show_item(server_rows[0],FALSE);log_line("Could not initialize Settings scrolling.");return;
+    }
     log_line(server_rows[0]?"Native Settings initialized; Servers added; Friends unchanged.":"Could not add Servers row.");
 }
 static void __thiscall hook_cleanup(void *menu,void *screen,void *lower) {
     if(page_owner==menu){
         /* gaMenu can retain its screen across visits. Remove screen-owned
          * controls explicitly so re-entry cannot leave duplicate IDs behind. */
+        cleanup_scroll(menu);
         void *ui=((void **)menu)[46];
         for(int id=1;id<=10;id++)if(server_rows[id]){
             ((int *)server_rows[id])[1]++;
@@ -338,15 +347,20 @@ static void __thiscall hook_cleanup(void *menu,void *screen,void *lower) {
 
 static void __thiscall hook_input(void *menu,int selection) {
     if(restarting)return;
+    if(page_owner==menu&&scroll_ready&&(selection==SCROLL_UP_ID||selection==SCROLL_DOWN_ID)){
+        if(scroll_active&&((int *)menu)[102]==0)scroll_to(menu,view_first()+(selection==SCROLL_DOWN_ID?1:-1),TRUE);
+        return;
+    }
     if (!server_page || page_owner!=menu) {
-        if(selection!=SERVERS_ID||page_owner!=menu||!server_rows[0]||((int *)menu)[62]!=0||((int *)menu)[102]!=0){
+        if(selection!=SERVERS_ID||page_owner!=menu||!server_rows[0]||((int *)menu)[62]!=0||((int *)menu)[102]!=0||!(*((BYTE *)server_rows[0]+372)&1)){
             original_input(menu,selection);return;
         }
         void *group=((void **)menu)[67],*audio=((void **)menu)[83];
         settings_visible=readable(group,404)?*((BYTE *)group+372)&1:0;
         audio_visible=readable(audio,404)?*((BYTE *)audio+372)&1:0;
         show_item(group,FALSE);show_item(audio,FALSE);
-        load_settings();server_page=TRUE;
+        load_settings();server_page=TRUE;page_first=0;
+        InterlockedExchange(&scroll_delta,0);InterlockedExchange(&scroll_requested,-1);
         for(int id=1;id<=10;id++)show_item(server_rows[id],TRUE);
         toggle_visibility(TRUE);
         wcscpy(heading,L"Servers — applies after restart");render(menu);focus_row(menu,SERVER_ACTION_BASE+1);
@@ -355,6 +369,7 @@ static void __thiscall hook_input(void *menu,int selection) {
     if(selection!=2000){
         selection-=SERVER_ACTION_BASE;
         if(selection<1||selection>10)return;
+        if(scroll_ready&&(selection-1<page_first||selection-1>=page_first+visible_rows))return;
     }
     switch (selection) {
     case 1:
