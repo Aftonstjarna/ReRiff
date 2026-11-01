@@ -76,7 +76,7 @@ namespace ReRiff {
 
         private static void ShowServerPopup(string endpoint) {
             try {
-                ReRiffShowServerToastW(endpoint == Disabled ? "Networking disabled" : endpoint);
+                ReRiffShowServerToastW(Singleplayer.IsEndpoint(endpoint) ? "Singleplayer" : endpoint);
             } catch (DllNotFoundException) { }
               catch (EntryPointNotFoundException) { }
               catch (BadImageFormatException) { }
@@ -97,8 +97,7 @@ namespace ReRiff {
                 string enabled;
                 if (values.TryGetValue("networking_enabled", out enabled)
                     && (enabled.Equals("false", StringComparison.OrdinalIgnoreCase) || enabled == "0" || enabled.Equals("no", StringComparison.OrdinalIgnoreCase))) {
-                    Log(folder, Disabled, "networking_disabled");
-                    return Disabled;
+                    return Local(folder, "singleplayer_selected");
                 }
                 values.TryGetValue("external_url", out external);
                 values.TryGetValue("fallback_url", out fallback);
@@ -118,17 +117,22 @@ namespace ReRiff {
                 string reason;
                 if (external.Length > 0 && Available(external, timeout)) {
                     endpoint = external; reason = "external_available";
-                } else if (fallback.Length > 0) {
-                    endpoint = fallback; reason = "configured_fallback";
+                } else if (fallback.Length > 0 && Available(fallback, timeout)) {
+                    endpoint = fallback; reason = "secondary_available";
                 } else {
-                    endpoint = Disabled; reason = externalOnly ? "external_only_unavailable" : "no_available_configured_address";
+                    return Local(folder, "servers_unavailable");
                 }
                 Log(folder, endpoint, reason);
                 return endpoint;
             } catch (Exception e) {
-                Log(folder, Disabled, "configuration_error:" + e.GetType().Name);
-                return Disabled;
+                return Local(folder, "configuration_error:" + e.GetType().Name);
             }
+        }
+
+        private static string Local(string folder, string reason) {
+            string endpoint = Singleplayer.Start(folder);
+            Log(folder, "singleplayer", reason);
+            return endpoint;
         }
 
         private static Dictionary<string, string> ReadIni(string path) {

@@ -17,3 +17,7 @@ mkdir -p build/experimental-engine-menu
 "$zig_tool" cc -target x86-windows-gnu -O2 -Wall -Wextra -Werror \
   ExperimentalMenu/test_display_modes.c -o build/experimental-engine-menu/test-display.exe \
   -Wl,--image-base,0x10000000 -luser32 -lgdi32 -ladvapi32 -static
+
+"$zig_tool" cc -target x86-windows-gnu -O2 -Wall -Wextra -Werror \
+  ExperimentalMenu/test_ui_scale.c -o build/experimental-engine-menu/test-ui-scale.exe \
+  -Wl,--image-base,0x10000000 -luser32 -lgdi32 -ladvapi32 -static

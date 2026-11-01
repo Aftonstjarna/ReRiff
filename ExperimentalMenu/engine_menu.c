@@ -59,7 +59,11 @@ static void **ui_instance;
 static ColourFn original_colour;
 static void *toggles[3][2];
 static const int toggle_actions[3]={1,4,5};
-static void *server_rows[11]; /* borrowed; the original screen owns every row */
+#define SERVER_ACTION_COUNT 9
+#define SERVER_ACTION_MAX 11
+static const int server_action_order[SERVER_ACTION_COUNT]={1,4,5,6,7,8,11,9,10};
+static int server_action_index(int action){for(int i=0;i<SERVER_ACTION_COUNT;i++)if(server_action_order[i]==action)return i;return -1;}
+static void *server_rows[SERVER_ACTION_MAX+1]; /* borrowed; the original screen owns every row */
 static BYTE settings_visible, audio_visible;
 static float server_row_width, server_row_height;
 static WCHAR config_path[MAX_PATH], log_path[MAX_PATH];
@@ -70,7 +74,7 @@ static unsigned input_trace_count;
 
 static WCHAR heading[96]=L"Servers — applies after restart";
 static volatile LONG installed;
-static BOOL restarting;
+static BOOL restarting,exiting;
 static DWORD restart_started;
 #include "../NativeLauncher/restart_protocol.h"
 #define SERVERS_ID 1500
@@ -156,6 +160,11 @@ static BOOL restart_game(void) {
     return ok;
 }
 static BOOL (*request_restart)(void)=restart_game;
+static BOOL exit_game(void){
+    Toast target;ZeroMemory(&target,sizeof(target));EnumWindows(find_game,(LPARAM)&target);
+    return target.game&&PostMessageW(target.game,WM_CLOSE,0,0);
+}
+static BOOL (*request_exit)(void)=exit_game;
 
 static BOOL readable(const void *p,size_t count) {
     MEMORY_BASIC_INFORMATION info;
@@ -173,13 +182,13 @@ static void focus_row(void *menu,int id) {
     if(readable(screen,16))set_focus(screen,id);
 }
 static void *item_text(void *menu,int id) {
-    return page_owner==menu&&id>=0&&id<=10?server_rows[id]:NULL;
+    return page_owner==menu&&id>=0&&id<=SERVER_ACTION_MAX?server_rows[id]:NULL;
 }
 static void keep_servers_available(void *menu) {
     if(!server_page||page_owner!=menu)return;
     DWORD mask=*(DWORD *)((BYTE *)((void **)menu)[46]+40);
     if(!mask)return;
-    for(int id=1;id<=10;id++){
+    for(int id=1;id<=SERVER_ACTION_MAX;id++){
         void *row=server_rows[id];
         /* Never clear a live mouse/controller interaction latch each frame. */
         if(readable(row,404)&&(*((BYTE *)row+372)&1)&&*(DWORD *)((BYTE *)row+76)!=mask){enable_input(row,TRUE);*(DWORD *)((BYTE *)row+76)=mask;}
@@ -204,6 +213,7 @@ static void update_toggles(void *menu) {
         sprite_position(knob,pos);
     }
 }
+static BOOL graphics_scroll_wheel(int delta);
 #include "settings_scroll.h"
 
 static void __thiscall hook_colour(void *menu,int id,const float *colour) {
@@ -243,7 +253,7 @@ static void __thiscall hook_tick(void *menu) {
 }
 
 static void leave_server_page(void *menu) {
-    for(int id=1;id<=10;id++)show_item(server_rows[id],FALSE);
+    for(int id=1;id<=SERVER_ACTION_MAX;id++)show_item(server_rows[id],FALSE);
     toggle_visibility(FALSE);
     show_item(((void **)menu)[67],settings_visible);
     show_item(((void **)menu)[83],audio_visible);
@@ -254,11 +264,11 @@ static void leave_server_page(void *menu) {
 }
 
 static void render(void *menu) {
-    static const WCHAR *labels[11]={L"", L"SKIP LAUNCHER",
-        L"USE LOCAL SERVER", L"USE CONFIGURED EXTERNAL SERVER", L"EXTERNAL ONLY",
-        L"FORCE OFFLINE", L"SAVE SETTINGS", L"RELOAD SAVED SETTINGS",
-        L"SAVE AND RESTART", L"BACK WITHOUT SAVING", L"SAVE AND RETURN"};
-    for(int id=1;id<=10;id++) {
+    static const WCHAR *labels[SERVER_ACTION_MAX+1]={L"", L"SKIP LAUNCHER",
+        L"USE SINGLEPLAYER", L"USE CONFIGURED SERVERS", L"PRIMARY SERVER ONLY",
+        L"SINGLEPLAYER", L"SAVE SETTINGS", L"RELOAD SAVED SETTINGS",
+        L"SAVE AND RESTART", L"BACK WITHOUT SAVING", L"SAVE AND RETURN", L"SAVE AND EXIT"};
+    for(int id=1;id<=SERVER_ACTION_MAX;id++) {
         void *text=item_text(menu,id);
         if(!text)continue;
         raw_text(text,labels[id]);
@@ -332,7 +342,8 @@ static void __thiscall hook_init(void *menu,void *screen,void *lower) {
     float gap=((float *)menu)[66],width=((float *)sample)[12],row_height=((float *)sample)[13];
     server_row_width=width;server_row_height=row_height;
     /* Submenu positions are laid out at the original Settings row interval. */
-    for(int id=1;id<=10;id++){
+    for(int id=1;id<=SERVER_ACTION_MAX;id++){
+        if(server_action_index(id)<0)continue;
         server_rows[id]=make_row(ui,TRUE,SERVER_ACTION_BASE+id,x,((float *)sample)[9]+(id-1)*gap,width,row_height,FALSE);
         if(!server_rows[id]){log_line("Could not create complete Servers page; original Settings retained.");return;}
     }
@@ -352,7 +363,7 @@ static void __thiscall hook_cleanup(void *menu,void *screen,void *lower) {
          * controls explicitly so re-entry cannot leave duplicate IDs behind. */
         cleanup_scroll(menu);
         void *ui=((void **)menu)[46];
-        for(int id=1;id<=10;id++)if(server_rows[id]){
+        for(int id=1;id<=SERVER_ACTION_MAX;id++)if(server_rows[id]){
             ((int *)server_rows[id])[1]++;
             remove_screen(ui,server_rows[id]);
         }
@@ -365,7 +376,7 @@ static void __thiscall hook_cleanup(void *menu,void *screen,void *lower) {
 }
 
 static void __thiscall hook_input(void *menu,int selection) {
-    if(restarting)return;
+    if(restarting||exiting)return;
     if(page_owner==menu&&!server_page&&((int *)menu)[62]==0&&selection>=0&&selection<5){
         /* These latches belong only to Audio. The original handler rejects
          * every root selection if either stale latch remains set. */
@@ -385,33 +396,24 @@ static void __thiscall hook_input(void *menu,int selection) {
         show_item(group,FALSE);show_item(audio,FALSE);
         load_settings();server_page=TRUE;page_first=0;logical_selection=0;pending_focus=SERVER_ACTION_BASE+1;
         InterlockedExchange(&scroll_delta,0);InterlockedExchange(&scroll_requested,-1);
-        for(int id=1;id<=10;id++)show_item(server_rows[id],TRUE);
+        for(int id=1;id<=SERVER_ACTION_MAX;id++)show_item(server_rows[id],TRUE);
         toggle_visibility(TRUE);
         wcscpy(heading,L"Servers — applies after restart");render(menu);if(!dispatching_menu){prepare_scroll(menu);apply_pending_focus(menu);}
         log_line("Native Settings > Servers opened.");return;
     }
     if(selection!=2000){
         selection-=SERVER_ACTION_BASE;
-        if(selection<1||selection>10)return;
-        if(scroll_ready&&(selection-1<page_first||selection-1>=page_first+visible_rows))return;
+        int index=server_action_index(selection);if(index<0)return;
+        if(scroll_ready&&(index<page_first||index>=page_first+visible_rows))return;
     }
     switch (selection) {
     case 1:
         pending.skip_launcher=!pending.skip_launcher;
         wcscpy(heading,pending.skip_launcher?L"Skip launcher enabled — Save to apply":L"Show launcher enabled — Save to apply"); break;
-    case 2:
-        pending.external[0]=0; wcscpy(pending.fallback,L"http://127.0.0.1:5144"); pending.only=FALSE; pending.enabled=TRUE;
-        wcscpy(heading,L"Local selected — Save to apply after restart"); break;
-    case 3: {
-        Settings selected=pending; load_settings();
-        wcscpy(selected.external,pending.external); pending=selected; pending.only=TRUE; pending.enabled=TRUE;
-        wcscpy(heading,*pending.external?L"External selected — Save to apply after restart":L"No external URL configured in server.ini");
-        break;
-    }
     case 4: pending.only=!pending.only; break;
     case 5:
         pending.enabled=!pending.enabled;
-        wcscpy(heading,pending.enabled?L"Force Offline off — networking enabled after restart":L"Force Offline on — addresses retained; Save to apply"); break;
+        wcscpy(heading,pending.enabled?L"Servers enabled — singleplayer if neither responds":L"Singleplayer on — addresses retained; Save to apply"); break;
     case 6: case 10:
         if (save_settings()) {
             wcscpy(heading,L"Saved — restart game to apply");
@@ -429,6 +431,13 @@ static void __thiscall hook_input(void *menu,int selection) {
         }else{
             wcscpy(heading,L"Saved — could not restart game");log_line("Save and restart: handoff failed; game left running.");
         }
+        break;
+    case 11:
+        if(!save_settings()){
+            wcscpy(heading,L"Save failed — game left running");log_line("Save and exit: save failed.");
+        }else if(request_exit()){
+            exiting=TRUE;wcscpy(heading,L"Saved — exiting game...");log_line("Save and exit requested through the native window close path.");
+        }else{wcscpy(heading,L"Saved — could not close game");log_line("Save and exit: native close request failed.");}
         break;
     case 9: case 2000: leave_server_page(menu); break;
     default: return; /* Do not forward page selections into gameplay/quit handlers. */
@@ -463,6 +472,8 @@ static BOOL supported_file(const WCHAR *path) {
 
 #include "antialiasing.h"
 #include "display_modes.h"
+#include "ui_scale.h"
+#include "ui_scale_slider.h"
 #include "graphics_aa_menu.h"
 #include "main_branding.h"
 
@@ -536,6 +547,11 @@ __declspec(dllexport) BOOL __cdecl ReRiffConfigureNativeGraphics(void **methods,
     graphics_resize=(GraphicsBridgeFn)methods[0];graphics_rescale=(GraphicsBridgeFn)methods[1];
     graphics_bridge_ready=TRUE;return TRUE;
 }
+__declspec(dllexport) BOOL __cdecl ReRiffConfigureNativeUiScale(void **methods,int count){
+    WCHAR path[MAX_PATH];DWORD length=GetModuleFileNameW(NULL,path,MAX_PATH);
+    if(!length||length>=MAX_PATH||!supported_file(path)||count!=1||!readable(methods,4)||!methods[0])return FALSE;
+    ui_font_setup=(GraphicsBridgeFn)methods[0];return TRUE;
+}
 
 __declspec(dllexport) BOOL __cdecl ReRiffStartEngineMenu(void) {
     if (InterlockedCompareExchange(&installed,1,0)) return installed==2;
@@ -579,6 +595,8 @@ __declspec(dllexport) BOOL __cdecl ReRiffStartEngineMenu(void) {
     if(!install_display_modes(base))log_line("Native display-mode extension could not be installed.");
     if(!install_graphics_aa_menu(base))log_line("Native antialiasing control could not be installed.");
     if(!install_main_branding(base))log_line("Main-menu branding could not be installed.");
+    if(!install_ui_scale(base))log_line("Native UI-scale extension could not be installed.");
+    if(borderless_active)aa_attach();
     InterlockedExchange(&installed,2); log_line("Engine menu hooks installed."); return TRUE;
 }
 

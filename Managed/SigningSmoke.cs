@@ -14,7 +14,8 @@ class SigningSmoke {
         string root = AppDomain.CurrentDomain.BaseDirectory;
         File.WriteAllText(Path.Combine(root, "server.ini"),
             "[server]\nnetworking_enabled=false\nshow_server_popup=false\n");
-        if (ReRiff.ClientConfig.CanSend()) throw new Exception("Expected offline fixture");
+        if (!ReRiff.ClientConfig.CanSend() || !ReRiff.Singleplayer.IsEndpoint(ReRiff.ClientConfig.GetServer()))
+            throw new Exception("Expected in-process singleplayer fixture");
         try { throw new WebException("ReRiff network diagnostic fixture"); }
         catch (WebException) { }
         string diagnostic = Path.Combine(root, "ReRiff-network.log");

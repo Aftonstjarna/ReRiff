@@ -47,16 +47,20 @@ int main(void) {
     SendMessageW(skip_checkbox,BM_SETCHECK,BST_UNCHECKED,0);
     if(!save())return 6;
     if(launcher_preference(L"skip_launcher")||!launcher_preference(L"auto_update_on_skip"))return 22;
-    if(!needs_local_server())return 10;
     SendMessageW(networking_checkbox,BM_SETCHECK,BST_UNCHECKED,0);
     if(!save())return 18;
     GetPrivateProfileStringW(L"server",L"networking_enabled",L"missing",value,4096,ini);if(wcscmp(value,L"false"))return 19;
     GetPrivateProfileStringW(L"server",L"fallback_url",L"",value,4096,ini);if(wcscmp(value,L"http://127.0.0.1:5144"))return 20;
+    /* The Singleplayer button changes mode without clearing either address. */
+    SetWindowTextW(external,L"https://primary.example");
+    SetWindowTextW(fallback,L"https://secondary.example");
+    SendMessageW(host,WM_COMMAND,LOCAL,0);
+    if(SendMessageW(networking_checkbox,BM_GETCHECK,0,0)!=BST_UNCHECKED)return 23;
+    GetWindowTextW(external,value,4096);if(wcscmp(value,L"https://primary.example"))return 24;
+    GetWindowTextW(fallback,value,4096);if(wcscmp(value,L"https://secondary.example"))return 25;
     WritePrivateProfileStringW(L"server",L"networking_enabled",L"false",ini);
-    if(needs_local_server())return 12;
     WritePrivateProfileStringW(L"server",L"networking_enabled",L"true",ini);
     WritePrivateProfileStringW(L"server",L"fallback_url",L"",ini);
-    if(needs_local_server())return 11;
     WritePrivateProfileStringW(L"server",L"fallback_url",L"http://127.0.0.1:5144",ini);
     GetPrivateProfileStringW(L"server",L"external_only",L"",value,4096,ini);if(wcscmp(value,L"false"))return 7;
     GetPrivateProfileStringW(L"server",L"external_url",L"missing",value,4096,ini);if(*value)return 8;

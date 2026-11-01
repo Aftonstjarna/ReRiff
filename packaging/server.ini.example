@@ -2,9 +2,11 @@
 ; External server example: https://riffapi.hobune.stream/
 ; To use it, set external_url = https://riffapi.hobune.stream/
 external_url =
-fallback_url = http://127.0.0.1:5144
+; Optional secondary Docker/Podman server. Neither available selects singleplayer.
+fallback_url =
 timeout_seconds = 5
 external_only = false
+; false selects singleplayer without probing servers; addresses are retained.
 networking_enabled = true
 show_server_popup = true
 

@@ -17,7 +17,7 @@ The original `gaOptionsMenu.tick` runs on Audio, where its slider hit tests and
 drag latches belong; stale slider latches are cleared before root activation. Cleanup removes the added screen rows
 before original cleanup so repeated visits cannot accumulate controls or IDs.
 
-Skip launcher, External only and Force Offline use the original fullscreen switch
+Skip launcher, Primary server only and Singleplayer use the original fullscreen switch
 artwork: sprite 73 is the bar, 74/75 the on/off thumb. The thumb uses the same
 right/left origins, bar-width displacement and 25×scale inset established by
 ILSpy `gaGraphicsOptions.setTogglebarVars` (0x0600117D). The guarded original
@@ -25,12 +25,12 @@ sprite creation, sprite-definition, origin and position routines create/update
 them. Their six screen-owned sprites have no input masks or menu IDs; the whole
 labelled row remains the only mouse/controller activation target. The original
 Settings colour callback is forwarded and its focus/pressed colour also tints
-both graphics. Force Offline displays the inverse of the saved
+both graphics. Singleplayer displays the inverse of the saved
 `networking_enabled` value: Off by default, with networking enabled. Existing
-preferences retain their meaning. Cleanup removes all six graphics as well as the ten text rows.
+disabled-networking preferences now select working singleplayer. Cleanup removes all six graphics as well as the ten text rows.
 
 Server settings, save/reload, skip-launcher, and Save and restart retain the
-existing behavior. No endpoint, DLL, or online Friends behavior changes here.
+existing behavior. Friends retains its original behavior; endpoint selection is handled by ClientConfig.
 The module creates no menu windows; navigation reads the same game input device
 and held-button masks as the original file picker.
 
@@ -268,9 +268,10 @@ fullscreen switch sprites, and enabling it clears exclusive Fullscreen.
 `display_modes.h` extends the original PC interface slots 0/1/2/5 for mode count,
 lookup, current mode and mode changes. Additional render presets, up to 7680×4320,
 are bounded by device texture limits and exposed only while Graphics builds its
-native mode list. Original 24-byte mode records have separate logical and render
-dimensions. Borderless supplies the monitor dimensions as logical size, retains
-the selected render dimensions, and uses the original windowed renderer reset.
+native mode list. Original 24-byte mode records have separate content and render
+dimensions. Borderless keeps both pairs at the selected render resolution and
+uses the original windowed renderer reset. Physical monitor dimensions apply
+only to the HWND, rather than splitting the game's internal coordinate spaces.
 The existing window is made borderless and sized to its monitor; no additional
 device, window or presentation loop is created.
 
@@ -282,8 +283,30 @@ style/restoration work through its original message pump. Preserve and forward
 all other messages to the original procedure. A cross-thread regression holds the
 owner without pumping messages while verifying the worker returns, then drains
 the original queue and checks the resulting style. Native catalog entries with
-zero render dimensions are normalized to their selected logical dimensions
-before substituting the borderless window dimensions.
+zero render dimensions are normalized to their selected content dimensions.
+Style work is queued only when the window differs from the desired state;
+minimized windows are left alone.
+
+The original PC pointer getter (vtable RVA 0x5FDC00, slot 11, function RVA
+0x0F8780) copies the coordinates produced by the game's own input update
+(RVA 0x15B940). That update uses window pixels. Borderless presentation can
+scale a larger back buffer into that window, so the getter extension multiplies
+the original result by back-buffer/client size. It preserves the native polling,
+button states, focus handling and optional coordinate normalization. Inactive
+sentinels and relative pointer mode pass through. No separate mouse polling or
+menu hit-test implementation is introduced. The original table entries and
+getter bytes are checked before installation.
+
+Main-menu centering reuses the eleven original row containers at menu +248 and
+their child artwork bounds. Moving the parents through native `elUIItem.setPos`
+moves the labels, icons and hit transforms together, retaining the original
+row spacing, input IDs and navigation. Local testing confirmed visible centering;
+the user confirmed matching hover after this pointer correction.
+The row hit rectangle also extends left through its icon with padding of one
+tenth of the native row interval. Compensating child positions preserves the
+artwork's visible placement; the original row continues to own hover/click input.
+The user subsequently reported that resolution changes are functioning. This
+does not by itself verify every Alt-Tab, revert or restart path.
 
 Apply delegates to the original `gaGraphicsOptions.handleScreenInput(3)` for the
 renderer handoff, menu rescaling and overlay setup. Borderless-only changes force
@@ -306,7 +329,9 @@ original methods `gaStateManager.rescaleMenus` (token 0x060012A5) and
 `gaGame.onResolutionAdjusted` (0x060010DC). The native and managed helpers must be
 updated together. Original PC entries and confirmation thunks are validated
 against the supported EXE before patching. The display fixture checks extended
-catalog bounds, distinct logical/render sizes, actual Win32 borderless styling,
+catalog bounds, coherent content/render sizes, native pointer mapping at client
+center/edges, inactive/relative/windowed pass-through, Win32 message forwarding,
+idle/minimized window behavior, actual Win32 borderless styling,
 Keep/Reject, failure rollback, the 9999/10000ms boundary and startup restoration;
 its renderer and original-confirmation callbacks are fixtures, so physical driver
 and live-game behavior need separate verification.
@@ -368,3 +393,47 @@ not show a corresponding new completed restart handoff for that latest attempt.
 This identifies failure to exit the old game for that attempt; it does not
 establish the window/process state of every earlier report. A later process
 check found no remaining Game.exe, after the test instance had been closed.
+
+Singleplayer integration retains these same ten rows and original scrolling.
+Use Singleplayer and the Singleplayer switch set `networking_enabled=false`
+without clearing either server address. Use configured servers re-enables primary,
+optional secondary, then in-process singleplayer selection after restart.
+
+
+### Independent UI scaling (unreleased)
+
+The Graphics slider retains the original Audio slider artwork (sprites 51/54),
+0/100 endpoint placement, button masks, repeat input and drag latch. 0 selects
+Auto; 25 is Small, 50 matches the 1080p reference, 75 is Large and 100 is Very
+Large. The saved value is `[graphics] ui_scale`; absent settings default to 0.
+The idle menu state is 0 (as in native Settings), not transition state 1.
+Graphics uses the native file-picker reel when rows exceed the available height.
+
+The current manual-scale experiment extends original `gaUI.setupFontScale`
+(token 0x060012C0) and `gaMenu.setupMenuScale`. Layout and pointer coordinates
+remain on the physical canvas. The font setup alone receives the manual factor;
+native menu design-reference constants size artwork and spacing. No per-item
+transforms, render-group creation or pointer rescaling are added. Auto restores
+the original reference constants and ratios.
+
+The native and managed helpers must be updated together. Fixtures cover sizing
+factors, physical-resolution and pointer preservation, reference restoration,
+and slider repeat, drag, bounds and transition guards. Manual scale and display
+confirmation still require live validation. Earlier render-group experiments
+were unsuitable for PC screens; passing matrix tests did not establish correct
+live rendering. Auto was confirmed working by the user on November 1.
+
+### Servers menu simplification
+
+The redundant USE SINGLEPLAYER / USE CONFIGURED SERVERS actions are removed.
+SKIP LAUNCHER, PRIMARY SERVER ONLY and SINGLEPLAYER retain their native graphical
+toggles. Save, reload, restart, back and return remain; SAVE AND EXIT first saves
+successfully, then sends the original game window WM_CLOSE. A save failure leaves
+the game running. Stable internal IDs are mapped to nine visible rows, including
+native wraparound and the original scrolling reel; removed actions are not inputs.
+
+Alt+Enter toggles borderless/windowed through the existing owner-thread style path
+without a renderer reset, preserving the selected render resolution. Held-key
+repeat is ignored. The original native handler retains exclusive-fullscreen
+Alt+Enter. The window hook remains installed in windowed mode and throughout
+gameplay; this does not make an already hung message pump responsive.
