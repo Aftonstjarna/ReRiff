@@ -23,17 +23,17 @@
 #endif
 #define WM_COMPLETE (WM_APP + 1)
 #define WM_GAME_RUNNING (WM_APP + 2)
-enum { EXTERNAL=101, FALLBACK, TIMEOUT, POPUP, SAVE, PLAY, LOCAL, EXTERNAL_ONLY, STOP, UPDATE, EXPERIMENTAL, NETWORKING };
+enum { EXTERNAL=101, FALLBACK, TIMEOUT, POPUP, SAVE, PLAY, LOCAL, EXTERNAL_ONLY, STOP, UPDATE, EXPERIMENTAL, NETWORKING, SKIP_LAUNCHER, AUTO_UPDATE_SKIP };
 static WCHAR folder[CAP], ini[CAP], message[1024];
 static WCHAR game_arguments[CAP];
-static BOOL force_show_launcher;
+static BOOL force_show_launcher, suppress_auto_update, automatic_update, force_auto_reinstall;
 static DWORD restart_parent_pid;
 #include "restart_protocol.h"
 static HWND window, status, external, fallback, timeout_edit, popup, play_button, save_button;
 static HWND only_checkbox, stop_button, update_button;
 static BOOL busy = FALSE, playing = FALSE;
 static HWND experimental_checkbox;
-static HWND networking_checkbox;
+static HWND networking_checkbox, skip_checkbox, auto_update_checkbox;
 static ULONGLONG settings_signature;
 static BOOL settings_observed=FALSE;
 static BOOL installed_experimental=FALSE, requested_experimental=FALSE;
@@ -110,12 +110,14 @@ static BOOL is_forwarded_game(const WCHAR *argument) {
 
 static BOOL parse_launcher_arguments(int count,LPWSTR *args,BOOL *skip,BOOL *selftest) {
     *skip=FALSE;*selftest=FALSE;force_show_launcher=FALSE;game_arguments[0]=0;
-    restart_parent_pid=0;
+    restart_parent_pid=0;suppress_auto_update=FALSE;force_auto_reinstall=FALSE;
     for(int i=1;i<count;i++){
         if(!wcscmp(args[i],L"--skip-launcher")||!wcscmp(args[i],L"--launcher-skip")||!wcscmp(args[i],L"--skip")){
             *skip=TRUE;force_show_launcher=FALSE;
         }
         else if(!wcscmp(args[i],L"--show-launcher")){*skip=FALSE;force_show_launcher=TRUE;}
+        else if(!wcscmp(args[i],L"--test-auto-update"))force_auto_reinstall=TRUE;
+        else if(!wcscmp(args[i],L"--no-auto-update"))suppress_auto_update=TRUE;
         else if(!wcscmp(args[i],L"--self-test"))*selftest=TRUE;
         else if(!wcscmp(args[i],L"--restart-game")){
             if(restart_parent_pid || ++i>=count || args[i][0]<L'1' || args[i][0]>L'9')return FALSE;
@@ -133,6 +135,10 @@ static BOOL parse_launcher_arguments(int count,LPWSTR *args,BOOL *skip,BOOL *sel
     return TRUE;
 }
 
+static BOOL launcher_preference(const WCHAR *key) {
+    WCHAR value[32];GetPrivateProfileStringW(L"launcher",key,L"false",value,32,ini);
+    return !_wcsicmp(value,L"true")||!_wcsicmp(value,L"yes")||!wcscmp(value,L"1");
+}
 static BOOL should_skip_launcher(BOOL requested) {
     WCHAR value[32];
     GetPrivateProfileStringW(L"launcher",L"skip_launcher",L"false",value,32,ini);
@@ -390,7 +396,9 @@ static BOOL save(void) {
         && WritePrivateProfileStringW(L"server",L"timeout_seconds",t,ini)
         && WritePrivateProfileStringW(L"server",L"external_only",only?L"true":L"false",ini)
         && WritePrivateProfileStringW(L"server",L"networking_enabled",enabled?L"true":L"false",ini)
-        && WritePrivateProfileStringW(L"server",L"show_server_popup",SendMessageW(popup,BM_GETCHECK,0,0)==BST_CHECKED?L"true":L"false",ini);
+        && WritePrivateProfileStringW(L"server",L"show_server_popup",SendMessageW(popup,BM_GETCHECK,0,0)==BST_CHECKED?L"true":L"false",ini)
+        && WritePrivateProfileStringW(L"launcher",L"skip_launcher",SendMessageW(skip_checkbox,BM_GETCHECK,0,0)==BST_CHECKED?L"true":L"false",ini)
+        && WritePrivateProfileStringW(L"launcher",L"auto_update_on_skip",SendMessageW(auto_update_checkbox,BM_GETCHECK,0,0)==BST_CHECKED?L"true":L"false",ini);
     if (!ok) MessageBoxW(window,L"Could not save server.ini.",L"ReRiff",MB_OK|MB_ICONERROR);
     else SetWindowTextW(status,L"Settings saved. They apply on the next game start.");
     return ok;
@@ -431,6 +439,8 @@ static void reload_settings_controls(void) {
     SendMessageW(only_checkbox,BM_SETCHECK,external_only()?BST_CHECKED:BST_UNCHECKED,0);
     GetPrivateProfileStringW(L"server",L"networking_enabled",L"true",value,4096,ini);
     SendMessageW(networking_checkbox,BM_SETCHECK,(_wcsicmp(value,L"false")&&_wcsicmp(value,L"no")&&wcscmp(value,L"0"))?BST_CHECKED:BST_UNCHECKED,0);
+    SendMessageW(skip_checkbox,BM_SETCHECK,launcher_preference(L"skip_launcher")?BST_CHECKED:BST_UNCHECKED,0);
+    SendMessageW(auto_update_checkbox,BM_SETCHECK,launcher_preference(L"auto_update_on_skip")?BST_CHECKED:BST_UNCHECKED,0);
     update_networking_controls();
 }
 
@@ -455,14 +465,16 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
         popup=control(L"BUTTON",L"Show the selected server when the game starts",BS_AUTOCHECKBOX|WS_TABSTOP,22,191,590,28,POPUP);
         only_checkbox=control(L"BUTTON",L"External server only (no local autostart or fallback)",BS_AUTOCHECKBOX|WS_TABSTOP,22,225,590,28,EXTERNAL_ONLY);
         networking_checkbox=control(L"BUTTON",L"Enable networking (keep saved addresses when disabled)",BS_AUTOCHECKBOX|WS_TABSTOP,22,259,600,28,NETWORKING);
-        control(L"STATIC",L"Stop local server affects this installation's Python backend, not Docker.",0,22,296,600,24,0);
-        status=control(L"STATIC",L"Checking server settings...",0,22,323,600,62,0);
-        control(L"BUTTON",L"Use local server",WS_TABSTOP,22,409,145,34,LOCAL);
-        stop_button=control(L"BUTTON",L"Stop local server",WS_TABSTOP,180,409,150,34,STOP);
-        save_button=control(L"BUTTON",L"Save settings",WS_TABSTOP,345,409,130,34,SAVE);
-        play_button=control(L"BUTTON",L"Play",WS_TABSTOP|BS_DEFPUSHBUTTON,490,409,130,34,PLAY);
-        update_button=control(L"BUTTON",L"Update from GitHub",WS_TABSTOP,22,453,155,30,UPDATE);
-        experimental_checkbox=control(L"BUTTON",L"Use experimental builds",BS_AUTOCHECKBOX|WS_TABSTOP,195,453,420,30,EXPERIMENTAL);
+        skip_checkbox=control(L"BUTTON",L"Skip launcher",BS_AUTOCHECKBOX|WS_TABSTOP,22,293,165,28,SKIP_LAUNCHER);
+        auto_update_checkbox=control(L"BUTTON",L"Auto-update when skipping launcher",BS_AUTOCHECKBOX|WS_TABSTOP,195,293,425,28,AUTO_UPDATE_SKIP);
+        control(L"STATIC",L"Stop local server affects this installation's Python backend, not Docker.",0,22,332,600,24,0);
+        status=control(L"STATIC",L"Checking server settings...",0,22,359,600,62,0);
+        control(L"BUTTON",L"Use local server",WS_TABSTOP,22,445,145,34,LOCAL);
+        stop_button=control(L"BUTTON",L"Stop local server",WS_TABSTOP,180,445,150,34,STOP);
+        save_button=control(L"BUTTON",L"Save settings",WS_TABSTOP,345,445,130,34,SAVE);
+        play_button=control(L"BUTTON",L"Play",WS_TABSTOP|BS_DEFPUSHBUTTON,490,445,130,34,PLAY);
+        update_button=control(L"BUTTON",L"Update from GitHub",WS_TABSTOP,22,489,155,30,UPDATE);
+        experimental_checkbox=control(L"BUTTON",L"Use experimental builds",BS_AUTOCHECKBOX|WS_TABSTOP,195,489,420,30,EXPERIMENTAL);
         SendMessageW(experimental_checkbox,BM_SETCHECK,installed_experimental?BST_CHECKED:BST_UNCHECKED,0);
         channel_title();
         reload_settings_controls();
@@ -501,6 +513,10 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
     return DefWindowProcW(hwnd,event,wp,lp);
 }
 
+static DWORD WINAPI automatic_update_worker(LPVOID unused) {
+    (void)unused;BOOL ok=check_updates();log_message(message);return ok?0:1;
+}
+
 int WINAPI wWinMain(HINSTANCE instance,HINSTANCE previous,LPWSTR command,int show) {
     (void)previous;(void)command;
     GetModuleFileNameW(NULL,folder,CAP);WCHAR *slash=wcsrchr(folder,L'\\');if (!slash) return 1;*slash=0;
@@ -522,6 +538,15 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE previous,LPWSTR command,int sho
         log_message(L"SELFTEST: native launcher initialized; no game or server started.");log_message(ini);log_message(value);return 0;
     }
     if (should_skip_launcher(skip)) {
+        if(!restart_parent_pid&&!suppress_auto_update&&(force_auto_reinstall||launcher_preference(L"auto_update_on_skip"))){
+            automatic_update=TRUE;
+            HANDLE update=CreateThread(NULL,4*1024*1024,automatic_update_worker,NULL,STACK_SIZE_PARAM_IS_A_RESERVATION,NULL);
+            if(update){WaitForSingleObject(update,INFINITE);CloseHandle(update);}
+            else log_message(L"Could not start automatic update check; starting installed game.");
+            if(update_handoff)return 0;
+            /* Network/preflight failures leave installed files intact. Play
+             * the existing version rather than blocking a skipped launch. */
+        }
         if ((needs_local_server()&&!start_server())||!launch_game()) {log_message(message);return 1;}
         return 0;
     }
@@ -529,7 +554,7 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE previous,LPWSTR command,int sho
     cls.hCursor=LoadCursorW(NULL,IDC_ARROW);cls.hbrBackground=(HBRUSH)(COLOR_WINDOW+1);
     RegisterClassW(&cls);
     HWND handle=CreateWindowExW(0,cls.lpszClassName,L"ReRiff Launcher v" RERIFF_WIDE_LITERAL(RERIFF_VERSION),WS_OVERLAPPED|WS_CAPTION|WS_SYSMENU|WS_MINIMIZEBOX,
-        CW_USEDEFAULT,CW_USEDEFAULT,660,545,NULL,NULL,instance,NULL);
+        CW_USEDEFAULT,CW_USEDEFAULT,660,581,NULL,NULL,instance,NULL);
     if (!handle) return 1;
     ShowWindow(handle,show);UpdateWindow(handle);
     MSG msg;while (GetMessageW(&msg,NULL,0,0)>0) {if (!IsDialogMessageW(handle,&msg)) {TranslateMessage(&msg);DispatchMessageW(&msg);}}

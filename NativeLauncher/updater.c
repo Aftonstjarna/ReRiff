@@ -42,11 +42,20 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE previous,LPWSTR arguments,int s
     }
     _snwprintf(name,CAP,L"%ls\\success",work);name[CAP-1]=0;
     ok=ok&&GetFileAttributesW(name)!=INVALID_FILE_ATTRIBUTES;
-    if(!ok){
+    WCHAR resume[CAP];BOOL automatic=FALSE;
+    _snwprintf(name,CAP,L"%ls\\resume-command.txt",work);name[CAP-1]=0;
+    input=CreateFileW(name,GENERIC_READ,FILE_SHARE_READ,NULL,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,NULL);bytes=0;
+    if(input!=INVALID_HANDLE_VALUE){
+        automatic=ReadFile(input,resume,sizeof(resume)-sizeof(WCHAR),&bytes,NULL)&&bytes>0&&bytes%sizeof(WCHAR)==0;
+        CloseHandle(input);if(automatic)resume[bytes/sizeof(WCHAR)]=0;
+    }
+    if(!ok&&!automatic){
         _snwprintf(command,CAP,L"The update could not finish. Existing files were retained or rolled back. Details: %ls\\update.log",work);
         MessageBoxW(NULL,command,L"ReRiff update failed",MB_OK|MB_ICONERROR);
     }
-    _snwprintf(command,CAP,L"\"%ls\\ReRiff-Launcher.exe\"",game);command[CAP-1]=0;
+    if(automatic)wcscpy(command,resume);
+    else _snwprintf(command,CAP,L"\"%ls\\ReRiff-Launcher.exe\" --show-launcher",game);
+    command[CAP-1]=0;
     start.wShowWindow=SW_SHOWNORMAL;
     if(CreateProcessW(NULL,command,NULL,NULL,FALSE,0,NULL,game,&start,&process)){
         CloseHandle(process.hThread);CloseHandle(process.hProcess);

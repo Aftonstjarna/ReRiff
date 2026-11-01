@@ -73,6 +73,7 @@ def build(args):
         print(name, 'delta:',len(encoded),'bytes')
     payload = common/'payload'
     copy(ROOT/'scripts/Collect-ReRiffStartup.ps1', payload/'Collect-ReRiffStartup.ps1')
+    copy(ROOT/'packaging/server.ini.example', payload/'server.ini.example')
     for name in ('ReRiff.ClientConfig.dll','ReRiff.Notify.dll','ReRiff-Launcher.exe','ReRiff-Updater.exe'):
         copy(ROOT/'build'/name, payload/name)
     copy(ROOT/'build/ReRiff.NewsHeaders.dll', payload/'ReRiff.NewsHeaders.dll')

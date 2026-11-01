@@ -18,15 +18,17 @@ if not re.fullmatch(r'\d+\.\d+\.\d+(?:-[1-9]\d*)?', version):
 env = dict(os.environ)
 env.setdefault('ZIG_GLOBAL_CACHE_DIR', str(Path(tempfile.gettempdir())/'reriff-zig-global'))
 env.setdefault('ZIG_LOCAL_CACHE_DIR', str(Path(tempfile.gettempdir())/'reriff-zig-local'))
+resource = root/'build/as-invoker.res'
+subprocess.run([args.zig,'rc','/fo',str(resource),str(root/'NativeLauncher/app.rc')],check=True,env=env)
 subprocess.run([args.zig,'cc','-target','x86-windows-gnu','-municode','-Wl,--subsystem,windows',
-                '-O2','-Wall','-Wextra','-Werror','-DRERIFF_VERSION="'+version+'"',str(root/'NativeLauncher/launcher.c'),
+                '-O2','-Wall','-Wextra','-Werror','-DRERIFF_VERSION="'+version+'"',str(root/'NativeLauncher/launcher.c'),str(resource),
                 '-o',str(root/'build/ReRiff-Launcher.exe'),'-lwininet','-lshell32','-luser32','-lgdi32','-ladvapi32','-static'],check=True,env=env)
 subprocess.run([args.zig,'cc','-target','x86-windows-gnu','-municode','-Wl,--subsystem,windows',
-                '-O2','-Wall','-Wextra','-Werror',str(root/'NativeLauncher/updater.c'),
+                '-O2','-Wall','-Wextra','-Werror',str(root/'NativeLauncher/updater.c'),str(resource),
                 '-o',str(root/'build/ReRiff-Updater.exe'),'-lshell32','-luser32','-static'],check=True,env=env)
 subprocess.run([args.zig,'cc','-target','x86-windows-gnu','-shared','-O2','-Wall','-Wextra','-Werror',
                 str(root/'ExperimentalMenu/engine_menu.c'),'-o',str(root/'build/ReRiff.Notify.dll'),
                 '-luser32','-lgdi32','-ladvapi32','-static'],check=True,env=env)
 subprocess.run([args.zig,'cc','-target','x86-windows-gnu','-municode','-Wl,--subsystem,windows',
-                '-O2','-Wall','-Wextra','-Werror',str(root/'NativeLauncher/installer.c'),
+                '-O2','-Wall','-Wextra','-Werror',str(root/'NativeLauncher/installer.c'),str(resource),
                 '-o',str(root/'build/ReRiff-Setup.exe'),'-lcomdlg32','-luser32','-static'],check=True,env=env)

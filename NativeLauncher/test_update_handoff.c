@@ -9,7 +9,8 @@
 int wmain(int argc,WCHAR **args) {
 #ifdef RERIFF_TEST_RELAUNCH
     (void)argc;(void)args;
-    FILE *marker=_wfopen(L"reopened",L"wb");if(!marker)return 1;fputs("visible launcher restarted",marker);fclose(marker);return 0;
+    FILE *marker=_wfopen(L"reopened",L"wb");if(!marker)return 1;char line[32768];WideCharToMultiByte(CP_UTF8,0,GetCommandLineW(),-1,line,sizeof(line),NULL,NULL);
+    fputs(line,marker);fclose(marker);return 0;
 #else
     if(argc!=4)return 1;
     WCHAR command[CAP],marker[CAP];

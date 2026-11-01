@@ -81,7 +81,9 @@ jobs:
       - name: Build self-contained Linux patcher
         run: python scripts/build-linux-patcher.py
       - name: Build native launcher, notification, and Windows setup
-        run: python scripts/build-windows-launcher.py --zig "$RUNNER_TEMP/release-tools/zig-x86_64-linux-0.14.1/zig"
+        run: |
+          python scripts/build-windows-launcher.py --zig "$RUNNER_TEMP/release-tools/zig-x86_64-linux-0.14.1/zig"
+          python scripts/verify-windows-manifests.py
       - name: Build Linux and Windows server identity libraries
         # Native catalog matches the platform running Python, not the x86 game.
         # Portable Windows Python and supported Linux release targets are x64.

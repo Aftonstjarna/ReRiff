@@ -88,7 +88,7 @@ def main():
     shutil.copy2(routing, dest / 'server_routing.py')
     config = game / 'server.ini'
     if not config.exists():
-        config.write_text('[server]\nexternal_url =\nfallback_url =\ntimeout_seconds = 5\n')
+        config.write_text('[server]\n; External server example: https://riffapi.hobune.stream/\nexternal_url =\nfallback_url =\ntimeout_seconds = 5\n\n[launcher]\nskip_launcher = false\nauto_update_on_skip = false\n')
     launcher.write_text('#!/bin/sh\nset -eu\nunset PYTHONPATH PYTHONHOME\nexport PYTHONNOUSERSITE=1\ncd ' + shlex.quote(str(repo)) + '\nexec ' + shlex.quote(str(python)) + ' ' + shlex.quote(str(dest / 'trace-server.py')) + ' --server-dir ' + shlex.quote(str(repo)) + ' --config ' + shlex.quote(str(config)) + '\n')
     launcher.chmod(0o755)
     for name in ('steam-launcher.sh', 'start-server-host.sh', 'stop-server-host.sh', 'server-control.py','apply-client-update.py'):

@@ -78,6 +78,34 @@ static BOOL update_command(WCHAR *out,const WCHAR *work,const WCHAR *archive,con
     out[CAP-1]=0;return TRUE;
 }
 
+/* Stable sorts after numbered prereleases of the same base version. */
+static BOOL parse_update_version(const char *text,int value[4]) {
+    int used=0,revision_used=0;value[3]=1000000;
+    if(strspn(text,"0123456789.-")!=strlen(text)||sscanf(text,"%d.%d.%d%n",value,value+1,value+2,&used)!=3)return FALSE;
+    for(int i=0;i<3;i++)if(value[i]<0||value[i]>9999)return FALSE;
+    if(text[used]){
+        if(text[used]!='-'||sscanf(text+used+1,"%d%n",value+3,&revision_used)!=1||text[used+1+revision_used]||value[3]<1||value[3]>=1000000)return FALSE;
+    }
+    return TRUE;
+}
+static BOOL update_version_newer(const int remote[4],const int local[4]) {
+    for(int i=0;i<4;i++)if(remote[i]!=local[i])return remote[i]>local[i];
+    return FALSE;
+}
+static BOOL should_install_automatic_update(const int remote[4],const int local[4]) {
+    return update_version_newer(remote,local)||(force_auto_reinstall&&!memcmp(remote,local,4*sizeof(int)));
+}
+static BOOL save_auto_resume(const WCHAR *work) {
+    WCHAR resume[CAP],name[CAP];
+    int length=_snwprintf(resume,CAP,L"\"%ls\\ReRiff-Launcher.exe\" --skip-launcher --no-auto-update -- \"%ls\\Game.exe\"%ls%ls",folder,folder,*game_arguments?L" ":L"",game_arguments);
+    if(length<0||length>=CAP)return FALSE;
+    _snwprintf(name,CAP,L"%ls\\resume-command.txt",work);name[CAP-1]=0;
+    HANDLE output=CreateFileW(name,GENERIC_WRITE,0,NULL,CREATE_NEW,FILE_ATTRIBUTE_NORMAL,NULL);DWORD written=0;
+    DWORD bytes=(DWORD)(length*sizeof(WCHAR));
+    BOOL ok=output!=INVALID_HANDLE_VALUE&&WriteFile(output,resume,bytes,&written,NULL)&&written==bytes;
+    if(output!=INVALID_HANDLE_VALUE)CloseHandle(output);return ok;
+}
+
 static BOOL check_updates(void) {
     WCHAR temporary[CAP],work[CAP],api[CAP],sums[CAP],archive[CAP],url[CAP],filename[256],hash_w[65],command[CAP],name[CAP],source[CAP];
     BOOL ok=FALSE;PROCESS_INFORMATION process;char expected[65]="",body[65536],version[64];int a,b,c,x,y,z;char tail;
@@ -105,7 +133,28 @@ static BOOL check_updates(void) {
     }
     if(sscanf(version,"%d.%d.%d%c",&a,&b,&c,&tail)!=3||a<0||a>9999||b<0||b>9999||c<0||c>9999
        ||sscanf(RERIFF_VERSION,"%d.%d.%d",&x,&y,&z)!=3)goto done;
-    if(requested_experimental==installed_experimental && !requested_experimental && (a<x||(a==x&&(b<y||(b==y&&c<=z))))){wcscpy(message,L"You have the latest published release.");ok=TRUE;goto done;}
+    if(!force_auto_reinstall && requested_experimental==installed_experimental && !requested_experimental && (a<x||(a==x&&(b<y||(b==y&&c<=z))))){wcscpy(message,L"You have the latest published release.");ok=TRUE;goto done;}
+    if(automatic_update){
+        /* The experimental tag has a compatibility filename with no revision.
+         * Read exact release metadata so unattended launches never reinstall
+         * the same revision or downgrade to an older build. */
+        WCHAR metadata[CAP];_snwprintf(metadata,CAP,L"%ls\\latest-release.json",work);metadata[CAP-1]=0;
+        _snwprintf(url,CAP,L"https://github.com/Aftonstjarna/ReRiff/releases/download/%ls/release.json",requested_experimental?L"experimental":L"invalid");
+        if(!requested_experimental){WCHAR tag_w[64];MultiByteToWideChar(CP_UTF8,0,version,-1,tag_w,64);_snwprintf(url,CAP,L"https://github.com/Aftonstjarna/ReRiff/releases/download/v%ls/release.json",tag_w);}
+        url[CAP-1]=0;
+        failure=L"Could not read the exact update version";
+        if(!update_download(session,url,metadata,65535))goto done;
+        file=_wfopen(metadata,L"rb");if(!file)goto done;
+        n=fread(body,1,sizeof(body)-1,file);body[n]=0;fclose(file);
+        char *value=strstr(body,"\"version\"");
+        if(!value||!(value=strchr(value,':'))||!(value=strchr(value,'"')))goto done;
+        value++;length=strcspn(value,"\"");if(length>=sizeof(version))goto done;
+        char exact[64];memcpy(exact,value,length);exact[length]=0;
+        int remote[4],local[4];if(!parse_update_version(exact,remote)||!parse_update_version(RERIFF_VERSION,local)||remote[0]!=a||remote[1]!=b||remote[2]!=c)goto done;
+        BOOL same=!memcmp(remote,local,sizeof(remote));
+        if(!should_install_automatic_update(remote,local)){wcscpy(message,L"No newer release on the installed channel; starting the game.");ok=TRUE;goto done;}
+        if(force_auto_reinstall&&same)log_message(L"TEST: unattended reinstall of the current published version; resume will skip the update check.");
+    }
     failure=L"Could not read the release checksums";
     WCHAR version_w[64],release_tag[80];MultiByteToWideChar(CP_UTF8,0,version,-1,version_w,64);
     if(requested_experimental)wcscpy(release_tag,L"experimental");else _snwprintf(release_tag,80,L"v%ls",version_w);
@@ -155,6 +204,7 @@ static BOOL check_updates(void) {
     if(output!=INVALID_HANDLE_VALUE)CloseHandle(output);if(!saved)goto done;
     path(source,L"ReRiff-Updater.exe");_snwprintf(name,CAP,L"%ls\\ReRiff-Updater.exe",work);name[CAP-1]=0;
     if(!CopyFileW(source,name,TRUE))goto done;
+    if(automatic_update&&!save_auto_resume(work))goto done;
     _snwprintf(command,CAP,L"\"%ls\" %lu \"%ls\" \"%ls\"",name,(unsigned long)GetCurrentProcessId(),work,folder);command[CAP-1]=0;
     if(!spawn(command,TRUE,&process))goto done;
     CloseHandle(process.hThread);CloseHandle(process.hProcess);
