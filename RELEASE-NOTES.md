@@ -7,6 +7,9 @@
   release channel. Compare exact numbered revisions, preserve game arguments,
   resume gameplay after installation, and suppress repeat checks during that
   resume. Failed checks start the installed version and log the failure.
+- Show a small native progress window for unattended checks/downloads,
+  verification and installation. Cancel starts the installed game before
+  handoff; cancellation is disabled during file replacement/rollback.
 - Add --test-auto-update for a one-shot, same-version unattended reinstall
   through the normal verified update path, without publishing a test release.
   The resumed game launch skips the second check; older builds are not installed.

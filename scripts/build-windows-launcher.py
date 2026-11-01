@@ -22,10 +22,10 @@ resource = root/'build/as-invoker.res'
 subprocess.run([args.zig,'rc','/fo',str(resource),str(root/'NativeLauncher/app.rc')],check=True,env=env)
 subprocess.run([args.zig,'cc','-target','x86-windows-gnu','-municode','-Wl,--subsystem,windows',
                 '-O2','-Wall','-Wextra','-Werror','-DRERIFF_VERSION="'+version+'"',str(root/'NativeLauncher/launcher.c'),str(resource),
-                '-o',str(root/'build/ReRiff-Launcher.exe'),'-lwininet','-lshell32','-luser32','-lgdi32','-ladvapi32','-static'],check=True,env=env)
+                '-o',str(root/'build/ReRiff-Launcher.exe'),'-lcomctl32','-lwininet','-lshell32','-luser32','-lgdi32','-ladvapi32','-static'],check=True,env=env)
 subprocess.run([args.zig,'cc','-target','x86-windows-gnu','-municode','-Wl,--subsystem,windows',
                 '-O2','-Wall','-Wextra','-Werror',str(root/'NativeLauncher/updater.c'),str(resource),
-                '-o',str(root/'build/ReRiff-Updater.exe'),'-lshell32','-luser32','-static'],check=True,env=env)
+                '-o',str(root/'build/ReRiff-Updater.exe'),'-lcomctl32','-lshell32','-luser32','-lgdi32','-static'],check=True,env=env)
 subprocess.run([args.zig,'cc','-target','x86-windows-gnu','-shared','-O2','-Wall','-Wextra','-Werror',
                 str(root/'ExperimentalMenu/engine_menu.c'),'-o',str(root/'build/ReRiff.Notify.dll'),
                 '-luser32','-lgdi32','-ladvapi32','-static'],check=True,env=env)
