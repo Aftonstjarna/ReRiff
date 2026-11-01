@@ -218,8 +218,11 @@ Manual updates and failed installations create no notice. The next main menu
 queues a matching-version toast and consumes the marker only if queuing works.
 Server and update toasts have independent lifetime gates and stack vertically;
 both are non-activating, click-through, control-free and dismiss automatically.
-The new notification is testable by same-version unattended reinstall after
-installing this updated updater; older updaters cannot write its notice marker.
+The installer also recognizes the older updater's prepared auto-resume context
+and stages the notice in its transaction, so the first upgrade can notify too.
+A failure rolls the marker back with the other files. The new native updater
+writes the installed version after success as well. Same-version unattended
+reinstall exercises notification delivery without a duplicate test release.
 
 ## Experimental graphics antialiasing
 
