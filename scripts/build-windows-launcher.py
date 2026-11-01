@@ -12,7 +12,7 @@ parser.add_argument('--zig', default='zig')
 args = parser.parse_args()
 root = Path(__file__).resolve().parent.parent
 version = (root/'VERSION').read_text().strip()
-if not re.fullmatch(r'\d+\.\d+\.\d+', version):
+if not re.fullmatch(r'\d+\.\d+\.\d+(?:-[1-9]\d*)?', version):
     raise ValueError('Invalid VERSION')
 (root/'build').mkdir(exist_ok=True)
 env = dict(os.environ)
@@ -25,8 +25,8 @@ subprocess.run([args.zig,'cc','-target','x86-windows-gnu','-municode','-Wl,--sub
                 '-O2','-Wall','-Wextra','-Werror',str(root/'NativeLauncher/updater.c'),
                 '-o',str(root/'build/ReRiff-Updater.exe'),'-lshell32','-luser32','-static'],check=True,env=env)
 subprocess.run([args.zig,'cc','-target','x86-windows-gnu','-shared','-O2','-Wall','-Wextra','-Werror',
-                str(root/'NativeLauncher/notification.c'),'-o',str(root/'build/ReRiff.Notify.dll'),
-                '-luser32','-lgdi32','-static'],check=True,env=env)
+                str(root/'ExperimentalMenu/engine_menu.c'),'-o',str(root/'build/ReRiff.Notify.dll'),
+                '-luser32','-lgdi32','-ladvapi32','-static'],check=True,env=env)
 subprocess.run([args.zig,'cc','-target','x86-windows-gnu','-municode','-Wl,--subsystem,windows',
                 '-O2','-Wall','-Wextra','-Werror',str(root/'NativeLauncher/installer.c'),
                 '-o',str(root/'build/ReRiff-Setup.exe'),'-lcomdlg32','-luser32','-static'],check=True,env=env)

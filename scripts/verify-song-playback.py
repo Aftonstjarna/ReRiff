@@ -1,0 +1,10 @@
+#!/usr/bin/env python3
+"""Compatibility launcher only; implementation lives in reriff-reference (C++)."""
+import os
+from pathlib import Path
+import sys
+
+binary = Path(__file__).resolve().parents[1] / 'build/native-linux/reriff-reference'
+if not binary.is_file():
+    raise SystemExit('Build the native tools first: make -C NativeLinux all')
+os.execv(str(binary), [str(binary), 'timing', *sys.argv[1:]])

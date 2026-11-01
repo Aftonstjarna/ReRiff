@@ -23,12 +23,19 @@
 #endif
 #define WM_COMPLETE (WM_APP + 1)
 #define WM_GAME_RUNNING (WM_APP + 2)
-enum { EXTERNAL=101, FALLBACK, TIMEOUT, POPUP, SAVE, PLAY, LOCAL, EXTERNAL_ONLY, STOP, UPDATE, EXPERIMENTAL };
+enum { EXTERNAL=101, FALLBACK, TIMEOUT, POPUP, SAVE, PLAY, LOCAL, EXTERNAL_ONLY, STOP, UPDATE, EXPERIMENTAL, NETWORKING };
 static WCHAR folder[CAP], ini[CAP], message[1024];
+static WCHAR game_arguments[CAP];
+static BOOL force_show_launcher;
+static DWORD restart_parent_pid;
+#include "restart_protocol.h"
 static HWND window, status, external, fallback, timeout_edit, popup, play_button, save_button;
 static HWND only_checkbox, stop_button, update_button;
 static BOOL busy = FALSE, playing = FALSE;
 static HWND experimental_checkbox;
+static HWND networking_checkbox;
+static ULONGLONG settings_signature;
+static BOOL settings_observed=FALSE;
 static BOOL installed_experimental=FALSE, requested_experimental=FALSE;
 static HFONT font;
 
@@ -71,9 +78,116 @@ static BOOL is_wine(void) {
     return GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "wine_get_version") != NULL;
 }
 
+static BOOL append_command_character(WCHAR *out,size_t *used,WCHAR value) {
+    if(*used>=CAP-1)return FALSE;
+    out[(*used)++]=value;out[*used]=0;return TRUE;
+}
+
+/* Windows command-line quoting: backslashes before quotes (including the
+ * closing quote) must be doubled so the game's argv retains the input. */
+static BOOL append_game_argument(const WCHAR *argument) {
+    size_t used=wcslen(game_arguments);
+    if(used&&!append_command_character(game_arguments,&used,L' '))return FALSE;
+    if(!append_command_character(game_arguments,&used,L'"'))return FALSE;
+    const WCHAR *cursor=argument;
+    for(;;){
+        size_t slashes=0;while(*cursor==L'\\'){slashes++;cursor++;}
+        size_t copies=(*cursor==L'"'||!*cursor)?slashes*2:slashes;
+        for(size_t i=0;i<copies;i++)if(!append_command_character(game_arguments,&used,L'\\'))return FALSE;
+        if(!*cursor)break;
+        if(*cursor==L'"'&&!append_command_character(game_arguments,&used,L'\\'))return FALSE;
+        if(!append_command_character(game_arguments,&used,*cursor++))return FALSE;
+    }
+    return append_command_character(game_arguments,&used,L'"');
+}
+
+static BOOL is_forwarded_game(const WCHAR *argument) {
+    WCHAR expected[CAP],resolved[CAP];path(expected,L"Game.exe");
+    if(!_wcsicmp(argument,L"Game.exe"))return TRUE;
+    DWORD length=GetFullPathNameW(argument,CAP,resolved,NULL);
+    return length&&length<CAP&&!_wcsicmp(expected,resolved);
+}
+
+static BOOL parse_launcher_arguments(int count,LPWSTR *args,BOOL *skip,BOOL *selftest) {
+    *skip=FALSE;*selftest=FALSE;force_show_launcher=FALSE;game_arguments[0]=0;
+    restart_parent_pid=0;
+    for(int i=1;i<count;i++){
+        if(!wcscmp(args[i],L"--skip-launcher")||!wcscmp(args[i],L"--launcher-skip")||!wcscmp(args[i],L"--skip")){
+            *skip=TRUE;force_show_launcher=FALSE;
+        }
+        else if(!wcscmp(args[i],L"--show-launcher")){*skip=FALSE;force_show_launcher=TRUE;}
+        else if(!wcscmp(args[i],L"--self-test"))*selftest=TRUE;
+        else if(!wcscmp(args[i],L"--restart-game")){
+            if(restart_parent_pid || ++i>=count || args[i][0]<L'1' || args[i][0]>L'9')return FALSE;
+            WCHAR *end;unsigned long pid=wcstoul(args[i],&end,10);
+            if(*end || !pid || pid==GetCurrentProcessId())return FALSE;
+            restart_parent_pid=(DWORD)pid;
+        }
+        else {
+            if(!wcscmp(args[i],L"--")&&++i>=count)return FALSE;
+            if(!is_forwarded_game(args[i]))return FALSE;
+            for(i++;i<count;i++)if(!append_game_argument(args[i]))return FALSE;
+            return TRUE;
+        }
+    }
+    return TRUE;
+}
+
+static BOOL should_skip_launcher(BOOL requested) {
+    WCHAR value[32];
+    GetPrivateProfileStringW(L"launcher",L"skip_launcher",L"false",value,32,ini);
+    return !force_show_launcher&&(requested||!_wcsicmp(value,L"true")||!_wcsicmp(value,L"yes")||!wcscmp(value,L"1"));
+}
+
+static BOOL game_command(WCHAR *command) {
+    WCHAR game[CAP];path(game,L"Game.exe");
+    int length=_snwprintf(command,CAP,L"\"%ls\"%ls%ls",game,*game_arguments?L" ":L"",game_arguments);
+    command[CAP-1]=0;
+    return length>=0&&length<CAP;
+}
+
+/* Used only when Game.exe was started without a supervising launcher. The
+ * game waits for our ready acknowledgement before posting its normal close. */
+static int wait_for_restart_parent(void) {
+    WCHAR expected[CAP],actual[CAP],name[96];DWORD length=CAP;
+    HANDLE parent=OpenProcess(SYNCHRONIZE|PROCESS_QUERY_LIMITED_INFORMATION,FALSE,restart_parent_pid);
+    if(!parent){wcscpy(message,L"Could not open the game requesting restart.");return -1;}
+    path(expected,L"Game.exe");
+    if(!QueryFullProcessImageNameW(parent,0,actual,&length)||_wcsicmp(expected,actual)){
+        CloseHandle(parent);wcscpy(message,L"Restart refused: process is not this installation's Game.exe.");return -1;
+    }
+    restart_event_name(name,96,restart_parent_pid,FALSE);
+    HANDLE request=OpenEventW(SYNCHRONIZE,FALSE,name);
+    restart_event_name(name,96,restart_parent_pid,TRUE);
+    HANDLE ready=OpenEventW(EVENT_MODIFY_STATE,FALSE,name);
+    if(!request||!ready||!SetEvent(ready)){
+        if(request)CloseHandle(request);if(ready)CloseHandle(ready);CloseHandle(parent);
+        wcscpy(message,L"Restart refused: game handoff is missing.");return -1;
+    }
+    CloseHandle(ready);
+    BOOL closed=WaitForSingleObject(parent,INFINITE)==WAIT_OBJECT_0;
+    BOOL committed=WaitForSingleObject(request,0)==WAIT_OBJECT_0;
+    CloseHandle(request);CloseHandle(parent);
+    return closed&&committed?1:0;
+}
+
 static BOOL external_only(void) {
     WCHAR value[32];GetPrivateProfileStringW(L"server",L"external_only",L"false",value,32,ini);
     return !_wcsicmp(value,L"true")||!wcscmp(value,L"1")||!_wcsicmp(value,L"yes");
+}
+
+static BOOL needs_local_server(void) {
+    WCHAR address[4096],host[256],enabled[32];
+    WritePrivateProfileStringW(NULL,NULL,NULL,ini);
+    GetPrivateProfileStringW(L"server",L"networking_enabled",L"true",enabled,32,ini);
+    if(!_wcsicmp(enabled,L"false") || !_wcsicmp(enabled,L"no") || !wcscmp(enabled,L"0"))return FALSE;
+    if(external_only())return FALSE;
+    GetPrivateProfileStringW(L"server",L"fallback_url",L"",address,4096,ini);
+    URL_COMPONENTSW parts;ZeroMemory(&parts,sizeof(parts));parts.dwStructSize=sizeof(parts);
+    parts.lpszHostName=host;parts.dwHostNameLength=256;
+    return *address && InternetCrackUrlW(address,0,0,&parts)
+        && parts.nScheme==INTERNET_SCHEME_HTTP && parts.nPort==5144
+        && (!_wcsicmp(host,L"localhost") || !wcscmp(host,L"127.0.0.1"));
 }
 
 #include "auto_update.h"
@@ -204,26 +318,34 @@ finish:
 #include "song_sync.h"
 
 static BOOL launch_game(void) {
+    for(;;){
     sync_cached_songs(ini);
-    WCHAR game[CAP],command[CAP]; PROCESS_INFORMATION process;
-    path(game,L"Game.exe");
-    _snwprintf(command,CAP,L"\"%ls\"",game);command[CAP-1]=0;
+    WCHAR command[CAP]; PROCESS_INFORMATION process;
+    if(!game_command(command)){wcscpy(message,L"The forwarded game command is too long.");return FALSE;}
     if (!spawn(command,FALSE,&process)) { wcscpy(message,L"Could not start Game.exe beside the launcher."); return FALSE; }
+    WCHAR event_name[96];restart_event_name(event_name,96,process.dwProcessId,FALSE);
+    HANDLE restart=CreateEventW(NULL,TRUE,FALSE,event_name);
     if (window) PostMessageW(window,WM_GAME_RUNNING,0,0);
     CloseHandle(process.hThread);
-    WaitForSingleObject(process.hProcess,INFINITE);
+    BOOL closed=WaitForSingleObject(process.hProcess,INFINITE)==WAIT_OBJECT_0;
+    BOOL again=restart&&WaitForSingleObject(restart,0)==WAIT_OBJECT_0;
+    if(restart)CloseHandle(restart);
     CloseHandle(process.hProcess);
     sync_cached_songs(ini);
-    return TRUE;
+    if(!closed){wcscpy(message,L"Could not wait for Game.exe to close.");return FALSE;}
+    if(!again)return TRUE;
+    log_message(L"Game closed for Save and restart; applying saved server settings.");
+    if(needs_local_server()&&!start_server())return FALSE;
+    }
 }
 
 static DWORD WINAPI worker(LPVOID parameter) {
     int action=(int)(INT_PTR)parameter;
     BOOL play=action==1;
-    BOOL only=external_only();
-    BOOL ok=action==3?check_updates():action==2?stop_server():(only?TRUE:start_server());
+    BOOL local=needs_local_server();
+    BOOL ok=action==3?check_updates():action==2?stop_server():(local?start_server():TRUE);
     if (ok && play) ok=launch_game();
-    if (ok && action<2) wcscpy(message,only?(play?L"Game closed. External-only mode did not start a local server.":L"External-only mode: local autostart and fallback are disabled."):(play?L"Game closed. Local server remains running.":L"Local server is ready."));
+    if (ok && action<2) wcscpy(message,!local?(play?L"Game closed. No local backend was needed.":L"Saved settings do not require local server startup."):(play?L"Game closed. Local server remains running.":L"Local server is ready."));
     log_message(message);
     PostMessageW(window,WM_COMPLETE,ok,update_handoff?2:play);
     return 0;
@@ -259,17 +381,65 @@ static BOOL save(void) {
     GetWindowTextW(external,a,4096);GetWindowTextW(fallback,b,4096);GetWindowTextW(timeout_edit,t,32);
     WCHAR *end; double seconds=wcstod(t,&end);
     BOOL only=SendMessageW(only_checkbox,BM_GETCHECK,0,0)==BST_CHECKED;
-    if (!valid_url(a)||(!only&&!valid_url(b))||!*t||*end||!(seconds>0 && seconds<=60)) {
+    BOOL enabled=SendMessageW(networking_checkbox,BM_GETCHECK,0,0)==BST_CHECKED;
+    if ((enabled&&(!valid_url(a)||(!only&&!valid_url(b))))||!*t||*end||!(seconds>0 && seconds<=60)) {
         MessageBoxW(window,L"Use HTTP(S) URLs and a timeout greater than 0 and at most 60 seconds.",L"Invalid settings",MB_OK|MB_ICONWARNING);return FALSE;
     }
     BOOL ok=WritePrivateProfileStringW(L"server",L"external_url",a,ini)
         && WritePrivateProfileStringW(L"server",L"fallback_url",b,ini)
         && WritePrivateProfileStringW(L"server",L"timeout_seconds",t,ini)
         && WritePrivateProfileStringW(L"server",L"external_only",only?L"true":L"false",ini)
+        && WritePrivateProfileStringW(L"server",L"networking_enabled",enabled?L"true":L"false",ini)
         && WritePrivateProfileStringW(L"server",L"show_server_popup",SendMessageW(popup,BM_GETCHECK,0,0)==BST_CHECKED?L"true":L"false",ini);
     if (!ok) MessageBoxW(window,L"Could not save server.ini.",L"ReRiff",MB_OK|MB_ICONERROR);
     else SetWindowTextW(status,L"Settings saved. They apply on the next game start.");
     return ok;
+}
+
+/* Watch content rather than timestamps: the game replaces the INI atomically. */
+static BOOL read_settings_signature(ULONGLONG *signature) {
+    HANDLE file=CreateFileW(ini,GENERIC_READ,FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,NULL,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,NULL);
+    if(file==INVALID_HANDLE_VALUE){
+        if(GetLastError()==ERROR_FILE_NOT_FOUND){*signature=0;return TRUE;}
+        return FALSE;
+    }
+    BYTE block[4096];DWORD count;ULONGLONG hash=14695981039346656037ULL;BOOL ok=TRUE;
+    for(;;){
+        if(!ReadFile(file,block,sizeof(block),&count,NULL)){ok=FALSE;break;}
+        if(!count)break;
+        for(DWORD i=0;i<count;i++){hash^=block[i];hash*=1099511628211ULL;}
+    }
+    CloseHandle(file);if(ok)*signature=hash;return ok;
+}
+
+static void update_networking_controls(void) {
+    BOOL enabled=SendMessageW(networking_checkbox,BM_GETCHECK,0,0)==BST_CHECKED;
+    EnableWindow(external,enabled);EnableWindow(only_checkbox,enabled);
+    EnableWindow(fallback,enabled&&SendMessageW(only_checkbox,BM_GETCHECK,0,0)!=BST_CHECKED);
+}
+
+static void reload_settings_controls(void) {
+    WCHAR value[4096];
+    settings_observed=read_settings_signature(&settings_signature);
+    /* Another process (the game menu) can atomically replace this file. */
+    WritePrivateProfileStringW(NULL,NULL,NULL,ini);
+    GetPrivateProfileStringW(L"server",L"external_url",L"",value,4096,ini);SetWindowTextW(external,value);
+    GetPrivateProfileStringW(L"server",L"fallback_url",L"",value,4096,ini);SetWindowTextW(fallback,value);
+    GetPrivateProfileStringW(L"server",L"timeout_seconds",L"5",value,4096,ini);SetWindowTextW(timeout_edit,value);
+    GetPrivateProfileStringW(L"server",L"show_server_popup",L"true",value,4096,ini);
+    SendMessageW(popup,BM_SETCHECK,(_wcsicmp(value,L"false")&&_wcsicmp(value,L"no")&&wcscmp(value,L"0"))?BST_CHECKED:BST_UNCHECKED,0);
+    SendMessageW(only_checkbox,BM_SETCHECK,external_only()?BST_CHECKED:BST_UNCHECKED,0);
+    GetPrivateProfileStringW(L"server",L"networking_enabled",L"true",value,4096,ini);
+    SendMessageW(networking_checkbox,BM_SETCHECK,(_wcsicmp(value,L"false")&&_wcsicmp(value,L"no")&&wcscmp(value,L"0"))?BST_CHECKED:BST_UNCHECKED,0);
+    update_networking_controls();
+}
+
+static void refresh_changed_settings(void) {
+    ULONGLONG current;
+    if(networking_checkbox&&read_settings_signature(&current)&&(!settings_observed||current!=settings_signature)){
+        reload_settings_controls();
+        if(!busy)SetWindowTextW(status,L"Saved server settings changed. The launcher has been updated.");
+    }
 }
 
 static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
@@ -284,41 +454,40 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
         timeout_edit=control(L"EDIT",L"5",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,172,146,95,28,TIMEOUT);
         popup=control(L"BUTTON",L"Show the selected server when the game starts",BS_AUTOCHECKBOX|WS_TABSTOP,22,191,590,28,POPUP);
         only_checkbox=control(L"BUTTON",L"External server only (no local autostart or fallback)",BS_AUTOCHECKBOX|WS_TABSTOP,22,225,590,28,EXTERNAL_ONLY);
-        control(L"STATIC",L"Both addresses blank disables game networking.\nStop local server affects this installation's Python backend, not Docker.",0,22,267,600,46,0);
+        networking_checkbox=control(L"BUTTON",L"Enable networking (keep saved addresses when disabled)",BS_AUTOCHECKBOX|WS_TABSTOP,22,259,600,28,NETWORKING);
+        control(L"STATIC",L"Stop local server affects this installation's Python backend, not Docker.",0,22,296,600,24,0);
         status=control(L"STATIC",L"Checking server settings...",0,22,323,600,62,0);
         control(L"BUTTON",L"Use local server",WS_TABSTOP,22,409,145,34,LOCAL);
         stop_button=control(L"BUTTON",L"Stop local server",WS_TABSTOP,180,409,150,34,STOP);
         save_button=control(L"BUTTON",L"Save settings",WS_TABSTOP,345,409,130,34,SAVE);
-        play_button=control(L"BUTTON",L"Save and play",WS_TABSTOP|BS_DEFPUSHBUTTON,490,409,130,34,PLAY);
+        play_button=control(L"BUTTON",L"Play",WS_TABSTOP|BS_DEFPUSHBUTTON,490,409,130,34,PLAY);
         update_button=control(L"BUTTON",L"Update from GitHub",WS_TABSTOP,22,453,155,30,UPDATE);
         experimental_checkbox=control(L"BUTTON",L"Use experimental builds",BS_AUTOCHECKBOX|WS_TABSTOP,195,453,420,30,EXPERIMENTAL);
         SendMessageW(experimental_checkbox,BM_SETCHECK,installed_experimental?BST_CHECKED:BST_UNCHECKED,0);
         channel_title();
-        WCHAR value[4096];
-        GetPrivateProfileStringW(L"server",L"external_url",L"",value,4096,ini);SetWindowTextW(external,value);
-        GetPrivateProfileStringW(L"server",L"fallback_url",L"",value,4096,ini);SetWindowTextW(fallback,value);
-        GetPrivateProfileStringW(L"server",L"timeout_seconds",L"5",value,4096,ini);SetWindowTextW(timeout_edit,value);
-        GetPrivateProfileStringW(L"server",L"show_server_popup",L"true",value,4096,ini);
-        SendMessageW(popup,BM_SETCHECK,(_wcsicmp(value,L"false")&&_wcsicmp(value,L"no")&&wcscmp(value,L"0"))?BST_CHECKED:BST_UNCHECKED,0);
-        SendMessageW(only_checkbox,BM_SETCHECK,external_only()?BST_CHECKED:BST_UNCHECKED,0);EnableWindow(fallback,!external_only());
+        reload_settings_controls();
+        SetTimer(hwnd,1,500,NULL);
         begin(FALSE);return 0;
     }
     if (event==WM_COMMAND) {
         switch (LOWORD(wp)) {
-            case LOCAL:SendMessageW(only_checkbox,BM_SETCHECK,BST_UNCHECKED,0);EnableWindow(fallback,TRUE);SetWindowTextW(fallback,L"http://127.0.0.1:5144");break;
-            case EXTERNAL_ONLY:EnableWindow(fallback,SendMessageW(only_checkbox,BM_GETCHECK,0,0)!=BST_CHECKED);break;
+            case LOCAL:SendMessageW(networking_checkbox,BM_SETCHECK,BST_CHECKED,0);SendMessageW(only_checkbox,BM_SETCHECK,BST_UNCHECKED,0);update_networking_controls();SetWindowTextW(fallback,L"http://127.0.0.1:5144");break;
+            case NETWORKING:case EXTERNAL_ONLY:update_networking_controls();break;
             case STOP:begin(2);break;
             case EXPERIMENTAL:
                 requested_experimental=SendMessageW(experimental_checkbox,BM_GETCHECK,0,0)==BST_CHECKED;
                 begin(3);break;
             case UPDATE:begin(3);break;
-            case SAVE:save();break;
-            case PLAY:if (save()) begin(TRUE);break;
+            case SAVE:if(save())settings_observed=read_settings_signature(&settings_signature);break;
+            case PLAY:begin(TRUE);break;
         }return 0;
     }
+    if(event==WM_TIMER&&wp==1){refresh_changed_settings();return 0;}
+    if(event==WM_ACTIVATE&&LOWORD(wp)!=WA_INACTIVE)refresh_changed_settings();
     if (event==WM_GAME_RUNNING) { SetWindowTextW(status,L"Game running. Keep the launcher open until the game closes.");ShowWindow(window,SW_MINIMIZE);return 0; }
     if (event==WM_COMPLETE) {
         if (lp==2) { DestroyWindow(hwnd);return 0; }
+        if (lp==1) reload_settings_controls();
         requested_experimental=installed_experimental;
         SendMessageW(experimental_checkbox,BM_SETCHECK,installed_experimental?BST_CHECKED:BST_UNCHECKED,0);
         busy=FALSE;playing=FALSE;EnableWindow(play_button,TRUE);EnableWindow(save_button,TRUE);EnableWindow(stop_button,TRUE);EnableWindow(update_button,TRUE);EnableWindow(experimental_checkbox,TRUE);SetWindowTextW(status,message);
@@ -328,7 +497,7 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
         if (busy) { SetWindowTextW(status,L"Wait for server startup or close the game before closing this launcher.");return 0; }
         DestroyWindow(hwnd);return 0;
     }
-    if (event==WM_DESTROY) { DeleteObject(font);PostQuitMessage(0);return 0; }
+    if (event==WM_DESTROY) { KillTimer(hwnd,1);DeleteObject(font);PostQuitMessage(0);return 0; }
     return DefWindowProcW(hwnd,event,wp,lp);
 }
 
@@ -337,18 +506,23 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE previous,LPWSTR command,int sho
     GetModuleFileNameW(NULL,folder,CAP);WCHAR *slash=wcsrchr(folder,L'\\');if (!slash) return 1;*slash=0;
     path(ini,L"server.ini");load_channel();
     BOOL skip=FALSE,selftest=FALSE;int count;LPWSTR *args=CommandLineToArgvW(GetCommandLineW(),&count);
-    for (int i=1;i<count;i++) {
-        if (!wcscmp(args[i],L"--skip-launcher")) skip=TRUE;
-        else if (!wcscmp(args[i],L"--self-test")) selftest=TRUE;
-        else { log_message(L"Unknown launcher argument.");LocalFree(args);return 2; }
+    if(!args||!parse_launcher_arguments(count,args,&skip,&selftest)) {
+        log_message(L"Unknown launcher argument. Steam may forward only the Game.exe beside this launcher and its arguments.");
+        if(args)LocalFree(args);return 2;
     }
     LocalFree(args);
+    if(restart_parent_pid){
+        int restart=wait_for_restart_parent();
+        if(restart<0){log_message(message);return 1;}
+        if(!restart)return 0;
+        skip=TRUE;force_show_launcher=FALSE;
+    }
     if (selftest) {
         WCHAR value[4096];GetPrivateProfileStringW(L"server",L"fallback_url",L"",value,4096,ini);
         log_message(L"SELFTEST: native launcher initialized; no game or server started.");log_message(ini);log_message(value);return 0;
     }
-    if (skip) {
-        if ((!external_only()&&!start_server())||!launch_game()) {log_message(message);return 1;}
+    if (should_skip_launcher(skip)) {
+        if ((needs_local_server()&&!start_server())||!launch_game()) {log_message(message);return 1;}
         return 0;
     }
     WNDCLASSW cls;ZeroMemory(&cls,sizeof(cls));cls.lpfnWndProc=procedure;cls.hInstance=instance;cls.lpszClassName=L"ReRiffNativeLauncher";

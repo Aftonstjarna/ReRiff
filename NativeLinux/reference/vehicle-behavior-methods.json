@@ -1,0 +1,234 @@
+[
+  {
+    "token": "0x06000103",
+    "name": "elMath.deadZone",
+    "rva": 1950184,
+    "va": 6144488,
+    "implementation": "IL",
+    "signature": "000320090c0c0c0c"
+  },
+  {
+    "token": "0x060000b9",
+    "name": "elMath.moveTowards",
+    "rva": 1942012,
+    "va": 6136316,
+    "implementation": "IL",
+    "signature": "0003200902202d0f0c0c0c"
+  },
+  {
+    "token": "0x06001730",
+    "name": "elPhysBody.convertLinearImpulseToAccel",
+    "rva": 244112,
+    "va": 4438416,
+    "implementation": "native",
+    "signature": "0003200d1f310f118118201120110f11823c0f118118202d0f2011118118"
+  },
+  {
+    "token": "0x0600172f",
+    "name": "elPhysBody.convertTorqueImpulseToAngAccel",
+    "rva": 243888,
+    "va": 4438192,
+    "implementation": "native",
+    "signature": "0003200d1f310f118118201120110f11823c0f118118202d0f2011118118"
+  },
+  {
+    "token": "0x060016d2",
+    "name": "elPhysBody.getAngVel",
+    "rva": 242016,
+    "va": 4436320,
+    "implementation": "native",
+    "signature": "0002200d1f310f118118201120110f201111823c0f118118"
+  },
+  {
+    "token": "0x06001731",
+    "name": "elPhysBody.getTotalForce",
+    "rva": 244256,
+    "va": 4438560,
+    "implementation": "native",
+    "signature": "0002200d1f310f118118201120110f201111823c0f118118"
+  },
+  {
+    "token": "0x06001732",
+    "name": "elPhysBody.getTotalTorque",
+    "rva": 244208,
+    "va": 4438512,
+    "implementation": "native",
+    "signature": "0002200d1f310f118118201120110f201111823c0f118118"
+  },
+  {
+    "token": "0x0600164e",
+    "name": "elPhysBody.getVel",
+    "rva": 241840,
+    "va": 4436144,
+    "implementation": "native",
+    "signature": "0002200d1f310f118118201120110f201111823c0f118118"
+  },
+  {
+    "token": "0x060016d3",
+    "name": "elPhysBody.setAngVel",
+    "rva": 242064,
+    "va": 4436368,
+    "implementation": "native",
+    "signature": "0002200d01201120110f11823c202d0f2011118118"
+  },
+  {
+    "token": "0x060016d1",
+    "name": "elPhysBody.setVel",
+    "rva": 241888,
+    "va": 4436192,
+    "implementation": "native",
+    "signature": "0002200d01201120110f11823c202d0f2011118118"
+  },
+  {
+    "token": "0x060004c0",
+    "name": "gaNodeTracker.getNumLanes_DAT",
+    "rva": 2128612,
+    "va": 6322916,
+    "implementation": "IL",
+    "signature": "0001200d0c201120110f2011118300"
+  },
+  {
+    "token": "0x060005b7",
+    "name": "gaPlayerLocal.calcAutoAccelBrake",
+    "rva": 2169376,
+    "va": 6363680,
+    "implementation": "IL",
+    "signature": "0003200d01201120110f11852c202d0f0c202d0f0c"
+  },
+  {
+    "token": "0x060005b8",
+    "name": "gaPlayerLocal.tickInput",
+    "rva": 2172996,
+    "va": 6367300,
+    "implementation": "IL",
+    "signature": "0001200d01201120110f11852c"
+  },
+  {
+    "token": "0x060005bd",
+    "name": "gaPlayerLocal.tickTargetSpeed",
+    "rva": 2169620,
+    "va": 6363924,
+    "implementation": "IL",
+    "signature": "0001200d01201120110f11852c"
+  },
+  {
+    "token": "0x06001280",
+    "name": "gaSpring.getMatchingFriction",
+    "rva": 3135900,
+    "va": 7330204,
+    "implementation": "IL",
+    "signature": "000220090c0c02"
+  },
+  {
+    "token": "0x06001285",
+    "name": "gaSpring.tick",
+    "rva": 3136268,
+    "va": 7330572,
+    "implementation": "IL",
+    "signature": "0003200d0c201120110f1186500c0c"
+  },
+  {
+    "token": "0x060005a4",
+    "name": "gaVehiclePhys.calcHorizontalVel",
+    "rva": 2166744,
+    "va": 6361048,
+    "implementation": "IL",
+    "signature": "0002200d1f310f118118201120110f20111183540f118118"
+  },
+  {
+    "token": "0x06000bcd",
+    "name": "gaVehiclePhys.getTopSpeed",
+    "rva": 2631936,
+    "va": 6826240,
+    "implementation": "IL",
+    "signature": "0001200d0c201120110f2011118354"
+  },
+  {
+    "token": "0x06000b97",
+    "name": "gaVehiclePhys.phys_applySkidSpeedup",
+    "rva": 2641960,
+    "va": 6836264,
+    "implementation": "IL",
+    "signature": "0002200d01201120110f118354202d0f2011118118"
+  },
+  {
+    "token": "0x06000b9c",
+    "name": "gaVehiclePhys.phys_applySuspAndTyreForces_HI",
+    "rva": 2642728,
+    "va": 6837032,
+    "implementation": "IL",
+    "signature": "0001200d01201120110f118354"
+  },
+  {
+    "token": "0x06000b99",
+    "name": "gaVehiclePhys.phys_applyYawDamping",
+    "rva": 2633448,
+    "va": 6827752,
+    "implementation": "IL",
+    "signature": "0003200d01201120110f1183540c202d0f2011118118"
+  },
+  {
+    "token": "0x06000b93",
+    "name": "gaVehiclePhys.phys_calcForwardFriction",
+    "rva": 2629432,
+    "va": 6823736,
+    "implementation": "IL",
+    "signature": "0001200d0c201120110f2011118354"
+  },
+  {
+    "token": "0x06000baf",
+    "name": "gaVehiclePhys.phys_calcGrip",
+    "rva": 2637604,
+    "va": 6831908,
+    "implementation": "IL",
+    "signature": "0002200d0c201120110f1183540c"
+  },
+  {
+    "token": "0x06000b92",
+    "name": "gaVehiclePhys.phys_calcLatFriction",
+    "rva": 2632904,
+    "va": 6827208,
+    "implementation": "IL",
+    "signature": "0002200d0c201120110f11835408"
+  },
+  {
+    "token": "0x06000b98",
+    "name": "gaVehiclePhys.phys_calcSkid",
+    "rva": 2630152,
+    "va": 6824456,
+    "implementation": "IL",
+    "signature": "0002200d01201120110f1183540c"
+  },
+  {
+    "token": "0x06000b9a",
+    "name": "gaVehiclePhys.phys_calcSteerAngle",
+    "rva": 2642296,
+    "va": 6836600,
+    "implementation": "IL",
+    "signature": "0001200d01201120110f118354"
+  },
+  {
+    "token": "0x06000b91",
+    "name": "gaVehiclePhys.phys_tickDrive",
+    "rva": 2632500,
+    "va": 6826804,
+    "implementation": "IL",
+    "signature": "0001200d01201120110f118354"
+  },
+  {
+    "token": "0x06000b9e",
+    "name": "gaVehiclePhys.phys_tickInputs",
+    "rva": 2634648,
+    "va": 6828952,
+    "implementation": "IL",
+    "signature": "0001200d01201120110f118354"
+  },
+  {
+    "token": "0x06000b9b",
+    "name": "gaVehiclePhys.shouldStickToTrack",
+    "rva": 2634476,
+    "va": 6828780,
+    "implementation": "IL",
+    "signature": "0002200d02201120110f11835402"
+  }
+]

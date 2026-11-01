@@ -24,11 +24,12 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--game-dir', type=Path, default=Path.home()/'.local/share/Steam/steamapps/common/Riff Racer')
     parser.add_argument('--restore', action='store_true')
-    parser.add_argument('--backup-dir', type=Path, default=Path(__file__).resolve().parent.parent/'backups/client')
+    parser.add_argument('--backup-dir', type=Path)
     args = parser.parse_args()
     game = args.game_dir.expanduser().resolve()
     build = Path(__file__).resolve().parent.parent/'build'
-    backups = args.backup_dir.expanduser().resolve()
+    backups = (args.backup_dir or game/'bak/originals').expanduser().resolve()
+    previous_backups = Path(__file__).resolve().parent.parent/'backups/client'
     if not (game/'Game.exe').is_file():
         parser.error('Game.exe not found')
     if args.restore:
@@ -36,7 +37,7 @@ def main():
         for name, digest in HASHES.items():
             backup = backups/name
             legacy = game/(name+'.reriff-client-original')
-            data = (backup if backup.exists() else legacy).read_bytes()
+            data = (backup if backup.exists() else previous_backups/name if (previous_backups/name).exists() else legacy).read_bytes()
             if hashlib.sha256(data).hexdigest() != digest:
                 raise ValueError('Invalid original backup: '+name)
             originals[name] = data
@@ -44,14 +45,14 @@ def main():
             replace(game/name, data)
         print('Original DLLs restored. INI and saved server data retained.')
         return
-    files = {name:(build/name).read_bytes() for name in (*HASHES, 'ReRiff.ClientConfig.dll', 'ReRiff.Notify.dll')}
+    files = {name:(build/name).read_bytes() for name in (*HASHES, 'ReRiff.ClientConfig.dll', 'ReRiff.NewsHeaders.dll', 'ReRiff.Notify.dll')}
     originals = {}
     old = b'https://parseapi.back4app.com'
     local = b'http://127.000000000.0.1:5144'
     for name, digest in HASHES.items():
         backup = backups/name
         legacy = game/(name+'.reriff-client-original')
-        original_path = backup if backup.exists() else legacy if legacy.exists() else game/name
+        original_path = backup if backup.exists() else previous_backups/name if (previous_backups/name).exists() else legacy if legacy.exists() else game/name
         data = original_path.read_bytes()
         if name == 'ParseOctane.dll' and data.count(local) == 1:
             data = data.replace(local, old, 1)
@@ -70,7 +71,7 @@ def main():
         if not backup.exists():
             with backup.open('xb') as stream: stream.write(data)
     # Helper first, SDK guard second, endpoint patch last.
-    for name in ('ReRiff.Notify.dll', 'ReRiff.ClientConfig.dll', 'Parse.NetFx45.dll', 'ParseOctane.dll'):
+    for name in ('ReRiff.Notify.dll', 'ReRiff.ClientConfig.dll', 'ReRiff.NewsHeaders.dll', 'Parse.NetFx45.dll', 'ParseOctane.dll'):
         if name not in HASHES and (game/name).exists():
             previous = (game/name).read_bytes()
             if previous != files[name]:

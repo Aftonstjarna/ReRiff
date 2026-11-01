@@ -67,7 +67,7 @@ class ClientUpdateTest(unittest.TestCase):
         self.assertEqual((self.game/'server.ini').read_bytes(), b'external settings\n')
         self.assertEqual((self.game/'localserver/save.json').read_bytes(), b'saved scores')
         self.assertTrue((self.work/'success').is_file())
-        self.assertTrue(list((self.root/'backups/versions').iterdir()))
+        self.assertTrue(list((self.game/'bak/versions').iterdir()))
 
     def test_windows_package_preflight_and_apply(self):
         archive, digest = self.package('windows')

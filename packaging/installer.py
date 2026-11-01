@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """Offline ReRiff installer for Linux/Proton and Windows. Close the game first."""
 import argparse
-import hashlib
 import json
 import os
 from pathlib import Path
 import re
 import shlex
+import shutil
 import sys
+import subprocess
 import tempfile
 import shutil
 import subprocess
@@ -38,16 +39,7 @@ def auto_game():
 
 
 def backup_base(game):
-    for parent in Path(__file__).resolve().parents:
-        if (parent/'.git').is_dir():
-            project = parent
-            break
-    else:
-        project = Path.home()/'.dev/ReRiff'
-        if not project.is_dir():
-            project = Path.home()/'ReRiff'
-    key = hashlib.sha256(str(game).encode()).hexdigest()[:12]
-    return project/'backups/installations'/key
+    return game/'bak'
 
 
 def replace(path, data):
@@ -63,18 +55,22 @@ def replace(path, data):
         temporary.unlink(missing_ok=True)
 
 
-def patch_vanilla(bundle, game, backups, manifest, restore):
+def patch_supported_client(bundle, game, backups, manifest, restore, previous_backups=None):
     """Run the source-built patcher on private copies, before changing the game."""
     supported = manifest['vanilla_originals']
     expected = manifest['required_existing']
     originals, plan, needs_patch = {}, {}, []
+    legacy = manifest.get("compatible_existing", {})
+    upgrades = manifest.get('client_upgrades', {})
     for name, original_hash in supported.items():
         path = game/name
         if not path.is_file():
             raise ValueError('Required game DLL is missing: '+str(path))
         current = path.read_bytes()
         current_hash = digest(current)
-        if current_hash not in (original_hash, expected[name]):
+        upgrade_outputs = upgrades.get(name, {})
+        ready = {expected[name], *upgrade_outputs.values()}
+        if current_hash not in ({original_hash, legacy.get(name)} | ready | set(upgrade_outputs)):
             raise ValueError('Unsupported game DLL; refusing to overwrite: '+str(path))
         saved = backups/'originals'/name
         if saved.exists():
@@ -82,33 +78,64 @@ def patch_vanilla(bundle, game, backups, manifest, restore):
             if digest(data) != original_hash:
                 raise ValueError('Original backup hash mismatch; backup retained: '+str(saved))
             originals[name] = data
+        elif previous_backups is not None and (previous_backups/'originals'/name).is_file():
+            recorded = previous_backups/'originals'/name
+            data = recorded.read_bytes()
+            if digest(data) != original_hash:
+                raise ValueError('Recorded original backup hash mismatch; backup retained: '+str(recorded))
+            originals[name] = data
         elif current_hash == original_hash:
             originals[name] = current
         elif restore:
             raise ValueError('Original backup missing: '+str(saved))
         if restore:
             plan[name] = originals[name]
-        elif current_hash == original_hash:
-            needs_patch.append(name)
+        elif current_hash not in ready:
+            needs_patch.append((name, name in originals, current_hash))
     if needs_patch:
         patcher = bundle/'patcher/ReRiff-Patcher.exe'
         command = [str(patcher)]
         if os.name != 'nt':
-            mono = shutil.which('mono')
-            if not mono:
-                raise ValueError('A fresh Linux installation requires Mono to patch the original DLLs. Install Mono, then run setup again. Existing patched installations do not require Mono.')
-            command.insert(0, mono)
+            native = bundle/'patcher/ReRiff-Patcher'
+            if native.is_file():
+                native.chmod(native.stat().st_mode | 0o100)
+                command = [str(native)]
+            else:
+                mono = shutil.which('mono')
+                if not mono:
+                    raise ValueError('The Linux patcher is missing from this package. Download the complete current Linux installer; no game files have been changed.')
+                command.insert(0, mono)
         with tempfile.TemporaryDirectory(prefix='reriff-patch-') as temporary:
-            for name in needs_patch:
+            for name, vanilla, input_hash in needs_patch:
                 source, output = Path(temporary)/name, Path(temporary)/('patched-'+name)
-                source.write_bytes(originals[name])
-                mode = ['--offline-gate'] if name == 'Parse.NetFx45.dll' else []
-                result = subprocess.run(command+mode+[str(source), str(bundle/'payload/ReRiff.ClientConfig.dll'), str(output)],
-                                        capture_output=True, text=True, timeout=120)
-                if result.returncode:
-                    raise ValueError('Local DLL patching failed for '+name+': '+result.stdout+result.stderr)
+                source.write_bytes(originals[name] if vanilla else (game/name).read_bytes())
+                def run_patch(mode, source, helper, output):
+                    result = subprocess.run(command+mode+[str(source), str(bundle/('payload/'+helper)), str(output)],
+                                            capture_output=True, text=True, timeout=120)
+                    if result.returncode:
+                        raise ValueError('Local DLL patching failed for '+name+': '+result.stdout+result.stderr)
+                if not vanilla and input_hash in upgrades.get(name, {}):
+                    if name == 'Parse.NetFx45.dll' and input_hash == legacy.get(name):
+                        with_news = Path(temporary)/'with-news.dll'
+                        run_patch(['--news-header'], source, 'ReRiff.NewsHeaders.dll', with_news)
+                        source = with_news
+                    # Existing hooks retain their IL; only the references to
+                    # ReRiff's own helpers change to the signed identities.
+                    result = subprocess.run(command+['--retarget-helpers',str(source),str(bundle/'payload'),str(output)],
+                                            capture_output=True,text=True,timeout=120)
+                    if result.returncode:
+                        raise ValueError('Client helper reference repair failed: '+result.stdout+result.stderr)
+                elif name == 'ParseOctane.dll':
+                    run_patch([], source, 'ReRiff.ClientConfig.dll', output)
+                else:
+                    if vanilla:
+                        offline = Path(temporary)/'offline.dll'
+                        run_patch(['--offline-gate'], source, 'ReRiff.ClientConfig.dll', offline)
+                        source = offline
+                    run_patch(['--news-header'], source, 'ReRiff.NewsHeaders.dll', output)
                 data = output.read_bytes()
-                if digest(data) != expected[name]:
+                output_hash = expected[name] if vanilla else upgrades.get(name, {}).get(input_hash, expected[name])
+                if digest(data) != output_hash:
                     raise ValueError('Local patch output hash mismatch: '+name)
                 plan[name] = data
     return originals, plan
@@ -135,12 +162,11 @@ def install(bundle, game, backups, platform, dry_run=False, restore=False):
                 raise ValueError('This is an update-only package. A supported existing ReRiff installation is required: '+name)
         if not (game/'ReRiff.ClientConfig.dll').is_file():
             raise ValueError('This update requires an existing ReRiff client helper.')
-    if state.get('backup_dir') and backups is None:
-        backups = Path(state['backup_dir'])
+    previous_backups = Path(state['backup_dir']) if state.get('backup_dir') else None
     backups = backups or backup_base(game)
     originals, plan = {}, {}
     if local_patching:
-        originals, plan = patch_vanilla(bundle, game, backups, manifest, restore)
+        originals, plan = patch_supported_client(bundle, game, backups, manifest, restore, previous_backups)
     for name, patch_info in manifest['patches'].items():
         current = (game/name).read_bytes()
         saved = backups/'originals'/name
@@ -150,6 +176,8 @@ def install(bundle, game, backups, platform, dry_run=False, restore=False):
         if digest(candidate) != patch_info['original']:
             legacy = Path(__file__).resolve()
             candidates = [saved]
+            if previous_backups is not None:
+                candidates.append(previous_backups/'originals'/name)
             for parent in legacy.parents:
                 candidates.append(parent/'backups/client'/name)
             original = next((p.read_bytes() for p in candidates if p.is_file() and digest(p.read_bytes()) == patch_info['original']), None)
@@ -177,12 +205,15 @@ def install(bundle, game, backups, platform, dry_run=False, restore=False):
             plan['localserver/start-server.cmd'] = b'@echo off\r\n"%~dp0windows-python\\python.exe" "%~dp0trace-server.py" --server-dir "%~dp0server"\r\n'
         else:
             root = game/'localserver'
-            script = '#!/bin/sh\nset -eu\nunset PYTHONHOME\nexport PYTHONNOUSERSITE=1\nexport PYTHONPATH='+shlex.quote(str(root/'python-libs'))+'\nexec '+shlex.quote(sys.executable)+' '+shlex.quote(str(root/'trace-server.py'))+' --server-dir '+shlex.quote(str(root/'server'))+'\n'
+            interpreter = sys.executable or shutil.which('python3')
+            if not interpreter:
+                raise ValueError('A native Python 3 interpreter is required for local server startup.')
+            script = '#!/bin/sh\nset -eu\nunset PYTHONHOME\nexport PYTHONNOUSERSITE=1\nexport PYTHONPATH='+shlex.quote(str(root/'python-libs'))+'\nexec '+shlex.quote(interpreter)+' '+shlex.quote(str(root/'trace-server.py'))+' --server-dir '+shlex.quote(str(root/'server'))+'\n'
             plan['localserver/start-server.sh'] = script.encode()
         if not (game/'server.ini').exists():
             plan['server.ini'] = b'[server]\nexternal_url =\nfallback_url = http://127.0.0.1:5144\ntimeout_seconds = 5\nshow_server_popup = true\n'
         next_state = {'version': manifest['version'], 'backup_dir': str(backups),
-                      'patched': manifest.get('required_existing', {}) if local_patching else ({n: digest(plan[n]) for n in originals} if originals else state.get('patched',manifest.get('required_existing',{})))}
+                      'patched': {n: digest(plan[n] if n in plan else (game/n).read_bytes()) for n in manifest['required_existing']} if local_patching else ({n: digest(plan[n]) for n in originals} if originals else state.get('patched',manifest.get('required_existing',{})))}
         plan['localserver/install-state.json'] = (json.dumps(next_state, indent=2)+'\n').encode()
     if dry_run:
         print(f'Validated ReRiff {manifest["version"]}: {len(plan)} files; backups: {backups}')
@@ -205,7 +236,7 @@ def install(bundle, game, backups, platform, dry_run=False, restore=False):
                 if digest(saved.read_bytes()) != digest(original):
                     raise ValueError('Original backup conflict: '+str(saved))
         else:
-            print('Verified original backup; kept unchanged: '+str(saved))
+            print('Verified vanilla backup; kept unchanged: '+str(saved))
     previous, changed = {}, []
     try:
         for relative, data in plan.items():

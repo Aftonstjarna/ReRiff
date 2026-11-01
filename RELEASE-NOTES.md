@@ -1,3 +1,97 @@
+# ReRiff 1.2.1 — Stable in-game server management
+
+Combines the tested client changes through experimental 1.2.1-4 and the
+experimental Docker server updates into the stable main branch.
+
+- Add a native, controller-friendly Servers menu inside the game, replacing
+  Friends while retaining News. Select local or external servers, toggle
+  external-only operation or networking, and save without losing stored URLs.
+- Add Save and restart: save settings, close the game normally, wait for the old
+  process to exit, and relaunch with the new configuration and original launch
+  arguments. It supports launcher-started and directly started games and returns
+  straight to gameplay without another launcher window.
+- Save the skip-launcher preference, support explicit skip/show flags, preserve
+  Steam-forwarded Windows game arguments, and refresh launcher controls after
+  settings are changed in the game.
+- Fix Windows helper loading failure 0x80131044 with strong-name signed managed
+  helpers and matching client references. Validate on Microsoft .NET Framework
+  x86 and verify known vanilla and upgraded DLL outputs before installation.
+- Bundle the Linux patcher's runtime so installation and DLL-hook updates need
+  neither Mono nor a separately installed .NET runtime on the Linux host.
+- Preserve verified vanilla backups, reject conflicting backup hashes, and
+  retain rollback, release checksum verification, and stable/experimental channel
+  checks. Current client backups use the game's bak folder.
+- Include the Windows startup collector and bounded network exception logging
+  in ReRiff-network.log for diagnosing remaining connection problems.
+- Promote the Docker server's native version-aware News responses, persistent
+  data configuration, and server checks to main and the stable :latest image.
+  The game compatibility Version endpoint remains unchanged.
+- Update the main README with player instructions and screenshots first, then
+  server administration, build instructions, and reconstruction status.
+
+Prerelease users: uncheck Use experimental builds while the game is closed to
+install stable 1.2.1. Manual installs must use the complete platform package.
+Existing settings and saved data are retained. Docker updates require pulling
+and recreating the container with its existing environment and data mount.
+
+The Windows game still needs its original runtime dependencies and uses Proton
+on Linux. A reported Windows connection issue after a successful server probe
+still needs network-log diagnosis; this release does not claim to resolve it.
+
+# ReRiff 1.2.1-4 — In-game Save and restart
+
+- Replace the third button from the bottom of the native Servers menu with
+  Save and restart.
+- Save settings first, close the game normally, and wait for the old process to
+  exit before relaunching with the saved server configuration and original game
+  arguments. The restart goes straight back into the game.
+- Support restarting both launcher-started and directly started games. A save
+  or handoff failure leaves the game running; a canceled close restores menu
+  interaction instead of forcing termination.
+# ReRiff 1.2.1-3 — Linux update patcher runtime
+
+- Include the Linux DLL patcher's runtime in the installer so fresh installs and
+  updates no longer require Mono or a host .NET installation.
+- Keep the signed-helper loading fix from revision -2, including verified DLL
+  repair and preservation of existing vanilla backups.
+- Record bounded network and assembly-loading exception details in
+  ReRiff-network.log, and include that log in the startup report collector.
+
+The Linux update failure was confirmed in update.log. The separately reported
+Windows external-server connection failure remains under investigation; the
+Windows selects the external address successfully; its subsequent game-request
+failure still needs the new network log to identify the cause.
+# ReRiff 1.2.1-2 — Windows assembly loading fix
+
+- Fix the assembly-loading failure identified in the supplied Windows crash
+  dump: ReRiff.ClientConfig was unsigned while the Parse transport required a
+  strongly named dependency (HRESULT 0x80131044).
+- Strong-name sign both ReRiff managed helpers and update their injected
+  references. Verify fresh and upgraded DLL outputs against known SHA256 hashes.
+- Repair supported older patched clients even when original backups are absent;
+  preserve existing verified vanilla backups and game settings.
+- Test helper loading on Microsoft .NET Framework x86 before publishing.
+- Use numbered prerelease revisions and preserve compatibility with older
+  experimental-channel updaters.
+
+Install the complete package with ReRiff-Setup.exe or the experimental updater.
+Both the patched Parse DLLs and matching helpers must be updated together.
+The identified loader error is addressed; the affected Windows client still
+needs to confirm that the game reaches its menu.
+# ReRiff 1.2.0 — Experimental in-game server management
+
+This is an experimental prerelease. Stable releases remain on their existing channel.
+
+- Replace Friends with a native Servers screen; preserve normal News.
+- Save server settings separately from Play; support both --skip and --skip-launcher.
+- Disable networking without clearing the saved server addresses.
+- Restore the server notification popup alongside the engine menu.
+- Add an experimental-build checkbox and show Experimental beside the installed version.
+- Report the client version to News and ask the player to exit and update when the server software is newer.
+- Support verified vanilla and existing ReRiff installs through local source-built DLL patching. Keep backups in the game's bak folder.
+
+The original Game.exe is unchanged. Recovery and Linux-port sources are checkpointed on the branch; the release does not enable Linux driving.
+
 # ReRiff 0.1.10 — Launcher release channels
 
 - Add a checkbox to switch between experimental builds and the stable release.

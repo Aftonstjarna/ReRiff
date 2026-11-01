@@ -1,54 +1,49 @@
 # ReRiff
 
-Riff Racer server restoration and client compatibility tools for Windows and
-Linux/Proton. ReRiff provides a local or shared server, a native Windows launcher,
-and client configuration tools. The game still runs through Proton on Linux and
-retains its existing .NET Framework requirements.
+Restore Riff Racer's local and shared-server features on Windows and Linux/Proton.
+ReRiff includes a launcher, automatic updates, and a **native in-game Servers
+menu** with controller navigation. Choose a server, keep or disable networking,
+save settings, or use **Save and restart** to apply changes immediately.
 
-This repository contains the server, launcher, client tools, and installers
-together. Current releases, instructions, and Docker publishing are maintained
-here.
+[Download stable 1.2.1](https://github.com/Aftonstjarna/ReRiff/releases/latest)
+· [Install and update](#install-or-update)
+· [Steam launch options](#launch-through-steam)
+· [Server settings](#server-settings)
+· [Troubleshooting](#troubleshooting)
+· [Server administration and technical details](#server-administration-and-technical-details)
 
-**Experimental builds include a native in-game Servers menu**, integrated into
-Riff Racer's own menu system with controller navigation. Select local or external
-servers, toggle networking and launcher skipping, and save settings from inside
-the game. Server connection changes apply on the next game start.
+**Native in-game Servers menu — including Save and restart**
 
-The screenshots below show the [experimental client](https://github.com/Aftonstjarna/ReRiff/releases/tag/experimental).
+![ReRiff native in-game Servers menu with Save and restart, server selection, and controller navigation](docs/images/reriff-in-game-menu.png)
 
-**Native in-game server menu**
-
-![ReRiff's native in-game Servers menu with server selection, networking, launcher skipping, and save controls](docs/images/reriff-in-game-menu.png)
-
-**Separate launcher and updater**
+**Launcher and updater** (shown with an earlier experimental build)
 
 ![ReRiff launcher with server addresses, networking settings, and GitHub updates](docs/images/reriff-launcher.png)
 
-[Download the latest release](https://github.com/Aftonstjarna/ReRiff/releases/latest)
-· [Install and update](#install-or-update)
-· [Steam launch options](#launch-through-steam)
-· [Docker server](#docker-server)
-· [Troubleshooting](#troubleshooting)
+Use the in-game **Servers** entry in place of Friends. **Save settings** keeps
+the page open, **Save and return** goes back to the main menu, and **Save and
+restart** saves and restarts the game without another launcher window. Changes
+to the active server otherwise apply on the next game start. The launcher's
+**Play** button uses saved settings; **Save settings** stores edits separately.
+
+Linux still runs the Windows game through Proton. The native in-game menu does
+not remove the game's existing .NET Framework requirements.
 
 ## Install or update
 
-**Installers support vanilla and existing ReRiff installations.** Setup checks
-the original DLL hashes and patches your local copies of `ParseOctane.dll` and
-`Parse.NetFx45.dll`, or keeps already-supported patched copies. Original game
-executables, assets, and game-derived binary patches are not included.
+**Installers support vanilla and existing ReRiff installations.** Setup verifies
+the supported DLL hashes and patches the user's local copies when required.
+Original game executables, assets, and game-derived binary patches are not included.
 
 Close the game and launcher before a manual installation. Existing settings,
-scores, ghosts, and server data are preserved. Keep the installation's recorded
-backup folder. Unknown game DLL modifications are rejected rather than
-overwritten. Matching vanilla backups
-are checked by SHA256, kept unchanged, and skipped so installation can continue.
-A conflicting backup stops installation without overwriting it.
+scores, ghosts, and server data are preserved. Client backups are
+kept in the game's `bak` folder. Keep this folder when updating. Unknown game DLL
+modifications are rejected rather than overwritten.
 
 **Windows:** download and extract `ReRiff-<version>-windows.zip`, run
 `ReRiff-Setup.exe`, and select the game's `Game.exe`. Keep the ZIP contents
 together until setup finishes. Portable Python and server dependencies are
-included. Local DLL patching uses .NET Framework 4.5 or newer, already required
-by the game's managed libraries; it does not need the .NET 8 SDK or runtime.
+included. Local DLL patching uses the game's .NET Framework runtime.
 The package targets x64 Windows; the launcher is native x86 Win32.
 
 **Linux/Proton (x86_64):** install Python 3.10 or newer, then run:
@@ -61,8 +56,14 @@ Replace `<version>` with the downloaded release number. Omit `--game-dir` to
 search common Steam libraries. Do not use `sudo`. The installer bundles the
 server libraries and places the backend in `localserver/` beside `Game.exe`.
 It does not change Steam's selected Proton version or launch options.
-For a vanilla installation, Mono must also be available on Linux to run the
-local DLL patcher. Updating an already-patched installation does not need Mono.
+The Linux installer includes the DLL patcher's runtime; a separate Mono or .NET
+installation is not required. If an older package reports that Mono is required,
+download the current complete Linux installer or retry the update.
+
+If Windows selects an external server but game features stay offline, include
+`ReRiff-network.log` from the game folder when reporting the failure. It records
+bounded network and assembly-loading exception details. The startup report
+collector includes it automatically.
 
 ### Automatic client updates
 
@@ -71,13 +72,47 @@ the latest stable release for your platform, verifies its SHA256 and package
 contents, applies the update with backups and rollback, then reopens itself.
 The title bar shows the running version. Settings and saved data are retained.
 
+If you are using a prerelease, **uncheck Use experimental builds** while the
+game is closed to install stable 1.2.1. This works even when your installed
+version has a revision suffix such as `1.2.1-4`. Superseded prereleases are
+archived; they are not offered as current updates.
+
 If your launcher cannot apply an update, install the current release manually.
 Client updates do not update the Docker server.
+
+### In-game Servers menu and launcher skipping
+
+In the game's **Servers** menu, toggle **Skip launcher: On/Off**, then choose
+**Save settings** or **Save and return**. The next start uses this preference;
+Back without saving discards the change. The preference is stored in
+`server.ini` as `[launcher] skip_launcher=true` or `false`.
+
+**Save and restart**, the third button from the bottom, saves your changes and
+restarts the game immediately so the new server settings take effect. It waits
+for the current game to exit before starting a replacement and skips the
+launcher window during that restart. A save or restart-handoff failure leaves
+the current game running.
+
+Use `--show-launcher` to open the launcher even when this preference is on.
+`--skip-launcher`, `--launcher-skip`, and `--skip` explicitly skip it. Launcher
+flags override the saved preference, so remove a forced skip flag from Steam's
+launch options if you want the in-game toggle to control the next start.
 
 ## Launch through Steam
 
 On Windows, run `ReRiff-Launcher.exe` beside `Game.exe`. Add `--skip-launcher`
 to start the game without the settings window.
+
+On native Windows, Steam launch options can use:
+
+```text
+"C:\Steam\steamapps\common\Riff Racer\ReRiff-Launcher.exe" %command%
+```
+
+Use your actual game folder and do not surround the whole line with single
+quotes. Steam's forwarded command must point to `Game.exe` beside the launcher.
+Put launcher flags such as `--skip-launcher` before `%command%`; game arguments
+forwarded after `Game.exe` are retained. Use the current launcher for Steam command forwarding.
 
 On Linux, set Steam launch options to the installed bridge, using your game path:
 
@@ -163,13 +198,76 @@ For verified legacy repairs, the optional `song-aliases.json` contains equivalen
 groups such as `[["first-cached-id", "second-cached-id"]]`. Automatic registration
 removes the need to maintain those groups. Never join IDs solely by song title.
 
+## Restore original DLLs
+
+Use a current installer and its verified backups with `--restore --game-dir '...'` to
+restore original DLLs while retaining the server, settings, and saved data.
+Keep the recorded backup folder. Original game runtime dependencies still apply.
+
+On Linux/Proton:
+
+```sh
+sh ReRiff-<version>-linux.run --restore --game-dir '/path/to/Riff Racer'
+```
+
+On Windows:
+
+```text
+ReRiff-Setup.exe --restore --game-dir "C:\path\to\Riff Racer"
+```
+
+`--dry-run` validates a manual
+installation without writing files; `--backup-dir` selects an explicit backup
+location. Existing installations continue using their recorded backup directory.
+
+## Troubleshooting
+
+For a white-screen crash on Windows, install the complete package with
+`ReRiff-Setup.exe` first; copying the launcher alone leaves required helpers
+missing. If the crash persists, run the included collector from the game folder:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File ".\Collect-ReRiffStartup.ps1"
+```
+
+It prints the path to a report in your temporary folder. Review it before
+sharing: it includes local paths and recent client logs. It does not change
+game files or Windows settings. The unsigned-helper loader failure (`0x80131044`) is fixed in current builds.
+If a different failure persists, send the generated startup report.
+
+- **Game folder not found:** pass `--game-dir` with the folder containing
+  `Game.exe`; use Steam's **Browse** button to locate it.
+- **Launcher does not open under Proton:** check the quoted bridge path and
+  retain `-- %command%`. Use the game's existing working Proton configuration.
+- **Old updater reports a stop failure:** install a current release manually
+  once. Updated launchers distinguish actual host-helper completion from Wine's
+  wrapper exit status, including when no local backend is running.
+- **Cannot connect over LAN:** check the saved external URL and port, container
+  port mapping/host networking, TCP firewall rule, and `ReRiff-client.log`. A
+  public-URL setting alone does not expose a port. Restart the game to reselect.
+- **Same song has separate leaderboards:** update the server and both launchers,
+  ensure the exact source files are accessible, and relaunch each client. Metadata
+  alone cannot recover unknown cached identities.
+- **Server will not start:** check `localserver/server-console.log` and
+  `ReRiff-launcher.log`; another service may already occupy port 5144.
+- **Update fails:** inspect the temporary `update.log` reported by the launcher.
+  Download or preflight failure keeps the old launcher open; installation errors
+  retain or roll back files. Keep the game's original runtime dependencies.
+- **Notification hidden in fullscreen:** use borderless/windowed mode. The
+  notification fades automatically and requires no input.
+
+## Server administration and technical details
+
+The player installation and usage instructions are above. The following sections
+cover hosting, persistent data, server diagnostics, source builds, and recovery.
+
 ## Docker server
 
-The published image is `ghcr.io/aftonstjarna/reriff:latest`.
-If an existing deployment uses `ghcr.io/aftonstjarna/riffapi-local-extended`,
-change its image to `ghcr.io/aftonstjarna/reriff:latest` while retaining the
-existing environment and data volume or bind mount. Existing `reriff` deployments
-can continue using the same image address. From this repository,
+The experimental server changes are included in main. Deploy `:latest` for
+stable servers; existing `:experimental` deployments can switch to `:latest`
+while retaining the same environment and `/data` mount.
+
+The published image is `ghcr.io/aftonstjarna/reriff:latest`. From this repository,
 use the supplied Compose configuration:
 
 ```sh
@@ -262,6 +360,9 @@ GitHub's container workflow builds and tests pushes and pull requests. The defau
 branch publishes `latest` and a commit-specific tag to GHCR; version-tag builds
 can publish version tags. GitHub does not deploy or restart your server.
 
+The server News response reports its version and asks older clients to update,
+while leaving the game compatibility Version endpoint unchanged.
+
 ## Admin panel and logs
 
 For a local server, open `http://127.0.0.1:5144/admin`. For a shared server, use
@@ -300,51 +401,6 @@ For a local session summary:
 python3 "/path/to/Riff Racer/localserver/trace-server.py" --report /path/to/session.jsonl
 ```
 
-## Restore original DLLs
-
-Use a current installer and its backups with `--restore --game-dir '...'` to
-restore original DLLs while retaining the server, settings, and saved data.
-Keep the recorded backup folder. Original game runtime dependencies still apply.
-
-On Linux/Proton:
-
-```sh
-sh ReRiff-<version>-linux.run --restore --game-dir '/path/to/Riff Racer'
-```
-
-On Windows:
-
-```text
-ReRiff-Setup.exe --restore --game-dir "C:\path\to\Riff Racer"
-```
-
-`--dry-run` validates a manual
-installation without writing files; `--backup-dir` selects an explicit backup
-location. Existing installations continue using their recorded backup directory.
-
-## Troubleshooting
-
-- **Game folder not found:** pass `--game-dir` with the folder containing
-  `Game.exe`; use Steam's **Browse** button to locate it.
-- **Launcher does not open under Proton:** check the quoted bridge path and
-  retain `-- %command%`. Use the game's existing working Proton configuration.
-- **Old updater reports a stop failure:** install a current release manually
-  once. Updated launchers distinguish actual host-helper completion from Wine's
-  wrapper exit status, including when no local backend is running.
-- **Cannot connect over LAN:** check the saved external URL and port, container
-  port mapping/host networking, TCP firewall rule, and `ReRiff-client.log`. A
-  public-URL setting alone does not expose a port. Restart the game to reselect.
-- **Same song has separate leaderboards:** update the server and both launchers,
-  ensure the exact source files are accessible, and relaunch each client. Metadata
-  alone cannot recover unknown cached identities.
-- **Server will not start:** check `localserver/server-console.log` and
-  `ReRiff-launcher.log`; another service may already occupy port 5144.
-- **Update fails:** inspect the temporary `update.log` reported by the launcher.
-  Download or preflight failure keeps the old launcher open; installation errors
-  retain or roll back files. Keep the game's original runtime dependencies.
-- **Notification hidden in fullscreen:** use borderless/windowed mode. The
-  notification fades automatically and requires no input.
-
 ## Standalone source server
 
 The compatibility command remains available:
@@ -365,10 +421,17 @@ installers include that library automatically.
 
 Client source builds use .NET SDK 8 and Zig 0.14.1:
 
+Managed helpers use the committed `Managed/ReRiff.snk` development key for a
+reproducible strong-name identity required by the Windows .NET Framework loader.
+This public development key is not a publisher certificate or an authentication
+secret. Update the patched Parse DLL references together with the helpers.
+
 ```sh
 dotnet build ClientConfig/ClientConfig.csproj -c Release -o build
+dotnet build NewsHeaders/NewsHeaders.csproj -c Release -o build
 dotnet build Patcher/InstallerPatcher.csproj -c Release -o build/installer-patcher
-python3 scripts/build-windows-launcher.py --zig /path/to/zig
+python3 scripts/build-linux-patcher.py
+RERIFF_RELEASE_CHANNEL=stable python3 scripts/build-windows-launcher.py --zig /path/to/zig
 python3 scripts/build-song-catalog.py --zig /path/to/zig
 ```
 
@@ -383,13 +446,25 @@ and the verified Windows portable Python archive, then run:
 python3 packaging/build_release.py --local-patching --wheels-dir /path/to/wheels --python-zip /path/to/python.zip
 ```
 
-Updating `VERSION` on `main` or `launcher` triggers GitHub's client release
-workflow. It builds and checks both installers, then publishes assets and
+Updating `VERSION` on `main` triggers a stable client release. The
+`codex/experimental-client` branch publishes numbered prerelease revisions. It builds and checks both installers, then publishes assets and
 checksums. Each release contains only its own notes; the full changelog remains
-in [RELEASE-NOTES.md](RELEASE-NOTES.md). Existing release versions are not replaced.
+in [RELEASE-NOTES.md](RELEASE-NOTES.md). Stable releases are not overwritten. An existing prerelease can be
+promoted under its base version after the stable build passes all checks.
 
 The vendored extended backend originates from
 [rumbadebu/riffapi-local-extended](https://github.com/rumbadebu/riffapi-local-extended)
 at revision `d6b98d2845bfbc8ee2888f805f8f0dc36bb73ede`, based on
 rebane2001/riffapi-local. Its Unlicense is retained. ReRiff source is MIT licensed;
 bundled dependencies retain their licenses.
+
+## Original-game reconstruction and Linux-port status
+
+For original-game reconstruction work, the required baseline is a byte-for-byte
+matching source rebuild of the original Windows executable. That baseline has
+**not yet been achieved**. See [matching reconstruction status and tools](Decomp/README.md).
+The separate native Linux port's behavior tests do not establish a matching decompilation.
+
+The source recovery and separate native Linux port remain research work. They
+are not a replacement executable shipped in the player installer, and driving
+in the native port remains disabled pending recovery of the original integration.

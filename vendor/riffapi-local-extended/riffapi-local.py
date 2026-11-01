@@ -42,23 +42,18 @@ LOG_FILE = os.path.join(DATA_DIR, "requests.log")
 
 STORAGE_LOCK = threading.RLock()
 
-news = {
-    "title": "RiffApiLocal",
-    "msg": "You're connected to RiffApiLocal.\nScores and ghosts are saved locally.",
-}
 username = "RiffApiLocal"
 
 # Canned responses kept from the original riffapi-local: the game needs these
 # exact configuration values to function.
 responses = {
     "Configuration": '{"results":[{"objectId":"ITz5K79wcQ","updatedAt":"2015-10-06T15:37:10.761Z","RegionGroup":"Default","createdAt":"2015-08-27T16:48:23.993Z","OnTrackCoinValue":10,"TrackConversionCost":300,"ShareScoreCoinReward":200,"WatchAdCoinReward":200,"TrackCreatorCoinReward":100}]}',
-    "News": f'{{"results":[{{"objectId":"RiffApiLocalNews","updatedAt":"2000-01-01T00:00:00.000Z","de":"{news["msg"]}","createdAt":"2000-01-01T00:00:00.000Z","ru":"{news["msg"]}","en":"{news["msg"]}","esTitle":"{news["title"]}","it":"{news["msg"]}","fr":"{news["msg"]}","frTitle":"{news["title"]}","itTitle":"{news["title"]}","es":"{news["msg"]}","enTitle":"{news["title"]}","Status":"Active","ruTitle":"{news["title"]}","deTitle":"{news["title"]}","Pinned":true,"ID":16}}]}}',
     "Profile_Steam": f'{{"results":[{{"objectId":"{username}Profile","SystemID":"1","FavouriteCar":1,"FavouriteSong":"null","FavouriteGenre":"pop","DriverLevel":0,"Platform":"PC","Username":"{username}","createdAt":"2000-01-01T00:00:00.000Z","updatedAt":"2000-01-01T00:00:00.000Z"}}]}}',
     "Version": '{"results":[{"objectId":"BoJMZ1TQJZ","updatedAt":"2015-02-10T21:05:53.214Z","Ver":100,"createdAt":"2015-02-10T20:50:24.164Z"}]}',
 }
 
 # Classes that always return the canned response above.
-CANNED_CLASSES = ("Configuration", "News", "Version")
+CANNED_CLASSES = ("Configuration", "Version")
 
 LOG_LOCK = threading.Lock()
 
@@ -548,6 +543,9 @@ def query_class(cls):
     with STORAGE_LOCK:
         objs = load_all_objects(cls)
 
+    if cls == "News":
+        objs = news_response(objs)
+
     views, match_where = song_query_view(cls, objs, where)
     filtered = [o for o, view in zip(objs, views) if matches_where(view, match_where)]
     # A player may already have records under several equivalent cached IDs.
@@ -956,6 +954,12 @@ _catalog_spec = importlib.util.spec_from_file_location(
 _catalog_module = importlib.util.module_from_spec(_catalog_spec)
 _catalog_spec.loader.exec_module(_catalog_module)
 _catalog_module.install(globals())
+
+_news_spec = importlib.util.spec_from_file_location(
+    'reriff_news_adapter', os.path.join(BASE_DIR, 'news_adapter.py'))
+_news_module = importlib.util.module_from_spec(_news_spec)
+_news_spec.loader.exec_module(_news_module)
+_news_module.install(globals())
 
 if __name__ == "__main__":
     ensure_dirs()
