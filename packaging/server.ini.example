@@ -13,3 +13,7 @@ show_server_popup = true
 skip_launcher = false
 ; Check the installed release channel before starting without the launcher.
 auto_update_on_skip = false
+
+[graphics]
+; Experimental native Graphics-menu setting; Off by default.
+antialiasing = false

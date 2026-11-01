@@ -60,8 +60,11 @@ try:
     resumed = (case.game/'reopened').read_text()
     if args.automatic:
         assert '--skip-launcher --no-auto-update' in resumed and '"space value"' in resumed, resumed
+        notice=(case.game/'localserver/update-notification.ini').read_bytes()
+        assert b'9.0.0-2' in notice, notice
     else:
         assert '--show-launcher' in resumed, resumed
+        assert not (case.game/'localserver/update-notification.ini').exists()
     assert (case.game/'server.ini').read_bytes() == b'external settings\n'
     assert (case.game/'localserver/save.json').read_bytes() == b'saved scores'
     print('PASS: native updater waited for parent exit, applied '+args.platform+' package, preserved settings/data and relaunched')

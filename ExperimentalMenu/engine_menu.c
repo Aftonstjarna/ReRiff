@@ -17,6 +17,12 @@
 #undef ReRiffShowServerToastW
 #undef DllMain
 
+#ifndef RERIFF_VERSION
+#define RERIFF_VERSION "development"
+#endif
+#define MENU_WIDE_(x) L##x
+#define MENU_WIDE(x) MENU_WIDE_(x)
+
 typedef void (__thiscall *ScreenFn)(void *,void *,void *);
 typedef void (__thiscall *InputFn)(void *,int);
 typedef void (__thiscall *TickFn)(void *);
@@ -452,8 +458,13 @@ static BOOL supported_file(const WCHAR *path) {
     CloseHandle(file); return ok;
 }
 
+#include "antialiasing.h"
+#include "graphics_aa_menu.h"
+#include "main_branding.h"
+
 /* All addresses are RVAs from original bytes, not Ghidra's inferred prototypes. */
 static BOOL validate_image_at(BYTE *base,uintptr_t address_base) {
+    if(!validate_main_branding(base,address_base))return FALSE;
     static const BYTE base_tick_start[]={0xff,0x25};
     if(!readable(base+0x7a56d0,4)||*(DWORD *)(base+0x7a56d0)!=(DWORD)(address_base+0x2e28f0)
         ||!readable(base+0x2e28f0,6)||memcmp(base+0x2e28f0,base_tick_start,2)
@@ -553,6 +564,8 @@ __declspec(dllexport) BOOL __cdecl ReRiffStartEngineMenu(void) {
     InterlockedExchangePointer(&table[24],(void *)&hook_input);
     InterlockedExchangePointer(&table[26],(void *)&hook_colour);
     DWORD ignored; VirtualProtect(table,27*sizeof(void *),protection,&ignored);
+    if(!install_graphics_aa_menu(base))log_line("Native antialiasing control could not be installed.");
+    if(!install_main_branding(base))log_line("Main-menu branding could not be installed.");
     InterlockedExchange(&installed,2); log_line("Engine menu hooks installed."); return TRUE;
 }
 

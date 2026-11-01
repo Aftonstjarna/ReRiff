@@ -7,7 +7,15 @@
 
 static HWND host,edit;
 static BOOL observed=FALSE,failed=FALSE;
-static int ticks=0;
+static int ticks=0;static int visible_count;
+static BOOL CALLBACK inspect_toast(HWND toast,LPARAM unused){
+    (void)unused;WCHAR cls[128];GetClassNameW(toast,cls,128);
+    if(wcscmp(cls,L"ReRiffServerToast")||!IsWindowVisible(toast))return TRUE;
+    visible_count++;LONG style=GetWindowLongW(toast,GWL_EXSTYLE);
+    if(!(style&WS_EX_NOACTIVATE)||!(style&WS_EX_TRANSPARENT)||GetForegroundWindow()!=host||GetFocus()!=edit
+        ||SendMessageW(toast,WM_NCHITTEST,0,0)!=HTTRANSPARENT||GetWindow(toast,GW_CHILD))failed=TRUE;
+    return TRUE;
+}
 static void finish(BOOL success) {
     if(!success) failed=TRUE;
     FILE *file=fopen("notification-test.txt","w");
@@ -17,9 +25,10 @@ static void finish(BOOL success) {
 static LRESULT CALLBACK procedure(HWND window,UINT event,WPARAM wp,LPARAM lp) {
     if(event==WM_TIMER){
         ticks++;
+        visible_count=0;EnumWindows(inspect_toast,0);
         HWND toast=FindWindowW(L"ReRiffServerToast",NULL);
         if(toast && IsWindowVisible(toast)){
-            observed=TRUE;
+            if(visible_count==2)observed=TRUE;
             LONG style=GetWindowLongW(toast,GWL_EXSTYLE);
             if(!(style&WS_EX_NOACTIVATE)||!(style&WS_EX_TRANSPARENT)||GetForegroundWindow()!=host||GetFocus()!=edit
                 ||SendMessageW(toast,WM_NCHITTEST,0,0)!=HTTRANSPARENT||GetWindow(toast,GW_CHILD)) failed=TRUE;
@@ -43,6 +52,10 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE previous,LPWSTR command,int sho
     fn.address=dll?GetProcAddress(dll,"ReRiffShowServerToastW"):NULL;
     if(!fn.address){failed=TRUE;finish(FALSE);return 1;}
     fn.function(L"http://127.0.0.1:5144");
+    typedef BOOL (__cdecl *update_fn)(const WCHAR *);
+    union {FARPROC address;update_fn function;} update;
+    update.address=GetProcAddress(dll,"ReRiffShowUpdateToastW");
+    if(!update.address||!update.function(L"ReRiff has updated to 1.2.2-8")){failed=TRUE;finish(FALSE);return 1;}
     SetTimer(host,1,100,NULL);
     MSG msg;while(GetMessageW(&msg,NULL,0,0)>0){TranslateMessage(&msg);DispatchMessageW(&msg);}
     /* Process exit releases the overlay module after its worker has finished. */

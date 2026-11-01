@@ -1,3 +1,23 @@
+# ReRiff 1.2.2-8 — Version watermark, update notice and native antialiasing
+
+- Show the running ReRiff version in the bottom-right corner of the main menu,
+  including numbered experimental revisions. Use native game text with no input
+  handling, and follow the current screen size.
+- After a successful unattended installation, show "ReRiff has updated to …"
+  once on the next main menu. Keep server and update notifications independent,
+  non-interactive and automatically dismissed. Failed/manual updates do not
+  create notices. Test this with --test-auto-update after installing this build.
+- Add Antialiasing to the original Graphics menu with the native fullscreen
+  switch artwork. Apply saves the setting; Back discards pending changes.
+- Implement optional post-process edge smoothing on the original D3D9 device,
+  disabled by default. Preserve graphics state and display modes; handle device
+  reset and fall back to Off when shader/device support is unavailable.
+- Retain existing Graphics controls, server controls, navigation and updates.
+
+Experimental: native menu and renderer fixtures verify ownership, placement,
+notice consumption, actual smoothed pixels, state restoration and device reset.
+Live gameplay and physical Windows/Proton driver testing are still required.
+
 # ReRiff 1.2.2-7 — Steam unattended-test forwarding fix
 
 - Recognize --test-auto-update and --no-auto-update in the Linux Steam bridge.
