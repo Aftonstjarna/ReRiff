@@ -1,3 +1,21 @@
+# ReRiff 1.2.2-4 — Restore vanilla Settings activation
+
+- Use base menu input dispatch for the scrolling Settings list. Keep the
+  original audio-slider update code on the Audio page, and clear stale Audio
+  drag flags before dispatching original Settings actions.
+- Reconcile input masks after the game's recursive screen reset: visible rows
+  use the active screen mask; hidden rows, arrows and dividers cannot capture
+  input. Preserve ongoing press/release state when a mask is unchanged.
+- Add regression coverage for hover/click and controller confirmation on
+  Graphics, Audio, Controls and Credits, including scrolling to Credits and
+  stale slider flags. Exercise the original native screen mask routine.
+- Record up to 64 vanilla Settings activations per visit in
+  ReRiff-engine-menu.log for follow-up diagnosis.
+- Keep Servers first and retain the native file-picker scrollbar.
+
+Experimental: automated checks pass; the reported live-game hover and activation
+failure still needs confirmation with this revision.
+
 # ReRiff 1.2.2-3 — Native scrollbar and Settings navigation
 
 - Move Servers to the first row of Settings, preserving all original entries.
