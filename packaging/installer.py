@@ -17,7 +17,8 @@ from shared_patch import apply_patch, digest
 
 
 def auto_game():
-    bases = [Path.home()/'.local/share/Steam', Path.home()/'.steam/steam']
+    bases = [Path.home()/'.local/share/Steam', Path.home()/'.steam/steam',
+             Path.home()/'.steam/root', Path.home()/'.var/app/com.valvesoftware.Steam/.local/share/Steam']
     if os.name == 'nt':
         try:
             import winreg
@@ -36,6 +37,71 @@ def auto_game():
         if (game/'Game.exe').is_file():
             return game
     return None
+
+
+def default_music_dir():
+    """Read the XDG setting as data; never source or evaluate the config."""
+    home = Path.home()
+    config = Path(os.environ.get('XDG_CONFIG_HOME', home/'.config'))/'user-dirs.dirs'
+    if config.is_file():
+        for line in config.read_text(errors='replace').splitlines():
+            match = re.match(r'^\s*XDG_MUSIC_DIR\s*=\s*(.*?)\s*$', line)
+            if match:
+                try:
+                    values = shlex.split(match[1], comments=True)
+                    if len(values) == 1:
+                        value = values[0].replace('${HOME}', str(home)).replace('$HOME', str(home))
+                        if Path(value).is_absolute():
+                            return Path(value)
+                except ValueError:
+                    pass
+    return home/'Music'
+
+
+def link_music_folder(game, music):
+    """Optional Linux convenience; never delete a user's music directory."""
+    candidates = [game/'prefix/pfx', game/'prefix']
+    if game.parent.name == 'common' and game.parent.parent.name == 'steamapps':
+        candidates.append(game.parent.parent/'compatdata/351990/pfx')
+    prefix = next((p.resolve() for p in candidates if (p/'drive_c/users/steamuser').is_dir()), None)
+    if prefix is None:
+        print('Music link deferred: no initialized Proton prefix found. Start the game once, then rerun setup to link music.')
+        return
+    destination = prefix/'drive_c/users/steamuser/Music'
+    music = music.expanduser().resolve()
+    if music == destination or destination in music.parents:
+        print('Music link skipped: the source must be outside the prefix Music folder.')
+        return
+    if destination.is_symlink() and destination.resolve() == music:
+        print('Music link already correct: '+str(destination)+' -> '+str(music))
+        return
+    if destination.exists() and not destination.is_symlink():
+        if not destination.is_dir() or any(destination.iterdir()):
+            print('Music link skipped: existing prefix Music contains files and was preserved: '+str(destination))
+            return
+    music.mkdir(parents=True, exist_ok=True)
+    if destination.is_symlink():
+        # Replacing a link changes no contents in its previous target.
+        fd, temporary = tempfile.mkstemp(prefix='.reriff-music-', dir=destination.parent)
+        os.close(fd)
+        temp = Path(temporary)
+        try:
+            temp.unlink()
+            temp.symlink_to(music, target_is_directory=True)
+            os.replace(temp, destination)
+        finally:
+            temp.unlink(missing_ok=True)
+    else:
+        removed_empty = destination.is_dir()
+        if removed_empty:
+            destination.rmdir()  # refuses if anything was added since the check
+        try:
+            destination.symlink_to(music, target_is_directory=True)
+        except OSError:
+            if removed_empty and not destination.exists():
+                destination.mkdir()
+            raise
+    print('Music linked: '+str(destination)+' -> '+str(music))
 
 
 def backup_base(game):
@@ -141,7 +207,7 @@ def patch_supported_client(bundle, game, backups, manifest, restore, previous_ba
     return originals, plan
 
 
-def install(bundle, game, backups, platform, dry_run=False, restore=False):
+def install(bundle, game, backups, platform, dry_run=False, restore=False, music_dir=None, music_link=None):
     if not (game/'Game.exe').is_file():
         raise ValueError(f'Game.exe was not found in {game}')
     manifest = json.loads((bundle/'manifest.json').read_text())
@@ -214,6 +280,10 @@ def install(bundle, game, backups, platform, dry_run=False, restore=False):
             plan['server.ini'] = b'[server]\nexternal_url =\nfallback_url = http://127.0.0.1:5144\ntimeout_seconds = 5\nshow_server_popup = true\n'
         next_state = {'version': manifest['version'], 'backup_dir': str(backups),
                       'patched': {n: digest(plan[n] if n in plan else (game/n).read_bytes()) for n in manifest['required_existing']} if local_patching else ({n: digest(plan[n]) for n in originals} if originals else state.get('patched',manifest.get('required_existing',{})))}
+        if platform == 'linux':
+            enabled = music_link if music_link is not None else (True if music_dir is not None else state.get('music_link', True))
+            chosen_music = music_dir or (Path(state['music_dir']) if state.get('music_dir') else default_music_dir())
+            next_state.update(music_link=enabled, music_dir=str(chosen_music.expanduser().resolve()))
         plan['localserver/install-state.json'] = (json.dumps(next_state, indent=2)+'\n').encode()
     if dry_run:
         print(f'Validated ReRiff {manifest["version"]}: {len(plan)} files; backups: {backups}')
@@ -260,18 +330,35 @@ def install(bundle, game, backups, platform, dry_run=False, restore=False):
             else:
                 replace(game/relative, previous[relative])
         raise
+    if platform == 'linux' and not restore and next_state.get('music_link'):
+        try:
+            link_music_folder(game, Path(next_state['music_dir']))
+        except OSError as error:
+            print('Music link was not applied; game installation completed: '+str(error))
     print(('Original DLLs restored.' if restore else 'ReRiff '+manifest['version']+' installed.')+'\nGame: '+str(game)+'\nBackups: '+str(backups)+'\nExisting settings and saved data preserved.')
     return plan
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--print-music-dir', action='store_true', help='Print the default Linux music folder without installing')
+    parser.add_argument('--music-dir', type=Path, help='Linux music folder to link into an initialized Proton prefix')
+    parser.add_argument('--no-music-link', dest='music_link', action='store_false', default=None, help='Skip Linux music linking (keeps existing folders/links)')
+    parser.add_argument('--print-game-dir', action='store_true', help='Print a detected Steam game folder without installing')
     parser.add_argument('--game-dir', type=Path)
     parser.add_argument('--backup-dir', type=Path)
     parser.add_argument('--platform', choices=('linux', 'windows'), default='windows' if os.name == 'nt' else 'linux')
     parser.add_argument('--dry-run', action='store_true')
     parser.add_argument('--restore', action='store_true', help='Restore original game DLLs; retain server and saved data')
     args = parser.parse_args()
+    if args.print_music_dir:
+        print(default_music_dir())
+        return
+    if args.print_game_dir:
+        found = auto_game()
+        if found:
+            print(found)
+        return
     game = args.game_dir or auto_game()
     if game is None:
         parser.error('Steam installation not found. Pass --game-dir pointing to the folder containing Game.exe.')
@@ -280,7 +367,7 @@ def main():
     try:
         install(Path(__file__).resolve().parent, game.expanduser().resolve(),
                 args.backup_dir.expanduser().resolve() if args.backup_dir else None,
-                args.platform, args.dry_run, args.restore)
+                args.platform, args.dry_run, args.restore, args.music_dir, args.music_link)
     except (OSError, ValueError, KeyError) as error:
         parser.exit(1, 'Installation failed: '+str(error)+'\n')
 

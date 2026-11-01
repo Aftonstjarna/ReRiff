@@ -12,7 +12,14 @@ save settings, or use **Save and restart** to apply changes immediately.
 · [Troubleshooting](#troubleshooting)
 · [Server administration and technical details](#server-administration-and-technical-details)
 
-**Native in-game Servers menu — including Save and restart**
+**Experimental client: Settings → Servers**
+
+The experimental client adds **Servers** to the original **Settings** screen.
+Existing settings entries remain available with their original actions. Friends
+keeps its original place on the main menu; restoring its online features is the
+next stage of work.
+
+**Native in-game Servers menu — including Save and restart** (stable 1.2.1 shown)
 
 ![ReRiff native in-game Servers menu with Save and restart, server selection, and controller navigation](docs/images/reriff-in-game-menu.png)
 
@@ -20,8 +27,9 @@ save settings, or use **Save and restart** to apply changes immediately.
 
 ![ReRiff launcher with server addresses, networking settings, and GitHub updates](docs/images/reriff-launcher.png)
 
-Use the in-game **Servers** entry in place of Friends. **Save settings** keeps
-the page open, **Save and return** goes back to the main menu, and **Save and
+In the experimental client, open **Settings → Servers**. Stable 1.2.1 uses a
+**Servers** entry in place of Friends. **Save settings** keeps the page open;
+**Save and return** returns to the parent menu, and **Save and
 restart** saves and restarts the game without another launcher window. Changes
 to the active server otherwise apply on the next game start. The launcher's
 **Play** button uses saved settings; **Save settings** stores edits separately.
@@ -50,14 +58,40 @@ together until setup finishes. Portable Python and server dependencies are
 included. Local DLL patching uses the game's .NET Framework runtime.
 The package targets x64 Windows; the launcher is native x86 Win32.
 
-**Linux/Proton (x86_64):** install Python 3.10 or newer, then run:
+**Linux/Proton (x86_64):** install Python 3.10 or newer. The experimental Linux
+installer opens a native folder picker and setup window when run without
+arguments in a desktop session:
+
+```sh
+sh ReRiff-<version>-linux.run
+```
+
+Choose the folder containing `Game.exe`, click **Install**, and wait for the
+result. **Link Linux music folder** is checked by default. Its editable field
+uses your XDG Music location (usually `~/Music`). Setup links that folder into
+this game's Proton prefix at `drive_c/users/steamuser/Music`, so the game can
+browse your music. Uncheck it to skip linking; this preference is retained for
+automatic updates. Existing non-empty Music folders inside the prefix are
+preserved. If Steam has not created the prefix yet, launch the game once and
+rerun setup to apply the link. Terminal installs accept `--music-dir '/your/music'`
+or `--no-music-link`. GTK 3 is required for the window and is available on many Steam desktops.
+The installer shows progress and details, keeps a log under
+`~/.local/state/reriff/` (or `$XDG_STATE_HOME/reriff/`), and reuses the same backup,
+verification, and rollback checks as Windows. Choosing a folder alone changes
+nothing. A failed installation can be retried from the window.
+
+For a terminal install, a machine without GTK, or the current stable installer:
+
 
 ```sh
 sh ReRiff-<version>-linux.run --game-dir '/path/to/steamapps/common/Riff Racer'
 ```
 
 Replace `<version>` with the downloaded release number. Omit `--game-dir` to
-search common Steam libraries. Do not use `sudo`. The installer bundles the
+search common Steam libraries (including Flatpak Steam). Use `--cli` to force
+terminal mode in the experimental installer, or `--gui` to request the window.
+Explicit options such as `--game-dir`, `--dry-run`, `--restore`, and `--help`
+keep their terminal behavior for scripts and automatic updates. Do not use `sudo`. The installer bundles the
 server libraries and places the backend in `localserver/` beside `Game.exe`.
 It does not change Steam's selected Proton version or launch options.
 The Linux installer includes the DLL patcher's runtime; a separate Mono or .NET
@@ -86,7 +120,10 @@ Client updates do not update the Docker server.
 
 ### In-game Servers menu and launcher skipping
 
-In the game's **Servers** menu, toggle **Skip launcher: On/Off**, then choose
+In the experimental client, open **Settings → Servers** and use the original
+fullscreen-style on/off switches for **Skip launcher**, **External only**, and
+**Networking**. Stable 1.2.1 uses the **Servers** entry on the main menu and text
+toggles. After changing Skip launcher, choose
 **Save settings** or **Save and return**. The next start uses this preference;
 Back without saving discards the change. The preference is stored in
 `server.ini` as `[launcher] skip_launcher=true` or `false`.
@@ -440,6 +477,8 @@ dotnet build ClientConfig/ClientConfig.csproj -c Release -o build
 dotnet build NewsHeaders/NewsHeaders.csproj -c Release -o build
 dotnet build Patcher/InstallerPatcher.csproj -c Release -o build/installer-patcher
 python3 scripts/build-linux-patcher.py
+# GUI build headers: libgtk-3-dev (Debian/Ubuntu) or gtk3-devel (Fedora).
+python3 scripts/build-linux-installer.py --zig /path/to/zig
 RERIFF_RELEASE_CHANNEL=stable python3 scripts/build-windows-launcher.py --zig /path/to/zig
 python3 scripts/build-song-catalog.py --zig /path/to/zig
 ```

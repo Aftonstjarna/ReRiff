@@ -1,3 +1,24 @@
+# ReRiff 1.2.2-1 — Native Settings integration and Linux GUI setup
+
+- Add Servers to the original Settings screen using the game's own text,
+  navigation, focus, and rendering. Existing settings entries and actions are
+  retained, and Friends keeps its original main-menu entry.
+- Reuse the original fullscreen toggle graphics for Skip launcher, External only,
+  and Networking, including the original on/off sprites and focus tint.
+- Keep server selection, networking and skip-launcher preferences, save/reload,
+  and Save and restart in the Settings submenu. Back returns to Settings.
+- Add a native Linux setup window with Steam-folder detection, a folder picker,
+  explicit Install action, progress, details, retry, and persistent installer
+  logs. It uses the existing transactional installer and verified backups.
+- Offer an optional Linux Music link with an editable source folder. Respect
+  XDG Music settings, preserve existing music files, and retain opt-out on updates.
+- Preserve terminal and automatic-updater behavior for explicit installer
+  arguments, and detect common Flatpak Steam libraries.
+
+Experimental: live game rendering and controller testing of the relocated menu
+are still required. Friends-list online functionality is a subsequent task.
+The Linux setup window requires GTK 3; command-line setup remains available.
+
 # ReRiff 1.2.1 — Stable in-game server management
 
 Combines the tested client changes through experimental 1.2.1-4 and the

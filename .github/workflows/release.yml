@@ -88,6 +88,12 @@ jobs:
         run: >-
           python scripts/build-song-catalog.py
           --zig "$RUNNER_TEMP/release-tools/zig-x86_64-linux-0.14.1/zig"
+      - name: Build and test native Linux setup
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev xvfb
+          python scripts/build-linux-installer.py --zig "$RUNNER_TEMP/release-tools/zig-x86_64-linux-0.14.1/zig"
+          python scripts/test-linux-installer.py --zig "$RUNNER_TEMP/release-tools/zig-x86_64-linux-0.14.1/zig"
       - name: Package Windows and Linux installers
         run: >-
           python packaging/build_release.py --local-patching
@@ -99,6 +105,7 @@ jobs:
         run: |
           python -m unittest discover -s packaging -p test_installer.py -v
           python -m unittest discover -s packaging -p test_helper_upgrade.py -v
+          python -m unittest discover -s packaging -p test_linux_music.py -v
       - name: Verify automatic update extraction and rollback
         run: python scripts/test_client_update.py
       - name: Validate Linux self-extractor

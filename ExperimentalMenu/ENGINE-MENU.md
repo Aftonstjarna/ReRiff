@@ -1,33 +1,33 @@
-# Engine-rendered Servers experiment
+# Native Settings > Servers integration
 
-This is the corrected experiment on `codex/experimental-client`. It hooks
-the original `gaMainMenu` callbacks and edits existing `elUIItemText` objects
-through the game's native text functions. The menu itself creates no windows,
-polls no keys, and uses no overlay renderer. Original menu focus, mouse/keyboard/controller
-selection dispatch and rendering remain responsible for interaction.
+The experimental client hooks the original `gaOptionsMenu` callbacks, adding
+Servers above its existing options. It does not patch the main-menu vtable,
+change Friends, replace settings entries, or move original rows, arrows,
+dividers, or audio sliders. New rows use the original `elUIItemText.createRaw`,
+font 3, centered alignment, menu-item flags, native colours and engine input.
 
-The prototype temporarily replaces **Friends** with **Servers**. News retains
-its original label and action. Selecting Servers
-turns the existing main-menu rows into a server-settings page. This is an engine
-menu page within the existing screen, not a new registered `gaState` subclass.
-It reuses the existing layout and icons. Back/Escape restores the original
-localized main-menu labels, with Friends continuing to read Servers.
+The entry is a child of the existing Settings group. The server page's ten rows
+are owned by the existing screen and use distinct IDs 1501–1510 (entry 1500).
+Opening the page saves the original Settings/audio group visibility, hides those
+groups, and focuses the first server control through `elUIScreen.setFocus(int)`.
+Back or Save and return restores the saved visibility and focuses Servers.
+The base `gaMenu.tick` handles the server page; all other Settings input and
+updates retain their original callbacks. Cleanup removes the added screen rows
+before original cleanup so repeated visits cannot accumulate controls or IDs.
 
-Commands select localhost, select the external URL already saved in server.ini,
-toggle external-only mode, disable networking, choose whether to skip the
-launcher on future starts, save, reload, or return. Changes
-are pending until Save; Back discards them on the next opening. They take effect
-after restarting the game. Disabling networking retains both saved addresses.
-Arbitrary URL text entry, backend start/stop, live endpoint switching and new
-menu artwork are not implemented. The replacement Friends row is enabled
-when its input mask is disabled and receives the original
-focused/normal menu colours. New Track still uses its original connection gate.
-While the Servers page is open, it uses the original `gaMenu.tick` UI callback
-instead of the main-menu tick's New Track/Charts availability gates. This keeps
-the replacement controls usable offline. Original row input masks are saved
-on entry and restored on return to the main menu.
-If the native online interface is absent, the original constructor omits Friends
-entirely; this experiment logs that absence instead of constructing a new row.
+Skip launcher, External only and Networking use the original fullscreen switch
+artwork: sprite 73 is the bar, 74/75 the on/off thumb. The thumb uses the same
+right/left origins, bar-width displacement and 25×scale inset established by
+ILSpy `gaGraphicsOptions.setTogglebarVars` (0x0600117D). The guarded original
+sprite creation, sprite-definition, origin and position routines create/update
+them. Their six screen-owned sprites have no input masks or menu IDs; the whole
+labelled row remains the only mouse/controller activation target. The original
+Settings colour callback is forwarded and its focus/pressed colour also tints
+both graphics. Cleanup removes all six graphics as well as the ten text rows.
+
+Server settings, save/reload, skip-launcher, and Save and restart retain the
+existing behavior. No endpoint, DLL, or online Friends behavior changes here.
+The module creates no menu windows and uses no independent input polling.
 
 ## Build, install, restore
 
@@ -59,8 +59,8 @@ independently of `show_server_popup`. It still supports ordinary notification
 DLLs by tolerating a missing menu export. The optional selected-server toast is
 preserved and follows `show_server_popup`; it is separate from the engine menu.
 Hook installation occurs during client initialization and
-the new label appears when the original main menu initializes. If initialization
-already happened, return to/recreate the main menu. The DLL stays loaded for the
+the new label appears when the original Settings menu initializes. If initialization
+already happened, return to/recreate Settings. The DLL stays loaded for the
 process lifetime. Installation and refusal reasons go to
 `ReRiff-engine-menu.log` beside Game.exe; no URLs or account data are logged.
 
@@ -68,64 +68,54 @@ process lifetime. Installation and refusal reasons go to
 
 Supported original SHA-256:
 `2d1af8a01ec6b1e3477ff6dbe4a44895828e2ac71449344fec9d7d99e87a58e2`.
-Installation and runtime check the entire original file hash. Runtime also
-checks all 27 menu vtable entries, the four IJW jump thunks and the native
-text/input-function prologues before writing four aligned vtable pointers. Unexpected
-bytes cause refusal. Game.exe on disk is unchanged. Original callbacks are
-retained for initialization, tick, cleanup and all ordinary main-menu selections.
+Installation and runtime check the entire original executable hash. Runtime
+also validates every Settings vtable entry, the five IJW jump thunks, the base
+menu tick, and native text/input/create/add/remove/focus entry bytes before
+patching the five aligned Settings callbacks. Game.exe on disk is unchanged.
 
 | Original entry | VA | Metadata token / evidence |
 | --- | --- | --- |
-| gaMainMenu vtable | 0x00BA7470 | Original data and ILSpy field |
-| tick, slot 3 | 0x00740A54 | thunk through 0x00BA74F8 to 0x0600149A |
-| initScreens, slot 15 | 0x0073FD14 | thunk through 0x00BA74F0 to 0x06001492 |
-| onCleanupScreens, slot 16 | 0x0073F23C | thunk through 0x00BA74EC to 0x06001494 |
-| handleScreenInput, slot 24 | 0x0073E88C | thunk through 0x00BA74E0 to 0x06001498 |
-| Original label table | 0x00BA7434 | News ID 4, Friends ID 8, Settings ID 9, Exit ID 10 |
-| elUIItemText.replaceTextRaw | 0x00450930 | 0x060016A2, UTF-16 raw display text |
-| elUIItemText.replaceText | 0x004508A0 | 0x06001769, localized string keys |
-| elUIItem.enableInput | 0x0044B4A0 | 0x060016D7, thiscall with byte boolean argument |
+| gaOptionsMenu vtable | 0x00BA5A7C | Original table bytes and ILSpy field |
+| tick, slot 3 | 0x006F10A4 | fixup 0x00BA5AFC; 0x0600119A |
+| initScreens, slot 15 | 0x006EFF50 | fixup 0x00BA5AEC; 0x06001195 |
+| cleanup, slot 16 | 0x006F0408 | fixup 0x00BA5AF0; 0x06001196 |
+| input, slot 24 | 0x006F08E3 | fixup 0x00BA5AF8; 0x06001199 |
+| elUIItemText.createRaw | 0x00450AF0 | 0x0600169C; cdecl, RET |
+| elUIItem.add | 0x00443800 | 0x06001699; thiscall, consuming SSP value |
+| elUIScreen.add / remove | 0x0048E8D0 / 0x0048E9D0 | 0x0600169F / 0x060016A0 |
+| elUIScreen.setFocus(int) | 0x0048F580 | 0x060016FE; thiscall, RET 4 |
+| updateItemColour, slot 26 | 0x006EF1E0 | fixup 0x00BA5AE8; 0x06001198 |
+| elUIItem.setAsMenuItem | 0x0044B530 | 0x060016AA |
+| text raw / localized | 0x00450930 / 0x004508A0 | 0x060016A2 / 0x06001769 |
+| elUIItem.enableInput | 0x0044B4A0 | 0x060016D7 |
 
-ILSpy `analysis/native-port/decompiled/Module.cs` establishes the menu's item
-array at +248, title at +144, and child-vector begin/end at item +376/+380.
-`gaMainMenu.tick` gets child zero as the text item. The hook borrows those
-references only during callbacks and never constructs/releases game objects.
-Native text calls and the hooks use x86 thiscall (ECX object, stack arguments).
-Original disassembly confirms text replacement's RET 4. Ghidra exports at the
-four native/thunk addresses are retained locally in RiffRacer's
-`analysis/ghidra/recovery`. Ghidra's inferred text prototypes and six-byte body
-extents are incomplete; original instructions and managed signatures supplied
-the calling-convention evidence. Additional Ghidra exports for the tick thunk
-and input-enable routine verify the Friends availability path. Focus is the
-original menu's field at +352; slot 26 is the original updateItemColour callback.
-Its focus/normal RGBA values come from gaMenu's original static colour data.
+ILSpy `analysis/native-port/decompiled/Module.cs` establishes Settings state at
++248, main/audio groups +268/+332, original setting text pointers +272 (five),
+title +144 and screen +184. Text-item position is +32/+36, extents +48/+52;
+visibility bit 0 at +372, enable mask +76, and interaction latch +356. The new
+entry is positioned from the original first row and spacing. The ten submenu
+rows occupy 22%–79% of screen height. No invented settings object layout is used.
 
-The native `elUIItem.enableInput` routine must not be called every frame on an
-already enabled row. Original bytes at `0x0044B50C` clear the interaction latch
-at item offset `+356`; `0x0044B518` writes the enabled mask at `+76`. Repeated
-calls erased mouse interaction between press and release. The hook now checks
-for the original all-input mask (`0xffffffff`) before enabling the row.
+Ghidra read-only exports are retained at `build/settings-evidence`; native
+instructions and original metadata signatures resolve Ghidra's incomplete
+prototypes. In particular, add/remove consume an SSP value on the stack, not a
+pointer to a local SSP as the managed IL signature might suggest. Incrementing
+the row reference before these calls matches the original `toItem` convention.
+All objects are allocated and released by the original engine.
 
-The base-menu tick is slot 3 of the original `gaMenu` vtable at `0x00BA56C4`.
-Its native thunk at `0x006E28F0` is `FF 25 34 57 BA 00`, jumping through the
-CLR fixup at `0x00BA5734`; these original bytes and the vtable entry are checked
-before installation. ILSpy identifies the managed body as `gaMenu.tick` at
-RVA `0x002E21FC`; Ghidra independently confirms the native indirect jump.
+`enableInput(TRUE)` clears the interaction latch. The hook checks for the
+existing all-input mask before calling it, preserving press/release across ticks.
 
 ## Validation and remaining trial
 
-Both x86 builds pass `-Wall -Wextra -Werror` inside development. Proton Hotfix
-tests pass the original SHA-256 check, refusal in a foreign host executable,
-original vtable/thunk/text-prologue checks, altered-vtable rejection, thiscall
-dispatch, menu text routing, original-selection forwarding, preset selection,
-save/reload, unrelated-key preservation, Back and cleanup. Regression checks
-also verify News forwarding, Friends replacement/restoration, re-enabling after
-an offline tick, and harmless handling of an absent Friends row. The test uses the
-unrelocated original image as a byte reference and stand-in menu/text objects
-for behavior. It also executes the original native enable-input TRUE branch,
-which calls no engine services, and verifies that an enabled row retains its
-interaction latch across several hooked ticks. It does **not** execute original
-rendering methods.
+The x86 regression harness validates the original executable and Settings
+vtable/thunk/native prologues, altered-vtable rejection, and original selections
+(including all original setting IDs) being forwarded. It covers added row
+ownership, audio-page isolation, focus/back, masks and native enable-input latch
+behavior, unrelated INI preservation, save/reload, save failures, restart handoff
+failure/cancellation, and removal of all added screen rows at cleanup. The
+harness uses original bytes as a read-only image; only the pure native TRUE
+branch of enableInput executes from that image. Rendering is not simulated.
 
 Actual Game.exe rendering, CLR-to-native callback transitions, all controller
 paths and focus behavior still require a live game trial. Hook initialization

@@ -118,6 +118,8 @@ def build(args):
         copy(ROOT/'build/server-sync'/library, folder/'payload/localserver/server'/library)
         news_library = library.replace('catalog', 'news')
         copy(ROOT/'build/server-sync'/news_library, folder/'payload/localserver/server'/news_library)
+        if platform == 'linux':
+            copy(ROOT/'build/ReRiff-Setup', folder/'ReRiff-Setup')
         if platform == 'windows':
             copy(ROOT/'build/ReRiff-Setup.exe',folder/'ReRiff-Setup.exe')
             with zipfile.ZipFile(args.python_zip) as archive:
@@ -148,7 +150,21 @@ work=$(mktemp -d "${TMPDIR:-/tmp}/reriff-install.XXXXXXXX")
 trap 'rm -rf "$work"' EXIT HUP INT TERM
 line=$(awk '/^__RERIFF_PAYLOAD__$/ { print NR+1; exit }' "$0")
 tail -n +"$line" "$0" | tar -xz -C "$work"
-python3 "$work/installer.py" --platform linux "$@"
+# Explicit installer arguments preserve the headless updater interface.
+mode=auto
+case "${1:-}" in
+  --gui) mode=gui; shift ;;
+  --cli) mode=cli; shift ;;
+esac
+if [ "$mode" = gui ] && [ "$#" -ne 0 ]; then
+  echo "Use --gui alone, or pass installer options for terminal mode." >&2
+  exit 2
+fi
+if [ "$mode" = gui ] || { [ "$mode" = auto ] && [ "$#" -eq 0 ] && { [ -n "${DISPLAY:-}" ] || [ -n "${WAYLAND_DISPLAY:-}" ]; }; }; then
+  "$work/ReRiff-Setup"
+else
+  python3 "$work/installer.py" --platform linux "$@"
+fi
 exit $?
 __RERIFF_PAYLOAD__
 '''
