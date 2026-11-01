@@ -13,6 +13,7 @@ static ModeSetFn mode_set_original;
 static InputFn graphics_input_original;
 static unsigned display_reset_serial;
 static BYTE display_reset_result;
+static BOOL borderless_preferred,display_alt_enter_held;
 static GraphicsBridgeFn graphics_resize,graphics_rescale;
 static BOOL graphics_bridge_ready,display_installed,display_catalog_scope,borderless_active,display_startup_checked;
 static DisplayMode extra_modes[24];
@@ -42,19 +43,66 @@ static HWND native_display_window(void){
     return readable(window,4)&&readable(*window,8)?*(HWND *)((BYTE *)*window+4):NULL;
 }
 static HWND (*display_window)(void)=native_display_window;
+static BOOL display_background_present(void){
+    if(!borderless_active)return FALSE;
+    HWND window=display_window();if(!IsWindow(window))return FALSE;
+    return IsIconic(window)||GetForegroundWindow()!=window;
+}
+typedef float *(__thiscall *PointerPositionFn)(void *,float *);
+static PointerPositionFn pointer_position_original;
+static void ui_scale_map_pointer(float *position);
+static void display_map_pointer(void *pointer,float *result){
+    if(!result||result[0]<0||result[1]<0||!readable(pointer,0x248)||*((BYTE *)pointer+0x246))return;
+    if(borderless_active&&display_installed){
+        RECT client;void *pc=display_pc();DisplayMode mode;BYTE full,sync;
+        if(pc&&GetClientRect(display_window(),&client)&&client.right>0&&client.bottom>0){
+            mode_current_original(pc,&mode,&full,&sync);
+            UINT width=mode.render_width?mode.render_width:mode.width,height=mode.render_height?mode.render_height:mode.height;
+            if(width&&height){result[0]*=(float)width/client.right;result[1]*=(float)height/client.bottom;}
+        }
+    }
+    ui_scale_map_pointer(result);
+}
+static float *__thiscall display_pointer_position(void *device,float *position){
+    float *result=pointer_position_original(device,position);
+    /* elInputDevicePC's original update polls and converts the pointer. Keep
+     * its buttons, focus, relative mode and optional 1280x720 normalization;
+     * only bridge the new window/back-buffer size difference at its getter. */
+    void *pointer=readable(device,0x38)?*(void **)((BYTE *)device+0x34):NULL;
+    display_map_pointer(pointer,result);
+    return result;
+}
 static void display_style_now(void);
 static HWND display_message_window;
 static WNDPROC display_original_proc;
 static UINT display_message;
 static volatile LONG display_style_pending;
+static unsigned display_window_trace;
 typedef struct DisplayWindowWork {WindowState state;} DisplayWindowWork;
 static void restore_window_now(const WindowState *state);
+static BOOL display_alt_enter(UINT message,WPARAM key,LPARAM flags){
+    if(key!=VK_RETURN)return FALSE;
+    if(message==WM_SYSKEYUP&&display_alt_enter_held){display_alt_enter_held=FALSE;return TRUE;}
+    if(message!=WM_SYSKEYDOWN||!(flags&((LPARAM)1<<29))||(!borderless_active&&!borderless_preferred))return FALSE;
+    /* Native exclusive Alt+Enter remains owned by the original window proc.
+     * Borderless is natively windowed rendering: only the existing owner-thread
+     * window-style path changes, preserving the selected render resolution. */
+    if(!(flags&((LPARAM)1<<30))){
+        borderless_active=!borderless_active;display_style_now();
+        log_line(borderless_active?"Alt+Enter: borderless fullscreen.":"Alt+Enter: windowed.");
+    }
+    display_alt_enter_held=TRUE;return TRUE;
+}
 static LRESULT CALLBACK display_window_proc(HWND window,UINT message,WPARAM wp,LPARAM lp){
+    if(display_alt_enter(message,wp,lp))return 0;
     if(message==display_message){
         DisplayWindowWork *work=(DisplayWindowWork *)lp;
         if(work){restore_window_now(&work->state);HeapFree(GetProcessHeap(),0,work);}
         else {InterlockedExchange(&display_style_pending,0);display_style_now();}
         return 0;
+    }
+    if(display_window_trace<80&&(message==WM_KEYDOWN||message==WM_LBUTTONDOWN||message==WM_CLOSE||message==WM_ACTIVATE||message==WM_ACTIVATEAPP||message==WM_SETFOCUS||message==WM_KILLFOCUS)){
+        char trace[160];snprintf(trace,sizeof(trace),"Display window message: hwnd=%p message=%04x wp=%lu thread=%lu original=%p.",(void *)window,message,(unsigned long)wp,(unsigned long)GetCurrentThreadId(),(void *)display_original_proc);log_line(trace);display_window_trace++;
     }
     return CallWindowProcW(display_original_proc,window,message,wp,lp);
 }
@@ -68,6 +116,7 @@ static BOOL queue_window_work(HWND window,const WindowState *restore){
         display_original_proc=(WNDPROC)GetWindowLongPtrW(window,GWLP_WNDPROC);
         if(!display_original_proc||!SetWindowLongPtrW(window,GWLP_WNDPROC,(LONG_PTR)display_window_proc))return FALSE;
         display_message_window=window;
+        char trace[160];snprintf(trace,sizeof(trace),"Display window hook: hwnd=%p owner=%lu caller=%lu original=%p.",(void *)window,(unsigned long)GetWindowThreadProcessId(window,NULL),(unsigned long)GetCurrentThreadId(),(void *)display_original_proc);log_line(trace);
     }
     DisplayWindowWork *work=NULL;
     if(restore){
@@ -101,23 +150,36 @@ static BOOL monitor_rect(HWND window,RECT *rect){
     if(!IsWindow(window)||!GetMonitorInfoW(MonitorFromWindow(window,MONITOR_DEFAULTTONEAREST),&info))return FALSE;
     *rect=info.rcMonitor;return TRUE;
 }
+static BOOL display_style_needed(HWND window){
+    if(!borderless_active)return normal_window.valid;
+    if(IsIconic(window))return FALSE;
+    RECT monitor,current;
+    if(!monitor_rect(window,&monitor)||!GetWindowRect(window,&current))return FALSE;
+    LONG_PTR style=GetWindowLongPtrW(window,GWL_STYLE),extended=GetWindowLongPtrW(window,GWL_EXSTYLE);
+    return (style&WS_OVERLAPPEDWINDOW)||!(style&WS_POPUP)
+        ||(extended&(WS_EX_WINDOWEDGE|WS_EX_CLIENTEDGE))||!EqualRect(&current,&monitor);
+}
 static void display_style_now(void){
     if(!display_installed)return;
     HWND window=display_window();RECT monitor,current;
     if(!borderless_active){if(normal_window.valid){restore_window(&normal_window);normal_window.valid=FALSE;}return;}
-    if(!monitor_rect(window,&monitor))return;
+    if(IsIconic(window)||!monitor_rect(window,&monitor))return;
     if(!normal_window.valid)normal_window=capture_window(window);
     LONG_PTR style=GetWindowLongPtrW(window,GWL_STYLE),extended=GetWindowLongPtrW(window,GWL_EXSTYLE);
     LONG_PTR desired=(style&~(LONG_PTR)WS_OVERLAPPEDWINDOW)|WS_POPUP;
     LONG_PTR desired_ex=extended&~(LONG_PTR)(WS_EX_WINDOWEDGE|WS_EX_CLIENTEDGE);
     if(style==desired&&extended==desired_ex&&GetWindowRect(window,&current)&&EqualRect(&current,&monitor))return;
+    char trace[192];snprintf(trace,sizeof(trace),"Display window styling: hwnd=%p style=%08lx to=%08lx size=%ldx%ld owner=%lu.",(void *)window,(unsigned long)style,(unsigned long)desired,monitor.right-monitor.left,monitor.bottom-monitor.top,(unsigned long)GetCurrentThreadId());log_line(trace);
     SetWindowLongPtrW(window,GWL_STYLE,desired);SetWindowLongPtrW(window,GWL_EXSTYLE,desired_ex);
     SetWindowPos(window,NULL,monitor.left,monitor.top,monitor.right-monitor.left,monitor.bottom-monitor.top,
         SWP_FRAMECHANGED|SWP_NOZORDER|SWP_NOACTIVATE);
 }
 static void display_style(void){
-    if(!display_installed||(!borderless_active&&!normal_window.valid))return;
+    if(!display_installed)return;
     HWND window=display_window();if(!IsWindow(window))return;
+    /* Keep the native Alt+Enter extension available in windowed mode too. */
+    if(display_message_window!=window){queue_window_work(window,NULL);return;}
+    if(!display_style_needed(window))return;
     if(GetWindowThreadProcessId(window,NULL)==GetCurrentThreadId())display_style_now();
     else if(!queue_window_work(window,NULL))log_line("Could not queue display window styling.");
 }
@@ -160,21 +222,24 @@ static void __thiscall extended_mode_current(void *pc,DisplayMode *mode,BYTE *fu
     if(display_catalog_scope&&borderless_active){mode->width=mode->render_width;mode->height=mode->render_height;}
 }
 static BYTE __thiscall extended_mode_set(void *pc,const DisplayMode *mode,BYTE single_sample,BYTE full){
-    DisplayMode requested=*mode;RECT monitor;
+    DisplayMode requested=*mode;
     /* Native catalog entries may leave render dimensions zero (use logical).
      * Resolve those before substituting the monitor-sized borderless window. */
     if(!requested.render_width)requested.render_width=requested.width;
     if(!requested.render_height)requested.render_height=requested.height;
+    /* These are renderer/content dimensions, not physical HWND dimensions.
+     * Keep the original pipeline at one coherent resolution. Windowed Present
+     * scales the completed back buffer to the separately monitor-sized HWND. */
     if(borderless_active){
-        if(!monitor_rect(display_window(),&monitor))return FALSE;
-        requested.width=(UINT)(monitor.right-monitor.left);requested.height=(UINT)(monitor.bottom-monitor.top);
+        if(!IsWindow(display_window()))return FALSE;
+        requested.width=requested.render_width;requested.height=requested.render_height;
         full=FALSE;
     }
     char trace[192];snprintf(trace,sizeof(trace),"Display reset begin: logical=%ux%u render=%ux%u exclusive=%u borderless=%u thread=%lu.",requested.width,requested.height,requested.render_width,requested.render_height,full,borderless_active,(unsigned long)GetCurrentThreadId());log_line(trace);
     BYTE changed=mode_set_original(pc,&requested,single_sample,full);
     display_reset_result=changed;display_reset_serial++;
     log_line(changed?"Display reset returned success.":"Display reset returned failure.");
-    if(changed)display_style();return changed;
+    if(changed){display_style();if(borderless_active&&display_pc==native_display_pc)aa_attach();}return changed;
 }
 static void save_display_preference(void){
     void *pc=display_pc();if(!pc)return;DisplayMode mode;BYTE full,sync;mode_current_original(pc,&mode,&full,&sync);
@@ -231,6 +296,7 @@ static void __thiscall display_confirm_input(void *menu,int selection){
     else if(selection==0){save_display_preference();display_change.active=FALSE;log_line("Display settings confirmed.");}
 }
 static BOOL apply_display(void *menu,BOOL borderless){
+    borderless_preferred=borderless;
     if(!display_installed||!graphics_bridge_ready)return FALSE;
     void *pc=display_pc();if(!pc)return FALSE;
     DisplayMode *begin=((DisplayMode **)menu)[67],*end=((DisplayMode **)menu)[68];
@@ -279,6 +345,10 @@ static void display_restore_startup(void){
     display_style();
 }
 static BOOL validate_display_modes(BYTE *base,uintptr_t address){
+    static const BYTE pointer_start[]={0x55,0x8b,0xec,0x8b,0x51,0x34,0x8b,0x45,0x08};
+    if(!readable(base+0xf8780,sizeof(pointer_start))||memcmp(base+0xf8780,pointer_start,sizeof(pointer_start))
+        ||!readable(base+0x5fdc00,26*sizeof(void *))||*(DWORD *)(base+0x5fdc00+11*4)!=address+0xf8780
+        ||*(DWORD *)(base+0x5fdc00+21*4)!=address+0xf8690)return FALSE;
     const DWORD methods[4]={0x97020,0x97050,0x97070,0x97100},slots[4]={0,1,2,5};
     for(int i=0;i<4;i++)if(!readable(base+0x5fc178+slots[i]*4,4)||*(DWORD *)(base+0x5fc178+slots[i]*4)!=address+methods[i])return FALSE;
     const DWORD entries[4]={0x2ec398,0x2eb42c,0x2ec677,0x2eb814},fixups[4]={0x7a5994,0x7a5988,0x7a599c,0x7a598c},indices[4]={15,3,24,2};
@@ -291,6 +361,11 @@ static BOOL validate_display_modes(BYTE *base,uintptr_t address){
 }
 static BOOL install_display_modes(BYTE *base){
     if(!validate_display_modes(base,(uintptr_t)base))return FALSE;
+    void **pointer=(void **)(base+0x5fdc00);DWORD pointer_protection;
+    if(!VirtualProtect(pointer+11,sizeof(void *),PAGE_READWRITE,&pointer_protection))return FALSE;
+    pointer_position_original=(PointerPositionFn)pointer[11];
+    InterlockedExchangePointer(pointer+11,(void *)display_pointer_position);
+    DWORD pointer_ignored;VirtualProtect(pointer+11,sizeof(void *),pointer_protection,&pointer_ignored);
     void **pc=(void **)(base+0x5fc178),**confirm=(void **)(base+0x7a5918);DWORD old;
     if(!VirtualProtect(pc,6*sizeof(void *),PAGE_READWRITE,&old))return FALSE;
     mode_count_original=(ModeCountFn)pc[0];mode_get_original=(ModeGetFn)pc[1];mode_current_original=(ModeCurrentFn)pc[2];mode_set_original=(ModeSetFn)pc[5];
@@ -306,6 +381,7 @@ static BOOL install_display_modes(BYTE *base){
     graphics_dt=(float *)(base+0x7ef604);
     graphics_game=(void **)(base+0x7e9d24);graphics_states=(void **)(base+0x7eefe0);
     confirm_previous_mode=(DisplayMode *)(base+0x7ec1f8);confirm_previous_full=(BYTE *)(base+0x7ebf04);
-    WCHAR value[16];GetPrivateProfileStringW(L"graphics",L"borderless",L"false",value,16,config_path);borderless_active=!_wcsicmp(value,L"true");
+    WCHAR value[16];GetPrivateProfileStringW(L"graphics",L"borderless",L"false",value,16,config_path);borderless_active=!_wcsicmp(value,L"true");borderless_preferred=borderless_active;
+    aa_skip_background_present=display_background_present;
     display_installed=TRUE;return TRUE;
 }

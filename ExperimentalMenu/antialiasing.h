@@ -103,13 +103,14 @@ static void aa_draw(IDirect3DDevice9 *device){
  done:
     if(state)IDirect3DStateBlock9_Release(state);IDirect3DSurface9_Release(back);
 }
-static HRESULT WINAPI aa_present(IDirect3DDevice9 *self,const RECT *a,const RECT *b,HWND window,const RGNDATA *dirty){aa_draw(self);return aa_present_original(self,a,b,window,dirty);}
+static BOOL (*aa_skip_background_present)(void);
+static HRESULT WINAPI aa_present(IDirect3DDevice9 *self,const RECT *a,const RECT *b,HWND window,const RGNDATA *dirty){if(aa_skip_background_present&&aa_skip_background_present())return D3D_OK;aa_draw(self);return aa_present_original(self,a,b,window,dirty);}
 static HRESULT WINAPI aa_reset(IDirect3DDevice9 *self,D3DPRESENT_PARAMETERS *params){
     char trace[192];snprintf(trace,sizeof(trace),"D3D9 Reset: %ux%u windowed=%d refresh=%u thread=%lu owner=%lu.",params->BackBufferWidth,params->BackBufferHeight,params->Windowed,params->FullScreen_RefreshRateInHz,(unsigned long)GetCurrentThreadId(),(unsigned long)GetWindowThreadProcessId(params->hDeviceWindow,NULL));log_line(trace);
     log_line("D3D9 Reset: releasing AA resources.");aa_release_resources();log_line("D3D9 Reset: calling original device.");
     HRESULT result=aa_reset_original(self,params);log_line(SUCCEEDED(result)?"D3D9 Reset: original device succeeded.":"D3D9 Reset: original device failed.");return result;
 }
-static HRESULT WINAPI aa_present_ex(IDirect3DDevice9Ex *self,const RECT *a,const RECT *b,HWND window,const RGNDATA *dirty,DWORD flags){aa_draw((IDirect3DDevice9 *)self);return aa_present_ex_original(self,a,b,window,dirty,flags);}
+static HRESULT WINAPI aa_present_ex(IDirect3DDevice9Ex *self,const RECT *a,const RECT *b,HWND window,const RGNDATA *dirty,DWORD flags){if(aa_skip_background_present&&aa_skip_background_present())return D3D_OK;aa_draw((IDirect3DDevice9 *)self);return aa_present_ex_original(self,a,b,window,dirty,flags);}
 static HRESULT WINAPI aa_reset_ex(IDirect3DDevice9Ex *self,D3DPRESENT_PARAMETERS *params,D3DDISPLAYMODEEX *mode){
     log_line("D3D9 ResetEx: releasing AA resources.");aa_release_resources();log_line("D3D9 ResetEx: calling original device.");
     HRESULT result=aa_reset_ex_original(self,params,mode);log_line(SUCCEEDED(result)?"D3D9 ResetEx: original device succeeded.":"D3D9 ResetEx: original device failed.");return result;

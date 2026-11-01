@@ -75,11 +75,14 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual((self.game/'server.ini').read_bytes(),ini)
         self.assertEqual(data.read_text(),'{"keep":true}')
         self.assertFalse(list(self.game.glob('*.reriff*')))
-        env={'PYTHONPATH':str(self.game/'localserver/python-libs'),'PYTHONNOUSERSITE':'1'}
-        import os
-        result=subprocess.run([sys.executable,'-c','import flask,click,markupsafe; assert markupsafe.escape("<") == "&lt;"; print(flask.Flask("test").test_client().get("/").status_code)'],env=dict(os.environ,**env),capture_output=True,text=True)
-        self.assertEqual(result.returncode,0,result.stderr)
         manifest=json.loads((self.bundle/'manifest.json').read_text())
+        if manifest.get('singleplayer'):
+            self.assertFalse((self.game/'localserver/server/riffapi-local.py').exists())
+            self.assertFalse((self.game/'localserver/python-libs').exists())
+        else:
+            env={'PYTHONPATH':str(self.game/'localserver/python-libs'),'PYTHONNOUSERSITE':'1'}
+            result=subprocess.run([sys.executable,'-c','import flask,click,markupsafe; assert markupsafe.escape("<") == "&lt;"; print(flask.Flask("test").test_client().get("/").status_code)'],env=dict(os.environ,**env),capture_output=True,text=True)
+            self.assertEqual(result.returncode,0,result.stderr)
         if manifest.get('vanilla_originals') and os.environ.get('RERIFF_SYNTHETIC_TESTS')=='1':
             # These synthetic inputs represent an already patched install,
             # deliberately without original DLL backups. Local-patching
@@ -111,8 +114,11 @@ class InstallerTests(unittest.TestCase):
     def test_empty_python_executable_uses_native_fallback(self):
         with patch.object(installer.sys, 'executable', ''), patch.object(installer.shutil, 'which', return_value='/usr/bin/python3'):
             plan = self.install(dry_run=True)
-        self.assertIn(b'exec /usr/bin/python3 ', plan['localserver/start-server.sh'])
-        self.assertNotIn(b"exec '' ", plan['localserver/start-server.sh'])
+        if json.loads((self.bundle/'manifest.json').read_text()).get('singleplayer'):
+            self.assertNotIn('localserver/start-server.sh', plan)
+        else:
+            self.assertIn(b'exec /usr/bin/python3 ', plan['localserver/start-server.sh'])
+            self.assertNotIn(b"exec '' ", plan['localserver/start-server.sh'])
 
     def test_unknown_modification_rejected(self):
         (self.game/'ParseOctane.dll').write_bytes(b'unknown')
@@ -172,6 +178,16 @@ class VanillaInstallerTests(unittest.TestCase):
 
     def install(self,**kwargs):
         return installer.install(self.bundle,self.game,self.backups,'windows',**kwargs)
+
+    def test_singleplayer_package_keeps_updater_runtime_without_server_startup(self):
+        path = self.bundle/'manifest.json'
+        manifest = json.loads(path.read_text()); manifest['singleplayer'] = True
+        path.write_text(json.dumps(manifest))
+        plan = self.install(dry_run=True)
+        self.assertIn('localserver/windows-python/python.exe', plan)
+        self.assertNotIn('localserver/start-server.cmd', plan)
+        self.assertNotIn('localserver/start-server.sh', plan)
+        self.assertNotIn(b'fallback_url = http://127.0.0.1:5144', plan['server.ini'])
 
     def test_fresh_repeat_restore_and_keep_matching_backup(self):
         saved=self.backups/'originals/ParseOctane.dll';saved.parent.mkdir(parents=True)

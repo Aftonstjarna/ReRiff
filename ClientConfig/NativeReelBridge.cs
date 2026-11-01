@@ -23,6 +23,8 @@ namespace ReRiff {
         private static extern int ReRiffConfigureNativeReel([In] IntPtr[] methods, int count);
         [DllImport("ReRiff.Notify.dll", CallingConvention=CallingConvention.Cdecl, ExactSpelling=true)]
         private static extern int ReRiffConfigureNativeGraphics([In] IntPtr[] methods, int count);
+        [DllImport("ReRiff.Notify.dll", CallingConvention=CallingConvention.Cdecl, ExactSpelling=true)]
+        private static extern int ReRiffConfigureNativeUiScale([In] IntPtr[] methods, int count);
 
         // addOption consumes an SSP passed by address in IL. Its C ABI adapter
         // accepts an owning object reference and supplies the temporary SSP.
@@ -78,6 +80,10 @@ namespace ReRiff {
                     Roots.Add(callback);graphicsPointers[i]=Marshal.GetFunctionPointerForDelegate(callback);
                 }
                 ReRiffConfigureNativeGraphics(graphicsPointers,graphicsPointers.Length);
+                MethodInfo fontSetup=game.ResolveMethod(0x060012c0) as MethodInfo;
+                if(fontSetup==null||fontSetup.Name!="gaUI.setupFontScale")throw new InvalidOperationException("Unexpected original font-scale method");
+                Delegate fontCallback=CreateCall(fontSetup,typeof(Tick),false);Roots.Add(fontCallback);
+                ReRiffConfigureNativeUiScale(new IntPtr[]{Marshal.GetFunctionPointerForDelegate(fontCallback)},1);
             } catch(DllNotFoundException) { }
               catch(EntryPointNotFoundException) { }
               catch(BadImageFormatException) { }

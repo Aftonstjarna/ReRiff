@@ -93,6 +93,9 @@ static BOOL song_request(const WCHAR *base,const char *body) {
 }
 
 static void sync_cached_songs(const WCHAR *config) {
+    WCHAR networking[32];
+    GetPrivateProfileStringW(L"server",L"networking_enabled",L"true",networking,32,config);
+    if(!_wcsicmp(networking,L"false")||!_wcsicmp(networking,L"no")||!wcscmp(networking,L"0"))return;
     WCHAR timeout_value[64],*timeout_end;
     GetPrivateProfileStringW(L"server",L"timeout_seconds",L"5",timeout_value,64,config);
     double seconds=wcstod(timeout_value,&timeout_end);

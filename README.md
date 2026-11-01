@@ -80,8 +80,8 @@ without overwriting the backup.
 
 **Windows:** download and extract `ReRiff-<version>-windows.zip`, run
 `ReRiff-Setup.exe`, and select the game's `Game.exe`. Keep the ZIP contents
-together until setup finishes. Portable Python and server dependencies are
-included. Local DLL patching uses the game's .NET Framework runtime.
+together until setup finishes. Portable Python is included for setup and updates; singleplayer runs inside
+the game without a Python server. Local DLL patching uses the game's .NET Framework runtime.
 The package targets x64 Windows; the launcher is native x86 Win32.
 
 **Linux/Proton (x86_64):** install Python 3.10 or newer. The Linux
@@ -226,8 +226,8 @@ To test an unattended update on Linux, use:
 Remove `--test-auto-update` after testing. It implies skipping the launcher for
 that invocation. Current bridges also recognize this flag after `%command%`.
 
-The Windows launcher runs in Steam's Proton prefix and starts or reuses the
-native Linux Python server when local operation is enabled. Keep your existing
+The Windows launcher runs in Steam's Proton prefix. Singleplayer storage runs
+inside the game; the launcher does not start a local Python server. Keep your existing
 working Proton and .NET setup. In Steam, find the game path with **Properties →
 Installed Files → Browse**, then edit **Properties → General → Launch Options**.
 Do not put the Windows EXE directly before `%command%` on Linux; use the bridge
@@ -237,42 +237,52 @@ above. The launcher waits for the game to exit so Steam keeps the session active
 
 The launcher edits `server.ini` beside `Game.exe`:
 
-- **External server:** the preferred shared server address, including its port.
-- **Fallback server:** normally `http://127.0.0.1:5144` for local play.
-- **External server only:** disables local autostart and fallback. An unavailable
-  external server leaves game networking disabled.
-- **Use local server:** selects local operation.
-- **Stop local server:** stops only this installation's Python backend. An
-  already stopped server succeeds; Docker and unrelated services are untouched.
+- **Primary server:** preferred shared Docker/Podman server address, including its port.
+- **Secondary server:** optional alternative shared server address.
+- **Primary server only:** skips the secondary server; singleplayer remains available.
+- **Singleplayer:** selects local play while retaining both saved server addresses.
+- **Use servers:** enables primary → secondary → singleplayer selection.
+- **Stop local server:** retained to stop an older installation's Python backend;
+  Docker and unrelated services are untouched.
 
-Both addresses blank disables Parse networking. Server selection is fixed for
-the game session, so restart the game after changing settings. The optional
-server notification fades automatically and does not take controller focus.
-Windowed mode gives the most reliable overlay visibility.
+In-game **Settings → Servers** keeps graphical mode toggles and offers
+**Save and exit** to save settings and close the game, alongside **Save and restart**.
 
-Example client configuration:
+Both addresses blank selects singleplayer. The game probes each configured server's
+`/classes/Version` endpoint in order. If neither responds, it starts singleplayer
+inside the game process. In-game **Settings → Servers → Singleplayer** replaces
+Force Offline; its native switch, input and scrolling are retained.
 
 ```ini
 [server]
 external_url = http://your-server:5144
-fallback_url = http://127.0.0.1:5144
+fallback_url = http://your-secondary-server:5144
 timeout_seconds = 5
 show_server_popup = true
 external_only = false
+networking_enabled = true
 ```
 
-The client probes the external `/classes/Version` endpoint at initialization and
-uses the fallback if that probe fails, unless external-only mode is enabled.
-A failed upload does not switch databases or retry on another server. Local and
-remote databases are separate and are not automatically synchronized. Missing,
-unreadable, or invalid configuration disables Parse networking; there is no
-hidden localhost destination. URL credentials, query strings and fragments are
-not accepted. Unrelated Steam networking remains enabled.
+Set `networking_enabled = false` to force singleplayer without probing either
+server. Saved addresses remain intact. Save settings, then restart the game to
+apply a selection. The optional startup notification displays Singleplayer or
+the chosen server.
 
-On native Windows the bundled portable Python runs the local backend. On Proton
-the launcher bridges to native Linux Python. The backend stays running after the
-game closes; use **Stop local server** when needed. Keep one local backend per
-installation/port. Automatic local startup expects port 5144.
+Selection stays fixed for the game session. Failed writes are never replayed to
+another database. Singleplayer, primary and secondary databases remain separate;
+remote scores are not automatically synchronized into singleplayer. Missing or
+invalid configuration selects singleplayer. URL credentials, query strings and
+fragments are not accepted.
+
+Singleplayer keeps scores, profiles, track metadata and ghost files in the game's
+`singleplayer/` folder using the original Parse SDK. Its loopback endpoint exists
+only inside the game process, on a temporary port, and ends when the game closes.
+The original game continues to own track generation, progression and its saves.
+On first use, existing `localserver/server/data/classes` and `files` are copied
+into singleplayer without moving or modifying the old data. Stop the old backend
+before this first import to get a consistent snapshot. Existing server addresses
+are preserved; choose Singleplayer to replace a previously configured localhost
+backend. Shared servers continue to run in Docker or Podman.
 
 ## Shared leaderboards and ghosts
 

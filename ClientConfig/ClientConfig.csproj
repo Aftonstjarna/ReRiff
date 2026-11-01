@@ -9,7 +9,9 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="ClientConfig.cs" />
+    <Compile Include="Singleplayer.cs" />
     <Compile Include="NativeReelBridge.cs" />
+    <Reference Include="System.Web.Extensions" />
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net40" Version="1.0.3" PrivateAssets="all" />
   </ItemGroup>
 </Project>

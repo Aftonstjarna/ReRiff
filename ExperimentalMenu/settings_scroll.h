@@ -1,11 +1,11 @@
 /* Original gaMenuReel owns scrollbar rendering and pointer interaction.
  * The native Settings adapter owns only row layout and one logical selection. */
 #define ROOT_LIMIT 6
-#define SCROLL_EXTRA_LIMIT 10
+#define SCROLL_EXTRA_LIMIT SERVER_ACTION_COUNT
 static struct RootRow {void *text,*arrow,*line;int id;float x,arrow_x,arrow_dy;} root_rows[ROOT_LIMIT];
 static int root_count,root_first,page_first,visible_rows,laid_out=-1,laid_first=-1,laid_active=-1;
 static float row_x,row_start,row_gap,line_width,line_dy,arrow_dy,ui_width,ui_height;
-static void *page_lines[10],*scroll_extras[SCROLL_EXTRA_LIMIT];static int extra_count;
+static void *page_lines[SERVER_ACTION_COUNT],*scroll_extras[SCROLL_EXTRA_LIMIT];static int extra_count;
 static volatile LONG scroll_active,scroll_delta,scroll_requested=-1;
 static BOOL scroll_ready;
 static HWND scroll_window;static WNDPROC scroll_previous;static int wheel_remainder;
@@ -15,7 +15,7 @@ static BOOL dispatching_menu;
 typedef void (__thiscall *DirectionFn)(void *,DWORD,unsigned);
 static DirectionFn server_direction_original;
 /* Preserve the original RTTI locator plus all 48 elUIItemText methods. */
-static void *server_direction_table[49],**server_original_tables[10];
+static void *server_direction_table[49],**server_original_tables[SERVER_ACTION_COUNT];
 static BOOL server_native_navigation;
 
 typedef void *(__cdecl *ReelCtorFn)(void *,void *,float,int);
@@ -59,9 +59,9 @@ static void set_line_size(void *line,float width,float height){
     float w=((float *)line)[12],h=((float *)line)[13];
     if(w>0&&h>0)scale_item(line,width/w,height/h);
 }
-static int view_count(void){return server_page?10:root_count;}
+static int view_count(void){return server_page?SERVER_ACTION_COUNT:root_count;}
 static int view_first(void){return server_page?page_first:root_first;}
-static int row_id(int index){return server_page?SERVER_ACTION_BASE+index+1:root_rows[index].id;}
+static int row_id(int index){return server_page?SERVER_ACTION_BASE+server_action_order[index]:root_rows[index].id;}
 static int focused_index(void *menu){
     int id=((int *)menu)[11];
     for(int i=0;i<view_count();i++)if(row_id(i)==id)return i;
@@ -74,16 +74,16 @@ static void layout_scroll(void *menu){
     DWORD list_mask=*(DWORD *)((BYTE *)((void **)menu)[46]+40);
     int count=view_count(),first=clamp_index(view_first(),0,count>visible_rows?count-visible_rows:0);
     if(server_page)page_first=first;else root_first=first;
-    for(int i=0;i<10;i++){
+    for(int i=0;i<SERVER_ACTION_COUNT;i++){
         BOOL show=active&&server_page&&i>=first&&i<first+visible_rows;
-        void *row=server_rows[i+1];int action=i+1;BOOL toggle=action==1||action==4||action==5;
+        void *row=server_rows[server_action_order[i]];int action=server_action_order[i];BOOL toggle=action==1||action==4||action==5;
         row_visible(row,show,list_mask);
         if(show){
             float y=row_start+(i-first)*row_gap;
             move_item(row,toggle?row_x-line_width*0.5f:row_x,y);
             ((float *)row)[12]=toggle?line_width:server_row_width;((float *)row)[13]=server_row_height;
         }
-        BOOL line_show=show&&i<first+visible_rows-1&&i<9;
+        BOOL line_show=show&&i<first+visible_rows-1&&i<SERVER_ACTION_COUNT-1;
         row_visible(page_lines[i],line_show,0);
         if(line_show)move_item(page_lines[i],row_x,row_start+(i-first)*row_gap+line_dy);
     }
@@ -101,7 +101,7 @@ static void layout_scroll(void *menu){
         }
     }
     for(int i=0;i<3;i++){
-        int index=toggle_actions[i]-1;
+        int index=server_action_index(toggle_actions[i]);
         BOOL show=active&&server_page&&index>=first&&index<first+visible_rows;
         for(int p=0;p<2;p++)row_visible(toggles[i][p],show,0);
         if(show)move_item(toggles[i][0],row_x+line_width*0.5f,row_start+(index-first)*row_gap+arrow_dy);
@@ -154,8 +154,8 @@ static void scroll_to(void *menu,int first,BOOL select_edge){
 static BOOL active_list(void *menu){return scroll_ready&&((int *)menu)[102]==0&&(server_page||(((int *)menu)[62]==0&&(*((BYTE *)((void **)menu)[67]+372)&1)));}
 static void __thiscall server_scroll_direction(void *row,DWORD key,unsigned device){
     if(server_native_navigation&&server_page&&page_owner&&active_list(page_owner)&&(key==64||key==128)){
-        int id=((int *)row)[key==64?39:40],index=id-SERVER_ACTION_BASE-1;
-        if(index>=0&&index<10){
+        int id=((int *)row)[key==64?39:40],index=server_action_index(id-SERVER_ACTION_BASE);
+        if(index>=0&&index<SERVER_ACTION_COUNT){
             /* Reveal the native link target before the original handler tests
              * its visibility/input mask. The game owns focus and key repeat. */
             int first=page_first;
@@ -170,22 +170,22 @@ static void __thiscall server_scroll_direction(void *row,DWORD key,unsigned devi
 static BOOL connect_server_navigation(void){
     void **table=*(void ***)server_rows[1];
     if(!readable(table-1,sizeof(server_direction_table))||!table[28])return FALSE;
-    for(int i=0;i<10;i++)if(!server_rows[i+1]||*(void ***)server_rows[i+1]!=table)return FALSE;
+    for(int i=0;i<SERVER_ACTION_COUNT;i++)if(!server_rows[server_action_order[i]]||*(void ***)server_rows[server_action_order[i]]!=table)return FALSE;
     memcpy(server_direction_table,table-1,sizeof(server_direction_table));
     server_direction_original=(DirectionFn)table[28];server_direction_table[29]=(void *)server_scroll_direction;
-    for(int i=0;i<10;i++){
-        void *row=server_rows[i+1];server_original_tables[i]=*(void ***)row;
+    for(int i=0;i<SERVER_ACTION_COUNT;i++){
+        void *row=server_rows[server_action_order[i]];server_original_tables[i]=*(void ***)row;
         ((int *)row)[38]=1;
-        ((int *)row)[39]=SERVER_ACTION_BASE+(i+9)%10+1;
-        ((int *)row)[40]=SERVER_ACTION_BASE+(i+1)%10+1;
+        ((int *)row)[39]=SERVER_ACTION_BASE+server_action_order[(i+SERVER_ACTION_COUNT-1)%SERVER_ACTION_COUNT];
+        ((int *)row)[40]=SERVER_ACTION_BASE+server_action_order[(i+1)%SERVER_ACTION_COUNT];
         ((int *)row)[41]=((int *)row)[42]=-1;
         *(void ***)row=server_direction_table+1;
     }
     server_native_navigation=TRUE;log_line("Native Servers wraparound direction links connected.");return TRUE;
 }
 static void disconnect_server_navigation(void){
-    for(int i=0;i<10;i++)if(server_original_tables[i]){
-        if(server_rows[i+1])*(void ***)server_rows[i+1]=server_original_tables[i];
+    for(int i=0;i<SERVER_ACTION_COUNT;i++)if(server_original_tables[i]){
+        if(server_rows[server_action_order[i]])*(void ***)server_rows[server_action_order[i]]=server_original_tables[i];
         server_original_tables[i]=NULL;
     }
     server_native_navigation=FALSE;
@@ -228,7 +228,7 @@ static void apply_pending_focus(void *menu){
     for(int i=0;i<view_count();i++)if(row_id(i)==id)logical_selection=i;
     static const float normal[4]={1,1,1,0.9f};
     for(int i=0;i<root_count;i++)colour_item(root_rows[i].text,normal);
-    for(int i=1;i<=10;i++)colour_item(server_rows[i],normal);
+    for(int i=0;i<SERVER_ACTION_COUNT;i++)colour_item(server_rows[server_action_order[i]],normal);
     for(int i=0;i<3;i++)for(int p=0;p<2;p++)colour_item(toggles[i][p],normal);
     focus_row(menu,id);
     /* Synchronize the menu's own focus/colour bookkeeping after the screen
@@ -271,10 +271,10 @@ static void reconcile_list_input(void *menu){
         row_visible(r->text,show,mask);row_visible(r->arrow,show,0);
         row_visible(r->line,show&&i<root_first+visible_rows-1&&i<root_count-1,0);
     }
-    for(int i=0;i<10;i++){
+    for(int i=0;i<SERVER_ACTION_COUNT;i++){
         BOOL show=server_page&&i>=page_first&&i<page_first+visible_rows;
-        row_visible(server_rows[i+1],show,mask);
-        row_visible(page_lines[i],show&&i<page_first+visible_rows-1&&i<9,0);
+        row_visible(server_rows[server_action_order[i]],show,mask);
+        row_visible(page_lines[i],show&&i<page_first+visible_rows-1&&i<SERVER_ACTION_COUNT-1,0);
     }
 }
 static void sync_scroll(void *menu){
@@ -289,6 +289,10 @@ static void sync_scroll(void *menu){
     }
 }
 static LRESULT CALLBACK scroll_wndproc(HWND window,UINT message,WPARAM wparam,LPARAM lparam){
+    if(message==WM_MOUSEWHEEL&&graphics_scroll_wheel(0)){
+        wheel_remainder+=(short)HIWORD(wparam);int steps=wheel_remainder/WHEEL_DELTA;wheel_remainder-=steps*WHEEL_DELTA;
+        graphics_scroll_wheel(-steps);return 0;
+    }
     if(scroll_active){
         if(message==WM_MOUSEWHEEL){
             wheel_remainder+=(short)HIWORD(wparam);int steps=wheel_remainder/WHEEL_DELTA;wheel_remainder-=steps*WHEEL_DELTA;
@@ -340,7 +344,7 @@ static BOOL init_scroll(void *menu,void *sample){
         if(!root_rows[i].line)return FALSE;
         set_line_size(root_rows[i].line,line_width,((float *)menu)[15]);
     }
-    for(int i=0;i<10;i++){
+    for(int i=0;i<SERVER_ACTION_COUNT;i++){
         page_lines[i]=scroll_sprite(screen,TRUE,51,row_x,row_start,4);
         if(!page_lines[i])return FALSE;
         set_line_size(page_lines[i],line_width,((float *)menu)[15]);

@@ -1,3 +1,28 @@
+# ReRiff 1.2.3-1 — Experimental singleplayer and native menu updates
+
+- Replace the client-managed Python server with in-process singleplayer storage.
+  Reuse the original Parse SDK; retain scores and ghosts across sessions and
+  import existing local-server data without modifying the source database.
+- Try the primary server, then the secondary server, then singleplayer.
+  Primary-only skips the secondary; the Singleplayer toggle retains saved URLs.
+  Client installers no longer bundle the Python backend or its web dependencies.
+- Simplify Settings → Servers by removing duplicate plaintext mode buttons while
+  retaining native graphical toggles, scrolling and wraparound navigation.
+  Add SAVE AND EXIT, which saves settings before requesting a normal game close.
+- Improve native menu hover, icon alignment and graphics navigation. Add a
+  volume-style UI SCALE slider: 0 uses the game's built-in Auto scaling; 25 is
+  Small, 50 is the 1080p reference, 75 is Large and 100 is Very Large.
+- Continue borderless fullscreen and higher render-resolution experiments with
+  the original Keep/Revert confirmation and 10-second timeout. Add Alt+Enter
+  switching between windowed and the selected fullscreen mode.
+
+This is a prerelease. Auto scaling has been confirmed in-game. Manual UI scaling,
+borderless focus/input, confirmation/revert and restart after borderless still
+need live testing; previous builds showed freezes or lingering audio. The server
+menu and display fixtures, original-SDK singleplayer tests, and installer/updater
+checks pass, but they do not establish complete Windows gameplay compatibility.
+Stable 1.2.2 is unchanged.
+
 # ReRiff 1.2.2-13 — Unreleased display experiments
 
 Held on the experimental branch; **not published or included in stable 1.2.2**.
