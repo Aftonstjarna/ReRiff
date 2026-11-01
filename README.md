@@ -131,7 +131,28 @@ addresses). Stable 1.2.1 uses the **Servers** entry on the main menu and text
 toggles. After changing Skip launcher, choose
 **Save settings** or **Save and return**. The next start uses this preference;
 Back without saving discards the change. The preference is stored in
-`server.ini` as `[launcher] skip_launcher=true` or `false`.
+`server.ini` as `[launcher] skip_launcher=true` or `false`. The launcher's
+**Skip launcher** checkbox edits this same preference and refreshes when you
+save it in-game. Choose **Save settings** in the launcher to save checkbox edits.
+
+Beside it, **Auto-update when skipping launcher** enables an update check before
+starting the game without the launcher window. It is Off by default, follows
+the installed stable/experimental channel, and resumes the game after an update
+with the original arguments. A failed check starts the installed version and
+records details in `ReRiff-launcher.log`. Existing settings and saved data are
+preserved. To test this path without a duplicate GitHub release, close the game
+and run `ReRiff-Launcher.exe --skip-launcher --test-auto-update`. This one launch
+can reinstall the same published version using the normal verified updater,
+then resume the game without checking again. It will not downgrade to an older
+published version; the installed release must include this flag.
+
+This option is configured in the launcher, with
+`[launcher] auto_update_on_skip=true` in `server.ini`.
+
+New INI files include `https://riffapi.hobune.stream/` as a commented external
+server example. Updates also install `server.ini.example` alongside the game.
+Copy the address into `external_url` to select it; the example does not change
+your active server.
 
 **Save and restart**, the third button from the bottom, saves your changes and
 restarts the game immediately so the new server settings take effect. It waits

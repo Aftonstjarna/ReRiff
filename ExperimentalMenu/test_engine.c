@@ -121,6 +121,7 @@ int main(int argc,char **argv){
     wcscpy(log_path,config_path);wcscat(log_path,L".log");
     CHECK(WritePrivateProfileStringW(L"server",L"external_url",L"https://example.com",config_path));
     CHECK(WritePrivateProfileStringW(L"keep",L"key",L"value",config_path));
+    CHECK(WritePrivateProfileStringW(L"launcher",L"auto_update_on_skip",L"true",config_path));
     original_init=mock_init;original_cleanup=mock_cleanup;original_input=mock_input;original_tick=mock_tick;base_tick=mock_base_tick;
     enable_input=mock_enable;raw_text=mock_raw;key_text=mock_key;create_text=mock_create;menu_item=mock_visible;
     add_item=mock_add;add_screen=mock_add;remove_screen=mock_remove;set_focus=mock_focus;
@@ -196,6 +197,7 @@ int main(int argc,char **argv){
     dispatching_menu=FALSE;apply_pending_focus(menu);CHECK(focused==1505);
     select_action(1);CHECK(pending.skip_launcher);select_action(6);select_action(1);select_action(7);CHECK(pending.skip_launcher);
     WCHAR value[32];GetPrivateProfileStringW(L"keep",L"key",L"",value,32,config_path);CHECK(!wcscmp(value,L"value"));
+    GetPrivateProfileStringW(L"launcher",L"auto_update_on_skip",L"",value,32,config_path);CHECK(!wcscmp(value,L"true"));
     select_action(9);CHECK(!server_page&&root_first==0&&focused==SERVERS_ID);
     ((int *)menu)[62]=1;group[372]=0;audio[372]=1;prepare_scroll(menu);CHECK(!native_reel&&!scroll_active);
     int audio_before=ticked;tick_entry(menu);CHECK(ticked==audio_before+1);

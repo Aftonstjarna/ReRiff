@@ -1,0 +1,15 @@
+[server]
+; External server example: https://riffapi.hobune.stream/
+; To use it, set external_url = https://riffapi.hobune.stream/
+external_url =
+fallback_url = http://127.0.0.1:5144
+timeout_seconds = 5
+external_only = false
+networking_enabled = true
+show_server_popup = true
+
+[launcher]
+; Shared with the in-game Skip launcher switch.
+skip_launcher = false
+; Check the installed release channel before starting without the launcher.
+auto_update_on_skip = false

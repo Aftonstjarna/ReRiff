@@ -17,6 +17,8 @@ int main(void) {
     WritePrivateProfileStringW(L"server",L"fallback_url",L"http://127.0.0.1:5144",temporary);
     WritePrivateProfileStringW(L"server",L"external_only",L"false",temporary);
     WritePrivateProfileStringW(L"server",L"networking_enabled",L"false",temporary);
+    WritePrivateProfileStringW(L"launcher",L"skip_launcher",L"true",temporary);
+    WritePrivateProfileStringW(L"launcher",L"auto_update_on_skip",L"true",temporary);
     WritePrivateProfileStringW(NULL,NULL,NULL,temporary);
     if(!MoveFileExW(temporary,ini,MOVEFILE_REPLACE_EXISTING))return 3;
     /* The game is still running: polling must notice the atomic replacement. */
@@ -26,6 +28,7 @@ int main(void) {
     if(SendMessageW(networking_checkbox,BM_GETCHECK,0,0)!=BST_UNCHECKED)return 13;
     GetWindowTextW(fallback,value,4096);if(wcscmp(value,L"http://127.0.0.1:5144"))return 14;
     if(IsWindowEnabled(external)||IsWindowEnabled(fallback))return 15;
+    if(SendMessageW(skip_checkbox,BM_GETCHECK,0,0)!=BST_CHECKED||SendMessageW(auto_update_checkbox,BM_GETCHECK,0,0)!=BST_CHECKED)return 21;
     /* No file change must leave an unsaved launcher edit alone. */
     SetWindowTextW(external,L"https://unsaved.example");
     SendMessageW(host,WM_TIMER,1,0);
@@ -41,7 +44,9 @@ int main(void) {
     GetPrivateProfileStringW(L"server",L"external_url",L"missing",value,4096,ini);if(*value)return 9;
     SetWindowTextW(external,L"");
     busy=FALSE;
+    SendMessageW(skip_checkbox,BM_SETCHECK,BST_UNCHECKED,0);
     if(!save())return 6;
+    if(launcher_preference(L"skip_launcher")||!launcher_preference(L"auto_update_on_skip"))return 22;
     if(!needs_local_server())return 10;
     SendMessageW(networking_checkbox,BM_SETCHECK,BST_UNCHECKED,0);
     if(!save())return 18;

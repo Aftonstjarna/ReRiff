@@ -1,3 +1,24 @@
+# ReRiff 1.2.2-6 — Launcher skipping and automatic updates
+
+- Add adjacent Skip launcher and Auto-update when skipping launcher checkboxes
+  to the launcher window. Skip launcher shares the existing in-game preference;
+  saving in-game refreshes the launcher control.
+- Offer opt-in automatic updates before skipped launches, on the installed
+  release channel. Compare exact numbered revisions, preserve game arguments,
+  resume gameplay after installation, and suppress repeat checks during that
+  resume. Failed checks start the installed version and log the failure.
+- Add --test-auto-update for a one-shot, same-version unattended reinstall
+  through the normal verified update path, without publishing a test release.
+  The resumed game launch skips the second check; older builds are not installed.
+- Give the launcher, updater and setup explicit asInvoker manifests so Windows
+  uses the current account's permissions instead of installer-name detection.
+  The game folder must still be writable by that account.
+- Add https://riffapi.hobune.stream/ as a commented example in newly generated
+  INI files and a bundled server.ini.example without selecting it or overwriting
+  existing configurations.
+- Include revision 5's centered native scrollbar and Force Offline toggle,
+  with Off meaning networking is enabled.
+
 # ReRiff 1.2.2-5 — Centered scrollbar and Force Offline
 
 - Center the native scrollbar vertically on the screen, retaining its height

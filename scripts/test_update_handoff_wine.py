@@ -12,6 +12,7 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--wine', required=True)
 parser.add_argument('--prefix', required=True)
 parser.add_argument('--platform', choices=['linux', 'windows'], default='linux')
+parser.add_argument('--automatic', action='store_true')
 args = parser.parse_args()
 spec = importlib.util.spec_from_file_location('updater_fixture', ROOT/'scripts/test_client_update.py')
 fixture = importlib.util.module_from_spec(spec)
@@ -34,6 +35,9 @@ try:
         assert (case.work/'prepared.json').exists()
         command = '"Z:'+str(case.work/'runtime/python.exe')+'" "Z:'+str(case.work/'apply.py')+'" --work "Z:'+str(case.work)+'"'
     (case.work/'apply-command.txt').write_bytes(command.encode('utf-16-le'))
+    if args.automatic:
+        resume = '"Z:'+str(case.game/'ReRiff-Launcher.exe')+'" --skip-launcher --no-auto-update -- "Z:'+str(case.game/'Game.exe')+'" "space value"'
+        (case.work/'resume-command.txt').write_bytes(resume.encode('utf-16-le'))
     subprocess.run(['/usr/bin/distrobox-host-exec', 'xvfb-run', '-a', 'env', 'WINEPREFIX='+args.prefix, 'WINEDEBUG=-all', args.wine,
                     str(ROOT/'build/test-update-parent.exe'), 'Z:'+str(ROOT/'build/ReRiff-Updater.exe'),
                     'Z:'+str(case.work), 'Z:'+str(case.game)], check=True, timeout=30)
@@ -42,6 +46,11 @@ try:
         time.sleep(0.1)
     assert (case.work/'success').is_file(), (case.work/'update.log').read_text() if (case.work/'update.log').exists() else 'No update result'
     assert (case.game/'reopened').is_file(), 'Launcher did not reopen'
+    resumed = (case.game/'reopened').read_text()
+    if args.automatic:
+        assert '--skip-launcher --no-auto-update' in resumed and '"space value"' in resumed, resumed
+    else:
+        assert '--show-launcher' in resumed, resumed
     assert (case.game/'server.ini').read_bytes() == b'external settings\n'
     assert (case.game/'localserver/save.json').read_bytes() == b'saved scores'
     print('PASS: native updater waited for parent exit, applied '+args.platform+' package, preserved settings/data and relaunched')
