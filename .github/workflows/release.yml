@@ -135,6 +135,9 @@ jobs:
               helper = 'payload/localserver/podman-server.py'
               assert hashlib.sha256((root / helper).read_bytes()).hexdigest() == manifest['files'][helper]
               assert not (root / 'payload/localserver/podman/config.json').exists()
+              notes = 'payload/localserver/client-release-notes.md'
+              assert hashlib.sha256((root / notes).read_bytes()).hexdigest() == manifest['files'][notes]
+              assert (root / notes).read_text().startswith('# ReRiff ' + manifest['version'] + ' ')
               menu = (root / 'payload/ReRiff.Notify.dll').read_bytes()
               assert b'ReRiffStartEngineMenu' in menu
               assert 'SAVE AND RESTART'.encode('utf-16-le') in menu

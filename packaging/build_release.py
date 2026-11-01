@@ -78,6 +78,7 @@ def build(args):
         copy(ROOT/'build'/name, payload/name)
     copy(ROOT/'build/ReRiff.NewsHeaders.dll', payload/'ReRiff.NewsHeaders.dll')
     copy(ROOT/'VERSION', payload/'localserver/client-version.txt')
+    (payload/'localserver/client-release-notes.md').write_text(notes,encoding='utf-8')
     (payload/'localserver/client-channel.ini').write_text('[client]\nchannel='+channel+'\n')
     # Multiplayer backend dependencies belong in the container image. The
     # installed client retains only updater and legacy-server cleanup tools.

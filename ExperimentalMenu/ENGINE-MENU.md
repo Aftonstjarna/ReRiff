@@ -502,3 +502,15 @@ or operand masks are used; the original executable hash check remains required.
 observed Windows base. The original and relocated images pass; opcode/operand
 mutations are rejected. This is runtime-hook validation evidence, not additional
 byte-for-byte recovered source or proof of live Windows gameplay compatibility.
+
+### Discardable relocation section
+
+The original `.reloc` section characteristics are `0x42000040`, including
+`IMAGE_SCN_MEM_DISCARDABLE`. Windows may unmap these records after applying them.
+Requiring the live relocation directory to be readable therefore rejected a
+legitimate loaded image even after the 1.2.3-4 address correction. Keep the records
+from the same SHA-256-verified file handle instead; continue checking every live
+instruction byte and its exact adjusted operand. The regression fixture protects
+the mapped relocation region with `PAGE_NOACCESS` and verifies that valid entry
+checks pass while opcode/operand mutations still fail. The log now reports the
+specific failed guard line and build version for remaining runtime differences.

@@ -233,6 +233,11 @@ Installed Files → Browse**, then edit **Properties → General → Launch Opti
 Do not put the Windows EXE directly before `%command%` on Linux; use the bridge
 above. The launcher waits for the game to exit so Steam keeps the session active.
 
+The News screen uses the installed client version's patch notes as its default
+message while preserving custom server announcements. Client notes ship with the
+installer and do not depend on updating the shared server. Delivery diagnostics
+are recorded in `logs/ReRiff-news.log`.
+
 ## Server settings
 
 The launcher edits `server.ini` beside `Game.exe`:

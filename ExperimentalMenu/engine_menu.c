@@ -461,6 +461,8 @@ static void server_save_prompt_result(void *menu,int choice){
     leave_server_page(menu);
 }
 
+static BYTE *verified_relocations;
+static DWORD verified_relocations_size;
 static BOOL supported_file(const WCHAR *path) {
     static const char expected[]="2d1af8a01ec6b1e3477ff6dbe4a44895828e2ac71449344fec9d7d99e87a58e2";
     HANDLE file=CreateFileW(path,GENERIC_READ,FILE_SHARE_READ,NULL,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,NULL);
@@ -483,6 +485,31 @@ static BOOL supported_file(const WCHAR *path) {
     }
     if (hash) CryptDestroyHash(hash);
     if (provider) CryptReleaseContext(provider,0);
+    if(ok&&!verified_relocations){
+        /* .reloc is discardable: Windows can unmap it after loading the game.
+         * Read the original relocation records from this same hash-verified handle. */
+        HANDLE mapping=CreateFileMappingW(file,NULL,PAGE_READONLY,0,0,NULL);
+        BYTE *raw=mapping?MapViewOfFile(mapping,FILE_MAP_READ,0,0,0):NULL;
+        if(raw){
+            IMAGE_DOS_HEADER *dos=(IMAGE_DOS_HEADER *)raw;
+            IMAGE_NT_HEADERS32 *nt=(IMAGE_NT_HEADERS32 *)(raw+dos->e_lfanew);
+            IMAGE_DATA_DIRECTORY reloc=nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC];
+            IMAGE_SECTION_HEADER *sections=IMAGE_FIRST_SECTION(nt);
+            for(unsigned i=0;i<nt->FileHeader.NumberOfSections;i++){
+                IMAGE_SECTION_HEADER *section=sections+i;
+                if(reloc.VirtualAddress<section->VirtualAddress)continue;
+                DWORD offset=reloc.VirtualAddress-section->VirtualAddress;
+                if(offset>section->SizeOfRawData||reloc.Size>section->SizeOfRawData-offset
+                    ||section->PointerToRawData>(DWORD)bytes.QuadPart||offset>(DWORD)bytes.QuadPart-section->PointerToRawData
+                    ||reloc.Size>(DWORD)bytes.QuadPart-section->PointerToRawData-offset)continue;
+                verified_relocations=HeapAlloc(GetProcessHeap(),0,reloc.Size);
+                if(verified_relocations){memcpy(verified_relocations,raw+section->PointerToRawData+offset,reloc.Size);verified_relocations_size=reloc.Size;}
+                break;
+            }
+            UnmapViewOfFile(raw);
+        }
+        if(mapping)CloseHandle(mapping);
+    }
     CloseHandle(file); return ok;
 }
 
@@ -502,11 +529,16 @@ static BOOL relocated_entry_matches(BYTE *base,uintptr_t address,DWORD rva,const
     IMAGE_NT_HEADERS32 *nt=(IMAGE_NT_HEADERS32 *)(base+dos->e_lfanew);
     if(nt->Signature!=IMAGE_NT_SIGNATURE||nt->OptionalHeader.ImageBase!=0x400000)return FALSE;
     IMAGE_DATA_DIRECTORY directory=nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC];
-    if(!directory.Size||directory.VirtualAddress>=nt->OptionalHeader.SizeOfImage||directory.Size>nt->OptionalHeader.SizeOfImage-directory.VirtualAddress||!readable(base+directory.VirtualAddress,directory.Size))return FALSE;
+    if(!directory.Size||directory.VirtualAddress>=nt->OptionalHeader.SizeOfImage||directory.Size>nt->OptionalHeader.SizeOfImage-directory.VirtualAddress)return FALSE;
+    BYTE *records=verified_relocations;
+    if(!records||verified_relocations_size!=directory.Size){
+        records=base+directory.VirtualAddress;
+        if(!readable(records,directory.Size))return FALSE;
+    }
     DWORD offset=0;BOOL found=FALSE;
     while(offset<directory.Size){
         if(directory.Size-offset<sizeof(IMAGE_BASE_RELOCATION))return FALSE;
-        IMAGE_BASE_RELOCATION *block=(IMAGE_BASE_RELOCATION *)(base+directory.VirtualAddress+offset);
+        IMAGE_BASE_RELOCATION *block=(IMAGE_BASE_RELOCATION *)(records+offset);
         if(block->SizeOfBlock<8||block->SizeOfBlock>directory.Size-offset||(block->SizeOfBlock&1))return FALSE;
         WORD *entries=(WORD *)(block+1);DWORD count=(block->SizeOfBlock-8)/2;
         for(DWORD j=0;j<count;j++)if((entries[j]>>12)==IMAGE_REL_BASED_HIGHLOW&&block->VirtualAddress+(entries[j]&4095)==rva+operand)found=TRUE;
@@ -518,49 +550,51 @@ static BOOL relocated_entry_matches(BYTE *base,uintptr_t address,DWORD rva,const
         &&!memcmp(base+rva+operand+4,expected+operand+4,length-operand-4);
 }
 
+static BOOL guard_refused(int line){char message[160];snprintf(message,sizeof(message),"Menu guard failed at engine_menu.c:%d; build=" RERIFF_VERSION "; original relocation bytes=%lu.",line,(unsigned long)verified_relocations_size);log_line(message);return FALSE;}
+
 /* All addresses are RVAs from original bytes, not Ghidra's inferred prototypes. */
 static BOOL validate_image_at(BYTE *base,uintptr_t address_base) {
-    if(!validate_main_branding(base,address_base))return FALSE;
+    if(!validate_main_branding(base,address_base))return guard_refused(__LINE__);
     static const BYTE base_tick_start[]={0xff,0x25};
     if(!readable(base+0x7a56d0,4)||*(DWORD *)(base+0x7a56d0)!=(DWORD)(address_base+0x2e28f0)
         ||!readable(base+0x2e28f0,6)||memcmp(base+0x2e28f0,base_tick_start,2)
-        ||*(DWORD *)(base+0x2e28f2)!=(DWORD)(address_base+0x7a5734))return FALSE;
-    if(!readable(base+0x7a5740,37*sizeof(void *))||*(DWORD *)(base+0x7a5740)!=(DWORD)(address_base+0x2e50e0))return FALSE;
-    if(!readable(base+0x2e50e0,6)||memcmp(base+0x2e50e0,base_tick_start,2)||*(DWORD *)(base+0x2e50e2)!=(DWORD)(address_base+0x7a57d4))return FALSE;
+        ||*(DWORD *)(base+0x2e28f2)!=(DWORD)(address_base+0x7a5734))return guard_refused(__LINE__);
+    if(!readable(base+0x7a5740,37*sizeof(void *))||*(DWORD *)(base+0x7a5740)!=(DWORD)(address_base+0x2e50e0))return guard_refused(__LINE__);
+    if(!readable(base+0x2e50e0,6)||memcmp(base+0x2e50e0,base_tick_start,2)||*(DWORD *)(base+0x2e50e2)!=(DWORD)(address_base+0x7a57d4))return guard_refused(__LINE__);
     static const DWORD entries[27]={0x2f10f4,0x2eea7a,0x2f0730,0x2f10a4,0x1f5891,
         0x2d96a2,0x2eea74,0x2eea80,0x1f58a5,0x2da614,0x2dd174,0x1f58b9,0x1f58cd,
         0x2f10fa,0x2da506,0x2eff50,0x2f0408,0x2d970f,0x2d979e,0x2d97f8,0x2d97fe,
         0x2d9e24,0x2d9e84,0x2d9dc4,0x2f08e3,0x2eea86,0x2ef1e0};
-    if (!readable(base+0x7a5a7c,sizeof(entries))) return FALSE;
+    if (!readable(base+0x7a5a7c,sizeof(entries))) return guard_refused(__LINE__);
     void **table=(void **)(base+0x7a5a7c);
-    for (int i=0;i<27;i++) if ((uintptr_t)table[i]!=address_base+entries[i]) return FALSE;
+    for (int i=0;i<27;i++) if ((uintptr_t)table[i]!=address_base+entries[i]) return guard_refused(__LINE__);
     const DWORD slots[5]={3,15,16,24,26}, targets[5]={0x7a5afc,0x7a5aec,0x7a5af0,0x7a5af8,0x7a5ae8};
     for (int i=0;i<5;i++) {
         BYTE *thunk=base+entries[slots[i]];
         if (!readable(thunk,6) || thunk[0]!=0xff || thunk[1]!=0x25
-            || *(DWORD *)(thunk+2)!=(DWORD)(address_base+targets[i])) return FALSE;
+            || *(DWORD *)(thunk+2)!=(DWORD)(address_base+targets[i])) return guard_refused(__LINE__);
     }
     /* Original native entry bytes for newly used Settings UI routines. */
     static const BYTE entry_0[]={0x55,0x8b,0xec,0x6a,0xff,0x68,0xfc,0xfb,0x8f,0x00,0x64,0xa1};
-    if(!relocated_entry_matches(base,address_base,0x50af0,entry_0,sizeof(entry_0),6))return FALSE;
+    if(!relocated_entry_matches(base,address_base,0x50af0,entry_0,sizeof(entry_0),6))return guard_refused(__LINE__);
     static const BYTE entry_1[]={0x55,0x8b,0xec,0x6a,0xff,0x68,0x08,0xf4,0x8f,0x00,0x64,0xa1};
-    if(!relocated_entry_matches(base,address_base,0x43800,entry_1,sizeof(entry_1),6))return FALSE;
+    if(!relocated_entry_matches(base,address_base,0x43800,entry_1,sizeof(entry_1),6))return guard_refused(__LINE__);
     static const BYTE entry_2[]={0x55,0x8b,0xec,0x6a,0xff,0x68,0x18,0x19,0x90,0x00,0x64,0xa1};
-    if(!relocated_entry_matches(base,address_base,0x8e8d0,entry_2,sizeof(entry_2),6))return FALSE;
+    if(!relocated_entry_matches(base,address_base,0x8e8d0,entry_2,sizeof(entry_2),6))return guard_refused(__LINE__);
     static const BYTE entry_3[]={0x55,0x8b,0xec,0x83,0xe4,0xf8,0x6a,0xff,0x68,0x46,0xf7,0x8f,0x00};
-    if(!relocated_entry_matches(base,address_base,0x4b530,entry_3,sizeof(entry_3),9))return FALSE;
+    if(!relocated_entry_matches(base,address_base,0x4b530,entry_3,sizeof(entry_3),9))return guard_refused(__LINE__);
     static const BYTE entry_4[]={0x55,0x8b,0xec,0x6a,0xff,0x68,0x08,0xf4,0x8f,0x00,0x64,0xa1};
-    if(!relocated_entry_matches(base,address_base,0x8f580,entry_4,sizeof(entry_4),6))return FALSE;
+    if(!relocated_entry_matches(base,address_base,0x8f580,entry_4,sizeof(entry_4),6))return guard_refused(__LINE__);
     static const BYTE remove_start[]={0x55,0x8b,0xec,0x6a,0xff,0x68,0x38,0xf4,0x8f,0x00,0x64,0xa1};
-    if(!relocated_entry_matches(base,address_base,0x8e9d0,remove_start,sizeof(remove_start),6))return FALSE;
+    if(!relocated_entry_matches(base,address_base,0x8e9d0,remove_start,sizeof(remove_start),6))return guard_refused(__LINE__);
     static const BYTE toggle_0[]={0x55,0x8b,0xec,0x6a,0xff,0x68,0x74,0xdf,0x8f,0x00,0x64,0xa1};
-    if(!relocated_entry_matches(base,address_base,0x22030,toggle_0,sizeof(toggle_0),6))return FALSE;
+    if(!relocated_entry_matches(base,address_base,0x22030,toggle_0,sizeof(toggle_0),6))return guard_refused(__LINE__);
     static const BYTE toggle_1[]={0x55,0x8b,0xec,0xa1,0xa4,0xba,0xbf,0x00,0x8b,0x55,0x08,0x56};
-    if(!relocated_entry_matches(base,address_base,0x48830,toggle_1,sizeof(toggle_1),4))return FALSE;
+    if(!relocated_entry_matches(base,address_base,0x48830,toggle_1,sizeof(toggle_1),4))return guard_refused(__LINE__);
     static const BYTE toggle_2[]={0x55,0x8b,0xec,0x6a,0xff,0x68,0xa8,0xf5,0x8f,0x00,0x64,0xa1};
-    if(!relocated_entry_matches(base,address_base,0x482b0,toggle_2,sizeof(toggle_2),6))return FALSE;
+    if(!relocated_entry_matches(base,address_base,0x482b0,toggle_2,sizeof(toggle_2),6))return guard_refused(__LINE__);
     static const BYTE toggle_3[]={0x55,0x8b,0xec,0x8b,0x55,0x08,0x8b,0x02,0x89,0x41,0x20,0x8b};
-    if(!readable(base+0x48280,sizeof(toggle_3))||memcmp(base+0x48280,toggle_3,sizeof(toggle_3)))return FALSE;
+    if(!readable(base+0x48280,sizeof(toggle_3))||memcmp(base+0x48280,toggle_3,sizeof(toggle_3)))return guard_refused(__LINE__);
     static const BYTE raw_start[]={0x55,0x8b,0xec,0x83,0xe4,0xf8,0x83,0xec,0x08};
     static const BYTE key_start[]={0x55,0x8b,0xec,0x53,0x56,0x8b,0x75,0x08};
     static const BYTE enable_start[]={0x55,0x8b,0xec,0x83,0xec,0x08,0x53,0x8a,0x5d,0x08};
