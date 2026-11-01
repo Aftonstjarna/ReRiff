@@ -115,6 +115,7 @@ jobs:
         run: |
           python scripts/test_client_update.py
           python scripts/test_steam_bridge.py
+          python scripts/test_podman_server.py
       - name: Validate Linux self-extractor
         run: sh "dist/v$(cat VERSION)/ReRiff-$(cat VERSION)-linux.run" --help
       - name: Verify published archive checksums and installed channel
@@ -131,6 +132,9 @@ jobs:
               channel.read(marker)
               assert channel['client']['channel'] == manifest['channel'] == os.environ['RERIFF_RELEASE_CHANNEL']
               assert hashlib.sha256(marker.read_bytes()).hexdigest() == manifest['files'][name]
+              helper = 'payload/localserver/podman-server.py'
+              assert hashlib.sha256((root / helper).read_bytes()).hexdigest() == manifest['files'][helper]
+              assert not (root / 'payload/localserver/podman/config.json').exists()
               menu = (root / 'payload/ReRiff.Notify.dll').read_bytes()
               assert b'ReRiffStartEngineMenu' in menu
               assert 'SAVE AND RESTART'.encode('utf-16-le') in menu

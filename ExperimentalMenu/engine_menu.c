@@ -493,6 +493,31 @@ static BOOL supported_file(const WCHAR *path) {
 #include "graphics_aa_menu.h"
 #include "main_branding.h"
 
+/* The supported PE's HIGHLOW relocation table identifies absolute operands.
+ * Compare exact instructions and their expected relocated value; never mask bytes. */
+static BOOL relocated_entry_matches(BYTE *base,uintptr_t address,DWORD rva,const BYTE *expected,size_t length,size_t operand){
+    if(operand+4>length||!readable(base+rva,length)||!readable(base,sizeof(IMAGE_DOS_HEADER)))return FALSE;
+    IMAGE_DOS_HEADER *dos=(IMAGE_DOS_HEADER *)base;
+    if(dos->e_magic!=IMAGE_DOS_SIGNATURE||dos->e_lfanew<0||!readable(base+dos->e_lfanew,sizeof(IMAGE_NT_HEADERS32)))return FALSE;
+    IMAGE_NT_HEADERS32 *nt=(IMAGE_NT_HEADERS32 *)(base+dos->e_lfanew);
+    if(nt->Signature!=IMAGE_NT_SIGNATURE||nt->OptionalHeader.ImageBase!=0x400000)return FALSE;
+    IMAGE_DATA_DIRECTORY directory=nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC];
+    if(!directory.Size||directory.VirtualAddress>=nt->OptionalHeader.SizeOfImage||directory.Size>nt->OptionalHeader.SizeOfImage-directory.VirtualAddress||!readable(base+directory.VirtualAddress,directory.Size))return FALSE;
+    DWORD offset=0;BOOL found=FALSE;
+    while(offset<directory.Size){
+        if(directory.Size-offset<sizeof(IMAGE_BASE_RELOCATION))return FALSE;
+        IMAGE_BASE_RELOCATION *block=(IMAGE_BASE_RELOCATION *)(base+directory.VirtualAddress+offset);
+        if(block->SizeOfBlock<8||block->SizeOfBlock>directory.Size-offset||(block->SizeOfBlock&1))return FALSE;
+        WORD *entries=(WORD *)(block+1);DWORD count=(block->SizeOfBlock-8)/2;
+        for(DWORD j=0;j<count;j++)if((entries[j]>>12)==IMAGE_REL_BASED_HIGHLOW&&block->VirtualAddress+(entries[j]&4095)==rva+operand)found=TRUE;
+        offset+=block->SizeOfBlock;
+    }
+    if(!found)return FALSE;
+    DWORD original;memcpy(&original,expected+operand,4);DWORD relocated=original+(DWORD)(address-0x400000);
+    return !memcmp(base+rva,expected,operand)&&!memcmp(base+rva+operand,&relocated,4)
+        &&!memcmp(base+rva+operand+4,expected+operand+4,length-operand-4);
+}
+
 /* All addresses are RVAs from original bytes, not Ghidra's inferred prototypes. */
 static BOOL validate_image_at(BYTE *base,uintptr_t address_base) {
     if(!validate_main_branding(base,address_base))return FALSE;
@@ -517,23 +542,23 @@ static BOOL validate_image_at(BYTE *base,uintptr_t address_base) {
     }
     /* Original native entry bytes for newly used Settings UI routines. */
     static const BYTE entry_0[]={0x55,0x8b,0xec,0x6a,0xff,0x68,0xfc,0xfb,0x8f,0x00,0x64,0xa1};
-    if(!readable(base+0x50af0,sizeof(entry_0))||memcmp(base+0x50af0,entry_0,sizeof(entry_0)))return FALSE;
+    if(!relocated_entry_matches(base,address_base,0x50af0,entry_0,sizeof(entry_0),6))return FALSE;
     static const BYTE entry_1[]={0x55,0x8b,0xec,0x6a,0xff,0x68,0x08,0xf4,0x8f,0x00,0x64,0xa1};
-    if(!readable(base+0x43800,sizeof(entry_1))||memcmp(base+0x43800,entry_1,sizeof(entry_1)))return FALSE;
+    if(!relocated_entry_matches(base,address_base,0x43800,entry_1,sizeof(entry_1),6))return FALSE;
     static const BYTE entry_2[]={0x55,0x8b,0xec,0x6a,0xff,0x68,0x18,0x19,0x90,0x00,0x64,0xa1};
-    if(!readable(base+0x8e8d0,sizeof(entry_2))||memcmp(base+0x8e8d0,entry_2,sizeof(entry_2)))return FALSE;
-    static const BYTE entry_3[]={0x55,0x8b,0xec,0x83,0xe4,0xf8,0x6a,0xff,0x68,0x46,0xf7,0x8f};
-    if(!readable(base+0x4b530,sizeof(entry_3))||memcmp(base+0x4b530,entry_3,sizeof(entry_3)))return FALSE;
+    if(!relocated_entry_matches(base,address_base,0x8e8d0,entry_2,sizeof(entry_2),6))return FALSE;
+    static const BYTE entry_3[]={0x55,0x8b,0xec,0x83,0xe4,0xf8,0x6a,0xff,0x68,0x46,0xf7,0x8f,0x00};
+    if(!relocated_entry_matches(base,address_base,0x4b530,entry_3,sizeof(entry_3),9))return FALSE;
     static const BYTE entry_4[]={0x55,0x8b,0xec,0x6a,0xff,0x68,0x08,0xf4,0x8f,0x00,0x64,0xa1};
-    if(!readable(base+0x8f580,sizeof(entry_4))||memcmp(base+0x8f580,entry_4,sizeof(entry_4)))return FALSE;
+    if(!relocated_entry_matches(base,address_base,0x8f580,entry_4,sizeof(entry_4),6))return FALSE;
     static const BYTE remove_start[]={0x55,0x8b,0xec,0x6a,0xff,0x68,0x38,0xf4,0x8f,0x00,0x64,0xa1};
-    if(!readable(base+0x8e9d0,sizeof(remove_start))||memcmp(base+0x8e9d0,remove_start,sizeof(remove_start)))return FALSE;
+    if(!relocated_entry_matches(base,address_base,0x8e9d0,remove_start,sizeof(remove_start),6))return FALSE;
     static const BYTE toggle_0[]={0x55,0x8b,0xec,0x6a,0xff,0x68,0x74,0xdf,0x8f,0x00,0x64,0xa1};
-    if(!readable(base+0x22030,sizeof(toggle_0))||memcmp(base+0x22030,toggle_0,sizeof(toggle_0)))return FALSE;
+    if(!relocated_entry_matches(base,address_base,0x22030,toggle_0,sizeof(toggle_0),6))return FALSE;
     static const BYTE toggle_1[]={0x55,0x8b,0xec,0xa1,0xa4,0xba,0xbf,0x00,0x8b,0x55,0x08,0x56};
-    if(!readable(base+0x48830,sizeof(toggle_1))||memcmp(base+0x48830,toggle_1,sizeof(toggle_1)))return FALSE;
+    if(!relocated_entry_matches(base,address_base,0x48830,toggle_1,sizeof(toggle_1),4))return FALSE;
     static const BYTE toggle_2[]={0x55,0x8b,0xec,0x6a,0xff,0x68,0xa8,0xf5,0x8f,0x00,0x64,0xa1};
-    if(!readable(base+0x482b0,sizeof(toggle_2))||memcmp(base+0x482b0,toggle_2,sizeof(toggle_2)))return FALSE;
+    if(!relocated_entry_matches(base,address_base,0x482b0,toggle_2,sizeof(toggle_2),6))return FALSE;
     static const BYTE toggle_3[]={0x55,0x8b,0xec,0x8b,0x55,0x08,0x8b,0x02,0x89,0x41,0x20,0x8b};
     if(!readable(base+0x48280,sizeof(toggle_3))||memcmp(base+0x48280,toggle_3,sizeof(toggle_3)))return FALSE;
     static const BYTE raw_start[]={0x55,0x8b,0xec,0x83,0xe4,0xf8,0x83,0xec,0x08};

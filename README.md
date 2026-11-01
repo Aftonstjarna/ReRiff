@@ -238,12 +238,25 @@ above. The launcher waits for the game to exit so Steam keeps the session active
 The launcher edits `server.ini` beside `Game.exe`:
 
 - **Primary server:** preferred shared Docker/Podman server address, including its port.
-- **Secondary server:** optional alternative shared server address.
+- **Secondary server:** optional fallback address, including the launcher-managed
+  local Podman server at `http://127.0.0.1:5144`.
 - **Primary server only:** skips the secondary server; singleplayer remains available.
 - **Singleplayer:** selects local play while retaining both saved server addresses.
 - **Use servers:** enables primary → secondary → singleplayer selection.
-- **Stop local server:** retained to stop an older installation's Python backend;
-  Docker and unrelated services are untouched.
+- **Install / Start / Stop local server:** optionally downloads and manages the
+  official server image with Podman. Install Podman separately and start its local
+  runtime first (a local Podman machine on Windows). Install creates a stopped
+  container; Start makes it available at `http://127.0.0.1:5144`. Enter that address
+  in **Secondary server**, enable **Use servers**, leave **Primary server only**
+  unchecked, and save. The Primary server is tried first.
+
+Optional-server configuration and data stay in `localserver/podman/` in the game
+folder; diagnostics are in `logs/ReRiff-podman.log` and
+`logs/ReRiff-localserver.log`. Stop retains configuration and data. The container
+binds only to localhost and is managed independently of Play and client updates.
+Client installers include the control helper, not the server image/backend.
+Podman itself keeps its engine/image storage in its normal location. This launcher
+feature has no original game equivalent; it does not replace native in-game controls.
 
 When backing out of Servers or Graphics with unsaved changes, a native confirmation
 asks whether to apply or discard them. Back inside that prompt keeps editing.
