@@ -249,7 +249,7 @@ int main(int argc,char **argv){
     *(DWORD *)((BYTE *)server_rows[1]+356)=0x12345678;tick_entry(menu);CHECK(*(DWORD *)((BYTE *)server_rows[1]+356)==0x12345678);
     /* Native drag/tap movement is consumed from the original reel, with no
      * competing custom scrollbar buttons or native UI directional pass. */
-    ((FakeReel *)native_reel)->selection=6;prepare_scroll(menu);sync_scroll(menu);CHECK(page_first==5&&focused==1508);
+    ((FakeReel *)native_reel)->selection=6;prepare_scroll(menu);sync_scroll(menu);CHECK(page_first==5&&focused==1509);
     HWND window=CreateWindowExW(0,L"STATIC",L"Native reel input fixture",WS_OVERLAPPEDWINDOW,0,0,800,600,NULL,NULL,GetModuleHandleW(NULL),NULL);
     CHECK(window);scroll_previous=mock_window;
     scroll_wndproc(window,WM_LBUTTONDOWN,MK_LBUTTON,MAKELPARAM(700,300));CHECK(forwarded==1);

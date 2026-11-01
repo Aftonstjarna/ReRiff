@@ -61,7 +61,7 @@ static void *toggles[3][2];
 static const int toggle_actions[3]={1,4,5};
 #define SERVER_ACTION_COUNT 9
 #define SERVER_ACTION_MAX 11
-static const int server_action_order[SERVER_ACTION_COUNT]={1,4,5,6,7,8,11,9,10};
+static const int server_action_order[SERVER_ACTION_COUNT]={1,4,5,6,7,9,10,8,11};
 static int server_action_index(int action){for(int i=0;i<SERVER_ACTION_COUNT;i++)if(server_action_order[i]==action)return i;return -1;}
 static void *server_rows[SERVER_ACTION_MAX+1]; /* borrowed; the original screen owns every row */
 static BYTE settings_visible, audio_visible;
@@ -272,7 +272,7 @@ static void render(void *menu) {
     static const WCHAR *labels[SERVER_ACTION_MAX+1]={L"", L"SKIP LAUNCHER",
         L"USE SINGLEPLAYER", L"USE CONFIGURED SERVERS", L"PRIMARY SERVER ONLY",
         L"SINGLEPLAYER", L"SAVE SETTINGS", L"RELOAD SAVED SETTINGS",
-        L"SAVE AND RESTART", L"BACK WITHOUT SAVING", L"SAVE AND RETURN", L"SAVE AND EXIT"};
+        L"SAVE AND RESTART", L"RETURN WITHOUT SAVING", L"SAVE AND RETURN", L"SAVE AND EXIT"};
     for(int id=1;id<=SERVER_ACTION_MAX;id++) {
         void *text=item_text(menu,id);
         if(!text)continue;
@@ -579,7 +579,7 @@ __declspec(dllexport) BOOL __cdecl ReRiffStartEngineMenu(void) {
     WCHAR path[MAX_PATH]; DWORD length=GetModuleFileNameW(NULL,path,MAX_PATH);
     if (!length || length>=MAX_PATH) return FALSE;
     WCHAR *slash=wcsrchr(path,L'\\');
-    if (!slash || (size_t)(slash-path)+30>=MAX_PATH) return FALSE;
+    if (!slash || (size_t)(slash-path)+1+wcslen(L"logs\\ReRiff-engine-menu.log")>=MAX_PATH) return FALSE;
     wcscpy(config_path,path); config_path[slash-path+1]=0;
     wcscpy(log_path,config_path);wcscat(log_path,L"logs");CreateDirectoryW(log_path,NULL);
     wcscpy(log_path,config_path); wcscat(log_path,L"logs\\ReRiff-engine-menu.log");

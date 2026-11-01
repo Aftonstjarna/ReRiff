@@ -460,7 +460,7 @@ against the original IL; this integration is an intentional mod, not recovery cr
 Original `gaGraphicsOptions.initScreens` explicitly clears menu-item flag bit 1
 at Apply item +372 (IL offsets 0x0ABD..0x0AD4, AND 253). This excludes the existing
 button from the normal directional-focus lifecycle. ReRiff uses original
-`elUIItem.setMenuItem` at RVA 0x4B530 to opt it in, retaining its original sprite,
+`elUIItem.setAsMenuItem` at RVA 0x4B530 to opt it in, retaining its original sprite,
 highlight/activation handlers and Apply action. The native Up/Down ID loop now
 runs Resolution → Fullscreen mode → AA → UI Scale → Apply → Resolution.
 Cleanup restores the original flag and navigation fields.
@@ -477,3 +477,7 @@ During this use, selection 2 applies and selection 1 discards. The original
 quit action is never forwarded. Escape/Back inside the overlay cancels the prompt
 and keeps editing. Callbacks run only after the native overlay is removed.
 The actual timed display Keep/Revert overlay remains separate.
+
+The final four Servers actions are Return without saving, Save and return,
+Save and restart, Save and exit. Their original internal IDs remain 9, 10,
+8 and 11; native link targets and scrolling use the visible-order map.
