@@ -10,6 +10,7 @@ class SigningSmoke {
             if (assembly.GetName().GetPublicKeyToken().Length == 0)
                 throw new Exception("Unsigned assembly: " + assembly.FullName);
         }
+        NativeReelBridgeSmoke.Run();
         string root = AppDomain.CurrentDomain.BaseDirectory;
         File.WriteAllText(Path.Combine(root, "server.ini"),
             "[server]\nnetworking_enabled=false\nshow_server_popup=false\n");

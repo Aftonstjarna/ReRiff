@@ -1,3 +1,21 @@
+# ReRiff 1.2.2-3 — Native scrollbar and Settings navigation
+
+- Move Servers to the first row of Settings, preserving all original entries.
+- Reuse the original local-track file picker’s gaMenuReel scrollbar, including
+  its artwork, arrows, dragging and range limits. Remove the custom scrollbar
+  and extra arrow controls from revision 2.
+- Give up/down navigation one selection owner with held-button repeat and
+  bounded movement. Apply focus after input dispatch to prevent competing
+  highlights, skipped entries and stuck navigation.
+- Retain vanilla spacing, separator lines, fullscreen-style switches, wheel,
+  Page Up/Down, Home/End, save/reload and Save and restart.
+- Guard the original executable and bridge methods; update the managed helper
+  and native menu together using the complete installer or updater.
+
+Experimental: automated navigation and bridge checks pass; scrollbar behavior
+and controller feel still require a live game trial. Friends restoration is
+not included in this revision.
+
 # ReRiff 1.2.2-2 — Vanilla spacing and scrolling Settings
 
 - Give Settings and Servers the original row spacing, text anchor and divider
