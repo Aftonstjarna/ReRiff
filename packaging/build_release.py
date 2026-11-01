@@ -78,13 +78,13 @@ def build(args):
     copy(ROOT/'build/ReRiff.NewsHeaders.dll', payload/'ReRiff.NewsHeaders.dll')
     copy(ROOT/'VERSION', payload/'localserver/client-version.txt')
     (payload/'localserver/client-channel.ini').write_text('[client]\nchannel='+channel+'\n')
-    copy(ROOT/'VERSION', payload/'localserver/server/VERSION')
     for name in ('trace-server.py','server_routing.py','steam-launcher.sh','start-server-host.sh','stop-server-host.sh','server-control.py','apply-client-update.py'):
         copy(ROOT/'scripts'/name,payload/'localserver'/name)
     (payload/'localserver/client-channel.ini').write_text('[client]\nchannel='+channel+'\n')
     for path in (ROOT/'vendor/riffapi-local-extended').iterdir():
         if path.is_file():
             copy(path,payload/'localserver/server'/path.name)
+    copy(ROOT/'VERSION',payload/'localserver/server/VERSION')
     copy(ROOT/'LICENSE',payload/'localserver/licenses/ReRiff.txt')
     copy(ROOT/'ServerSync/third_party/LICENSE.MIT',payload/'localserver/licenses/nlohmann-json.txt')
     libs = payload/'localserver/python-libs'
