@@ -56,10 +56,20 @@ class NewsVersions(unittest.TestCase):
             self.assertIn('Exit the game', self.news('0.9.9')[0]['en'])
 
     def test_unknown_or_invalid_versions_do_not_invent_update(self):
-        for version in (None, 'not-a-version', '1.2.3\"bad', '10000.0.0', '1.2'):
+        for version in (None, 'not-a-version', '1.2.3\"bad', '10000.0.0', '1.2', '1.2.2-0', '1.2.2-01', '1.2.2-10000', '1.2.2-rc1'):
             self.assertIn('unknown', self.news(version)[0]['en'])
         with patch.dict(os.environ, {'RERIFF_SERVER_VERSION': 'invalid'}):
             self.assertIn('unknown', self.news('0.1.8')[0]['en'])
+
+    def test_numbered_prereleases_compare_with_stable_and_other_revisions(self):
+        cases = [('1.2.2-1', '1.2.1', True), ('1.2.2-1', '1.2.2-1', False),
+                 ('1.2.2-10', '1.2.2-2', True), ('1.2.2', '1.2.2-10', True),
+                 ('1.2.2-10', '1.2.2', False), ('1.2.1', '1.2.2-1', False)]
+        for server, client, update in cases:
+            with self.subTest(server=server, client=client), patch.dict(os.environ, {'RERIFF_SERVER_VERSION': server}):
+                row = self.news(client)[0]
+                self.assertNotIn('unknown', row['en'])
+                self.assertEqual(row['enTitle'] == 'Exit to update ReRiff', update)
 
     def test_normal_parse_filters_and_count(self):
         rows = self.news('0.1.8', {'where': json.dumps({'Status': 'Active'}), 'order': 'ID', 'limit': 1})

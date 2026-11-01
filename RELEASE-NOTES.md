@@ -12,6 +12,8 @@
   logs. It uses the existing transactional installer and verified backups.
 - Offer an optional Linux Music link with an editable source folder. Respect
   XDG Music settings, preserve existing music files, and retain opt-out on updates.
+- Recognize numbered prerelease versions in server News comparisons, with
+  numeric revision ordering and stable releases sorting after their prereleases.
 - Preserve terminal and automatic-updater behavior for explicit installer
   arguments, and detect common Flatpak Steam libraries.
 
