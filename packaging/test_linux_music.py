@@ -98,6 +98,15 @@ class MusicLinkTests(unittest.TestCase):
         with patch.object(Path, 'home', return_value=home), patch.dict(os.environ, {'XDG_CONFIG_HOME': str(config)}):
             self.assertEqual(installer.default_music_dir(), home/'Music ü $(never execute)')
 
+    def test_disabled_xdg_music_defaults_to_music_not_entire_home(self):
+        patch.stopall()
+        home = self.root/'home'
+        config = home/'.config'
+        config.mkdir(parents=True)
+        (config/'user-dirs.dirs').write_text('XDG_MUSIC_DIR="$HOME"\n')
+        with patch.object(Path, 'home', return_value=home), patch.dict(os.environ, {'XDG_CONFIG_HOME': str(config)}):
+            self.assertEqual(installer.default_music_dir(), home/'Music')
+
 
 if __name__ == '__main__':
     unittest.main()
