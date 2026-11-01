@@ -1,3 +1,16 @@
+# ReRiff 1.2.2-7 — Steam unattended-test forwarding fix
+
+- Recognize --test-auto-update and --no-auto-update in the Linux Steam bridge.
+  Keep Steam's Proton invocation and forward the original Game.exe path and
+  arguments explicitly, preserving spaces and Unicode.
+- Accept the test flag before or after Steam's forwarded game command without
+  passing it into the original game. The test flag implies skipping the launcher
+  for that invocation, including on Windows.
+- Add regression checks for the real bridge and native launcher parsing, and
+  document the Linux Steam launch-options example.
+- Retain the progress window, safe Cancel behavior and same-version test mode
+  from revision 6. Existing settings and saved data are preserved.
+
 # ReRiff 1.2.2-6 — Launcher skipping and automatic updates
 
 - Add adjacent Skip launcher and Auto-update when skipping launcher checkboxes

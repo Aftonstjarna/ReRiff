@@ -116,7 +116,7 @@ static BOOL parse_launcher_arguments(int count,LPWSTR *args,BOOL *skip,BOOL *sel
             *skip=TRUE;force_show_launcher=FALSE;
         }
         else if(!wcscmp(args[i],L"--show-launcher")){*skip=FALSE;force_show_launcher=TRUE;}
-        else if(!wcscmp(args[i],L"--test-auto-update"))force_auto_reinstall=TRUE;
+        else if(!wcscmp(args[i],L"--test-auto-update")){force_auto_reinstall=TRUE;*skip=TRUE;force_show_launcher=FALSE;}
         else if(!wcscmp(args[i],L"--no-auto-update"))suppress_auto_update=TRUE;
         else if(!wcscmp(args[i],L"--self-test"))*selftest=TRUE;
         else if(!wcscmp(args[i],L"--restart-game")){
@@ -128,7 +128,13 @@ static BOOL parse_launcher_arguments(int count,LPWSTR *args,BOOL *skip,BOOL *sel
         else {
             if(!wcscmp(args[i],L"--")&&++i>=count)return FALSE;
             if(!is_forwarded_game(args[i]))return FALSE;
-            for(i++;i<count;i++)if(!append_game_argument(args[i]))return FALSE;
+            for(i++;i<count;i++){
+                /* Steam commonly appends launch options after %command%.
+                 * These updater-only flags must not reach the original EXE. */
+                if(!wcscmp(args[i],L"--test-auto-update")){force_auto_reinstall=TRUE;*skip=TRUE;force_show_launcher=FALSE;}
+                else if(!wcscmp(args[i],L"--no-auto-update"))suppress_auto_update=TRUE;
+                else if(!append_game_argument(args[i]))return FALSE;
+            }
             return TRUE;
         }
     }
@@ -538,6 +544,7 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE previous,LPWSTR command,int sho
         WCHAR value[4096];GetPrivateProfileStringW(L"server",L"fallback_url",L"",value,4096,ini);
         log_message(L"SELFTEST: native launcher initialized; no game or server started.");log_message(ini);log_message(value);return 0;
     }
+    if(force_auto_reinstall)log_message(L"TEST: unattended update requested.");
     if (should_skip_launcher(skip)) {
         if(!restart_parent_pid&&!suppress_auto_update&&(force_auto_reinstall||launcher_preference(L"auto_update_on_skip"))){
             automatic_update=TRUE;progress_open(TRUE);progress_report(PROGRESS_CHECK,-1);

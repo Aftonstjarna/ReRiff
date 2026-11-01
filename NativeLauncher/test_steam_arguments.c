@@ -28,6 +28,11 @@ int main(void) {
     CHECK(!should_skip_launcher(FALSE));DeleteFileW(ini);
     LPWSTR bridge[]={L"ReRiff-Launcher.exe",L"--skip-launcher",L"--",game,L"--game-option"};
     CHECK(parse_launcher_arguments(5,bridge,&skip,&selftest)&&skip&&!selftest);
+    LPWSTR appended_test[]={L"ReRiff-Launcher.exe",game,L"--test-auto-update",L"space value"};
+    CHECK(parse_launcher_arguments(4,appended_test,&skip,&selftest)&&skip&&force_auto_reinstall);
+    CHECK(!wcsstr(game_arguments,L"--test-auto-update")&&wcsstr(game_arguments,L"space value"));
+    LPWSTR standalone_test[]={L"ReRiff-Launcher.exe",L"--test-auto-update"};
+    CHECK(parse_launcher_arguments(2,standalone_test,&skip,&selftest)&&skip&&force_auto_reinstall);
     LPWSTR unknown[]={L"ReRiff-Launcher.exe",L"C:\\another-installation\\Game.exe"};
     CHECK(!parse_launcher_arguments(2,unknown,&skip,&selftest));
     LPWSTR placeholder[]={L"ReRiff-Launcher.exe",L"%command%"};
