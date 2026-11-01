@@ -8,7 +8,8 @@ static void *fake_ui=screen;
 static BOOL restart_ok;
 static EnableFn native_enable;
 static void __thiscall mock_tick(void *self){(void)self;ticked++;}
-static void __thiscall mock_base_tick(void *self){(void)self;base_ticked++;}
+static void __thiscall mock_base_tick(void *self);
+static int pointer_hover=-1;static BOOL accept_press;
 static void __thiscall mock_enable(void *self,BYTE enabled){
     if(enabled)native_enable(self,TRUE);
     else *(DWORD *)((BYTE *)self+76)=0;
@@ -29,7 +30,11 @@ static void *__thiscall mock_sprite(void *ui,int id,const float *pos,int origin,
 static void __thiscall mock_raw(void *text,const WCHAR *value){wcsncpy((WCHAR *)((BYTE *)text+512),value,250);((float *)text)[12]=(float)wcslen(value)*8;}
 static void __thiscall mock_key(void *text,const char *value){MultiByteToWideChar(CP_UTF8,0,value,-1,(WCHAR *)((BYTE *)text+512),250);}
 static const char *__thiscall mock_title(void *self){(void)self;return "settings-title";}
-static void __thiscall mock_input(void *self,int selection){(void)self;delegated=selection;}
+static void __thiscall mock_input(void *self,int selection){
+    /* Exact guard in gaOptionsMenu.handleScreenInput, verified original IL. */
+    if(((int *)self)[102]||*((BYTE *)self+392)||*((BYTE *)self+393))return;
+    delegated=selection;
+}
 static void __thiscall mock_init(void *self,void *up,void *low){(void)self;(void)up;(void)low;initialized++;}
 static void __thiscall mock_cleanup(void *self,void *up,void *low){(void)self;(void)up;(void)low;cleaned++;}
 static void __thiscall mock_focus(void *self,int id){(void)self;focused=id;}
@@ -56,6 +61,18 @@ static BOOL mock_restart(void){
 static InputFn volatile input_entry=hook_input;
 static ScreenFn volatile init_entry=hook_init,cleanup_entry=hook_cleanup;
 static TickFn volatile tick_entry=hook_tick;
+static void __thiscall mock_base_tick(void *self){
+    base_ticked++;
+    if(pointer_hover>=0){
+        for(int i=0;i<root_count;i++){
+            void *row=root_rows[i].text;
+            if(root_rows[i].id==pointer_hover&&(*((BYTE *)row+372)&1)&&(*(DWORD *)((BYTE *)row+76)&1)){
+                focused=pointer_hover;((int *)self)[11]=focused;
+            }
+        }
+    }
+    if(accept_press){accept_press=FALSE;input_entry(self,focused);}
+}
 static void select_action(int action){logical_selection=action-1;scroll_to(menu,clamp_index(action-1,0,10-visible_rows),FALSE);apply_pending_focus(menu);input_entry(menu,SERVER_ACTION_BASE+action);}
 static void open_servers(void){if(((int *)menu)[62]==0&&!server_page)scroll_to(menu,0,FALSE);input_entry(menu,SERVERS_ID);}
 typedef struct FakeReel {BYTE object[532];void *children[16];int count,maximum,selection;} FakeReel;
@@ -124,16 +141,37 @@ int main(int argc,char **argv){
         ((void **)menu)[73+i]=vanilla_arrows[i];vanilla_arrows[i][372]=1;
         if(i<3){*(void ***)vanilla_lines[i]=item_vtable;((void **)menu)[78+i]=vanilla_lines[i];vanilla_lines[i][372]=1;}
     }
-    group[372]=1;init_entry(menu,NULL,NULL);CHECK(initialized==1&&visible_rows==4&&root_count==5&&added==30);
+    *(DWORD *)(screen+40)=1;group[372]=1;init_entry(menu,NULL,NULL);CHECK(initialized==1&&visible_rows==4&&root_count==5&&added==30);
     CHECK(root_rows[0].id==SERVERS_ID&&(*((BYTE *)server_rows[0]+372)&1));
     CHECK(root_rows[1].id==0&&((float *)root_rows[1].text)[9]-((float *)server_rows[0])[9]==row_gap);
     tick_entry(menu);CHECK(native_reel&&bars==1&&focused==SERVERS_ID&&logical_selection==0);
+    /* Reproduce gaMenu.enter's original recursive input-mask reset AFTER
+     * initScreens. Exercise the real original native method, not a mask mock. */
+    void *children[24];int child_count=0;
+    for(int i=0;i<root_count;i++){children[child_count++]=root_rows[i].text;if(root_rows[i].arrow)children[child_count++]=root_rows[i].arrow;if(root_rows[i].line)children[child_count++]=root_rows[i].line;}
+    ((void **)group)[94]=children;((void **)group)[95]=children+child_count;((void **)screen)[3]=group;
+    ((void (__thiscall *)(void *,DWORD))((BYTE *)image+0x8f4e0))(screen,1);
+    CHECK(*(DWORD *)((BYTE *)root_rows[4].text+76)==1); /* hidden native row reenabled */
+    prepare_scroll(menu);CHECK(*(DWORD *)((BYTE *)root_rows[4].text+76)==0);
+    CHECK(*(DWORD *)((BYTE *)root_rows[0].arrow+76)==0);
+    *(DWORD *)((BYTE *)root_rows[1].text+356)=0x24681357;
+    tick_entry(menu);CHECK(*(DWORD *)((BYTE *)root_rows[1].text+356)==0x24681357);
+    /* Cover all original actions with hover+click and focused controller A,
+     * including stale Audio latches and a scroll to reach Credits. */
+    for(int i=1;i<root_count;i++){
+        logical_selection=i;scroll_to(menu,i>=visible_rows?i-visible_rows+1:0,FALSE);apply_pending_focus(menu);
+        pointer_hover=root_rows[i].id;delegated=-1;accept_press=TRUE;menu[392]=menu[393]=1;
+        tick_entry(menu);CHECK(focused==root_rows[i].id&&delegated==root_rows[i].id&&!menu[392]&&!menu[393]);
+        pointer_hover=-1;delegated=-1;accept_press=TRUE;menu[392]=1;
+        tick_entry(menu);CHECK(delegated==root_rows[i].id&&!menu[392]);
+    }
+    logical_selection=0;scroll_to(menu,0,FALSE);apply_pending_focus(menu);
     CHECK(navigate_direction(menu,128,100));apply_pending_focus(menu);CHECK(logical_selection==1&&focused==0);
     CHECK(navigate_direction(menu,128,101));CHECK(logical_selection==1);
     CHECK(navigate_direction(menu,128,350));apply_pending_focus(menu);CHECK(logical_selection==2&&focused==1);
     CHECK(navigate_direction(menu,192,351));CHECK(logical_selection==2);
     CHECK(!navigate_direction(menu,0,352));
-    held_input=128;last_direction=0;int native_before=ticked;tick_entry(menu);CHECK(ticked==native_before);held_input=0;
+    held_input=128;last_direction=0;int native_before=base_ticked;tick_entry(menu);CHECK(base_ticked==native_before);held_input=0;
     open_servers();CHECK(server_page&&focused==1501&&native_reel&&bars==2&&destroyed==1);
     CHECK(!wcscmp(label(8),L"Save and restart"));CHECK(((float *)server_rows[2])[9]-((float *)server_rows[1])[9]==row_gap);
     CHECK(!(*((BYTE *)server_rows[5]+372)&1)&&*(DWORD *)((BYTE *)server_rows[5]+76)==0);
@@ -155,10 +193,11 @@ int main(int argc,char **argv){
     WCHAR value[32];GetPrivateProfileStringW(L"keep",L"key",L"",value,32,config_path);CHECK(!wcscmp(value,L"value"));
     select_action(9);CHECK(!server_page&&root_first==0&&focused==SERVERS_ID);
     ((int *)menu)[62]=1;group[372]=0;audio[372]=1;prepare_scroll(menu);CHECK(!native_reel&&!scroll_active);
+    int audio_before=ticked;tick_entry(menu);CHECK(ticked==audio_before+1);
     ((int *)menu)[62]=0;group[372]=1;audio[372]=0;prepare_scroll(menu);CHECK(native_reel&&scroll_active);
     open_servers();request_restart=mock_restart;restart_ok=FALSE;select_action(8);CHECK(restart_calls==1&&!restarting);
     restart_ok=TRUE;select_action(8);CHECK(restart_calls==2&&restarting);restart_started=GetTickCount()-15001;tick_entry(menu);CHECK(!restarting);
     cleanup_entry(menu,NULL,NULL);CHECK(cleaned==1&&!page_owner&&!native_reel&&destroyed==constructed&&removed==26);
     FreeLibrary(image);DeleteFileW(config_path);DeleteFileW(log_path);
-    puts("PASS: original guards, Servers first, native reel lifecycle, one navigation owner, held-repeat/boundaries, deferred focus, pointer forwarding, wheel, masks, save/restart and cleanup");return 0;
+    puts("PASS: original guards, Servers first, native reel lifecycle, one navigation owner, held-repeat/boundaries, deferred focus, pointer forwarding, original mask reset, vanilla hover/click/controller activation, Audio isolation, press latches, save/restart and cleanup");return 0;
 }

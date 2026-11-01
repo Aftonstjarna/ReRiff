@@ -11,8 +11,10 @@ are owned by the existing screen and use distinct IDs 1501–1510 (entry 1500).
 Opening the page saves the original Settings/audio group visibility, hides those
 groups, and focuses the first server control through `elUIScreen.setFocus(int)`.
 Back or Save and return restores the saved visibility and focuses Servers.
-The base `gaMenu.tick` handles the server page; all other Settings input and
-updates retain their original callbacks. Cleanup removes the added screen rows
+The base `gaMenu.tick` handles Servers and the scrolling root Settings list.
+Original root actions still dispatch through `gaOptionsMenu.handleScreenInput`.
+The original `gaOptionsMenu.tick` runs on Audio, where its slider hit tests and
+drag latches belong; stale slider latches are cleared before root activation. Cleanup removes the added screen rows
 before original cleanup so repeated visits cannot accumulate controls or IDs.
 
 Skip launcher, External only and Networking use the original fullscreen switch
@@ -61,10 +63,15 @@ and Down=128 use the original input device masks from
 directional input is held, base menu navigation is gated as in that file picker.
 Repeat begins at 250ms and accelerates to 20ms, advancing at most once per tick.
 Focus is deferred until input dispatch returns, then both screen focus and the
-original menu focus bookkeeping are updated. Hidden controls have no input masks.
+original menu focus bookkeeping are updated. Hidden controls have no input masks. The game recursively assigns the screen
+mask after initScreens, so masks are reconciled before dispatch and afterwards,
+using the active screen mask rather than a saved initialization mask. Existing
+press/release latches are preserved whenever the mask is already correct.
 
 The native harness covers original guards, first-entry ordering, reel lifetime,
-held repeat, boundaries, deferred focus, pointer forwarding, wheel, save/restart
+held repeat, boundaries, deferred focus, pointer forwarding, wheel, original
+screen mask resets, hover/click and controller activation of all four vanilla
+entries with stale Audio latches, Audio tick delegation, save/restart
 and cleanup. The signed managed smoke test covers pointer/float arguments and
 owning SSP indirection through actual cdecl callbacks on Mono and Windows CLR.
 Live controller and drag testing is still required.

@@ -2,7 +2,7 @@
  * The native Settings adapter owns only row layout and one logical selection. */
 #define ROOT_LIMIT 6
 #define SCROLL_EXTRA_LIMIT 10
-static struct RootRow {void *text,*arrow,*line;int id;DWORD mask;float x,arrow_x,arrow_dy;} root_rows[ROOT_LIMIT];
+static struct RootRow {void *text,*arrow,*line;int id;float x,arrow_x,arrow_dy;} root_rows[ROOT_LIMIT];
 static int root_count,root_first,page_first,visible_rows,laid_out=-1,laid_first=-1,laid_active=-1;
 static float row_x,row_start,row_gap,line_width,line_dy,arrow_dy,ui_width,ui_height;
 static void *page_lines[10],*scroll_extras[SCROLL_EXTRA_LIMIT];static int extra_count;
@@ -66,12 +66,13 @@ static void layout_scroll(void *menu){
     if(!scroll_ready)return;
     BOOL active=server_page||(((int *)menu)[62]==0&&*((BYTE *)((void **)menu)[67]+372)&1);
     if(((int *)menu)[102]!=0)active=FALSE;
+    DWORD list_mask=*(DWORD *)((BYTE *)((void **)menu)[46]+40);
     int count=view_count(),first=clamp_index(view_first(),0,count>visible_rows?count-visible_rows:0);
     if(server_page)page_first=first;else root_first=first;
     for(int i=0;i<10;i++){
         BOOL show=active&&server_page&&i>=first&&i<first+visible_rows;
         void *row=server_rows[i+1];int action=i+1;BOOL toggle=action==1||action==4||action==5;
-        row_visible(row,show,0xffffffffu);
+        row_visible(row,show,list_mask);
         if(show){
             float y=row_start+(i-first)*row_gap;
             move_item(row,toggle?row_x-line_width*0.5f:row_x,y);
@@ -84,7 +85,7 @@ static void layout_scroll(void *menu){
     if(!server_page&&((int *)menu)[62]==0){
         for(int i=0;i<root_count;i++){
             struct RootRow *r=&root_rows[i];BOOL show=active&&i>=first&&i<first+visible_rows;
-            row_visible(r->text,show,r->mask);row_visible(r->arrow,show,0);
+            row_visible(r->text,show,list_mask);row_visible(r->arrow,show,0);
             BOOL line_show=show&&i<first+visible_rows-1&&i<root_count-1;
             row_visible(r->line,line_show,0);
             if(show){
@@ -188,6 +189,7 @@ static void apply_pending_focus(void *menu){
      * focus change, rather than competing inside a selection callback. */
     ((InputFn)(*(void ***)menu)[25])(menu,id);
 }
+static void reconcile_list_input(void *menu);
 static void prepare_scroll(void *menu){
     if(!scroll_ready)return;
     int page=server_page?1:(((int *)menu)[62]==0?0:2);BOOL active=active_list(menu);
@@ -196,6 +198,7 @@ static void prepare_scroll(void *menu){
         layout_scroll(menu);
         if(active&&pending_focus<0){int focused=focused_index(menu);if(focused>=0)logical_selection=focused;}
     }
+    if(active)reconcile_list_input(menu);
     if(active&&!create_native_reel(menu))log_line("Native file-picker scrollbar could not be created.");
     if(active&&native_reel){
         reel_tick(native_reel);
@@ -210,11 +213,30 @@ static void prepare_scroll(void *menu){
     int request=(int)InterlockedExchange(&scroll_requested,-1),delta=(int)InterlockedExchange(&scroll_delta,0);
     if(active&&(request>=0||delta))scroll_to(menu,request>=0?request:view_first()+delta,FALSE);
 }
+static void reconcile_list_input(void *menu){
+    if(!active_list(menu))return;
+    /* gaMenu.enter sets the screen mask recursively after initScreens. It can
+     * reenable offscreen children and decorations. Reconcile without resetting
+     * live press/release latches on unchanged visible rows. */
+    DWORD mask=*(DWORD *)((BYTE *)((void **)menu)[46]+40);
+    if(!mask)return; /* Preserve the game's disabled-screen/transition gate. */
+    for(int i=0;i<root_count;i++){
+        struct RootRow *r=&root_rows[i];BOOL show=!server_page&&i>=root_first&&i<root_first+visible_rows;
+        row_visible(r->text,show,mask);row_visible(r->arrow,show,0);
+        row_visible(r->line,show&&i<root_first+visible_rows-1&&i<root_count-1,0);
+    }
+    for(int i=0;i<10;i++){
+        BOOL show=server_page&&i>=page_first&&i<page_first+visible_rows;
+        row_visible(server_rows[i+1],show,mask);
+        row_visible(page_lines[i],show&&i<page_first+visible_rows-1&&i<9,0);
+    }
+}
 static void sync_scroll(void *menu){
     if(!scroll_ready)return;
     int page=server_page?1:(((int *)menu)[62]==0?0:2);
     if(page!=laid_out||active_list(menu)!=laid_active||(native_reel&&native_reel_page!=page))prepare_scroll(menu);
     if(active_list(menu)){
+        reconcile_list_input(menu);
         int focused=focused_index(menu);
         if(pending_focus<0&&focused>=0)logical_selection=focused;
         apply_pending_focus(menu);
@@ -256,13 +278,13 @@ static BOOL init_scroll(void *menu,void *sample){
     void *group=((void **)menu)[67],*screen=((void **)menu)[46];
     root_count=1;
     struct RootRow *added=&root_rows[0];added->id=SERVERS_ID;added->text=server_rows[0];
-    added->x=row_x;added->mask=0xffffffffu;added->arrow_x=row_x+line_width*0.5f;added->arrow_dy=arrow_dy;
+    added->x=row_x;added->arrow_x=row_x+line_width*0.5f;added->arrow_dy=arrow_dy;
     added->arrow=scroll_sprite(group,FALSE,52,added->arrow_x,row_start+arrow_dy,5);
     if(!added->arrow)return FALSE;scale_item(added->arrow,((float *)menu)[14],((float *)menu)[15]);
     for(int id=0;id<5;id++){
         void *text=((void **)menu)[68+id];if(!readable(text,484))continue;
         struct RootRow *r=&root_rows[root_count++];r->id=id;r->text=text;
-        r->x=((float *)text)[8];r->mask=*(DWORD *)((BYTE *)text+76);
+        r->x=((float *)text)[8];
         r->arrow=((void **)menu)[73+id];r->line=id<4?((void **)menu)[78+id]:NULL;
         r->arrow_x=r->arrow?((float *)r->arrow)[8]:row_x+line_width*0.5f;
         r->arrow_dy=r->arrow?((float *)r->arrow)[9]-((float *)text)[9]:arrow_dy;

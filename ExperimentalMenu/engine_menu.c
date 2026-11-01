@@ -1,5 +1,5 @@
 /* Engine-rendered experiment for the hash-pinned original x86 Game.exe.
- * Runs only on the game's own menu callbacks. No windows or input polling. */
+ * Runs on the game's own menu callbacks and reads its existing input device. */
 #ifndef UNICODE
 #define UNICODE
 #endif
@@ -58,6 +58,7 @@ static WCHAR config_path[MAX_PATH], log_path[MAX_PATH];
 static Settings pending;
 static void *page_owner;
 static BOOL server_page;
+static unsigned input_trace_count;
 
 static WCHAR heading[96]=L"Servers — applies after restart";
 static volatile LONG installed;
@@ -168,10 +169,12 @@ static void *item_text(void *menu,int id) {
 }
 static void keep_servers_available(void *menu) {
     if(!server_page||page_owner!=menu)return;
+    DWORD mask=*(DWORD *)((BYTE *)((void **)menu)[46]+40);
+    if(!mask)return;
     for(int id=1;id<=10;id++){
         void *row=server_rows[id];
         /* Never clear a live mouse/controller interaction latch each frame. */
-        if(readable(row,404)&&(*((BYTE *)row+372)&1)&&*(DWORD *)((BYTE *)row+76)!=0xffffffffu)enable_input(row,TRUE);
+        if(readable(row,404)&&(*((BYTE *)row+372)&1)&&*(DWORD *)((BYTE *)row+76)!=mask){enable_input(row,TRUE);*(DWORD *)((BYTE *)row+76)=mask;}
     }
 }
 
@@ -218,7 +221,13 @@ static void __thiscall hook_tick(void *menu) {
     BOOL navigating=navigate_direction(menu,direction_input(),GetTickCount());
     dispatching_menu=TRUE;
     if(!navigating){
-        if(server_page&&page_owner==menu){keep_servers_available(menu);base_tick(menu);}
+        if(active_list(menu)){
+            /* The original options tick runs audio-slider hit tests and drag
+             * latches even on the root page. A scrolling root uses the same
+             * base menu dispatch as Servers; Audio retains the original tick. */
+            if(!server_page){*((BYTE *)menu+392)=0;*((BYTE *)menu+393)=0;}
+            keep_servers_available(menu);base_tick(menu);
+        }
         else original_tick(menu);
     }
     dispatching_menu=FALSE;
@@ -305,7 +314,7 @@ static BOOL make_toggles(void *menu,void *screen,float x,float width,float heigh
 }
 static void __thiscall hook_init(void *menu,void *screen,void *lower) {
     original_init(menu,screen,lower);
-    page_owner=menu;server_page=FALSE;ZeroMemory(server_rows,sizeof(server_rows));ZeroMemory(toggles,sizeof(toggles));
+    page_owner=menu;server_page=FALSE;input_trace_count=0;ZeroMemory(server_rows,sizeof(server_rows));ZeroMemory(toggles,sizeof(toggles));
     void *group=((void **)menu)[67],*ui=((void **)menu)[46],*sample=NULL;
     for(int id=0;id<5&&!sample;id++)sample=((void **)menu)[68+id];
     if(!readable(group,404)||!readable(ui,16)||!readable(sample,484)){
@@ -348,6 +357,15 @@ static void __thiscall hook_cleanup(void *menu,void *screen,void *lower) {
 
 static void __thiscall hook_input(void *menu,int selection) {
     if(restarting)return;
+    if(page_owner==menu&&!server_page&&((int *)menu)[62]==0&&selection>=0&&selection<5){
+        /* These latches belong only to Audio. The original handler rejects
+         * every root selection if either stale latch remains set. */
+        *((BYTE *)menu+392)=0;*((BYTE *)menu+393)=0;
+        if(input_trace_count++<64){
+            char event[192];snprintf(event,sizeof(event),"Settings activate id=%d focus=%d viewport=%d transition=%d",selection,((int *)menu)[11],root_first,((int *)menu)[102]);
+            log_line(event);
+        }
+    }
     if (!server_page || page_owner!=menu) {
         if(selection!=SERVERS_ID||page_owner!=menu||!server_rows[0]||((int *)menu)[62]!=0||((int *)menu)[102]!=0||!(*((BYTE *)server_rows[0]+372)&1)){
             original_input(menu,selection);return;
