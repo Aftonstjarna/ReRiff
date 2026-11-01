@@ -34,6 +34,12 @@ int main(void) {
     CHECK(!parse_launcher_arguments(2,placeholder,&skip,&selftest));
     LPWSTR missing[]={L"ReRiff-Launcher.exe",L"--"};
     CHECK(!parse_launcher_arguments(2,missing,&skip,&selftest));
+    LPWSTR restart[]={L"ReRiff-Launcher.exe",L"--restart-game",L"12345",L"--skip-launcher",L"--",game,L"space value"};
+    CHECK(parse_launcher_arguments(7,restart,&skip,&selftest)&&restart_parent_pid==12345&&skip);
+    LPWSTR bad_restart[]={L"ReRiff-Launcher.exe",L"--restart-game",L"0"};
+    CHECK(!parse_launcher_arguments(3,bad_restart,&skip,&selftest));
+    bad_restart[2]=L"123bad";
+    CHECK(!parse_launcher_arguments(3,bad_restart,&skip,&selftest));
     static WCHAR oversized[CAP];for(int i=0;i<CAP-1;i++)oversized[i]=L'x';
     LPWSTR too_long[]={L"ReRiff-Launcher.exe",game,oversized};
     CHECK(!parse_launcher_arguments(3,too_long,&skip,&selftest));

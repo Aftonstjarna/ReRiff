@@ -1,6 +1,8 @@
 /* Engine-rendered experiment for the hash-pinned original x86 Game.exe.
  * Runs only on the game's own menu callbacks. No windows or input polling. */
+#ifndef UNICODE
 #define UNICODE
+#endif
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <wincrypt.h>
@@ -38,6 +40,9 @@ static BOOL server_page;
 static DWORD original_input_masks[11];
 static WCHAR heading[96]=L"Servers — applies after restart";
 static volatile LONG installed;
+static BOOL restarting;
+static DWORD restart_started;
+#include "../NativeLauncher/restart_protocol.h"
 #define SERVERS_ID 8
 
 static void log_line(const char *line) {
@@ -84,6 +89,43 @@ static BOOL save_settings(void) {
     return ok;
 }
 
+static BOOL restart_game(void) {
+    Toast target;ZeroMemory(&target,sizeof(target));
+    EnumWindows(find_game,(LPARAM)&target);
+    if(!target.game)return FALSE;
+    WCHAR name[96];DWORD pid=GetCurrentProcessId();
+    restart_event_name(name,96,pid,FALSE);
+    HANDLE request=OpenEventW(EVENT_MODIFY_STATE,FALSE,name);
+    if(!request){
+        request=CreateEventW(NULL,TRUE,FALSE,name);
+        restart_event_name(name,96,pid,TRUE);
+        HANDLE ready=CreateEventW(NULL,TRUE,FALSE,name);
+        WCHAR folder[MAX_PATH],launcher[MAX_PATH];
+        DWORD count=GetModuleFileNameW(NULL,folder,MAX_PATH);
+        WCHAR *slash=count&&count<MAX_PATH?wcsrchr(folder,L'\\'):NULL;
+        if(!request||!ready||!slash||((size_t)(slash-folder)+24>=MAX_PATH)){
+            if(request)CloseHandle(request);if(ready)CloseHandle(ready);return FALSE;
+        }
+        slash[1]=0;wcscpy(launcher,folder);wcscat(launcher,L"ReRiff-Launcher.exe");
+        /* Keep the original argument quoting and Steam environment. */
+        static WCHAR command[32768];
+        int used=_snwprintf(command,32768,L"\"%ls\" --restart-game %lu --skip-launcher -- %ls",
+            launcher,(unsigned long)pid,GetCommandLineW());
+        STARTUPINFOW start;PROCESS_INFORMATION child;ZeroMemory(&start,sizeof(start));start.cb=sizeof(start);
+        start.dwFlags=STARTF_USESHOWWINDOW;start.wShowWindow=SW_HIDE;
+        BOOL started=used>0&&used<32768&&CreateProcessW(launcher,command,NULL,NULL,FALSE,0,NULL,folder,&start,&child);
+        if(started){CloseHandle(child.hThread);CloseHandle(child.hProcess);}
+        BOOL armed=started&&WaitForSingleObject(ready,5000)==WAIT_OBJECT_0;
+        CloseHandle(ready);
+        if(!armed){CloseHandle(request);return FALSE;}
+    }
+    BOOL ok=SetEvent(request)&&PostMessageW(target.game,WM_CLOSE,0,0);
+    if(!ok)ResetEvent(request);
+    CloseHandle(request);
+    return ok;
+}
+static BOOL (*request_restart)(void)=restart_game;
+
 static BOOL readable(const void *p,size_t count) {
     MEMORY_BASIC_INFORMATION info;
     if (!p || !VirtualQuery(p,&info,sizeof(info)) || info.State!=MEM_COMMIT
@@ -120,7 +162,15 @@ static void keep_servers_available(void *menu) {
     colour(menu,SERVERS_ID,((int *)menu)[88]==SERVERS_ID?focus:normal);
 }
 
+static void render(void *menu);
 static void __thiscall hook_tick(void *menu) {
+    if(restarting&&GetTickCount()-restart_started>15000){
+        WCHAR name[96];restart_event_name(name,96,GetCurrentProcessId(),FALSE);
+        HANDLE request=OpenEventW(EVENT_MODIFY_STATE,FALSE,name);
+        if(request){ResetEvent(request);CloseHandle(request);}
+        restarting=FALSE;wcscpy(heading,L"Saved — restart canceled; game still running");
+        log_line("Save and restart: game did not close; request canceled.");render(menu);
+    }
     if(server_page&&page_owner==menu){
         keep_servers_available(menu);
         /* Use the real menu UI tick without main-menu New Track/Charts gates
@@ -144,7 +194,7 @@ static void render(void *menu) {
     static const WCHAR *labels[11]={L"", L"Skip launcher",
         L"Use local server", L"Use configured external server", L"",
         L"Disable networking", L"Save settings", L"Reload saved settings",
-        L"Server settings", L"Back without saving", L"Save and return"};
+        L"Save and restart", L"Back without saving", L"Save and return"};
     WCHAR only[64];
     swprintf(only,64,L"External only: %ls",pending.only?L"On":L"Off");
     for (int id=1;id<=10;id++) {
@@ -181,6 +231,7 @@ static void __thiscall hook_cleanup(void *menu,void *screen,void *lower) {
 }
 
 static void __thiscall hook_input(void *menu,int selection) {
+    if(restarting)return;
     if (!server_page || page_owner!=menu) {
         if (selection!=SERVERS_ID) { original_input(menu,selection); return; }
         for(int id=1;id<=10;id++){
@@ -216,6 +267,16 @@ static void __thiscall hook_input(void *menu,int selection) {
         } else { wcscpy(heading,L"Save failed — original settings retained"); log_line("Server settings save failed."); }
         break;
     case 7: load_settings(); wcscpy(heading,L"Reloaded — applies after restart"); break;
+    case 8:
+        if(!save_settings()){
+            wcscpy(heading,L"Save failed — game not restarted");log_line("Save and restart: save failed.");
+        }else if(request_restart()){
+            restarting=TRUE;restart_started=GetTickCount();
+            wcscpy(heading,L"Saved — restarting game...");log_line("Save and restart requested.");
+        }else{
+            wcscpy(heading,L"Saved — could not restart game");log_line("Save and restart: handoff failed; game left running.");
+        }
+        break;
     case 9: case 2000: leave_server_page(menu); break;
     default: return; /* Do not forward page selections into gameplay/quit handlers. */
     }

@@ -27,6 +27,8 @@ enum { EXTERNAL=101, FALLBACK, TIMEOUT, POPUP, SAVE, PLAY, LOCAL, EXTERNAL_ONLY,
 static WCHAR folder[CAP], ini[CAP], message[1024];
 static WCHAR game_arguments[CAP];
 static BOOL force_show_launcher;
+static DWORD restart_parent_pid;
+#include "restart_protocol.h"
 static HWND window, status, external, fallback, timeout_edit, popup, play_button, save_button;
 static HWND only_checkbox, stop_button, update_button;
 static BOOL busy = FALSE, playing = FALSE;
@@ -108,12 +110,19 @@ static BOOL is_forwarded_game(const WCHAR *argument) {
 
 static BOOL parse_launcher_arguments(int count,LPWSTR *args,BOOL *skip,BOOL *selftest) {
     *skip=FALSE;*selftest=FALSE;force_show_launcher=FALSE;game_arguments[0]=0;
+    restart_parent_pid=0;
     for(int i=1;i<count;i++){
         if(!wcscmp(args[i],L"--skip-launcher")||!wcscmp(args[i],L"--launcher-skip")||!wcscmp(args[i],L"--skip")){
             *skip=TRUE;force_show_launcher=FALSE;
         }
         else if(!wcscmp(args[i],L"--show-launcher")){*skip=FALSE;force_show_launcher=TRUE;}
         else if(!wcscmp(args[i],L"--self-test"))*selftest=TRUE;
+        else if(!wcscmp(args[i],L"--restart-game")){
+            if(restart_parent_pid || ++i>=count || args[i][0]<L'1' || args[i][0]>L'9')return FALSE;
+            WCHAR *end;unsigned long pid=wcstoul(args[i],&end,10);
+            if(*end || !pid || pid==GetCurrentProcessId())return FALSE;
+            restart_parent_pid=(DWORD)pid;
+        }
         else {
             if(!wcscmp(args[i],L"--")&&++i>=count)return FALSE;
             if(!is_forwarded_game(args[i]))return FALSE;
@@ -135,6 +144,31 @@ static BOOL game_command(WCHAR *command) {
     int length=_snwprintf(command,CAP,L"\"%ls\"%ls%ls",game,*game_arguments?L" ":L"",game_arguments);
     command[CAP-1]=0;
     return length>=0&&length<CAP;
+}
+
+/* Used only when Game.exe was started without a supervising launcher. The
+ * game waits for our ready acknowledgement before posting its normal close. */
+static int wait_for_restart_parent(void) {
+    WCHAR expected[CAP],actual[CAP],name[96];DWORD length=CAP;
+    HANDLE parent=OpenProcess(SYNCHRONIZE|PROCESS_QUERY_LIMITED_INFORMATION,FALSE,restart_parent_pid);
+    if(!parent){wcscpy(message,L"Could not open the game requesting restart.");return -1;}
+    path(expected,L"Game.exe");
+    if(!QueryFullProcessImageNameW(parent,0,actual,&length)||_wcsicmp(expected,actual)){
+        CloseHandle(parent);wcscpy(message,L"Restart refused: process is not this installation's Game.exe.");return -1;
+    }
+    restart_event_name(name,96,restart_parent_pid,FALSE);
+    HANDLE request=OpenEventW(SYNCHRONIZE,FALSE,name);
+    restart_event_name(name,96,restart_parent_pid,TRUE);
+    HANDLE ready=OpenEventW(EVENT_MODIFY_STATE,FALSE,name);
+    if(!request||!ready||!SetEvent(ready)){
+        if(request)CloseHandle(request);if(ready)CloseHandle(ready);CloseHandle(parent);
+        wcscpy(message,L"Restart refused: game handoff is missing.");return -1;
+    }
+    CloseHandle(ready);
+    BOOL closed=WaitForSingleObject(parent,INFINITE)==WAIT_OBJECT_0;
+    BOOL committed=WaitForSingleObject(request,0)==WAIT_OBJECT_0;
+    CloseHandle(request);CloseHandle(parent);
+    return closed&&committed?1:0;
 }
 
 static BOOL external_only(void) {
@@ -284,16 +318,25 @@ finish:
 #include "song_sync.h"
 
 static BOOL launch_game(void) {
+    for(;;){
     sync_cached_songs(ini);
     WCHAR command[CAP]; PROCESS_INFORMATION process;
     if(!game_command(command)){wcscpy(message,L"The forwarded game command is too long.");return FALSE;}
     if (!spawn(command,FALSE,&process)) { wcscpy(message,L"Could not start Game.exe beside the launcher."); return FALSE; }
+    WCHAR event_name[96];restart_event_name(event_name,96,process.dwProcessId,FALSE);
+    HANDLE restart=CreateEventW(NULL,TRUE,FALSE,event_name);
     if (window) PostMessageW(window,WM_GAME_RUNNING,0,0);
     CloseHandle(process.hThread);
-    WaitForSingleObject(process.hProcess,INFINITE);
+    BOOL closed=WaitForSingleObject(process.hProcess,INFINITE)==WAIT_OBJECT_0;
+    BOOL again=restart&&WaitForSingleObject(restart,0)==WAIT_OBJECT_0;
+    if(restart)CloseHandle(restart);
     CloseHandle(process.hProcess);
     sync_cached_songs(ini);
-    return TRUE;
+    if(!closed){wcscpy(message,L"Could not wait for Game.exe to close.");return FALSE;}
+    if(!again)return TRUE;
+    log_message(L"Game closed for Save and restart; applying saved server settings.");
+    if(needs_local_server()&&!start_server())return FALSE;
+    }
 }
 
 static DWORD WINAPI worker(LPVOID parameter) {
@@ -468,6 +511,12 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE previous,LPWSTR command,int sho
         if(args)LocalFree(args);return 2;
     }
     LocalFree(args);
+    if(restart_parent_pid){
+        int restart=wait_for_restart_parent();
+        if(restart<0){log_message(message);return 1;}
+        if(!restart)return 0;
+        skip=TRUE;force_show_launcher=FALSE;
+    }
     if (selftest) {
         WCHAR value[4096];GetPrivateProfileStringW(L"server",L"fallback_url",L"",value,4096,ini);
         log_message(L"SELFTEST: native launcher initialized; no game or server started.");log_message(ini);log_message(value);return 0;

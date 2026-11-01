@@ -10,6 +10,14 @@ static BOOL friends_enabled;
 static BOOL disable_during_tick=TRUE;
 static EnableFn native_enable;
 static int base_ticked;
+static int restart_calls;
+static BOOL restart_ok;
+static BOOL mock_restart(void) {
+    WCHAR value[32];
+    GetPrivateProfileStringW(L"launcher",L"skip_launcher",L"missing",value,32,config_path);
+    if(wcscmp(value,pending.skip_launcher?L"true":L"false"))return FALSE;
+    restart_calls++;return restart_ok;
+}
 static void __thiscall mock_base_tick(void *self) { (void)self;base_ticked++; }
 static void __thiscall mock_tick(void *self) {
     (void)self; ticked++;
@@ -133,6 +141,7 @@ int main(int argc,char **argv) {
     select_item(1);CHECK(pending.skip_launcher&&!wcscmp(label(1),L"Skip launcher: On"));
     select_item(9);CHECK(!server_page&&*(DWORD *)(items[1]+76)==0);
     select_item(8);CHECK(!pending.skip_launcher);
+    CHECK(!wcscmp(label(8),L"Save and restart"));
     select_item(1);CHECK(pending.skip_launcher);
     select_item(2); CHECK(!pending.only && !wcscmp(pending.fallback,L"http://127.0.0.1:5144"));
     select_item(3); CHECK(pending.only && !wcscmp(pending.external,L"https://example.com"));
@@ -155,6 +164,20 @@ int main(int argc,char **argv) {
         && !wcscmp(pending.fallback,L"http://127.0.0.1:5144"));
     select_item(8); select_item(5); select_item(10); load_settings(); CHECK(pending.enabled);
     select_item(8);select_item(1);select_item(10);load_settings();CHECK(!pending.skip_launcher);
+    select_item(8);select_item(1);request_restart=mock_restart;
+    /* A failed handoff keeps the game open after saving. */
+    restart_ok=FALSE;select_item(8);CHECK(restart_calls==1&&!restarting);
+    CHECK(!wcscmp(heading,L"Saved — could not restart game"));
+    load_settings();CHECK(pending.skip_launcher);
+    /* A write failure must never request shutdown. */
+    WCHAR valid_config[MAX_PATH];wcscpy(valid_config,config_path);
+    wcscat(config_path,L"\\missing\\server.ini");select_item(8);
+    CHECK(restart_calls==1&&!restarting);
+    wcscpy(config_path,valid_config);
+    restart_ok=TRUE;select_item(8);CHECK(restart_calls==2&&restarting);
+    select_item(1);CHECK(restart_calls==2&&pending.skip_launcher);
+    restart_started=GetTickCount()-15001;tick_entry(menu);
+    CHECK(!restarting);
     cleanup_entry(menu,NULL,NULL); CHECK(cleaned==1 && !page_owner);
     FreeLibrary(image);
     DeleteFileW(config_path); DeleteFileW(log_path);

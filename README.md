@@ -85,6 +85,12 @@ In the game's **Servers** menu, toggle **Skip launcher: On/Off**, then choose
 Back without saving discards the change. The preference is stored in
 `server.ini` as `[launcher] skip_launcher=true` or `false`.
 
+**Save and restart**, the third button from the bottom, saves your changes and
+restarts the game immediately so the new server settings take effect. It waits
+for the current game to exit before starting a replacement and skips the
+launcher window during that restart. A save or restart-handoff failure leaves
+the current game running.
+
 Use `--show-launcher` to open the launcher even when this preference is on.
 `--skip-launcher`, `--launcher-skip`, and `--skip` explicitly skip it. Launcher
 flags override the saved preference, so remove a forced skip flag from Steam's

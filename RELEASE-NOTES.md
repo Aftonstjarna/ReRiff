@@ -1,3 +1,14 @@
+# ReRiff 1.2.1-4 — In-game Save and restart
+
+- Replace the third button from the bottom of the native Servers menu with
+  Save and restart.
+- Save settings first, close the game normally, and wait for the old process to
+  exit before relaunching with the saved server configuration and original game
+  arguments. The restart goes straight back into the game.
+- Support restarting both launcher-started and directly started games. A save
+  or handoff failure leaves the game running; a canceled close restores menu
+  interaction instead of forcing termination.
+
 # ReRiff 1.2.1-3 — Linux update patcher runtime
 
 - Include the Linux DLL patcher's runtime in the installer so fresh installs and
