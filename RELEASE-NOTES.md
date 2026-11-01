@@ -1,3 +1,64 @@
+# ReRiff 1.2.2-13 — Unreleased display experiments
+
+Held on the experimental branch; **not published or included in stable 1.2.2**.
+
+- Prototype native resolution-text hover, GPU-bounded render presets, borderless
+  fullscreen, and the original Keep/Revert overlay with a 10-second deadline.
+- Delegate Apply to the original Graphics handler and move window styling onto
+  the original HWND message thread. Normalize native zero render dimensions.
+- Start the deadline at native screen entry and log renderer reset stages,
+  confirmation state and button activation for diagnosis.
+- Keep Graphics and Servers action labels uppercase, while the main Settings
+  entry remains titled Servers.
+
+Known live failures: keyboard/mouse input can stop after borderless applies;
+controller confirmation has sometimes worked. Confirmation/reversion can freeze.
+Save and restart after borderless may leave lingering audio or an invisible game
+window. Process/window ownership and complete input restoration remain unresolved.
+Fixture checks do not establish that these paths work in the actual game.
+
+# ReRiff 1.2.2 — Native Settings, Linux setup and automatic updates
+
+Combines the working changes from experimental 1.2.2-1 through 1.2.2-12.
+
+- Move Servers into the original Settings screen as its first entry, retaining
+  Graphics, Audio, Controls, Credits and the original Friends main-menu entry.
+  Keep vanilla spacing and separator lines, reuse the track picker's scrollbar,
+  and fix mouse/controller selection, held navigation and input-mask handling.
+- Reuse native fullscreen-style switches for Skip launcher, External only and
+  Force Offline. Force Offline is Off by default, meaning networking is enabled.
+  The Servers list wraps in both directions and scrolls the focused row into view.
+- Add a native Linux setup window with Steam/Flatpak folder detection, progress,
+  details and retry. Offer an optional Music-folder link into the Proton prefix,
+  with an editable source path, retained preference and existing-file protection.
+  Terminal installation and unattended updating remain available.
+- Link the launcher's Skip launcher checkbox to the existing in-game setting.
+  Add opt-in automatic updates when skipping, with progress, safe cancellation,
+  verified packages, rollback, original-argument forwarding and automatic game resume.
+  Include --test-auto-update for a same-version update test without another release.
+- Give Windows launcher/updater/setup explicit current-user manifests. They no
+  longer request elevation solely because of installer-name detection; the game
+  folder must be writable by the current account.
+- Show the ReRiff version at the bottom right of the main menu at half the menu
+  font size. Show a one-time, non-interactive notification after an unattended
+  update, alongside the independent server-address notification.
+- Add optional post-process antialiasing in Graphics using the native switch art
+  and directional navigation. Fix D3D9 backend attachment, Apply persistence,
+  switch hit area and complete keyboard/controller wraparound. AA is Off by
+  default; unsupported devices fall back to Off.
+- Match added Graphics/Servers action labels to the original all-caps style while
+  keeping the main Settings entry titled Servers.
+- Correct numeric prerelease ordering in server News and include a commented
+  public-server address example without selecting it or overwriting saved settings.
+
+Unlocked render resolutions, borderless fullscreen and the modified display
+confirmation/timed-revert path are **not included**. They remain in experimental
+for further testing of input loss, confirmation/revert freezes and restart/window
+visibility issues. Stable retains the original resolution and fullscreen behavior.
+Friends-list online restoration is not included. Linux runs the Windows game
+through Proton. AA has been checked live on Proton; physical Windows graphics
+and full-race performance remain additional validation targets.
+
 # ReRiff 1.2.2-12 — Native Servers menu wraparound
 
 - Wrap Up from the first Servers entry to the last, and Down from the last

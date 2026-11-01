@@ -17,3 +17,7 @@ auto_update_on_skip = false
 [graphics]
 ; Experimental native Graphics-menu setting; Off by default.
 antialiasing = false
+; Keep a monitor-sized borderless window while choosing the render resolution.
+borderless = false
+; render_width, render_height and exclusive_fullscreen are written after
+; confirming a display change in the native Keep/Revert screen.

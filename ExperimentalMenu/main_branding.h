@@ -38,9 +38,11 @@ static void attach_main_branding(void *menu){
     deliver_update_notice();
 }
 static void __thiscall branded_main_init(void *menu,void *screen,void *lower){
+    display_restore_startup();
     main_init_original(menu,screen,lower);attach_main_branding(menu);
 }
 static void __thiscall branded_main_tick(void *menu){
+    display_restore_startup();display_style();
     /* Transport initialization can happen after the first main-menu init. */
     if(!watermark||watermark_owner!=menu)attach_main_branding(menu);
     position_watermark(menu);

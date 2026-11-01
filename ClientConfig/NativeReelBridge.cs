@@ -21,6 +21,8 @@ namespace ReRiff {
         private static bool attempted;
         [DllImport("ReRiff.Notify.dll", CallingConvention=CallingConvention.Cdecl, ExactSpelling=true)]
         private static extern int ReRiffConfigureNativeReel([In] IntPtr[] methods, int count);
+        [DllImport("ReRiff.Notify.dll", CallingConvention=CallingConvention.Cdecl, ExactSpelling=true)]
+        private static extern int ReRiffConfigureNativeGraphics([In] IntPtr[] methods, int count);
 
         // addOption consumes an SSP passed by address in IL. Its C ABI adapter
         // accepts an owning object reference and supplies the temporary SSP.
@@ -66,6 +68,16 @@ namespace ReRiff {
                     Roots.Add(callback);pointers[i]=Marshal.GetFunctionPointerForDelegate(callback);
                 }
                 ReRiffConfigureNativeReel(pointers,pointers.Length);
+                int[] graphicsTokens={0x060010dc,0x060012a5};
+                string[] graphicsNames={"gaGame.onResolutionAdjusted","gaStateManager.rescaleMenus"};
+                IntPtr[] graphicsPointers=new IntPtr[graphicsTokens.Length];
+                for(int i=0;i<graphicsTokens.Length;i++){
+                    MethodInfo original=game.ResolveMethod(graphicsTokens[i]) as MethodInfo;
+                    if(original==null||original.Name!=graphicsNames[i])throw new InvalidOperationException("Unexpected original graphics method");
+                    Delegate callback=CreateCall(original,typeof(Tick),false);
+                    Roots.Add(callback);graphicsPointers[i]=Marshal.GetFunctionPointerForDelegate(callback);
+                }
+                ReRiffConfigureNativeGraphics(graphicsPointers,graphicsPointers.Length);
             } catch(DllNotFoundException) { }
               catch(EntryPointNotFoundException) { }
               catch(BadImageFormatException) { }

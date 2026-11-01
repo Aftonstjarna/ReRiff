@@ -243,13 +243,13 @@ reinstall exercises notification delivery without a duplicate test release.
 ## Experimental graphics antialiasing
 
 `graphics_aa_menu.h` adds ID 1601 to the original gaGraphicsOptions screen,
-retaining resolution, fullscreen and Apply actions. Three rows are centered
+retaining resolution, fullscreen and Apply actions. Four rows are centered
 using the measured vanilla row interval. Native fullscreen sprites render the
 new switch. Left/right shortcuts belong to the focused row; Apply persists
 `[graphics] antialiasing=true/false`, while Back discards pending changes.
 The original native direction handler (VA 0x44AA60) uses mode 1 at item +0x98
 and Up/Down target IDs at +0x9C/+0xA0. Extend vanilla's two-row loop to
-Resolution → Fullscreen (ID 4) → AA → Resolution. Both resolution arrows wrap
+Resolution → Fullscreen (ID 4) → Borderless (ID 1602) → AA → Resolution. Both resolution arrows wrap
 Up to AA; AA wraps Down to the original left resolution arrow (ID 1). Apply
 (ID 3) retains its activation and has Up to AA and Down to Resolution when
 mouse-focused. Restore all four modified controls' navigation fields on cleanup.
@@ -257,6 +257,62 @@ Keyboard/controller directions and
 held-key repeat continue through the original screen handler; there is no
 competing custom direction poller. Ghidra direction/focus exports are in
 build/graphics-evidence, checked against original instruction bytes.
+
+The original resolution text is passive. Extend its hover area with the original
+`elUI.createBlankButton` (RVA 0x222F0, ID 1604), centered between the arrow controls.
+It participates in native hit testing and focus, highlights the resolution label
+with the native palette, and restores arrow shortcuts. Clicking the text focuses
+the row without changing the selected mode. Borderless uses the original
+fullscreen switch sprites, and enabling it clears exclusive Fullscreen.
+
+`display_modes.h` extends the original PC interface slots 0/1/2/5 for mode count,
+lookup, current mode and mode changes. Additional render presets, up to 7680×4320,
+are bounded by device texture limits and exposed only while Graphics builds its
+native mode list. Original 24-byte mode records have separate logical and render
+dimensions. Borderless supplies the monitor dimensions as logical size, retains
+the selected render dimensions, and uses the original windowed renderer reset.
+The existing window is made borderless and sized to its monitor; no additional
+device, window or presentation loop is created.
+
+Window style/position changes must run on the HWND's owner thread. The menu runs
+on a worker that the original renderer can wait for; calling SetWindowLong or
+SetWindowPos synchronously there deadlocks after an otherwise successful reset.
+Extend the existing window procedure with a registered private message and queue
+style/restoration work through its original message pump. Preserve and forward
+all other messages to the original procedure. A cross-thread regression holds the
+owner without pumping messages while verifying the worker returns, then drains
+the original queue and checks the resulting style. Native catalog entries with
+zero render dimensions are normalized to their selected logical dimensions
+before substituting the borderless window dimensions.
+
+Apply delegates to the original `gaGraphicsOptions.handleScreenInput(3)` for the
+renderer handoff, menu rescaling and overlay setup. Borderless-only changes force
+the native dirty check without discarding the actual previous mode/fullscreen
+snapshot. This reuses `gaGraphicsConfirm` (table RVA 0x7A5918, state 26), its original
+localized message, Keep/Revert buttons and revert implementation. Its init,
+tick and input hooks use the original countdown fields, with a monotonic
+10-second deadline started by the original screen-entry callback (slot 2,
+thunk RVA 0x2EB814, fixup RVA 0x7A598C). Resource initialization can happen long
+before the overlay opens and must not start the deadline. Whole remaining
+seconds are fed to the native timer so its
+truncation cannot revert at nine seconds. The previous mode and fullscreen flag
+use the original globals at RVAs 0x7EC1F8 and 0x7EBF04. Revert also restores the
+previous borderless state and window style/position, and runs only once. Keep
+persists render dimensions and display flags in `[graphics]`; startup restores
+that confirmed mode through the original renderer.
+
+Menu rescaling and resolution callbacks use the signed managed bridge to invoke
+original methods `gaStateManager.rescaleMenus` (token 0x060012A5) and
+`gaGame.onResolutionAdjusted` (0x060010DC). The native and managed helpers must be
+updated together. Original PC entries and confirmation thunks are validated
+against the supported EXE before patching. The display fixture checks extended
+catalog bounds, distinct logical/render sizes, actual Win32 borderless styling,
+Keep/Reject, failure rollback, the 9999/10000ms boundary and startup restoration;
+its renderer and original-confirmation callbacks are fixtures, so physical driver
+and live-game behavior need separate verification.
+
+Added option labels use uppercase text, including ANTIALIASING, BORDERLESS
+FULLSCREEN and the Servers page actions; the root entry stays titled Servers; original labels are retained.
 
 The original renderer was cross-checked with Ghidra, the separate RiffRacer
 recovery sources and original bytes. wsGraphicsDevice (primary vtable RVA
@@ -292,3 +348,15 @@ The real software-rendered D3D9 fixture verifies changed/smoothed edge pixels,
 state restoration, enabled-AA reset/recreation and Off cleanup. Full-race visual
 and performance checks, physical Windows drivers, Ex reset paths and third-party renderer
 wrappers remain experimental validation targets.
+
+## Display experiments held from stable 1.2.2
+
+The display-mode, borderless and confirmation hooks are retained only on the
+experimental branch. Stable is based on tested revision 1.2.2-12 and does not
+include these hooks or the associated resolution-hover prototype. Live testing
+found that keyboard/mouse input can stop after borderless applies even when
+controller confirmation works. Reversion can freeze after a successful device
+reset. Servers Save and restart after borderless may leave audio playing with
+no visible window; it is not yet established whether the old process remains
+or a restarted window is invisible. Preserve this evidence for further native
+input, window-thread and shutdown investigation; fixture success is insufficient.
