@@ -1,3 +1,14 @@
+# ReRiff 1.2.2-5 — Centered scrollbar and Force Offline
+
+- Center the native scrollbar vertically on the screen, retaining its height
+  and right-side position on both Settings lists.
+- Rename Networking to Force Offline and invert its displayed state: Off means
+  networking is enabled, On disables networking. The default is Off.
+- Preserve existing saved networking preferences and server addresses, including
+  save/reload and selection of local or external servers.
+- Retain revision 4's navigation and vanilla Settings activation fixes, reported
+  working in live testing.
+
 # ReRiff 1.2.2-4 — Restore vanilla Settings activation
 
 - Use base menu input dispatch for the scrolling Settings list. Keep the

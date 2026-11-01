@@ -98,7 +98,7 @@ static void __cdecl mock_reel_move(void *self,int first,float *time){
 }
 static int __cdecl mock_reel_selection(void *self){return ((FakeReel *)self)->selection;}
 static void __cdecl mock_reel_bar(void *self,float x,float top,float bottom,int pc,float *width){
-    (void)self;if(!(x>0&&bottom>top)||pc!=1||width)abort();bars++;
+    (void)self;if(!(x>0&&bottom>top)||pc!=1||width||top+bottom<ui_height-0.01f||top+bottom>ui_height+0.01f)abort();bars++;
 }
 static void __thiscall mock_menu_focus(void *self,int id){
     ((int *)self)[11]=id;static const float c[4]={0,1,1,0.8f};
@@ -173,6 +173,11 @@ int main(int argc,char **argv){
     CHECK(!navigate_direction(menu,0,352));
     held_input=128;last_direction=0;int native_before=base_ticked;tick_entry(menu);CHECK(base_ticked==native_before);held_input=0;
     open_servers();CHECK(server_page&&focused==1501&&native_reel&&bars==2&&destroyed==1);
+    CHECK(!wcscmp(label(5),L"Force Offline")&&pending.enabled&&((unsigned *)toggles[2][1])[100]==75);
+    select_action(5);CHECK(!pending.enabled&&((unsigned *)toggles[2][1])[100]==74);
+    select_action(6);select_action(7);CHECK(!pending.enabled&&((unsigned *)toggles[2][1])[100]==74);
+    select_action(5);CHECK(pending.enabled&&((unsigned *)toggles[2][1])[100]==75);select_action(6);
+    scroll_to(menu,0,FALSE);apply_pending_focus(menu);
     CHECK(!wcscmp(label(8),L"Save and restart"));CHECK(((float *)server_rows[2])[9]-((float *)server_rows[1])[9]==row_gap);
     CHECK(!(*((BYTE *)server_rows[5]+372)&1)&&*(DWORD *)((BYTE *)server_rows[5]+76)==0);
     *(DWORD *)((BYTE *)server_rows[1]+356)=0x12345678;tick_entry(menu);CHECK(*(DWORD *)((BYTE *)server_rows[1]+356)==0x12345678);

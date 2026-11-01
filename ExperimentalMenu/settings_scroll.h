@@ -131,7 +131,9 @@ static BOOL create_native_reel(void *menu){
         ((int *)spacer)[1]++;reel_add(native_reel,spacer,NULL);
     }
     reel_limit(native_reel,visible_rows);
-    reel_bar(native_reel,ui_width*0.92f,row_start,row_start+(visible_rows-1)*row_gap+server_row_height,1,NULL);
+    float bar_height=(visible_rows-1)*row_gap+server_row_height;
+    float bar_top=(ui_height-bar_height)*0.5f;
+    reel_bar(native_reel,ui_width*0.92f,bar_top,bar_top+bar_height,1,NULL);
     float instant=0;reel_move(native_reel,view_first(),&instant);
     native_reel_page=server_page?1:0;return TRUE;
 }
