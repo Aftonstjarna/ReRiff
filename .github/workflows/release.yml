@@ -113,8 +113,10 @@ jobs:
           PYTHONNOUSERSITE: '1'
           PYTHONPATH: build/release/linux/payload/localserver/python-libs
         run: python scripts/test_news_versions.py
-      - name: Verify automatic update extraction and rollback
-        run: python scripts/test_client_update.py
+      - name: Verify automatic update extraction, rollback and Steam forwarding
+        run: |
+          python scripts/test_client_update.py
+          python scripts/test_steam_bridge.py
       - name: Validate Linux self-extractor
         run: sh "dist/v$(cat VERSION)/ReRiff-$(cat VERSION)-linux.run" --help
       - name: Verify published archive checksums and installed channel

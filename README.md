@@ -196,6 +196,15 @@ To skip the launcher window:
 "/path/to/Riff Racer/localserver/steam-launcher.sh" --skip-launcher -- %command%
 ```
 
+To test an unattended update on Linux, use:
+
+```text
+"/path/to/Riff Racer/localserver/steam-launcher.sh" --test-auto-update -- %command%
+```
+
+Remove `--test-auto-update` after testing. It implies skipping the launcher for
+that invocation. Current bridges also recognize this flag after `%command%`.
+
 The Windows launcher runs in Steam's Proton prefix and starts or reuses the
 native Linux Python server when local operation is enabled. Keep your existing
 working Proton and .NET setup. In Steam, find the game path with **Properties →
