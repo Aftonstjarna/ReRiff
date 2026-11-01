@@ -12,6 +12,12 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--zig', default='zig')
 args = parser.parse_args()
 flags = shlex.split(subprocess.check_output(['pkg-config', '--cflags', 'gtk+-3.0'], text=True))
+# Ubuntu's broad multiarch include path would shadow Zig's target libc bits
+# with the runner's newer libc headers (notably the time64 definitions). Keep
+# that path for third-party headers, after the portable target's system headers.
+flags = [part for flag in flags for part in
+         (['-idirafter', flag[2:]] if flag == '-I/usr/include/x86_64-linux-gnu' else [flag])]
+
 env = dict(os.environ, ZIG_GLOBAL_CACHE_DIR='/tmp/reriff-zig-global', ZIG_LOCAL_CACHE_DIR='/tmp/reriff-zig-local')
 exe = root/'build/test-linux-installer'
 subprocess.run([args.zig, 'cc', '-target', 'x86_64-linux-gnu.2.28', '-O2', '-Wall', '-Wextra', '-Werror',
