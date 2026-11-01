@@ -215,12 +215,12 @@ int main(int argc,char **argv){
     CHECK(focused==1501&&native_directions==60&&page_first==0);
     int polls_before=direction_polls;native_before=base_ticked;held_input=128;
     tick_entry(menu);held_input=0;CHECK(direction_polls==polls_before&&base_ticked==native_before+1);
-    CHECK(!wcscmp(label(5),L"Force Offline")&&pending.enabled&&((unsigned *)toggles[2][1])[100]==75);
+    CHECK(!wcscmp(label(5),L"FORCE OFFLINE")&&pending.enabled&&((unsigned *)toggles[2][1])[100]==75);
     select_action(5);CHECK(!pending.enabled&&((unsigned *)toggles[2][1])[100]==74);
     select_action(6);select_action(7);CHECK(!pending.enabled&&((unsigned *)toggles[2][1])[100]==74);
     select_action(5);CHECK(pending.enabled&&((unsigned *)toggles[2][1])[100]==75);select_action(6);
     scroll_to(menu,0,FALSE);apply_pending_focus(menu);
-    CHECK(!wcscmp(label(8),L"Save and restart"));CHECK(((float *)server_rows[2])[9]-((float *)server_rows[1])[9]==row_gap);
+    CHECK(!wcscmp(label(8),L"SAVE AND RESTART"));CHECK(((float *)server_rows[2])[9]-((float *)server_rows[1])[9]==row_gap);
     CHECK(!(*((BYTE *)server_rows[5]+372)&1)&&*(DWORD *)((BYTE *)server_rows[5]+76)==0);
     *(DWORD *)((BYTE *)server_rows[1]+356)=0x12345678;tick_entry(menu);CHECK(*(DWORD *)((BYTE *)server_rows[1]+356)==0x12345678);
     /* Native drag/tap movement is consumed from the original reel, with no

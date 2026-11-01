@@ -135,7 +135,7 @@ jobs:
               assert hashlib.sha256(marker.read_bytes()).hexdigest() == manifest['files'][name]
               menu = (root / 'payload/ReRiff.Notify.dll').read_bytes()
               assert b'ReRiffStartEngineMenu' in menu
-              assert 'Save and restart'.encode('utf-16-le') in menu
+              assert 'SAVE AND RESTART'.encode('utf-16-le') in menu
           PYCODE
           cd "dist/v$(cat VERSION)" && sha256sum -c SHA256SUMS
       - name: Publish GitHub release and installers

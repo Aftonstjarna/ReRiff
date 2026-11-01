@@ -252,10 +252,10 @@ static void leave_server_page(void *menu) {
 }
 
 static void render(void *menu) {
-    static const WCHAR *labels[11]={L"", L"Skip launcher",
-        L"Use local server", L"Use configured external server", L"External only",
-        L"Force Offline", L"Save settings", L"Reload saved settings",
-        L"Save and restart", L"Back without saving", L"Save and return"};
+    static const WCHAR *labels[11]={L"", L"SKIP LAUNCHER",
+        L"USE LOCAL SERVER", L"USE CONFIGURED EXTERNAL SERVER", L"EXTERNAL ONLY",
+        L"FORCE OFFLINE", L"SAVE SETTINGS", L"RELOAD SAVED SETTINGS",
+        L"SAVE AND RESTART", L"BACK WITHOUT SAVING", L"SAVE AND RETURN"};
     for(int id=1;id<=10;id++) {
         void *text=item_text(menu,id);
         if(!text)continue;

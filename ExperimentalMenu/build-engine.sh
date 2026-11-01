@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-cd /var/home/afton/.dev/ReRiff
+cd "$(dirname "$0")/.."
 zig_tool=${1:-/tmp/reriff-zig/zig-x86_64-linux-0.14.1/zig}
 export ZIG_GLOBAL_CACHE_DIR=/tmp/reriff-menu-zig-global
 export ZIG_LOCAL_CACHE_DIR=/tmp/reriff-menu-zig-local
