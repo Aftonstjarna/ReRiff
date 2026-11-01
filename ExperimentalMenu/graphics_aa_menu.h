@@ -35,7 +35,7 @@ static void aa_load_preference(void){
 }
 static void aa_sync_art(void *menu){
     if(aa_menu_owner!=menu||!aa_label)return;
-    raw_text(aa_label,InterlockedCompareExchange(&aa_fault,0,0)?L"Antialiasing unavailable":L"Antialiasing");
+    raw_text(aa_label,InterlockedCompareExchange(&aa_fault,0,0)?L"ANTIALIASING UNAVAILABLE":L"ANTIALIASING");
     ((float *)aa_label)[12]=aa_hit_width;((float *)aa_label)[13]=aa_hit_height;
     if(!aa_bar||!aa_knob)return;
     sprite_def(aa_knob,aa_pending?74:75);sprite_origin(aa_knob,aa_pending?5:3);
@@ -65,7 +65,7 @@ static void __thiscall aa_graphics_init(void *menu,void *screen,void *lower){
         for(void **it=begin;it!=end;it++)if(readable(*it,484))move_item(*it,((float *)*it)[8],((float *)*it)[9]-gap*0.5f);
     aa_pending=InterlockedCompareExchange(&aa_requested,0,0)!=0;
     aa_hit_width=right-x;aa_hit_height=gap;
-    aa_label=create_text(L"Antialiasing",x,y,3,0,1,-1,FALSE,-1,FALSE,TRUE);
+    aa_label=create_text(L"ANTIALIASING",x,y,3,0,1,-1,FALSE,-1,FALSE,TRUE);
     if(!aa_label)return;
     ((int *)aa_label)[2]=AA_CONTROL_ID;((int *)aa_label)[15]=100;menu_item(aa_label,TRUE);
     ((float *)aa_label)[12]=right-x;((float *)aa_label)[13]=gap;
