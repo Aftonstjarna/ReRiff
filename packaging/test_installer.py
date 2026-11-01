@@ -79,7 +79,14 @@ class InstallerTests(unittest.TestCase):
         import os
         result=subprocess.run([sys.executable,'-c','import flask,click,markupsafe; assert markupsafe.escape("<") == "&lt;"; print(flask.Flask("test").test_client().get("/").status_code)'],env=dict(os.environ,**env),capture_output=True,text=True)
         self.assertEqual(result.returncode,0,result.stderr)
-        if json.loads((self.bundle/'manifest.json').read_text()).get('update_only'):
+        manifest=json.loads((self.bundle/'manifest.json').read_text())
+        if manifest.get('vanilla_originals') and os.environ.get('RERIFF_SYNTHETIC_TESTS')=='1':
+            # These synthetic inputs represent an already patched install,
+            # deliberately without original DLL backups. Local-patching
+            # packages can restore originals only when those backups exist.
+            with self.assertRaisesRegex(ValueError,'Original backup missing'):
+                self.install(restore=True)
+        elif manifest.get('update_only') and not manifest.get('vanilla_originals'):
             with self.assertRaisesRegex(ValueError,'original full installer'):
                 self.install(restore=True)
         else:
@@ -91,6 +98,21 @@ class InstallerTests(unittest.TestCase):
         before=set(self.game.rglob('*'));self.install(dry_run=True)
         self.assertEqual(set(self.game.rglob('*')),before)
         self.assertFalse(self.backups.exists())
+
+    def test_default_backup_location_is_game_bak(self):
+        state = self.game/'localserver/install-state.json'
+        state.parent.mkdir(parents=True, exist_ok=True)
+        state.write_text(json.dumps({'backup_dir': str(self.root/'old-project-backups')}))
+        plan = installer.install(self.bundle, self.game, None, 'linux', dry_run=True)
+        next_state = json.loads(plan['localserver/install-state.json'])
+        self.assertEqual(Path(next_state['backup_dir']), self.game/'bak')
+        self.assertFalse((self.game/'bak').exists())
+
+    def test_empty_python_executable_uses_native_fallback(self):
+        with patch.object(installer.sys, 'executable', ''), patch.object(installer.shutil, 'which', return_value='/usr/bin/python3'):
+            plan = self.install(dry_run=True)
+        self.assertIn(b'exec /usr/bin/python3 ', plan['localserver/start-server.sh'])
+        self.assertNotIn(b"exec '' ", plan['localserver/start-server.sh'])
 
     def test_unknown_modification_rejected(self):
         (self.game/'ParseOctane.dll').write_bytes(b'unknown')
@@ -130,6 +152,7 @@ class VanillaInstallerTests(unittest.TestCase):
         self.patched={'ParseOctane.dll':b'INI endpoint', 'Parse.NetFx45.dll':b'offline gate'}
         for name,data in self.originals.items():(self.game/name).write_bytes(data)
         files={'payload/ReRiff.ClientConfig.dll':b'helper','payload/ReRiff.Notify.dll':b'toast',
+               'payload/ReRiff.NewsHeaders.dll':b'header helper',
                'patcher/ReRiff-Patcher.exe':b'source-built tool','python/python.exe':b'python'}
         for name,data in files.items():
             path=self.bundle/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_bytes(data)
@@ -140,7 +163,8 @@ class VanillaInstallerTests(unittest.TestCase):
         (self.bundle/'manifest.json').write_text(json.dumps(manifest))
         def run(command,**kwargs):
             source,helper,output=map(Path,command[-3:])
-            Path(output).write_bytes(self.patched[source.name])
+            name='Parse.NetFx45.dll' if '--news-header' in command else source.name
+            Path(output).write_bytes(self.patched[name])
             return subprocess.CompletedProcess(command,0,'','')
         self.runner=patch.object(installer.subprocess,'run',side_effect=run).start()
         self.addCleanup(patch.stopall)
@@ -154,7 +178,7 @@ class VanillaInstallerTests(unittest.TestCase):
         saved.write_bytes(self.originals[saved.name]);stamp=saved.stat().st_mtime_ns
         (self.game/'server.ini').write_bytes(b'existing settings')
         self.install();self.install()
-        self.assertEqual(self.runner.call_count,2)
+        self.assertEqual(self.runner.call_count,3)
         self.assertEqual(saved.stat().st_mtime_ns,stamp)
         for name,data in self.patched.items():self.assertEqual((self.game/name).read_bytes(),data)
         self.assertEqual((self.game/'server.ini').read_bytes(),b'existing settings')

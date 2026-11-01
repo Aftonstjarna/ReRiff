@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><NoWarn>SYSLIB0014</NoWarn></PropertyGroup>
+  <ItemGroup><Reference Include="ReRiff.NewsHeaders"><HintPath>../../build/ReRiff.NewsHeaders.dll</HintPath></Reference></ItemGroup>
+</Project>

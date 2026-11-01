@@ -31,7 +31,7 @@ def build(args):
         raise ValueError('Invalid release channel')
     version = (ROOT/'VERSION').read_text().strip()
     notes = release_notes((ROOT/'RELEASE-NOTES.md').read_text(encoding='utf-8'), version)
-    if not re.fullmatch(r'\d+\.\d+\.\d+', version):
+    if not re.fullmatch(r'\d+\.\d+\.\d+(?:-[1-9]\d*)?', version):
         raise ValueError('Invalid VERSION')
     # Retain the flag understood by existing automatic updaters: packages
     # contain no game-derived deltas. vanilla_originals enables local patching.
@@ -72,8 +72,13 @@ def build(args):
         patches[name] = {'file': path.relative_to(common).as_posix(), 'original': metadata['original'], 'patched': metadata['patched']}
         print(name, 'delta:',len(encoded),'bytes')
     payload = common/'payload'
+    copy(ROOT/'scripts/Collect-ReRiffStartup.ps1', payload/'Collect-ReRiffStartup.ps1')
     for name in ('ReRiff.ClientConfig.dll','ReRiff.Notify.dll','ReRiff-Launcher.exe','ReRiff-Updater.exe'):
         copy(ROOT/'build'/name, payload/name)
+    copy(ROOT/'build/ReRiff.NewsHeaders.dll', payload/'ReRiff.NewsHeaders.dll')
+    copy(ROOT/'VERSION', payload/'localserver/client-version.txt')
+    (payload/'localserver/client-channel.ini').write_text('[client]\nchannel='+channel+'\n')
+    copy(ROOT/'VERSION', payload/'localserver/server/VERSION')
     for name in ('trace-server.py','server_routing.py','steam-launcher.sh','start-server-host.sh','stop-server-host.sh','server-control.py','apply-client-update.py'):
         copy(ROOT/'scripts'/name,payload/'localserver'/name)
     (payload/'localserver/client-channel.ini').write_text('[client]\nchannel='+channel+'\n')
@@ -105,8 +110,14 @@ def build(args):
     for platform in ('linux','windows'):
         folder = stage/platform
         shutil.copytree(common,folder)
+        if args.local_patching and platform == 'linux':
+            copy(ROOT/'build/linux-patcher/Patcher', folder/'patcher/ReRiff-Patcher')
+            for name in ('LICENSE.TXT', 'THIRD-PARTY-NOTICES.TXT'):
+                copy(ROOT/'build/linux-patcher'/name, folder/'patcher'/('dotnet-'+name))
         library = 'reriff-catalog.dll' if platform == 'windows' else 'libreriff-catalog.so'
         copy(ROOT/'build/server-sync'/library, folder/'payload/localserver/server'/library)
+        news_library = library.replace('catalog', 'news')
+        copy(ROOT/'build/server-sync'/news_library, folder/'payload/localserver/server'/news_library)
         if platform == 'windows':
             copy(ROOT/'build/ReRiff-Setup.exe',folder/'ReRiff-Setup.exe')
             with zipfile.ZipFile(args.python_zip) as archive:
@@ -114,8 +125,10 @@ def build(args):
             (folder/'python/python313._pth').write_text('python313.zip\n.\n..\nimport site\n')
         manifest = {'channel':channel,'version':version,'commit':commit,'platform':platform,'patches':patches,
                     'update_only':update_only,
-                    'required_existing':json.loads((ROOT/'packaging/required-client.json').read_text()) if update_only else {},
                     'vanilla_originals':json.loads((ROOT/'packaging/original-client.json').read_text()) if args.local_patching else {},
+                    'compatible_existing':json.loads((ROOT/'packaging/compatible-client.json').read_text()) if args.local_patching else {},
+                    'client_upgrades':json.loads((ROOT/'packaging/client-upgrades.json').read_text()) if args.local_patching else {},
+                    'required_existing':json.loads((ROOT/'packaging/required-client.json').read_text()) if update_only else {},
                     'files':{p.relative_to(folder).as_posix():digest(p.read_bytes()) for p in sorted(folder.rglob('*')) if p.is_file()}}
         (folder/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
         if platform=='windows':

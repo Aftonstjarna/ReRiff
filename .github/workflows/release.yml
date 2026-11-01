@@ -2,7 +2,7 @@ name: Build and publish client release
 
 on:
   push:
-    branches: [main, launcher]
+    branches: [main, launcher, codex/experimental-client]
     paths: [VERSION]
   workflow_dispatch:
 
@@ -14,10 +14,27 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  windows-loader:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '8.0.x'
+      - name: Test signed helpers on Microsoft .NET Framework x86
+        shell: pwsh
+        run: |
+          dotnet build Managed/SigningSmoke.csproj -c Release -o build/signing-smoke
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & .\build\signing-smoke\SigningSmoke.exe
+          exit $LASTEXITCODE
   release:
     if: github.repository == 'Aftonstjarna/ReRiff'
+    needs: windows-loader
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      RERIFF_RELEASE_CHANNEL: ${{ github.ref_name == 'codex/experimental-client' && 'experimental' || 'stable' }}
     permissions:
       contents: write
     steps:
@@ -35,10 +52,18 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           version=$(cat VERSION)
-          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
-          if gh release view "v$version" >/dev/null 2>&1; then
-            echo "Release v$version already exists; bump VERSION instead of replacing it."
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[1-9][0-9]*)?$ ]]
+          if [[ "$version" == *-* && "$RERIFF_RELEASE_CHANNEL" != experimental ]]; then
+            echo 'Revision suffixes are reserved for experimental prereleases.'
             exit 1
+          fi
+          if gh release view "v$version" >/dev/null 2>&1; then
+            prerelease=$(gh release view "v$version" --json isPrerelease --jq .isPrerelease)
+            if [[ "$RERIFF_RELEASE_CHANNEL" != stable || "$prerelease" != true ]]; then
+              echo "An existing stable release cannot be overwritten; bump VERSION."
+              exit 1
+            fi
+            echo "The existing prerelease will be promoted only after all checks pass."
           fi
       - name: Fetch verified compiler and Windows Python
         run: python packaging/fetch_release_tools.py --directory "$RUNNER_TEMP/release-tools"
@@ -49,8 +74,12 @@ jobs:
           --implementation cp --abi cp313 -r packaging/requirements.txt
       - name: Build client helper
         run: dotnet build ClientConfig/ClientConfig.csproj -c Release -o build
+      - name: Build client version header adapter
+        run: dotnet build NewsHeaders/NewsHeaders.csproj -c Release -o build
       - name: Build local vanilla-install patcher
         run: dotnet build Patcher/InstallerPatcher.csproj -c Release -o build/installer-patcher
+      - name: Build self-contained Linux patcher
+        run: python scripts/build-linux-patcher.py
       - name: Build native launcher, notification, and Windows setup
         run: python scripts/build-windows-launcher.py --zig "$RUNNER_TEMP/release-tools/zig-x86_64-linux-0.14.1/zig"
       - name: Build Linux and Windows server identity libraries
@@ -67,15 +96,17 @@ jobs:
       - name: Verify installer safety and rollback
         env:
           RERIFF_SYNTHETIC_TESTS: '1'
-        run: python -m unittest discover -s packaging -p test_installer.py -v
+        run: |
+          python -m unittest discover -s packaging -p test_installer.py -v
+          python -m unittest discover -s packaging -p test_helper_upgrade.py -v
       - name: Verify automatic update extraction and rollback
         run: python scripts/test_client_update.py
       - name: Validate Linux self-extractor
         run: sh "dist/v$(cat VERSION)/ReRiff-$(cat VERSION)-linux.run" --help
-      - name: Verify published archive checksums
+      - name: Verify published archive checksums and installed channel
         run: |
-          python - <<'PY'
-          import configparser, hashlib, json
+          python - <<'PYCODE'
+          import configparser, hashlib, json, os
           from pathlib import Path
           for platform in ('linux', 'windows'):
               root = Path('build/release') / platform
@@ -84,9 +115,9 @@ jobs:
               marker = root / name
               channel = configparser.ConfigParser()
               channel.read(marker)
-              assert channel['client']['channel'] == manifest['channel'] == 'stable'
+              assert channel['client']['channel'] == manifest['channel'] == os.environ['RERIFF_RELEASE_CHANNEL']
               assert hashlib.sha256(marker.read_bytes()).hexdigest() == manifest['files'][name]
-          PY
+          PYCODE
           cd "dist/v$(cat VERSION)" && sha256sum -c SHA256SUMS
       - name: Publish GitHub release and installers
         env:
@@ -94,8 +125,56 @@ jobs:
         run: |
           version=$(cat VERSION)
           python packaging/release_notes.py --version "$version" --output "$RUNNER_TEMP/RELEASE-NOTES.md"
-          gh release create "v$version" \
-            --target "$GITHUB_SHA" \
-            --title "ReRiff $version" \
-            --notes-file "$RUNNER_TEMP/RELEASE-NOTES.md" \
-            "dist/v$version/"*
+          flags=()
+          if [ "$RERIFF_RELEASE_CHANNEL" = experimental ]; then
+            flags+=(--prerelease --latest=false)
+          fi
+          if gh release view "v$version" >/dev/null 2>&1; then
+            test "$RERIFF_RELEASE_CHANNEL" = stable
+            test "$(gh release view "v$version" --json isPrerelease --jq .isPrerelease)" = true
+            gh release upload "v$version" "dist/v$version/"* --clobber
+            gh api --method PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/v$version" \
+              -f sha="$GITHUB_SHA" -F force=true
+            gh release edit "v$version" --draft=false --prerelease=false --latest \
+              --target "$GITHUB_SHA" --title "ReRiff $version" \
+              --notes-file "$RUNNER_TEMP/RELEASE-NOTES.md"
+          else
+            gh release create "v$version" "${flags[@]}" \
+              --target "$GITHUB_SHA" --title "ReRiff $version" \
+              --notes-file "$RUNNER_TEMP/RELEASE-NOTES.md" "dist/v$version/"*
+          fi
+          if [ "$RERIFF_RELEASE_CHANNEL" = experimental ]; then
+            # Compatibility alias for the channel picker shipped in v0.1.10.
+            alias_dir="$RUNNER_TEMP/experimental-assets"
+            mkdir -p "$alias_dir"
+            cp "dist/v$version/"* "$alias_dir/"
+            base_version="${version%%-*}"
+            if [ "$base_version" != "$version" ]; then
+              # Older launchers parse only three numeric components. Offer
+              # aliases of the exact same packages so they can upgrade too.
+              cp "$alias_dir/ReRiff-$version-linux.run" "$alias_dir/ReRiff-$base_version-linux.run"
+              cp "$alias_dir/ReRiff-$version-windows.zip" "$alias_dir/ReRiff-$base_version-windows.zip"
+              (cd "$alias_dir" && sha256sum ReRiff-*.run ReRiff-*.zip ReRiff-*.tar.gz > SHA256SUMS)
+            fi
+            if gh release view experimental >/dev/null 2>&1; then
+              gh release upload experimental "$alias_dir/"* --clobber
+              # Keep only this build's archives: older launchers infer the
+              # experimental version from the first ReRiff-* asset name.
+              gh release view experimental --json assets --jq '.assets[].name' |
+                while IFS= read -r asset; do
+                  case "$asset" in
+                    ReRiff-"$version"-*|ReRiff-"$base_version"-linux.run|ReRiff-"$base_version"-windows.zip) ;;
+                    ReRiff-*) gh release delete-asset experimental "$asset" --yes ;;
+                  esac
+                done
+              gh api --method PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/experimental" \
+                -f sha="$GITHUB_SHA" -F force=true
+              gh release edit experimental --draft=false --prerelease --latest=false \
+                --title "ReRiff $version Experimental" \
+                --notes-file "$RUNNER_TEMP/RELEASE-NOTES.md"
+            else
+              gh release create experimental --prerelease --latest=false \
+                --target "$GITHUB_SHA" --title "ReRiff $version Experimental" \
+                --notes-file "$RUNNER_TEMP/RELEASE-NOTES.md" "$alias_dir/"*
+            fi
+          fi

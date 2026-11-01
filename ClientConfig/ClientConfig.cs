@@ -12,6 +12,8 @@ namespace ReRiff {
         private static readonly object Sync = new object();
         private static string selected;
         private static bool initialized;
+        private static int networkEvents;
+        [ThreadStatic] private static bool recordingException;
         private const string Disabled = "reriff-disabled://offline";
 
         // Called inside ParseOctane.dll before ParseClient.Initialize.
@@ -19,8 +21,10 @@ namespace ReRiff {
             lock (Sync) {
                 if (!initialized) {
                     string folder = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+                    AppDomain.CurrentDomain.FirstChanceException += RecordNetworkException;
                     selected = Select(folder);
                     initialized = true;
+                    StartEngineMenu();
                     bool showPopup = true;
                     try {
                         string setting;
@@ -37,6 +41,34 @@ namespace ReRiff {
         }
 
         public static bool CanSend() { return GetServer() != Disabled; }
+
+        private static void RecordNetworkException(object sender, System.Runtime.ExceptionServices.FirstChanceExceptionEventArgs args) {
+            Exception error = args.Exception;
+            if (recordingException || !(error is WebException || error is FileLoadException
+                || error is FileNotFoundException || error is BadImageFormatException
+                || error is InvalidProgramException || error is TypeLoadException
+                || error is MissingMethodException || error is System.Security.SecurityException
+                || error.GetType().FullName.StartsWith("Parse.", StringComparison.Ordinal))) return;
+            if (System.Threading.Interlocked.Increment(ref networkEvents) > 32) return;
+            recordingException = true;
+            try {
+                string folder = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+                File.AppendAllText(Path.Combine(folder, "ReRiff-network.log"),
+                    DateTime.UtcNow.ToString("o") + Environment.NewLine + error.ToString() + Environment.NewLine);
+            } catch (Exception) {
+                // Diagnostics must never change exception propagation or fail startup.
+            } finally { recordingException = false; }
+        }
+
+        [DllImport("ReRiff.Notify.dll", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        private static extern int ReRiffStartEngineMenu();
+
+        private static void StartEngineMenu() {
+            try { ReRiffStartEngineMenu(); }
+            catch (DllNotFoundException) { }
+            catch (EntryPointNotFoundException) { }
+            catch (BadImageFormatException) { }
+        }
 
         [DllImport("ReRiff.Notify.dll", CharSet = CharSet.Unicode,
                    CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
@@ -62,6 +94,12 @@ namespace ReRiff {
             int timeout = 5000;
             try {
                 var values = ReadIni(config);
+                string enabled;
+                if (values.TryGetValue("networking_enabled", out enabled)
+                    && (enabled.Equals("false", StringComparison.OrdinalIgnoreCase) || enabled == "0" || enabled.Equals("no", StringComparison.OrdinalIgnoreCase))) {
+                    Log(folder, Disabled, "networking_disabled");
+                    return Disabled;
+                }
                 values.TryGetValue("external_url", out external);
                 values.TryGetValue("fallback_url", out fallback);
                 string raw;
