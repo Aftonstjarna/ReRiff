@@ -5,6 +5,7 @@ static InputFn graphics_input_original;
 static ColourFn graphics_colour_original;
 static void *aa_menu_owner,*aa_label,*aa_bar,*aa_knob;
 static BOOL aa_pending;
+static float aa_hit_width,aa_hit_height;
 static BOOL (*attach_antialiasing)(void)=aa_attach;
 static void aa_load_preference(void){
     WCHAR value[16];GetPrivateProfileStringW(L"graphics",L"antialiasing",L"false",value,16,config_path);
@@ -13,6 +14,7 @@ static void aa_load_preference(void){
 static void aa_sync_art(void *menu){
     if(aa_menu_owner!=menu||!aa_label)return;
     raw_text(aa_label,InterlockedCompareExchange(&aa_fault,0,0)?L"Antialiasing unavailable":L"Antialiasing");
+    ((float *)aa_label)[12]=aa_hit_width;((float *)aa_label)[13]=aa_hit_height;
     if(!aa_bar||!aa_knob)return;
     sprite_def(aa_knob,aa_pending?74:75);sprite_origin(aa_knob,aa_pending?5:3);
     float scale=((float *)menu)[15],pos[2]={((float *)aa_bar)[8],((float *)aa_bar)[9]};
@@ -39,6 +41,7 @@ static void __thiscall aa_graphics_init(void *menu,void *screen,void *lower){
     if(begin&&end&&end>=begin&&end-begin<256&&readable(begin,(size_t)(end-begin)*sizeof(void *)))
         for(void **it=begin;it!=end;it++)if(readable(*it,484))move_item(*it,((float *)*it)[8],((float *)*it)[9]-gap*0.5f);
     aa_pending=InterlockedCompareExchange(&aa_requested,0,0)!=0;
+    aa_hit_width=right-x;aa_hit_height=gap;
     aa_label=create_text(L"Antialiasing",x,y,3,0,1,-1,FALSE,-1,FALSE,TRUE);
     if(!aa_label)return;
     ((int *)aa_label)[2]=AA_CONTROL_ID;((int *)aa_label)[15]=100;menu_item(aa_label,TRUE);

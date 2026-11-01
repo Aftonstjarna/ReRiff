@@ -239,6 +239,7 @@ int main(int argc,char **argv){
     CHECK(aa_label&&aa_bar&&aa_knob&&!aa_pending&&((int *)aa_label)[2]==AA_CONTROL_ID);
     CHECK(((float *)aa_label)[9]==620&&((float *)graphics_test_items[0])[9]==540&&((float *)graphics_test_items[5])[9]==460);
     aa_graphics_input(gm,AA_CONTROL_ID);CHECK(aa_pending&&!aa_requested&&((unsigned *)aa_knob)[100]==74);
+    CHECK(((float *)aa_label)[12]==820&&((float *)aa_label)[13]==80);
     aa_graphics_input(gm,3);CHECK(aa_requested&&aa_attach_calls==1&&delegated==3);
     GetPrivateProfileStringW(L"graphics",L"antialiasing",L"",value,32,config_path);CHECK(!wcscmp(value,L"true"));
     aa_graphics_input(gm,AA_CONTROL_ID);CHECK(!aa_pending&&aa_requested);
