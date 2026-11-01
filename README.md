@@ -367,6 +367,8 @@ can publish version tags. GitHub does not deploy or restart your server.
 
 The server News response reports its version and asks older clients to update,
 while leaving the game compatibility Version endpoint unchanged.
+The image's `VERSION` file supplies that version; `RERIFF_SERVER_VERSION` can
+override it explicitly. Normal stored News announcements are retained.
 
 ## Admin panel and logs
 
@@ -420,7 +422,9 @@ with tracing enabled, binds to localhost, and uses `data/` beside this root scri
 `RERIFF_DATA_DIR` (or the legacy `RIFFAPI_DATA_DIR`) can select another data folder.
 Source-based song registration also needs the built native catalog library; set
 `RERIFF_CATALOG_LIBRARY` to its path in `build/server-sync/`. Docker and the
-installers include that library automatically.
+installers include that library automatically. Set `RERIFF_NEWS_LIBRARY` to
+`build/server-sync/libreriff-news.so` for version-aware News in a source-based
+server. Installed and Docker servers already include both libraries.
 
 ## Build and release
 
