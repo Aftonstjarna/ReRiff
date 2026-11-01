@@ -208,7 +208,10 @@ without taking focus and dismisses itself. Exact pre-trial backups remain in bak
 init/tick/cleanup. The watermark is a screen-owned, right-aligned native text
 item with no menu ID, shortcuts or input mask. Its compiled version includes
 the numbered experimental revision. Position follows elUI.getResolution
-(RVA 0x1FA50), so it stays in the bottom-right corner. Late transport startup
+(RVA 0x1FA50), so it stays in the bottom-right corner. Its rendered height is
+half the original main-menu font height, derived from the original row interval
+at menu +292 (half of 1.5 font heights), rather than scaling a fixed font by the
+unrelated menu design scale. Late transport startup
 can attach it during the first observed main-menu tick. Cleanup releases its
 borrowed reference through the original screen API.
 
@@ -234,9 +237,13 @@ new switch. Left/right shortcuts belong to the focused row; Apply persists
 
 The original renderer was cross-checked with the separate RiffRacer recovery
 sources and original bytes: wsGraphicsDevice primary vtable RVA 0x5FBF44,
-renderer singleton RVA 0x80D408, actual D3D9 device at +0x78, and optional Ex
-interface at +0x7C. The native getPC adjustment at VA 0x4910D0 returns +0x18;
-it must not be mistaken for the primary renderer layout. Device creation and
+renderer singleton RVA 0x80D408, embedded PC vtable RVA 0x5FC178. The native
+getPC adjustment at VA 0x4910D0 returns +0x18. Device creation's +0x78 and
+optional Ex +0x7C offsets are relative to that PC subobject, so the complete
+wrapper offsets are +0x90 and +0x94. Revision 8 incorrectly read wrapper
++0x78, a vector, and rejected attachment. Tests verify the original adjustment
+and constructor bytes, then attach through this layout to a real D3D9 fixture.
+Device creation and
 presentation evidence is in that recovery's FRAME.md/device_create.S and
 application_frame.S; local Ghidra resolution evidence is under build/graphics-evidence.
 No new matching reconstruction credit is claimed for these intentional changes.

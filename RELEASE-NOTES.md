@@ -1,3 +1,17 @@
+# ReRiff 1.2.2-9 — Antialiasing device lookup and watermark size
+
+- Fix Antialiasing becoming unavailable on Apply: locate the D3D9 device through
+  the original embedded PC renderer, retaining the supported-layout checks.
+- Size the main-menu watermark to half the original menu entries' font height,
+  using the menu's chosen font size rather than an unrelated design scale.
+- Verify the original renderer adjustment/constructor bytes, device attachment,
+  hooked Present/Reset, edge smoothing and graphics-state restoration. Check
+  watermark sizing at two menu font heights.
+
+Antialiasing remains experimental and Off by default. Enable it under
+Settings → Graphics → Antialiasing and select Apply. Live gameplay and driver
+testing are still needed.
+
 # ReRiff 1.2.2-8 — Version watermark, update notice and native antialiasing
 
 - Show the running ReRiff version in the bottom-right corner of the main menu,

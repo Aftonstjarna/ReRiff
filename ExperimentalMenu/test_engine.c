@@ -220,11 +220,18 @@ int main(int argc,char **argv){
     CHECK(!wcscmp((const WCHAR *)((BYTE *)watermark+512),L"ReRiff v" MENU_WIDE(RERIFF_VERSION)));
     CHECK(notices==2&&!wcscmp(notice_text,L"ReRiff has updated to " MENU_WIDE(RERIFF_VERSION))&&GetFileAttributesW(update_notice_path)==INVALID_FILE_ATTRIBUTES);
     deliver_update_notice();CHECK(notices==2);
-    ((float *)watermark)[13]=64;branded_main_tick(menu);
-    CHECK(((float *)watermark)[8]==1908&&((float *)watermark)[9]==1052);
+    ((float *)menu)[73]=48;((float *)watermark)[13]=64;branded_main_tick(menu);
+    CHECK(((float *)watermark)[14]==0.5f&&((float *)watermark)[15]==0.5f);
+    CHECK(((float *)watermark)[8]==1908&&((float *)watermark)[9]==1036);
+    ((float *)menu)[73]=24;branded_main_tick(menu);
+    CHECK(((float *)watermark)[15]==0.25f&&((float *)watermark)[9]==1052);
     branded_main_cleanup(menu,NULL,NULL);CHECK(!watermark&&!watermark_owner&&removed==27);
     branded_main_tick(menu);CHECK(watermark&&notices==2);branded_main_cleanup(menu,NULL,NULL);CHECK(!watermark&&removed==28);
     CHECK(validate_graphics_aa_menu((BYTE *)image,nt->OptionalHeader.ImageBase));
+    static const BYTE pc_adjustment[]={0x85,0xc9,0x74,4,0x8d,0x41,0x18,0xc3,0x33,0xc0,0xc3};
+    static const BYTE graphics_tables[]={0xc7,7,0x44,0xbf,0x9f,0,0xc7,0x47,0x18,0x78,0xc1,0x9f,0};
+    CHECK(!memcmp((BYTE *)image+0x910d0,pc_adjustment,sizeof(pc_adjustment)));
+    CHECK(!memcmp((BYTE *)image+0x9155d,graphics_tables,sizeof(graphics_tables)));
     void *gm=graphics_test_menu;*(void ***)gm=vtable;((void **)gm)[46]=screen;
     ((float *)gm)[14]=((float *)gm)[15]=0.5f;
     for(int i=0;i<7;i++){*(void ***)graphics_test_items[i]=item_vtable;((float *)graphics_test_items[i])[12]=300;((float *)graphics_test_items[i])[13]=64;graphics_test_items[i][372]=1;}

@@ -107,17 +107,24 @@ static HRESULT WINAPI aa_present(IDirect3DDevice9 *self,const RECT *a,const RECT
 static HRESULT WINAPI aa_reset(IDirect3DDevice9 *self,D3DPRESENT_PARAMETERS *params){aa_release_resources();return aa_reset_original(self,params);}
 static HRESULT WINAPI aa_present_ex(IDirect3DDevice9Ex *self,const RECT *a,const RECT *b,HWND window,const RGNDATA *dirty,DWORD flags){aa_draw((IDirect3DDevice9 *)self);return aa_present_ex_original(self,a,b,window,dirty,flags);}
 static HRESULT WINAPI aa_reset_ex(IDirect3DDevice9Ex *self,D3DPRESENT_PARAMETERS *params,D3DDISPLAYMODEEX *mode){aa_release_resources();return aa_reset_ex_original(self,params,mode);}
-static BOOL aa_attach(void){
-    BYTE *base=(BYTE *)GetModuleHandleW(NULL);void **graphics=(void **)(base+0x80d408);
-    if(!readable(graphics,4)||!readable(*graphics,128)||*(void **)*graphics!=base+0x5fbf44)return FALSE;
-    IDirect3DDevice9 *device=*(IDirect3DDevice9 **)((BYTE *)*graphics+0x78);
+static BOOL aa_attach_renderer(BYTE *base,void *graphics){
+    /* wsGraphicsDevice embeds wsGraphicsDevicePC at +0x18 (getPC, VA
+     * 0x4910D0). Device creation's +0x78/+0x7C offsets are PC-relative. */
+    if(!readable(graphics,0x98)||*(void **)graphics!=base+0x5fbf44)return FALSE;
+    BYTE *pc=(BYTE *)graphics+0x18;
+    if(*(void **)pc!=base+0x5fc178)return FALSE;
+    IDirect3DDevice9 *device=*(IDirect3DDevice9 **)(pc+0x78);
     if(!readable(device,4))return FALSE;
     if(aa_device)return aa_device==device;
-    BOOL extended=*(void **)((BYTE *)*graphics+0x7c)!=NULL;unsigned entries=extended?134:119;
+    BOOL extended=*(void **)(pc+0x7c)!=NULL;unsigned entries=extended?134:119;
     void **table=*(void ***)device;if(!readable(table,entries*sizeof(void *)))return FALSE;
     HMODULE owner=NULL;if(!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,(const WCHAR *)table[0],&owner)||owner!=GetModuleHandleW(L"d3d9.dll"))return FALSE;
     memcpy(aa_methods,table,entries*sizeof(void *));
     aa_present_original=(void *)table[17];aa_reset_original=(void *)table[16];aa_methods[17]=(void *)aa_present;aa_methods[16]=(void *)aa_reset;
     if(extended){aa_present_ex_original=(void *)table[121];aa_reset_ex_original=(void *)table[132];aa_methods[121]=(void *)aa_present_ex;aa_methods[132]=(void *)aa_reset_ex;}
     InterlockedExchangePointer((void *volatile *)device,aa_methods);aa_device=device;log_line("Post-process antialiasing attached to the original D3D9 device.");return TRUE;
+}
+static BOOL aa_attach(void){
+    BYTE *base=(BYTE *)GetModuleHandleW(NULL);void **graphics=(void **)(base+0x80d408);
+    return readable(graphics,4)&&aa_attach_renderer(base,*graphics);
 }

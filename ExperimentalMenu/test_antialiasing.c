@@ -12,6 +12,18 @@ int main(void){
     params.BackBufferCount=1;params.SwapEffect=D3DSWAPEFFECT_DISCARD;params.hDeviceWindow=host;params.Windowed=TRUE;
     params.PresentationInterval=D3DPRESENT_INTERVAL_IMMEDIATE;
     IDirect3DDevice9 *device=NULL;hr=IDirect3D9_CreateDevice(api,D3DADAPTER_DEFAULT,D3DDEVTYPE_HAL,host,D3DCREATE_SOFTWARE_VERTEXPROCESSING,&params,&device);CHECK(SUCCEEDED(hr));
+    BYTE renderer[0x98]={0};BYTE *base=(BYTE *)GetModuleHandleW(NULL);
+    *(void **)renderer=base+0x5fbf44;
+    *(void **)(renderer+0x18)=base+0x5fc178;
+    /* Old wrapper-relative +0x78 is a vector, not the device. */
+    *(void **)(renderer+0x78)=(void *)1;
+    CHECK(!aa_attach_renderer(base,renderer));
+    *(void **)(renderer+0x90)=device;
+    *(void **)(renderer+0x18)=NULL;CHECK(!aa_attach_renderer(base,renderer));
+    *(void **)(renderer+0x18)=base+0x5fc178;
+    CHECK(aa_attach_renderer(base,renderer)&&aa_device==device);
+    CHECK(device->lpVtbl->Present==aa_present&&device->lpVtbl->Reset==aa_reset);
+    CHECK(aa_attach_renderer(base,renderer));
     IDirect3DSurface9 *back=NULL,*readback=NULL;
     CHECK(SUCCEEDED(hr=IDirect3DDevice9_GetBackBuffer(device,0,0,D3DBACKBUFFER_TYPE_MONO,&back)));
     CHECK(SUCCEEDED(hr=IDirect3DDevice9_CreateOffscreenPlainSurface(device,64,64,D3DFMT_A8R8G8B8,D3DPOOL_SYSTEMMEM,&readback,NULL)));
@@ -45,11 +57,11 @@ int main(void){
     }
     IDirect3DSurface9_UnlockRect(readback);CHECK(changed>10&&smoothed>10);
     IDirect3DSurface9_Release(back);IDirect3DSurface9_Release(readback);
-    aa_reset_original=device->lpVtbl->Reset;
-    CHECK(SUCCEEDED(hr=aa_reset(device,&params)));CHECK(!aa_texture&&!aa_surface&&!aa_shader);
-    aa_draw(device);CHECK(aa_texture&&aa_shader&&!aa_fault);
+    CHECK(SUCCEEDED(hr=IDirect3DDevice9_Reset(device,&params)));CHECK(!aa_texture&&!aa_surface&&!aa_shader);
+    CHECK(SUCCEEDED(hr=IDirect3DDevice9_Present(device,NULL,NULL,NULL,NULL)));
+    CHECK(aa_texture&&aa_shader&&!aa_fault);
     aa_requested=0;aa_draw(device);CHECK(!aa_texture&&!aa_surface&&!aa_shader);
     CHECK(SUCCEEDED(hr=IDirect3DDevice9_Reset(device,&params)));
     IDirect3DDevice9_Release(device);IDirect3D9_Release(api);DestroyWindow(host);
-    printf("PASS: %d changed pixels, %d smoothed edge pixels; viewport/scissor/blend restored; Off releases reset-sensitive resources\n",changed,smoothed);return 0;
+    printf("PASS: embedded PC device attachment; %d changed pixels, %d smoothed edge pixels; viewport/scissor/blend restored; hooked reset and Off release resources\n",changed,smoothed);return 0;
 }
