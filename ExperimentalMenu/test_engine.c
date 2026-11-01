@@ -81,6 +81,16 @@ static DWORD held_input;
 static int aa_attach_calls;
 static BOOL mock_aa_attach(void){aa_attach_calls++;return TRUE;}
 static BYTE graphics_test_menu[512],graphics_test_items[7][1024];
+static BOOL graphics_cycle(void **items,int count,int start,int field,const int *expected,int steps){
+    int id=start;
+    for(int step=0;step<steps;step++){
+        void *item=NULL;
+        for(int i=0;i<count;i++)if(((int *)items[i])[2]==id)item=items[i];
+        if(!item||((int *)item)[38]!=1)return FALSE;
+        id=((int *)item)[field];if(id!=expected[step])return FALSE;
+    }
+    return TRUE;
+}
 static BOOL notice_accept;static int notices;static WCHAR notice_text[128];
 static BOOL mock_notice(const WCHAR *text){notices++;wcsncpy(notice_text,text,127);return notice_accept;}
 static float * __cdecl mock_resolution(float *out,int screen_id){if(screen_id)abort();out[0]=1920;out[1]=1080;return out;}
@@ -246,17 +256,26 @@ int main(int argc,char **argv){
     for(int i=0;i<7;i++)for(int field=39;field<=42;field++)((int *)graphics_test_items[i])[field]=-1;
     ((int *)graphics_test_items[0])[38]=1;((int *)graphics_test_items[0])[39]=1;((int *)graphics_test_items[0])[40]=1;
     ((int *)graphics_test_items[2])[38]=((int *)graphics_test_items[3])[38]=1;
+    ((int *)graphics_test_items[2])[39]=((int *)graphics_test_items[3])[39]=4;
     ((int *)graphics_test_items[2])[40]=((int *)graphics_test_items[3])[40]=4;
     graphics_init_original=mock_init;graphics_cleanup_original=mock_cleanup;graphics_tick_original=mock_tick;graphics_input_original=mock_input;graphics_colour_original=mock_menu_colour;
     attach_antialiasing=mock_aa_attach;aa_requested=aa_fault=0;aa_graphics_init(gm,NULL,NULL);
     CHECK(aa_label&&aa_bar&&aa_knob&&!aa_pending&&((int *)aa_label)[2]==AA_CONTROL_ID);
-    /* Follow the native Down IDs through resolution -> fullscreen -> AA -> Apply,
-     * then Up through AA -> fullscreen -> resolution. No second input poller. */
+    /* Exercise multiple complete native row loops in both directions, including
+     * both resolution arrows and escape from the mouse-focused Apply button. */
+    void *nav_items[5]={graphics_test_items[2],graphics_test_items[3],graphics_test_items[0],aa_label,graphics_test_items[6]};
+    const int down_cycle[]={4,AA_CONTROL_ID,1,4,AA_CONTROL_ID,1,4,AA_CONTROL_ID,1};
+    const int up_cycle[]={AA_CONTROL_ID,4,1,AA_CONTROL_ID,4,1,AA_CONTROL_ID,4,1};
+    CHECK(graphics_cycle(nav_items,5,1,40,down_cycle,9));
+    CHECK(graphics_cycle(nav_items,5,2,40,down_cycle,9));
+    CHECK(graphics_cycle(nav_items,5,1,39,up_cycle,9));
+    CHECK(graphics_cycle(nav_items,5,2,39,up_cycle,9));
     CHECK(((int *)graphics_test_items[2])[40]==((int *)graphics_test_items[0])[2]);
     CHECK(((int *)graphics_test_items[3])[40]==((int *)graphics_test_items[0])[2]);
     CHECK(((int *)graphics_test_items[0])[40]==((int *)aa_label)[2]);
-    CHECK(((int *)aa_label)[38]==1&&((int *)aa_label)[40]==((int *)graphics_test_items[6])[2]);
+    CHECK(((int *)aa_label)[38]==1&&((int *)aa_label)[40]==1);
     CHECK(((int *)graphics_test_items[6])[38]==1&&((int *)graphics_test_items[6])[39]==AA_CONTROL_ID);
+    CHECK(((int *)graphics_test_items[6])[40]==1);
     CHECK(((int *)aa_label)[39]==4&&((int *)graphics_test_items[0])[39]==1);
     CHECK(((float *)aa_label)[9]==620&&((float *)graphics_test_items[0])[9]==540&&((float *)graphics_test_items[5])[9]==460);
     aa_graphics_input(gm,AA_CONTROL_ID);CHECK(aa_pending&&!aa_requested&&((unsigned *)aa_knob)[100]==74);
@@ -269,6 +288,8 @@ int main(int argc,char **argv){
     aa_graphics_input(gm,3);CHECK(!aa_requested);aa_graphics_cleanup(gm,NULL,NULL);CHECK(!aa_label&&!aa_bar&&!aa_knob&&removed==31);
     CHECK(((int *)graphics_test_items[0])[38]==1&&((int *)graphics_test_items[0])[40]==1);
     CHECK(((int *)graphics_test_items[6])[38]==0&&((int *)graphics_test_items[6])[39]==-1);
+    CHECK(((int *)graphics_test_items[6])[40]==-1);
+    for(int i=2;i<4;i++)CHECK(((int *)graphics_test_items[i])[38]==1&&((int *)graphics_test_items[i])[39]==4&&((int *)graphics_test_items[i])[40]==4);
     FreeLibrary(image);DeleteFileW(config_path);DeleteFileW(log_path);
     puts("PASS: original guards, Servers first, native reel lifecycle, one navigation owner, held-repeat/boundaries, deferred focus, pointer forwarding, original mask reset, vanilla hover/click/controller activation, Audio isolation, press latches, save/restart, version branding, one-time update notice, Graphics AA control and cleanup");return 0;
 }

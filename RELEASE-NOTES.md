@@ -1,3 +1,15 @@
+# ReRiff 1.2.2-11 — Restore native Graphics row wraparound
+
+- Extend the game's original directional focus links into a complete settings
+  loop: Resolution → Fullscreen → Antialiasing → Resolution, with the reverse
+  order for Up. Update both resolution-arrow controls so the top wraps to AA.
+- Keep Apply's native activation and give it Up/Down routes back to AA and
+  Resolution when focused with the mouse, preventing a navigation dead end.
+- Retain the original input handler and held-key repeat. Restore all four
+  modified controls' navigation fields on cleanup.
+- Test three complete cycles in both directions from both resolution arrows,
+  Apply escape links and restoration of the original navigation fields.
+
 # ReRiff 1.2.2-10 — Attach antialiasing to the render-thread backend
 
 - Fix AA still becoming unavailable in revision 9. The public graphics wrapper

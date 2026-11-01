@@ -235,9 +235,12 @@ using the measured vanilla row interval. Native fullscreen sprites render the
 new switch. Left/right shortcuts belong to the focused row; Apply persists
 `[graphics] antialiasing=true/false`, while Back discards pending changes.
 The original native direction handler (VA 0x44AA60) uses mode 1 at item +0x98
-and Up/Down target IDs at +0x9C/+0xA0. Splice the added row between Fullscreen
-(ID 4) and Apply (ID 3), retaining the existing resolution links and restoring
-all modified navigation fields on cleanup. Keyboard/controller directions and
+and Up/Down target IDs at +0x9C/+0xA0. Extend vanilla's two-row loop to
+Resolution → Fullscreen (ID 4) → AA → Resolution. Both resolution arrows wrap
+Up to AA; AA wraps Down to the original left resolution arrow (ID 1). Apply
+(ID 3) retains its activation and has Up to AA and Down to Resolution when
+mouse-focused. Restore all four modified controls' navigation fields on cleanup.
+Keyboard/controller directions and
 held-key repeat continue through the original screen handler; there is no
 competing custom direction poller. Ghidra direction/focus exports are in
 build/graphics-evidence, checked against original instruction bytes.
