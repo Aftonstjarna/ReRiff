@@ -136,14 +136,23 @@ def main():
     parser.add_argument('--game-dir', type=Path)
     parser.add_argument('--platform', choices=['linux', 'windows'])
     args = parser.parse_args()
+    game=args.game_dir
+    if game is None:
+        try: game=Path(json.loads((args.work/'prepared.json').read_text())['game'])
+        except (OSError,ValueError,KeyError): pass
+    log_path=game/'logs/update.log' if game else args.work/'update.log'
     try:
-        with (args.work/'update.log').open('a', encoding='utf-8') as log, contextlib.redirect_stdout(log), contextlib.redirect_stderr(log):
+        log_path.parent.mkdir(parents=True,exist_ok=True)
+    except OSError:
+        log_path=args.work/'update.log'
+    try:
+        with log_path.open('a', encoding='utf-8') as log, contextlib.redirect_stdout(log), contextlib.redirect_stderr(log):
             if args.prepare:
                 prepare(args.archive, args.sha256, args.work, args.game_dir, args.platform, args.channel)
             else:
                 apply(args.work)
     except Exception as error:
-        with (args.work/'update.log').open('a', encoding='utf-8') as log:
+        with log_path.open('a', encoding='utf-8') as log:
             log.write(type(error).__name__+': '+str(error)+'\n')
         (args.work/'failure').write_text(type(error).__name__+'\n')
         return 1

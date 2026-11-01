@@ -357,6 +357,20 @@ def install(bundle, game, backups, platform, dry_run=False, restore=False, music
             link_music_folder(game, Path(next_state['music_dir']))
         except OSError as error:
             print('Music link was not applied; game installation completed: '+str(error))
+    # Preserve older diagnostics while keeping the game root clear.
+    logs=game/'logs'
+    try:
+        logs.mkdir(exist_ok=True)
+        for name in ('ReRiff-client.log','ReRiff-network.log','ReRiff-engine-menu.log','ReRiff-launcher.log','installer.log'):
+            old=game/name
+            if old.is_file():
+                target=logs/name
+                if target.exists():
+                    import time
+                    target=logs/('legacy-'+str(time.time_ns())+'-'+name)
+                old.rename(target)
+    except OSError as error:
+        print('Could not relocate legacy diagnostics: '+str(error))
     print(('Original DLLs restored.' if restore else 'ReRiff '+manifest['version']+' installed.')+'\nGame: '+str(game)+'\nBackups: '+str(backups)+'\nExisting settings and saved data preserved.')
     return plan
 

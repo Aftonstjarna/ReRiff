@@ -12,9 +12,21 @@ static ColourFn graphics_colour_original;
 static void *aa_menu_owner,*aa_label,*aa_bar,*aa_knob,*resolution_hover;
 static void *borderless_label,*borderless_bar,*borderless_knob;
 static const float *graphics_focus_colour;
-static BOOL aa_pending,borderless_pending;
+static BOOL aa_pending,borderless_pending,apply_was_menu_item;
 static float aa_hit_width,aa_hit_height;
 static struct {void *item;int links[5];} aa_navigation[4];
+static int graphics_saved_resolution,graphics_saved_scale;
+static BOOL graphics_saved_full,graphics_saved_borderless,graphics_saved_aa,graphics_exit_after_apply;
+static void __thiscall aa_graphics_input(void *menu,int selection);
+static BOOL graphics_dirty(void *menu){
+    return ((int *)menu)[75]!=graphics_saved_resolution||(*((BYTE *)menu+305)!=0)!=graphics_saved_full
+        ||borderless_pending!=graphics_saved_borderless||aa_pending!=graphics_saved_aa||ui_slider_pending!=graphics_saved_scale;
+}
+static void graphics_save_prompt_result(void *menu,int choice){
+    if(choice<0)return;
+    if(choice){graphics_exit_after_apply=TRUE;aa_graphics_input(menu,3);}
+    else{aa_pending=graphics_saved_aa;borderless_pending=graphics_saved_borderless;ui_slider_pending=graphics_saved_scale;graphics_input_original(menu,2000);}
+}
 static BOOL (*attach_antialiasing)(void)=aa_attach;
 #include "graphics_scroll.h"
 static void aa_connect_navigation(void *menu){
@@ -28,7 +40,7 @@ static void aa_connect_navigation(void *menu){
     /* Native direction handler 0x44AA60: mode 1 uses IDs at +9C/+A0 for
      * Up/Down. Extend vanilla's closed row loop in both directions. */
     for(int i=2;i<4;i++){
-        ((int *)items[i])[38]=1;((int *)items[i])[39]=UI_SCALE_CONTROL_ID;
+        ((int *)items[i])[38]=1;((int *)items[i])[39]=((int *)apply)[2];
         ((int *)items[i])[40]=BORDERLESS_CONTROL_ID;
     }
     ((int *)full)[38]=1;((int *)full)[40]=BORDERLESS_CONTROL_ID;
@@ -39,8 +51,11 @@ static void aa_connect_navigation(void *menu){
     ((int *)borderless_label)[41]=DISPLAY_LEFT_ID;((int *)borderless_label)[42]=DISPLAY_RIGHT_ID;
     ((int *)aa_label)[38]=1;((int *)aa_label)[39]=BORDERLESS_CONTROL_ID;
     ((int *)aa_label)[40]=UI_SCALE_CONTROL_ID;
-    if(ui_slider_label){((int *)ui_slider_label)[38]=1;((int *)ui_slider_label)[39]=AA_CONTROL_ID;((int *)ui_slider_label)[40]=((int *)left)[2];((int *)ui_slider_label)[41]=((int *)ui_slider_label)[42]=-1;}
+    if(ui_slider_label){((int *)ui_slider_label)[38]=1;((int *)ui_slider_label)[39]=AA_CONTROL_ID;((int *)ui_slider_label)[40]=((int *)apply)[2];((int *)ui_slider_label)[41]=((int *)ui_slider_label)[42]=-1;}
     ((int *)aa_label)[41]=((int *)aa_label)[42]=-1;
+    /* Vanilla init clears the Apply button's menu-item bit (+372, bit 1).
+     * Opt the existing sprite into the native focus/highlight lifecycle. */
+    apply_was_menu_item=(*((BYTE *)apply+372)&2)!=0;menu_item(apply,TRUE);
     ((int *)apply)[38]=1;((int *)apply)[39]=UI_SCALE_CONTROL_ID;
     ((int *)apply)[40]=((int *)left)[2];
 }
@@ -68,6 +83,9 @@ static void aa_graphics_input_state(void *menu){
     DWORD mask=*(DWORD *)((BYTE *)((void **)menu)[46]+40);
     row_visible(aa_label,TRUE,mask);row_visible(aa_bar,TRUE,0);row_visible(aa_knob,TRUE,0);
     row_visible(resolution_hover,TRUE,mask);
+    /* Apply was not part of vanilla row input. Keep its native mask aligned
+     * with the active screen, just like the selectable settings rows. */
+    row_visible(((void **)menu)[66],TRUE,mask);
     row_visible(borderless_label,TRUE,mask);row_visible(borderless_bar,TRUE,mask);row_visible(borderless_knob,TRUE,mask);
     row_visible(ui_slider_label,TRUE,mask);row_visible(ui_slider_rail,TRUE,0);row_visible(ui_slider_knob,TRUE,0);
     if(ui_slider_label)*(DWORD *)((BYTE *)ui_slider_label+64)=((int *)menu)[11]==UI_SCALE_CONTROL_ID?768:0;
@@ -147,11 +165,15 @@ static void __thiscall aa_graphics_init(void *menu,void *screen,void *lower){
         ((int *)resolution_hover)[40]=BORDERLESS_CONTROL_ID;
         ((int *)resolution_hover)[1]++;add_screen(((void **)menu)[46],resolution_hover);
     }
+    graphics_saved_resolution=((int *)menu)[75];graphics_saved_full=*((BYTE *)menu+305)!=0;
+    graphics_saved_borderless=borderless_pending;graphics_saved_aa=aa_pending;graphics_saved_scale=ui_slider_pending;graphics_exit_after_apply=FALSE;
     aa_sync_art(menu);graphics_scroll_init(menu,gap);
 }
 static void __thiscall aa_graphics_cleanup(void *menu,void *screen,void *lower){
     if(aa_menu_owner==menu){
+        graphics_exit_after_apply=FALSE;
         graphics_scroll_cleanup();
+        menu_item(((void **)menu)[66],apply_was_menu_item);
         for(int i=0;i<4;i++)if(aa_navigation[i].item){
             memcpy((BYTE *)aa_navigation[i].item+0x98,aa_navigation[i].links,sizeof(aa_navigation[i].links));
             aa_navigation[i].item=NULL;
@@ -165,6 +187,10 @@ static void __thiscall aa_graphics_cleanup(void *menu,void *screen,void *lower){
 }
 static void __thiscall aa_graphics_input_scoped(void *menu,int selection){
     if(aa_menu_owner==menu&&aa_label){
+        if(selection==2000&&graphics_dirty(menu)){
+            if(!save_prompt_begin(menu,graphics_save_prompt_result))log_line("Cannot show native save prompt; Graphics left open.");
+            return;
+        }
         if(selection==RESOLUTION_FOCUS_ID||selection==UI_SCALE_CONTROL_ID)return;
         if(selection==BORDERLESS_CONTROL_ID||selection==DISPLAY_LEFT_ID||selection==DISPLAY_RIGHT_ID){
             int mode=borderless_pending?1:*((BYTE *)menu+305)?2:0;
@@ -181,6 +207,9 @@ static void __thiscall aa_graphics_input_scoped(void *menu,int selection){
             if(aa_pending&&!attach_antialiasing()){aa_pending=FALSE;aa_fail("Antialiasing unavailable: original graphics device could not be attached.");}
             if(WritePrivateProfileStringW(L"graphics",L"antialiasing",aa_pending?L"true":L"false",config_path))InterlockedExchange(&aa_requested,aa_pending);
             else log_line("Could not save antialiasing preference.");
+            if(aa_pending!=(InterlockedCompareExchange(&aa_requested,0,0)!=0)||ui_slider_pending!=ui_scale_value){graphics_exit_after_apply=FALSE;log_line("Graphics save failed; settings left open.");return;}
+            graphics_saved_aa=aa_pending;graphics_saved_scale=ui_slider_pending;
+            graphics_saved_resolution=((int *)menu)[75];graphics_saved_full=*((BYTE *)menu+305)!=0;graphics_saved_borderless=borderless_pending;
             aa_sync_art(menu);
             if(apply_display(menu,borderless_pending))return;
         }
@@ -199,9 +228,19 @@ static void __thiscall aa_graphics_colour(void *menu,int id,const float *colour)
     if(menu==aa_menu_owner&&(id==BORDERLESS_CONTROL_ID||id==DISPLAY_LEFT_ID||id==DISPLAY_RIGHT_ID)){if(borderless_label)colour_item(borderless_label,colour);if(borderless_bar)colour_item(borderless_bar,colour);if(borderless_knob)colour_item(borderless_knob,colour);}
 }
 static void __thiscall aa_graphics_tick(void *menu){
+    save_prompt_tick(menu);
     if(menu==aa_menu_owner)ui_slider_tick(menu);
     aa_graphics_input_state(menu);graphics_scroll_tick(menu);graphics_tick_original(menu);aa_graphics_input_state(menu);graphics_layout(menu);
+    if(menu==aa_menu_owner){
+        static const float normal[4]={1,1,1,0.9f};
+        colour_item(((void **)menu)[66],((int *)menu)[11]==3?graphics_focus_colour:normal);
+        static int last_focus=-999;int focus=((int *)menu)[11];
+        if(last_focus!=focus){void *button=((void **)menu)[66];char trace[180];snprintf(trace,sizeof(trace),"Graphics focus=%d Apply id=%d flags=%u mask=%lu up=%d down=%d.",focus,((int *)button)[2],*((BYTE *)button+372),(unsigned long)*(DWORD *)((BYTE *)button+76),((int *)button)[39],((int *)button)[40]);log_line(trace);last_focus=focus;}
+    }
     display_style();
+    if(menu==aa_menu_owner&&graphics_exit_after_apply&&!display_change.active&&((int *)menu)[102]==0&&readable(overlay_manager,4)&&readable(*overlay_manager,48)&&!((void **)*overlay_manager)[11]){
+        graphics_exit_after_apply=FALSE;graphics_input_original(menu,2000);return;
+    }
     if(aa_menu_owner==menu&&InterlockedCompareExchange(&aa_fault,0,0)){aa_pending=FALSE;aa_sync_art(menu);}
     if(aa_menu_owner==menu&&((int *)menu)[11]==RESOLUTION_FOCUS_ID){
         void **begin=((void ***)menu)[70],**end=((void ***)menu)[71];

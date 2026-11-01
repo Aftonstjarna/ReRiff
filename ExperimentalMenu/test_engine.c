@@ -5,6 +5,7 @@ static void *vtable[27],*item_methods[49];
 static void **item_vtable=item_methods+1;
 static int delegated,initialized,cleaned,ticked,base_ticked,focused,created,added;
 static int restart_calls,removed,sprites_created,colours;
+static void *colour_watch;static float watched_colour[4];
 static void *fake_ui=screen;
 static BOOL restart_ok;
 static BOOL testing_graphics_reel;
@@ -29,7 +30,7 @@ static void __thiscall mock_enable(void *self,BYTE enabled){
 static void __thiscall mock_visible(void *self,BYTE visible){
     *((BYTE *)self+372)=(*((BYTE *)self+372)&~1)|!!visible;
 }
-static void __thiscall mock_colour(void *self,const float *value){(void)self;(void)value;colours++;}
+static void __thiscall mock_colour(void *self,const float *value){if(self==colour_watch&&value)memcpy(watched_colour,value,sizeof(watched_colour));colours++;}
 static void __thiscall mock_menu_colour(void *self,int id,const float *value){(void)self;(void)id;(void)value;}
 static void __thiscall mock_scale(void *self,const float *value){((float *)self)[14]=value[0];((float *)self)[15]=value[1];}
 static void __thiscall mock_def(void *self,unsigned id){((unsigned *)self)[100]=id;}
@@ -103,6 +104,9 @@ static DWORD held_input;
 static int aa_attach_calls;
 static BOOL mock_aa_attach(void){aa_attach_calls++;return TRUE;}
 static BYTE graphics_test_menu[512],graphics_test_items[7][1024];
+static void __thiscall mock_graphics_menu_item(void *item,BYTE enabled){
+    BYTE *flags=(BYTE *)item+372;*flags=(*flags&~2)|(enabled?2:0);
+}
 static BOOL graphics_cycle(void **items,int count,int start,int field,const int *expected,int steps){
     int id=start;
     for(int step=0;step<steps;step++){
@@ -326,8 +330,9 @@ int main(int argc,char **argv){
     ((int *)graphics_test_items[2])[38]=((int *)graphics_test_items[3])[38]=1;
     ((int *)graphics_test_items[2])[39]=((int *)graphics_test_items[3])[39]=4;
     ((int *)graphics_test_items[2])[40]=((int *)graphics_test_items[3])[40]=4;
-    graphics_init_original=mock_init;graphics_cleanup_original=mock_cleanup;graphics_tick_original=mock_tick;graphics_input_original=mock_graphics_input;graphics_button_sprite=mock_button_sprite;graphics_colour_original=mock_menu_colour;
+    graphics_init_original=mock_init;graphics_cleanup_original=mock_cleanup;graphics_tick_original=mock_tick;menu_item=mock_graphics_menu_item;graphics_input_original=mock_graphics_input;graphics_button_sprite=mock_button_sprite;graphics_colour_original=mock_menu_colour;
     attach_antialiasing=mock_aa_attach;aa_requested=aa_fault=0;aa_graphics_init(gm,NULL,NULL);
+    CHECK((*((BYTE *)graphics_test_items[6]+372)&2)!=0);
     CHECK(aa_label&&aa_bar&&aa_knob&&!aa_pending&&((int *)aa_label)[2]==AA_CONTROL_ID);
     CHECK(resolution_hover&&((int *)resolution_hover)[2]==RESOLUTION_FOCUS_ID);
     CHECK(((float *)resolution_hover)[8]==960&&((float *)resolution_hover)[9]==420);
@@ -335,12 +340,16 @@ int main(int argc,char **argv){
     /* Exercise multiple complete native row loops in both directions, including
      * both resolution arrows and escape from the mouse-focused Apply button. */
     void *nav_items[8]={graphics_test_items[2],graphics_test_items[3],borderless_label,borderless_bar,borderless_knob,aa_label,graphics_test_items[6],ui_slider_label};
-    const int down_cycle[]={BORDERLESS_CONTROL_ID,AA_CONTROL_ID,UI_SCALE_CONTROL_ID,1,BORDERLESS_CONTROL_ID,AA_CONTROL_ID,UI_SCALE_CONTROL_ID,1};
-    const int up_cycle[]={UI_SCALE_CONTROL_ID,AA_CONTROL_ID,BORDERLESS_CONTROL_ID,1,UI_SCALE_CONTROL_ID,AA_CONTROL_ID,BORDERLESS_CONTROL_ID,1};
-    CHECK(graphics_cycle(nav_items,8,1,40,down_cycle,8));
-    CHECK(graphics_cycle(nav_items,8,2,40,down_cycle,8));
-    CHECK(graphics_cycle(nav_items,8,1,39,up_cycle,8));
-    CHECK(graphics_cycle(nav_items,8,2,39,up_cycle,8));
+    const int down_cycle[]={BORDERLESS_CONTROL_ID,AA_CONTROL_ID,UI_SCALE_CONTROL_ID,3,1,BORDERLESS_CONTROL_ID,AA_CONTROL_ID,UI_SCALE_CONTROL_ID,3,1};
+    const int up_cycle[]={3,UI_SCALE_CONTROL_ID,AA_CONTROL_ID,BORDERLESS_CONTROL_ID,1,3,UI_SCALE_CONTROL_ID,AA_CONTROL_ID,BORDERLESS_CONTROL_ID,1};
+    CHECK(graphics_cycle(nav_items,8,1,40,down_cycle,10));
+    CHECK(graphics_cycle(nav_items,8,2,40,down_cycle,10));
+    CHECK(graphics_cycle(nav_items,8,1,39,up_cycle,10));
+    CHECK(graphics_cycle(nav_items,8,2,39,up_cycle,10));
+    const int from_apply_down[]={1,BORDERLESS_CONTROL_ID,AA_CONTROL_ID,UI_SCALE_CONTROL_ID,3};
+    const int from_apply_up[]={UI_SCALE_CONTROL_ID,AA_CONTROL_ID,BORDERLESS_CONTROL_ID,1,3};
+    CHECK(graphics_cycle(nav_items,8,3,40,from_apply_down,5));
+    CHECK(graphics_cycle(nav_items,8,3,39,from_apply_up,5));
     CHECK(((int *)borderless_bar)[2]==DISPLAY_LEFT_ID&&((int *)borderless_knob)[2]==DISPLAY_RIGHT_ID);
     CHECK(((unsigned *)borderless_bar)[100]==59&&((unsigned *)borderless_knob)[100]==60);
     CHECK(((float *)aa_label)[9]==580&&((float *)borderless_label)[9]==500);
@@ -358,6 +367,11 @@ int main(int argc,char **argv){
     int saved_visible=graphics_visible;graphics_visible=2;graphics_scroll_to(gm,1,FALSE);
     CHECK(!graphics_test_items[5][372]);graphics_scroll_to(gm,0,FALSE);
     CHECK(graphics_test_items[5][372]);graphics_visible=saved_visible;graphics_layout(gm);
+    static const float apply_focus_colour[4]={0,1,1,1};graphics_focus_colour=apply_focus_colour;
+    colour_watch=graphics_test_items[6];((int *)gm)[11]=3;aa_graphics_tick(gm);
+    CHECK(!memcmp(watched_colour,apply_focus_colour,sizeof(watched_colour)));
+    CHECK(*(DWORD *)(graphics_test_items[6]+76)==*(DWORD *)(screen+40));
+    ((int *)gm)[11]=RESOLUTION_FOCUS_ID;aa_graphics_tick(gm);CHECK(watched_colour[0]==1&&watched_colour[1]==1);
     aa_graphics_input(gm,AA_CONTROL_ID);CHECK(aa_pending&&!aa_requested&&((unsigned *)aa_knob)[100]==74);
     CHECK(((float *)aa_label)[12]==820&&((float *)aa_label)[13]==80);
     aa_graphics_input(gm,3);CHECK(aa_requested&&aa_attach_calls==1&&delegated==3);
@@ -371,6 +385,7 @@ int main(int argc,char **argv){
     delegated=-1;aa_graphics_input(gm,RESOLUTION_FOCUS_ID);CHECK(delegated==-1);
     CHECK(*(DWORD *)((BYTE *)aa_bar+76)==0&&*(DWORD *)((BYTE *)aa_knob+76)==0);
     aa_graphics_input(gm,3);CHECK(!aa_requested);aa_graphics_cleanup(gm,NULL,NULL);CHECK(!aa_label&&!aa_bar&&!aa_knob&&!resolution_hover&&!borderless_label&&removed==38);
+    CHECK(!(*((BYTE *)graphics_test_items[6]+372)&2));
     CHECK(((int *)graphics_test_items[0])[38]==1&&((int *)graphics_test_items[0])[40]==1);
     CHECK(((int *)graphics_test_items[6])[38]==0&&((int *)graphics_test_items[6])[39]==-1);
     CHECK(((int *)graphics_test_items[6])[40]==-1);
@@ -387,5 +402,5 @@ int main(int argc,char **argv){
     aa_graphics_cleanup(gm,NULL,NULL);CHECK(!graphics_reel&&constructed==destroyed);
     ui_scope_set(NULL);TlsFree(ui_scope_tls);ui_scope_tls=TLS_OUT_OF_INDEXES;
     FreeLibrary(image);DeleteFileW(config_path);DeleteFileW(log_path);
-    puts("PASS: original guards, Servers first, native reel lifecycle, one navigation owner, held-repeat/boundaries, deferred focus, pointer forwarding, original mask reset, vanilla hover/click/controller activation, Audio isolation, press latches, save/restart, version branding, one-time update notice, Graphics AA control and cleanup");return 0;
+    puts("PASS: original guards, Servers first, native reel lifecycle, one navigation owner, held-repeat/boundaries, deferred focus, pointer forwarding, original mask reset, vanilla hover/click/controller activation, Audio isolation, press latches, save/restart, version branding, one-time update notice, Graphics AA, Apply native focus/mask/highlight and cleanup");return 0;
 }

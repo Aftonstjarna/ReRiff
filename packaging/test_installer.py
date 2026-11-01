@@ -188,6 +188,19 @@ class VanillaInstallerTests(unittest.TestCase):
         self.assertNotIn('localserver/start-server.cmd', plan)
         self.assertNotIn('localserver/start-server.sh', plan)
         self.assertNotIn(b'fallback_url = http://127.0.0.1:5144', plan['server.ini'])
+        self.assertIn(b'skip_launcher = false', plan['server.ini'])
+        self.assertIn(b'auto_update_on_skip = false', plan['server.ini'])
+
+    def test_legacy_logs_are_relocated_without_overwriting_current_log(self):
+        (self.game/'ReRiff-client.log').write_bytes(b'older diagnostics')
+        (self.game/'logs').mkdir()
+        (self.game/'logs/ReRiff-client.log').write_bytes(b'current diagnostics')
+        self.install()
+        self.assertFalse((self.game/'ReRiff-client.log').exists())
+        self.assertEqual((self.game/'logs/ReRiff-client.log').read_bytes(),b'current diagnostics')
+        moved=list((self.game/'logs').glob('legacy-*-ReRiff-client.log'))
+        self.assertEqual(len(moved),1)
+        self.assertEqual(moved[0].read_bytes(),b'older diagnostics')
 
     def test_fresh_repeat_restore_and_keep_matching_backup(self):
         saved=self.backups/'originals/ParseOctane.dll';saved.parent.mkdir(parents=True)

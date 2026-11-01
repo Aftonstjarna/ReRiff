@@ -29,6 +29,18 @@ int main(void){
     CHECK(parse_update_version("1.2.2",remote)&&update_version_newer(remote,local));
     CHECK(parse_update_version("1.2.2-7",remote)&&parse_update_version("1.2.2",local)&&!update_version_newer(remote,local));
     CHECK(!parse_update_version("1.2.2-0",remote)&&!parse_update_version("1.2.2-7junk",remote));
+    char selected_version[64],selected_tag[80];
+    const char *releases="["
+      "{\"tag_name\":\"v9.0.0\",\"prerelease\":false,\"draft\":false},"
+      "{\"tag_name\":\"v1.2.3-2\",\"prerelease\":true,\"draft\":false,\"body\":\"prerelease false\"},"
+      "{\"tag_name\":\"v1.2.3-10\",\"prerelease\":true,\"draft\":false,\"assets\":[{\"prerelease\":false}]},"
+      "{\"tag_name\":\"v2.0.0-1\",\"prerelease\":true,\"draft\":true},"
+      "{\"tag_name\":\"experimental\",\"prerelease\":true,\"draft\":false}]";
+    CHECK(select_github_release(releases,TRUE,selected_version,selected_tag)&&!strcmp(selected_version,"1.2.3-10")&&!strcmp(selected_tag,"v1.2.3-10"));
+    CHECK(select_github_release(releases,FALSE,selected_version,selected_tag)&&!strcmp(selected_version,"9.0.0"));
+    CHECK(!select_github_release("[{\"tag_name\":\"v1.2.3-1\",\"prerelease\":true,\"draft\":true}]",TRUE,selected_version,selected_tag));
+    CHECK(!select_github_release("[{\"tag_name\":\"v1.2.3-1\",\"prerelease\":true",TRUE,selected_version,selected_tag));
+    CHECK(!select_github_release("{\"tag_name\":\"v1.2.3-1\",\"prerelease\":true,\"draft\":false}",FALSE,selected_version,selected_tag));
     DeleteFileW(work);RemoveDirectoryW(name);DeleteFileW(ini);
     puts("PASS: shared skip preference, opt-in automatic updates, resume arguments, loop suppression and exact revision ordering");return 0;
 }

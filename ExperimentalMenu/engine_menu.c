@@ -67,7 +67,7 @@ static void *server_rows[SERVER_ACTION_MAX+1]; /* borrowed; the original screen 
 static BYTE settings_visible, audio_visible;
 static float server_row_width, server_row_height;
 static WCHAR config_path[MAX_PATH], log_path[MAX_PATH];
-static Settings pending;
+static Settings pending,saved_settings;
 static void *page_owner;
 static BOOL server_page;
 static unsigned input_trace_count;
@@ -98,6 +98,7 @@ static void load_settings(void) {
     pending.enabled=_wcsicmp(value,L"false") && _wcsicmp(value,L"no") && wcscmp(value,L"0");
     GetPrivateProfileStringW(L"launcher",L"skip_launcher",L"false",value,32,config_path);
     pending.skip_launcher=!_wcsicmp(value,L"true") || !_wcsicmp(value,L"yes") || !wcscmp(value,L"1");
+    saved_settings=pending;
 }
 
 static BOOL save_settings(void) {
@@ -120,6 +121,7 @@ static BOOL save_settings(void) {
         ok=MoveFileExW(temp,config_path,MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH);
         WritePrivateProfileStringW(NULL,NULL,NULL,config_path);
     }
+    if(ok)saved_settings=pending;
     if (!ok) DeleteFileW(temp);
     return ok;
 }
@@ -215,6 +217,8 @@ static void update_toggles(void *menu) {
 }
 static BOOL graphics_scroll_wheel(int delta);
 #include "settings_scroll.h"
+#include "save_prompt.h"
+static void server_save_prompt_result(void *menu,int choice);
 
 static void __thiscall hook_colour(void *menu,int id,const float *colour) {
     original_colour(menu,id,colour);
@@ -228,6 +232,7 @@ static void __thiscall hook_colour(void *menu,int id,const float *colour) {
 
 static void render(void *menu);
 static void __thiscall hook_tick(void *menu) {
+    save_prompt_tick(menu);
     if(restarting&&GetTickCount()-restart_started>15000){
         WCHAR name[96];restart_event_name(name,96,GetCurrentProcessId(),FALSE);
         HANDLE request=OpenEventW(EVENT_MODIFY_STATE,FALSE,name);
@@ -401,6 +406,10 @@ static void __thiscall hook_input(void *menu,int selection) {
         wcscpy(heading,L"Servers — applies after restart");render(menu);if(!dispatching_menu){prepare_scroll(menu);apply_pending_focus(menu);}
         log_line("Native Settings > Servers opened.");return;
     }
+    if(selection==2000&&memcmp(&pending,&saved_settings,sizeof(pending))){
+        if(!save_prompt_begin(menu,server_save_prompt_result))log_line("Cannot show native save prompt; server settings left open.");
+        return;
+    }
     if(selection!=2000){
         selection-=SERVER_ACTION_BASE;
         int index=server_action_index(selection);if(index<0)return;
@@ -443,6 +452,13 @@ static void __thiscall hook_input(void *menu,int selection) {
     default: return; /* Do not forward page selections into gameplay/quit handlers. */
     }
     render(menu);
+}
+
+static void server_save_prompt_result(void *menu,int choice){
+    if(choice<0)return;
+    if(choice&&!save_settings()){wcscpy(heading,L"Save failed — settings left open");render(menu);return;}
+    if(!choice)load_settings();
+    leave_server_page(menu);
 }
 
 static BOOL supported_file(const WCHAR *path) {
@@ -547,6 +563,11 @@ __declspec(dllexport) BOOL __cdecl ReRiffConfigureNativeGraphics(void **methods,
     graphics_resize=(GraphicsBridgeFn)methods[0];graphics_rescale=(GraphicsBridgeFn)methods[1];
     graphics_bridge_ready=TRUE;return TRUE;
 }
+__declspec(dllexport) BOOL __cdecl ReRiffConfigureNativePrompt(void **methods,int count){
+    WCHAR path[MAX_PATH];DWORD length=GetModuleFileNameW(NULL,path,MAX_PATH);
+    if(!length||length>=MAX_PATH||!supported_file(path)||count!=2||!readable(methods,8)||!methods[0]||!methods[1])return FALSE;
+    overlay_push=(SaveOverlayFn)methods[0];overlay_pop=(SaveOverlayFn)methods[1];return TRUE;
+}
 __declspec(dllexport) BOOL __cdecl ReRiffConfigureNativeUiScale(void **methods,int count){
     WCHAR path[MAX_PATH];DWORD length=GetModuleFileNameW(NULL,path,MAX_PATH);
     if(!length||length>=MAX_PATH||!supported_file(path)||count!=1||!readable(methods,4)||!methods[0])return FALSE;
@@ -560,11 +581,13 @@ __declspec(dllexport) BOOL __cdecl ReRiffStartEngineMenu(void) {
     WCHAR *slash=wcsrchr(path,L'\\');
     if (!slash || (size_t)(slash-path)+30>=MAX_PATH) return FALSE;
     wcscpy(config_path,path); config_path[slash-path+1]=0;
-    wcscpy(log_path,config_path); wcscat(log_path,L"ReRiff-engine-menu.log");
+    wcscpy(log_path,config_path);wcscat(log_path,L"logs");CreateDirectoryW(log_path,NULL);
+    wcscpy(log_path,config_path); wcscat(log_path,L"logs\\ReRiff-engine-menu.log");
     wcscat(config_path,L"server.ini");
     BYTE *base=(BYTE *)GetModuleHandleW(NULL);
-    if (!supported_file(path) || !validate_image(base)) {
-        log_line("Refused: unsupported executable or unexpected menu bytes."); return FALSE;
+    if(!supported_file(path)){log_line("Refused: unsupported Game.exe file hash or size.");return FALSE;}
+    if(!validate_image(base)){
+        char detail[128];snprintf(detail,sizeof(detail),"Refused: runtime menu bytes differ; image base=%p.",(void *)base);log_line(detail);return FALSE;
     }
     if(!bridge_ready){log_line("Native file-picker bridge unavailable; update ReRiff.ClientConfig.dll with this menu DLL.");return FALSE;}
     HMODULE pinned;
@@ -595,6 +618,7 @@ __declspec(dllexport) BOOL __cdecl ReRiffStartEngineMenu(void) {
     if(!install_display_modes(base))log_line("Native display-mode extension could not be installed.");
     if(!install_graphics_aa_menu(base))log_line("Native antialiasing control could not be installed.");
     if(!install_main_branding(base))log_line("Main-menu branding could not be installed.");
+    if(!install_save_prompt(base))log_line("Native save prompt could not be installed.");
     if(!install_ui_scale(base))log_line("Native UI-scale extension could not be installed.");
     if(borderless_active)aa_attach();
     InterlockedExchange(&installed,2); log_line("Engine menu hooks installed."); return TRUE;

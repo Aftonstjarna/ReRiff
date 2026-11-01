@@ -59,7 +59,8 @@ static void channel_title(void) {
 
 static void log_message(const WCHAR *text) {
     WCHAR name[CAP]; char utf8[4096]; DWORD written;
-    path(name, L"ReRiff-launcher.log");
+    path(name,L"logs");CreateDirectoryW(name,NULL);
+    path(name, L"logs\\ReRiff-launcher.log");
     int bytes = WideCharToMultiByte(CP_UTF8, 0, text, -1, utf8, sizeof(utf8)-3, NULL, NULL);
     if (!bytes) return;
     utf8[bytes-1]='\r'; utf8[bytes]='\n';
@@ -387,7 +388,7 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
         save_button=control(L"BUTTON",L"Save settings",WS_TABSTOP,345,445,130,34,SAVE);
         play_button=control(L"BUTTON",L"Play",WS_TABSTOP|BS_DEFPUSHBUTTON,490,445,130,34,PLAY);
         update_button=control(L"BUTTON",L"Update from GitHub",WS_TABSTOP,22,489,155,30,UPDATE);
-        experimental_checkbox=control(L"BUTTON",L"Use experimental builds",BS_AUTOCHECKBOX|WS_TABSTOP,195,489,420,30,EXPERIMENTAL);
+        experimental_checkbox=control(L"BUTTON",L"Use experimental releases (prereleases)",BS_AUTOCHECKBOX|WS_TABSTOP,195,489,420,30,EXPERIMENTAL);
         SendMessageW(experimental_checkbox,BM_SETCHECK,installed_experimental?BST_CHECKED:BST_UNCHECKED,0);
         channel_title();
         reload_settings_controls();
