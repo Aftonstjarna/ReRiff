@@ -437,3 +437,20 @@ without a renderer reset, preserving the selected render resolution. Held-key
 repeat is ignored. The original native handler retains exclusive-fullscreen
 Alt+Enter. The window hook remains installed in windowed mode and throughout
 gameplay; this does not make an already hung message pump responsive.
+
+### Fullscreen selector and resolution visibility
+
+Graphics now has four rows: resolution, fullscreen mode, antialiasing and UI
+scale. The fullscreen mode cycles OFF (WINDOWED), BORDERLESS and EXCLUSIVE.
+It reuses `elUI.createButtonSprite` (token 0x060016E5, native RVA 0x222C0),
+original resolution sprites 59/60, origins 3/5, native Up/Down links, and
+left/right input masks. Original fullscreen fields remain the Apply authority;
+the separate original toggle artwork is hidden, not removed from its owner.
+
+Original `gaGraphicsOptions.showResolutionText` (token 0x06001177, IL RVA
+0x2EC76C) returns immediately if the selected index at menu +300 is unchanged.
+Otherwise it hides all text-vector entries at +280/+284, then shows the chosen
+entry. A scrolling adapter that hides that entry must explicitly restore only
+that selected entry when it becomes visible again. Calling the original function
+with the unchanged selection cannot restore it. These semantics were checked
+against the original IL; this integration is an intentional mod, not recovery credit.
