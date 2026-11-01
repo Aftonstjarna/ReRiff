@@ -1,20 +1,31 @@
-/* Bounded Settings lists. Engine objects/rendering/input remain native; the
- * window callback only queues wheel/drag requests for the menu's own thread. */
-#define SCROLL_UP_ID 1601
-#define SCROLL_DOWN_ID 1602
+/* Original gaMenuReel owns scrollbar rendering and pointer interaction.
+ * The native Settings adapter owns only row layout and one logical selection. */
 #define ROOT_LIMIT 6
-#define SCROLL_EXTRA_LIMIT 14
-static struct RootRow { void *text,*arrow,*line;int id;DWORD mask;float x,arrow_x,arrow_dy; } root_rows[ROOT_LIMIT];
+#define SCROLL_EXTRA_LIMIT 10
+static struct RootRow {void *text,*arrow,*line;int id;DWORD mask;float x,arrow_x,arrow_dy;} root_rows[ROOT_LIMIT];
 static int root_count,root_first,page_first,visible_rows,laid_out=-1,laid_first=-1,laid_active=-1;
 static float row_x,row_start,row_gap,line_width,line_dy,arrow_dy,ui_width,ui_height;
-static void *page_lines[10],*scroll_track,*scroll_thumb,*scroll_buttons[2];
-static void *scroll_extras[SCROLL_EXTRA_LIMIT];static int extra_count;
+static void *page_lines[10],*scroll_extras[SCROLL_EXTRA_LIMIT];static int extra_count;
 static volatile LONG scroll_active,scroll_delta,scroll_requested=-1;
-static int scroll_view_count,scroll_view_first;
-static float bar_x,bar_width,bar_top,bar_bottom,thumb_y,thumb_height;
-static HWND scroll_window;static WNDPROC scroll_previous;
-static BOOL bar_dragging;static float drag_grab;static int wheel_remainder;
 static BOOL scroll_ready;
+static HWND scroll_window;static WNDPROC scroll_previous;static int wheel_remainder;
+static int logical_selection,pending_focus=-1,last_direction;
+static DWORD direction_started,next_repeat;
+static BOOL dispatching_menu;
+
+typedef void *(__cdecl *ReelCtorFn)(void *,void *,float,int);
+typedef void (__cdecl *ReelAddFn)(void *,void *,void *);
+typedef void (__cdecl *ReelLimitFn)(void *,int);
+typedef void (__cdecl *ReelTickFn)(void *);
+typedef void (__cdecl *ReelMoveFn)(void *,int,float *);
+typedef int (__cdecl *ReelSelectionFn)(void *);
+typedef void (__cdecl *ReelBarFn)(void *,float,float,float,int,float *);
+static ReelCtorFn reel_ctor;static ReelAddFn reel_add;static ReelLimitFn reel_limit;
+static ReelTickFn reel_tick;static ReelMoveFn reel_move;static ReelSelectionFn reel_selection;static ReelBarFn reel_bar;
+static void *(__cdecl *game_allocate)(size_t);
+static void **reel_vtable,**input_manager;
+static void *native_reel;static int native_reel_page=-1;
+static BOOL bridge_ready;
 
 static int clamp_index(int n,int lo,int hi){return n<lo?lo:n>hi?hi:n;}
 static void colour_item(void *item,const float *c){
@@ -50,12 +61,6 @@ static int focused_index(void *menu){
     int id=((int *)menu)[11];
     for(int i=0;i<view_count();i++)if(row_id(i)==id)return i;
     return -1;
-}
-static void scrollbar_shortcuts(void *menu){
-    if(!scroll_ready)return;
-    int first=view_first(),index=focused_index(menu),count=view_count();
-    ((DWORD *)scroll_buttons[0])[16]=scroll_active&&first>0&&index==first?64:0;
-    ((DWORD *)scroll_buttons[1])[16]=scroll_active&&first+visible_rows<count&&index==first+visible_rows-1?128:0;
 }
 static void layout_scroll(void *menu){
     if(!scroll_ready)return;
@@ -96,94 +101,151 @@ static void layout_scroll(void *menu){
         if(show)move_item(toggles[i][0],row_x+line_width*0.5f,row_start+(index-first)*row_gap+arrow_dy);
     }
     update_toggles(menu);
-    BOOL overflow=active&&count>visible_rows;
-    row_visible(scroll_track,overflow,0);row_visible(scroll_thumb,overflow,0);
-    row_visible(scroll_buttons[0],overflow&&first>0,0xffffffffu);
-    row_visible(scroll_buttons[1],overflow&&first+visible_rows<count,0xffffffffu);
-    float span=bar_bottom-bar_top;
-    thumb_height=span*(float)visible_rows/(float)(count?count:1);
-    thumb_y=bar_top+(count>visible_rows?(span-thumb_height)*(float)first/(float)(count-visible_rows):0);
-    if(overflow){set_line_size(scroll_thumb,bar_width,thumb_height);move_item(scroll_thumb,bar_x,thumb_y);}
-    scroll_view_count=count;scroll_view_first=first;
-    InterlockedExchange(&scroll_active,overflow);
-    laid_active=active;
-    laid_out=server_page?1:(((int *)menu)[62]==0?0:2);laid_first=first;
-    scrollbar_shortcuts(menu);
+    scroll_active=active;
+    laid_active=active;laid_out=server_page?1:(((int *)menu)[62]==0?0:2);laid_first=first;
+}
+
+static void release_native_reel(void){
+    if(native_reel){
+        void *old=native_reel;native_reel=NULL;native_reel_page=-1;
+        /* The helper holds the sole reference; the original deleting dtor
+         * unregisters the four scrollbar visuals and releases spacer children. */
+        ((int *)old)[1]--;
+        ((void *(__thiscall *)(void *,unsigned))(*(void ***)old)[0])(old,1);
+    }
+}
+static BOOL create_native_reel(void *menu){
+    if(native_reel||view_count()<=visible_rows)return TRUE;
+    void *storage=game_allocate(532);if(!storage)return FALSE;
+    native_reel=reel_ctor(storage,menu,row_gap,1);
+    if(!native_reel)return FALSE;
+    if(*(void ***)native_reel!=reel_vtable){native_reel=NULL;log_line("Unexpected native reel object; menu not enabled.");return FALSE;}
+    ((int *)native_reel)[1]++;
+    for(int i=0;i<view_count();i++){
+        /* Real native options establish the reel's range, as in the file
+         * picker. Empty noninteractive rows carry no Settings actions. */
+        void *spacer=create_text(L"",0,i*row_gap,3,1,0,-1,FALSE,-1,FALSE,TRUE);
+        if(!spacer){release_native_reel();return FALSE;}
+        menu_item(spacer,FALSE);enable_input(spacer,FALSE);show_item(spacer,FALSE);
+        ((int *)spacer)[1]++;reel_add(native_reel,spacer,NULL);
+    }
+    reel_limit(native_reel,visible_rows);
+    reel_bar(native_reel,ui_width*0.92f,row_start,row_start+(visible_rows-1)*row_gap+server_row_height,1,NULL);
+    float instant=0;reel_move(native_reel,view_first(),&instant);
+    native_reel_page=server_page?1:0;return TRUE;
 }
 static void scroll_to(void *menu,int first,BOOL select_edge){
     int count=view_count(),old=view_first();first=clamp_index(first,0,count>visible_rows?count-visible_rows:0);
-    if(first==old)return;
-    int focus=focused_index(menu);
     if(server_page)page_first=first;else root_first=first;
-    layout_scroll(menu);
-    if(select_edge)focus=first>old?first+visible_rows-1:first;
-    if(focus>=0)focus_row(menu,row_id(clamp_index(focus,first,first+visible_rows-1)));
+    if(native_reel){float instant=0;reel_move(native_reel,first,&instant);}
+    if(select_edge)logical_selection=first>old?first+visible_rows-1:first;
+    logical_selection=clamp_index(logical_selection,first,first+visible_rows-1);
+    if(first!=old||laid_first!=first)layout_scroll(menu);
+    pending_focus=row_id(logical_selection);
+}
+static BOOL active_list(void *menu){return scroll_ready&&((int *)menu)[102]==0&&(server_page||(((int *)menu)[62]==0&&(*((BYTE *)((void **)menu)[67]+372)&1)));}
+static DWORD poll_direction(void){
+    if(!readable(input_manager,sizeof(void *))||!readable(*input_manager,sizeof(void *)))return 0;
+    void *manager=*input_manager;
+    void *device=((void *(__thiscall *)(void *,unsigned))(*(void ***)manager)[1])(manager,0);
+    if(!readable(device,sizeof(void *)))return 0;
+    /* Same held masks/virtual button test as gaFileSelectInterface.tickInput. */
+    DWORD held=((DWORD (__thiscall *)(void *))(*(void ***)device)[5])(device);
+    for(DWORD key=64;key<=128;key*=2)
+        if(((BYTE (__thiscall *)(void *,DWORD))(*(void ***)device)[0])(device,key))held|=key;
+    return held&192;
+}
+static DWORD (*direction_input)(void)=poll_direction;
+static BOOL navigate_direction(void *menu,DWORD held,DWORD now){
+    if(!active_list(menu)){last_direction=0;return FALSE;}
+    int direction=held==64?-1:held==128?1:0;
+    if(!held){last_direction=0;return FALSE;}
+    if(!direction)return TRUE; /* Opposite directions do not invoke two owners. */
+    BOOL step=direction!=last_direction||(LONG)(now-next_repeat)>=0;
+    if(direction!=last_direction)direction_started=now;
+    last_direction=direction;
+    if(step){
+        int interval=250-(int)((now-direction_started)*0.07f);if(interval<20)interval=20;
+        next_repeat=now+(DWORD)interval;
+        logical_selection=clamp_index(logical_selection+direction,0,view_count()-1);
+        int first=view_first();
+        if(logical_selection<first)first=logical_selection;
+        if(logical_selection>=first+visible_rows)first=logical_selection-visible_rows+1;
+        scroll_to(menu,first,FALSE);
+    }
+    return TRUE; /* The file picker also gates gaMenu.tick while navigating. */
+}
+static void apply_pending_focus(void *menu){
+    if(pending_focus<0||dispatching_menu||!active_list(menu))return;
+    int id=pending_focus;pending_focus=-1;
+    for(int i=0;i<view_count();i++)if(row_id(i)==id)logical_selection=i;
+    static const float normal[4]={1,1,1,0.9f};
+    for(int i=0;i<root_count;i++)colour_item(root_rows[i].text,normal);
+    for(int i=1;i<=10;i++)colour_item(server_rows[i],normal);
+    for(int i=0;i<3;i++)for(int p=0;p<2;p++)colour_item(toggles[i][p],normal);
+    focus_row(menu,id);
+    /* Synchronize the menu's own focus/colour bookkeeping after the screen
+     * focus change, rather than competing inside a selection callback. */
+    ((InputFn)(*(void ***)menu)[25])(menu,id);
+}
+static void prepare_scroll(void *menu){
+    if(!scroll_ready)return;
+    int page=server_page?1:(((int *)menu)[62]==0?0:2);BOOL active=active_list(menu);
+    if(native_reel&&(!active||native_reel_page!=page))release_native_reel();
+    if(page!=laid_out||active!=laid_active){
+        layout_scroll(menu);
+        if(active&&pending_focus<0){int focused=focused_index(menu);if(focused>=0)logical_selection=focused;}
+    }
+    if(active&&!create_native_reel(menu))log_line("Native file-picker scrollbar could not be created.");
+    if(active&&native_reel){
+        reel_tick(native_reel);
+        int first=clamp_index(reel_selection(native_reel),0,view_count()-visible_rows);
+        if(first!=view_first()){
+            if(server_page)page_first=first;else root_first=first;
+            layout_scroll(menu);
+            logical_selection=clamp_index(logical_selection,first,first+visible_rows-1);
+            pending_focus=row_id(logical_selection);
+        }
+    }
+    int request=(int)InterlockedExchange(&scroll_requested,-1),delta=(int)InterlockedExchange(&scroll_delta,0);
+    if(active&&(request>=0||delta))scroll_to(menu,request>=0?request:view_first()+delta,FALSE);
 }
 static void sync_scroll(void *menu){
     if(!scroll_ready)return;
     int page=server_page?1:(((int *)menu)[62]==0?0:2);
-    BOOL active=(server_page||(page==0&&(*((BYTE *)((void **)menu)[67]+372)&1)))&&((int *)menu)[102]==0;
-    if(page!=laid_out||view_first()!=laid_first||active!=laid_active)layout_scroll(menu);
-    /* Original Audio/Graphics returns can refocus a row outside the previous
-     * viewport. Reveal it before accepting further input. */
-    int focused=focused_index(menu),first=view_first();
-    if(page!=2&&focused>=0&&(focused<first||focused>=first+visible_rows))
-        scroll_to(menu,focused<first?focused:focused-visible_rows+1,FALSE);
-    int request=(int)InterlockedExchange(&scroll_requested,-1);
-    int delta=(int)InterlockedExchange(&scroll_delta,0);
-    if(scroll_active&&(request>=0||delta))scroll_to(menu,request>=0?request:view_first()+delta,FALSE);
-    scrollbar_shortcuts(menu);
-}
-static void drag_scroll(float y){
-    float travel=bar_bottom-bar_top-thumb_height;
-    int maximum=scroll_view_count-visible_rows;
-    if(travel>0&&maximum>0){
-        int index=(int)(((y-bar_top-drag_grab)/travel)*(float)maximum+0.5f);
-        InterlockedExchange(&scroll_requested,clamp_index(index,0,maximum));
+    if(page!=laid_out||active_list(menu)!=laid_active||(native_reel&&native_reel_page!=page))prepare_scroll(menu);
+    if(active_list(menu)){
+        int focused=focused_index(menu);
+        if(pending_focus<0&&focused>=0)logical_selection=focused;
+        apply_pending_focus(menu);
     }
 }
 static LRESULT CALLBACK scroll_wndproc(HWND window,UINT message,WPARAM wparam,LPARAM lparam){
-    /* No engine calls or object writes on the Windows message thread. */
-    if(bar_dragging&&(message==WM_LBUTTONUP||message==WM_CAPTURECHANGED||message==WM_CANCELMODE||!scroll_active)){
-        bar_dragging=FALSE;if(GetCapture()==window)ReleaseCapture();
-        if(message==WM_LBUTTONUP)return 0;
-    }
     if(scroll_active){
         if(message==WM_MOUSEWHEEL){
-            wheel_remainder+=(short)HIWORD(wparam);
-            int steps=wheel_remainder/WHEEL_DELTA;wheel_remainder-=steps*WHEEL_DELTA;
+            wheel_remainder+=(short)HIWORD(wparam);int steps=wheel_remainder/WHEEL_DELTA;wheel_remainder-=steps*WHEEL_DELTA;
             InterlockedExchangeAdd(&scroll_delta,-steps);return 0;
         }
         if(message==WM_KEYDOWN){
             if(wparam==VK_PRIOR||wparam==VK_NEXT){InterlockedExchangeAdd(&scroll_delta,wparam==VK_NEXT?visible_rows:-visible_rows);return 0;}
-            if(wparam==VK_HOME||wparam==VK_END){InterlockedExchange(&scroll_requested,wparam==VK_HOME?0:scroll_view_count-visible_rows);return 0;}
-        }
-        if(message==WM_LBUTTONDOWN||message==WM_MOUSEMOVE){
-            RECT client;
-            if(GetClientRect(window,&client)&&client.right>0&&client.bottom>0){
-                float x=(float)(short)LOWORD(lparam)*ui_width/(float)client.right;
-                float y=(float)(short)HIWORD(lparam)*ui_height/(float)client.bottom;
-                if(message==WM_LBUTTONDOWN&&x>=bar_x-bar_width*1.5f&&x<=bar_x+bar_width*1.5f&&y>=bar_top&&y<=bar_bottom){
-                    bar_dragging=TRUE;drag_grab=y>=thumb_y&&y<=thumb_y+thumb_height?y-thumb_y:thumb_height*0.5f;
-                    SetCapture(window);drag_scroll(y);return 0;
-                }
-                if(message==WM_MOUSEMOVE&&bar_dragging){drag_scroll(y);return 0;}
-            }
+            if(wparam==VK_HOME||wparam==VK_END){InterlockedExchange(&scroll_requested,wparam==VK_HOME?0:view_count()-visible_rows);return 0;}
         }
     }
-    return CallWindowProcW(scroll_previous,window,message,wparam,lparam);
+    /* All pointer events, including native scrollbar dragging, are untouched. */
+    return scroll_previous?CallWindowProcW(scroll_previous,window,message,wparam,lparam):DefWindowProcW(window,message,wparam,lparam);
 }
 static void attach_scroll_window(void){
-    if(scroll_window)return;
-    Toast target;ZeroMemory(&target,sizeof(target));EnumWindows(find_game,(LPARAM)&target);
+    if(scroll_window)return;Toast target;ZeroMemory(&target,sizeof(target));EnumWindows(find_game,(LPARAM)&target);
     if(!target.game)return;
-    SetLastError(0);LONG_PTR previous=SetWindowLongPtrW(target.game,GWLP_WNDPROC,(LONG_PTR)&scroll_wndproc);
+    scroll_previous=(WNDPROC)GetWindowLongPtrW(target.game,GWLP_WNDPROC);
+    LONG_PTR previous=SetWindowLongPtrW(target.game,GWLP_WNDPROC,(LONG_PTR)&scroll_wndproc);
     if(previous){scroll_previous=(WNDPROC)previous;scroll_window=target.game;}
 }
 static BOOL init_scroll(void *menu,void *sample){
     root_count=0;root_first=page_first=extra_count=0;laid_out=-1;scroll_ready=FALSE;
     ZeroMemory(root_rows,sizeof(root_rows));ZeroMemory(page_lines,sizeof(page_lines));
-    ZeroMemory(scroll_extras,sizeof(scroll_extras));ZeroMemory(scroll_buttons,sizeof(scroll_buttons));
+    ZeroMemory(scroll_extras,sizeof(scroll_extras));
+    logical_selection=0;pending_focus=SERVERS_ID;last_direction=0;
     row_x=((float *)sample)[8];row_start=((float *)sample)[9];row_gap=((float *)menu)[66];
     ui_width=row_x*2;ui_height=row_start/0.3f;
     if(row_gap<=0||ui_height<=0)return FALSE;
@@ -192,6 +254,11 @@ static BOOL init_scroll(void *menu,void *sample){
     arrow_dy=((float *)menu)[15]*60.0f;
     line_dy=row_gap*0.5f+((float *)menu)[15]*50.0f;
     void *group=((void **)menu)[67],*screen=((void **)menu)[46];
+    root_count=1;
+    struct RootRow *added=&root_rows[0];added->id=SERVERS_ID;added->text=server_rows[0];
+    added->x=row_x;added->mask=0xffffffffu;added->arrow_x=row_x+line_width*0.5f;added->arrow_dy=arrow_dy;
+    added->arrow=scroll_sprite(group,FALSE,52,added->arrow_x,row_start+arrow_dy,5);
+    if(!added->arrow)return FALSE;scale_item(added->arrow,((float *)menu)[14],((float *)menu)[15]);
     for(int id=0;id<5;id++){
         void *text=((void **)menu)[68+id];if(!readable(text,484))continue;
         struct RootRow *r=&root_rows[root_count++];r->id=id;r->text=text;
@@ -200,10 +267,6 @@ static BOOL init_scroll(void *menu,void *sample){
         r->arrow_x=r->arrow?((float *)r->arrow)[8]:row_x+line_width*0.5f;
         r->arrow_dy=r->arrow?((float *)r->arrow)[9]-((float *)text)[9]:arrow_dy;
     }
-    struct RootRow *added=&root_rows[root_count++];added->id=SERVERS_ID;added->text=server_rows[0];
-    added->x=row_x;added->mask=0xffffffffu;added->arrow_x=row_x+line_width*0.5f;added->arrow_dy=arrow_dy;
-    added->arrow=scroll_sprite(group,FALSE,52,added->arrow_x,row_start+arrow_dy,5);
-    if(!added->arrow)return FALSE;scale_item(added->arrow,((float *)menu)[14],((float *)menu)[15]);
     for(int i=0;i<root_count;i++)if(!root_rows[i].line){
         root_rows[i].line=scroll_sprite(group,FALSE,51,row_x,row_start+line_dy,4);
         if(!root_rows[i].line)return FALSE;
@@ -214,31 +277,11 @@ static BOOL init_scroll(void *menu,void *sample){
         if(!page_lines[i])return FALSE;
         set_line_size(page_lines[i],line_width,((float *)menu)[15]);
     }
-    bar_width=((float *)menu)[14]*22.0f;if(bar_width<10)bar_width=10;
-    bar_x=ui_width*0.92f;bar_top=row_start+arrow_dy;
-    bar_bottom=row_start+(visible_rows-1)*row_gap+arrow_dy;
-    /* Include a row-height allowance when only one row fits. */
-    if(bar_bottom-bar_top<server_row_height)bar_bottom=bar_top+server_row_height;
-    scroll_track=scroll_sprite(screen,TRUE,51,bar_x,bar_top,1);
-    scroll_thumb=scroll_sprite(screen,TRUE,51,bar_x,bar_top,1);
-    if(!scroll_track||!scroll_thumb)return FALSE;
-    set_line_size(scroll_track,bar_width,bar_bottom-bar_top);
-    static const float track_colour[4]={1,1,1,0.2f};colour_item(scroll_track,track_colour);
-    ((int *)scroll_thumb)[15]=101;
-    for(int i=0;i<2;i++){
-        void *button=create_text(i?L"v":L"^",bar_x,i?bar_bottom+server_row_height*0.6f:bar_top-server_row_height*0.6f,3,1,1,-1,FALSE,-1,FALSE,TRUE);
-        if(!button)return FALSE;
-        scroll_buttons[i]=button;scroll_extras[extra_count++]=button;
-        ((int *)button)[2]=i?SCROLL_DOWN_ID:SCROLL_UP_ID;((int *)button)[15]=100;
-        menu_item(button,TRUE);show_item(button,FALSE);
-        ((float *)button)[12]=bar_width*4;((float *)button)[13]=server_row_height*0.6f;
-        ((int *)button)[1]++;add_screen(screen,button);
-    }
     scroll_ready=TRUE;layout_scroll(menu);return TRUE;
 }
 static void cleanup_scroll(void *menu){
     InterlockedExchange(&scroll_active,0);InterlockedExchange(&scroll_delta,0);InterlockedExchange(&scroll_requested,-1);
-    scroll_ready=FALSE;
+    scroll_ready=FALSE;pending_focus=-1;release_native_reel();
     for(int i=0;i<extra_count;i++)if(scroll_extras[i]){
         ((int *)scroll_extras[i])[1]++;remove_screen(((void **)menu)[46],scroll_extras[i]);
     }

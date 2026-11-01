@@ -64,7 +64,7 @@ namespace ReRiff {
         private static extern int ReRiffStartEngineMenu();
 
         private static void StartEngineMenu() {
-            try { ReRiffStartEngineMenu(); }
+            try { NativeReelBridge.Configure(); ReRiffStartEngineMenu(); }
             catch (DllNotFoundException) { }
             catch (EntryPointNotFoundException) { }
             catch (BadImageFormatException) { }

@@ -214,14 +214,15 @@ static void __thiscall hook_tick(void *menu) {
         restarting=FALSE;wcscpy(heading,L"Saved — restart canceled; game still running");
         log_line("Save and restart: game did not close; request canceled.");render(menu);
     }
-    if(server_page&&page_owner==menu){
-        keep_servers_available(menu);
-        /* The native base menu handles server-page input and focus without
-         * running Settings audio-slider updates on these controls. */
-        base_tick(menu);
-    }else original_tick(menu);
-    sync_scroll(menu);attach_scroll_window();
-    keep_servers_available(menu);
+    prepare_scroll(menu);
+    BOOL navigating=navigate_direction(menu,direction_input(),GetTickCount());
+    dispatching_menu=TRUE;
+    if(!navigating){
+        if(server_page&&page_owner==menu){keep_servers_available(menu);base_tick(menu);}
+        else original_tick(menu);
+    }
+    dispatching_menu=FALSE;
+    sync_scroll(menu);attach_scroll_window();keep_servers_available(menu);
 }
 
 static void leave_server_page(void *menu) {
@@ -231,8 +232,8 @@ static void leave_server_page(void *menu) {
     show_item(((void **)menu)[83],audio_visible);
     server_page=FALSE;
     InterlockedExchange(&scroll_delta,0);InterlockedExchange(&scroll_requested,-1);
-    root_first=clamp_index(root_count-visible_rows,0,root_count);layout_scroll(menu);
-    focus_row(menu,SERVERS_ID);
+    root_first=0;logical_selection=0;pending_focus=SERVERS_ID;layout_scroll(menu);
+    if(!dispatching_menu){prepare_scroll(menu);apply_pending_focus(menu);}
 }
 
 static void render(void *menu) {
@@ -347,10 +348,6 @@ static void __thiscall hook_cleanup(void *menu,void *screen,void *lower) {
 
 static void __thiscall hook_input(void *menu,int selection) {
     if(restarting)return;
-    if(page_owner==menu&&scroll_ready&&(selection==SCROLL_UP_ID||selection==SCROLL_DOWN_ID)){
-        if(scroll_active&&((int *)menu)[102]==0)scroll_to(menu,view_first()+(selection==SCROLL_DOWN_ID?1:-1),TRUE);
-        return;
-    }
     if (!server_page || page_owner!=menu) {
         if(selection!=SERVERS_ID||page_owner!=menu||!server_rows[0]||((int *)menu)[62]!=0||((int *)menu)[102]!=0||!(*((BYTE *)server_rows[0]+372)&1)){
             original_input(menu,selection);return;
@@ -359,11 +356,11 @@ static void __thiscall hook_input(void *menu,int selection) {
         settings_visible=readable(group,404)?*((BYTE *)group+372)&1:0;
         audio_visible=readable(audio,404)?*((BYTE *)audio+372)&1:0;
         show_item(group,FALSE);show_item(audio,FALSE);
-        load_settings();server_page=TRUE;page_first=0;
+        load_settings();server_page=TRUE;page_first=0;logical_selection=0;pending_focus=SERVER_ACTION_BASE+1;
         InterlockedExchange(&scroll_delta,0);InterlockedExchange(&scroll_requested,-1);
         for(int id=1;id<=10;id++)show_item(server_rows[id],TRUE);
         toggle_visibility(TRUE);
-        wcscpy(heading,L"Servers — applies after restart");render(menu);focus_row(menu,SERVER_ACTION_BASE+1);
+        wcscpy(heading,L"Servers — applies after restart");render(menu);if(!dispatching_menu){prepare_scroll(menu);apply_pending_focus(menu);}
         log_line("Native Settings > Servers opened.");return;
     }
     if(selection!=2000){
@@ -443,6 +440,8 @@ static BOOL validate_image_at(BYTE *base,uintptr_t address_base) {
     if(!readable(base+0x7a56d0,4)||*(DWORD *)(base+0x7a56d0)!=(DWORD)(address_base+0x2e28f0)
         ||!readable(base+0x2e28f0,6)||memcmp(base+0x2e28f0,base_tick_start,2)
         ||*(DWORD *)(base+0x2e28f2)!=(DWORD)(address_base+0x7a5734))return FALSE;
+    if(!readable(base+0x7a5740,37*sizeof(void *))||*(DWORD *)(base+0x7a5740)!=(DWORD)(address_base+0x2e50e0))return FALSE;
+    if(!readable(base+0x2e50e0,6)||memcmp(base+0x2e50e0,base_tick_start,2)||*(DWORD *)(base+0x2e50e2)!=(DWORD)(address_base+0x7a57d4))return FALSE;
     static const DWORD entries[27]={0x2f10f4,0x2eea7a,0x2f0730,0x2f10a4,0x1f5891,
         0x2d96a2,0x2eea74,0x2eea80,0x1f58a5,0x2da614,0x2dd174,0x1f58b9,0x1f58cd,
         0x2f10fa,0x2da506,0x2eff50,0x2f0408,0x2d970f,0x2d979e,0x2d97f8,0x2d97fe,
@@ -489,6 +488,15 @@ static BOOL validate_image_at(BYTE *base,uintptr_t address_base) {
 
 static BOOL validate_image(BYTE *base) { return validate_image_at(base,(uintptr_t)base); }
 
+__declspec(dllexport) BOOL __cdecl ReRiffConfigureNativeReel(void **methods,int count) {
+    WCHAR path[MAX_PATH];DWORD length=GetModuleFileNameW(NULL,path,MAX_PATH);
+    if(!length||length>=MAX_PATH||!supported_file(path)||count!=7||!readable(methods,7*sizeof(void *)))return FALSE;
+    for(int i=0;i<7;i++)if(!methods[i])return FALSE;
+    reel_ctor=(ReelCtorFn)methods[0];reel_add=(ReelAddFn)methods[1];reel_limit=(ReelLimitFn)methods[2];
+    reel_tick=(ReelTickFn)methods[3];reel_move=(ReelMoveFn)methods[4];reel_selection=(ReelSelectionFn)methods[5];reel_bar=(ReelBarFn)methods[6];
+    bridge_ready=TRUE;return TRUE;
+}
+
 __declspec(dllexport) BOOL __cdecl ReRiffStartEngineMenu(void) {
     if (InterlockedCompareExchange(&installed,1,0)) return installed==2;
     WCHAR path[MAX_PATH]; DWORD length=GetModuleFileNameW(NULL,path,MAX_PATH);
@@ -502,6 +510,7 @@ __declspec(dllexport) BOOL __cdecl ReRiffStartEngineMenu(void) {
     if (!supported_file(path) || !validate_image(base)) {
         log_line("Refused: unsupported executable or unexpected menu bytes."); return FALSE;
     }
+    if(!bridge_ready){log_line("Native file-picker bridge unavailable; update ReRiff.ClientConfig.dll with this menu DLL.");return FALSE;}
     HMODULE pinned;
     if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_PIN,
         (const WCHAR *)(uintptr_t)&ReRiffStartEngineMenu,&pinned)) return FALSE;
@@ -513,6 +522,8 @@ __declspec(dllexport) BOOL __cdecl ReRiffStartEngineMenu(void) {
     base_tick=(TickFn)(base+0x2e28f0);
     raw_text=(RawTextFn)(base+0x50930); key_text=(KeyTextFn)(base+0x508a0);
     create_text=(CreateTextFn)(base+0x50af0);
+    game_allocate=*(void *(__cdecl **)(size_t))(base+0x52d4b4);
+    reel_vtable=(void **)(base+0x7a5740);input_manager=(void **)(base+0x80d410);
     create_sprite=(SpriteFn)(base+0x22030);ui_instance=(void **)(base+0x7fbaa4);
     sprite_def=(SpriteDefFn)(base+0x48830);sprite_origin=(SpriteDefFn)(base+0x482b0);
     sprite_position=(PositionFn)(base+0x48280);

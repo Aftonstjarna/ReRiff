@@ -14,11 +14,12 @@ save settings, or use **Save and restart** to apply changes immediately.
 
 **Experimental client: Settings → Servers**
 
-The experimental client adds **Servers** to the original **Settings** screen.
+The experimental client adds **Servers** as the first entry in the original **Settings** screen.
 Existing settings entries remain available with their original actions. Both
 Settings lists keep vanilla row spacing and separator lines; scroll to reach
-additional entries. Use the wheel, drag the scrollbar, press Page Up/Down or
-Home/End, or continue up/down with the controller at the list edge. Friends
+additional entries. The scrollbar reuses the game’s local-track file picker
+control. Use the wheel, drag the scrollbar, press Page Up/Down or Home/End,
+or navigate up/down with the controller. Friends
 keeps its original place on the main menu; restoring its online features is the
 next stage of work.
 

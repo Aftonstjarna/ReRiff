@@ -1,7 +1,7 @@
 # Native Settings > Servers integration
 
 The experimental client hooks the original `gaOptionsMenu` callbacks, adding
-Servers after its existing options. It does not patch the main-menu vtable,
+Servers before its existing options. It does not patch the main-menu vtable,
 change Friends, replace settings entries, or change audio sliders. Main Settings
 rows, their arrows and dividers scroll together at the original row interval. New rows use the original `elUIItemText.createRaw`,
 font 3, centered alignment, menu-item flags, native colours and engine input.
@@ -27,7 +27,8 @@ both graphics. Cleanup removes all six graphics as well as the ten text rows.
 
 Server settings, save/reload, skip-launcher, and Save and restart retain the
 existing behavior. No endpoint, DLL, or online Friends behavior changes here.
-The module creates no menu windows and uses no independent input polling.
+The module creates no menu windows; navigation reads the same game input device
+and held-button masks as the original file picker.
 
 ## Scrolling and vanilla spacing
 
@@ -38,24 +39,35 @@ placement and 1650×scale width. Servers gets the original sprite 52 arrow.
 Only complete rows fit in the viewport; all remaining text, switches and lines
 are hidden and have zero input masks. Save/reload preserve the viewport.
 
-The native screen owns a track, proportional thumb, two small arrow controls,
-and ten submenu lines. The Settings group owns the new root arrow and any
-missing root divider. Wheel notches scroll a row; Page Up/Down scroll a viewport;
-Home/End jump to the limits; clicking or dragging the track moves the thumb.
-A subclassed game-window procedure only queues integer requests. All engine
-object changes run in the existing menu tick, and events outside Settings are
-forwarded to the retained window procedure. The pinned DLL keeps the callback
-valid; input is disabled at cleanup and while Audio settings/modal screens are
-active.
+The original `gaMenuReel` supplies the scrollbar artwork, arrows, dragging and
+range limits. Its seven managed methods have no callable native entry points;
+`ClientConfig/NativeReelBridge.cs` supplies rooted cdecl delegates that call the
+original IL methods. Both sides verify the supported Game.exe hash, and native
+hooks verify original vtable/thunk bytes. The addOption adapter supplies the
+owning SSP indirection expected by the original method. No game assembly is
+shipped. Missing bridge support leaves the original Settings menu untouched.
 
-Controller edge scrolling uses the original UI item shortcut mask at +64, as
-used in Graphics settings, with Up=64 and Down=128 verified by the original
-`gaFileSelectInterface.tickInput`. Shortcuts are armed only at a visible list
-edge with more rows in that direction. Arrow activation reveals the next row
-and gives it native focus. Returning from vanilla Audio/Graphics reveals the
-originally focused row if it lies outside the old viewport. Cleanup removes
-all 30 screen-owned added objects; group-owned additions follow original group
-cleanup.
+A reel holds empty native spacer options to establish the original range while
+Settings rows retain their existing owners. It uses the game's allocator and
+original deleting destructor. Switching between root, Servers and Audio releases
+the reel, unregistering the original globally registered scrollbar visuals.
+Ten added screen-owned divider lines and group-owned root arrow/dividers retain
+original cleanup ownership.
+
+Only wheel and Page/Home/End events are queued by the window procedure. Pointer
+button and motion events pass untouched to the game for native dragging. Up=64
+and Down=128 use the original input device masks from
+`gaFileSelectInterface.tickInput`. One logical selection owns navigation; while
+directional input is held, base menu navigation is gated as in that file picker.
+Repeat begins at 250ms and accelerates to 20ms, advancing at most once per tick.
+Focus is deferred until input dispatch returns, then both screen focus and the
+original menu focus bookkeeping are updated. Hidden controls have no input masks.
+
+The native harness covers original guards, first-entry ordering, reel lifetime,
+held repeat, boundaries, deferred focus, pointer forwarding, wheel, save/restart
+and cleanup. The signed managed smoke test covers pointer/float arguments and
+owning SSP indirection through actual cdecl callbacks on Mono and Windows CLR.
+Live controller and drag testing is still required.
 
 ## Build, install, restore
 
