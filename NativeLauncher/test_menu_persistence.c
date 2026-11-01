@@ -12,6 +12,15 @@ int main(void) {
     busy=TRUE;
     HWND host=CreateWindowW(cls.lpszClassName,L"Persistence test",WS_OVERLAPPEDWINDOW,0,0,650,550,NULL,NULL,cls.hInstance,NULL);
     if(!host)return 2;
+    WCHAR caption[256];
+    const WCHAR *labels[]={L"Install local server",L"Start local server",L"Stop local server"};
+    for(int state=0;state<3;state++){
+        podman_state=state;podman_controls();GetWindowTextW(stop_button,caption,256);
+        if(wcscmp(caption,labels[state]))return 23;
+    }
+    GetWindowTextW(podman_hint,caption,256);
+    if(!wcsstr(caption,L"Secondary server"))return 24;
+    podman_state=0;podman_controls();
     WCHAR temporary[CAP];_snwprintf(temporary,CAP,L"%ls.new",ini);temporary[CAP-1]=0;
     WritePrivateProfileStringW(L"server",L"external_url",L"",temporary);
     WritePrivateProfileStringW(L"server",L"fallback_url",L"http://127.0.0.1:5144",temporary);

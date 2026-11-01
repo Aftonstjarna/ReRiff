@@ -81,7 +81,7 @@ def build(args):
     (payload/'localserver/client-channel.ini').write_text('[client]\nchannel='+channel+'\n')
     # Multiplayer backend dependencies belong in the container image. The
     # installed client retains only updater and legacy-server cleanup tools.
-    for name in ('steam-launcher.sh', 'stop-server-host.sh', 'server-control.py', 'apply-client-update.py'):
+    for name in ('steam-launcher.sh', 'stop-server-host.sh', 'server-control.py', 'apply-client-update.py', 'podman-server.py'):
         copy(ROOT/'scripts'/name, payload/'localserver'/name)
     output.mkdir(parents=True, exist_ok=True)
     commit = subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()

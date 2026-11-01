@@ -1,3 +1,23 @@
+# ReRiff 1.2.3-4 — Experimental Windows menu loading and optional server
+
+- Fix native-menu startup guards for the original Windows executable when Windows
+  loads it at a different address. Validate exact relocated operands against the
+  original PE relocation table, while retaining the executable hash check.
+- Replace the launcher’s legacy Stop local server action with Install, Start and
+  Stop for an optional per-game Podman server. Download the official server image
+  only when Install is selected; client installers do not bundle the backend.
+- Keep server configuration and persistent data in `localserver/podman/`, expose
+  it only at `http://127.0.0.1:5144`, and show that address for the Secondary server
+  field. The configured Primary server remains first in the connection order.
+- Keep Podman diagnostics in the game’s `logs/` folder. Manage only the container
+  belonging to this game folder; retain data when stopping the server.
+
+This is an experimental debugging build. Install Podman separately and start its
+local runtime before installing the optional server. Automated tests cover rebased
+menu guards and server ownership/lifecycle; Windows gameplay still needs live
+validation. The reported missing release popup and News patch notes are not fixed
+in this revision. Existing display and manual UI scaling experiments remain under test.
+
 # ReRiff 1.2.3-3 — Experimental Servers action order
 
 - Order the final Servers actions as RETURN WITHOUT SAVING, SAVE AND RETURN,

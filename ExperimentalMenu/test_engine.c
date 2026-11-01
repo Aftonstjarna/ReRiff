@@ -158,6 +158,27 @@ int main(int argc,char **argv){
     IMAGE_NT_HEADERS32 *nt=(IMAGE_NT_HEADERS32 *)((BYTE *)image+((IMAGE_DOS_HEADER *)image)->e_lfanew);
     CHECK(validate_image_at((BYTE *)image,nt->OptionalHeader.ImageBase));
     CHECK(validate_display_modes((BYTE *)image,nt->OptionalHeader.ImageBase));
+    /* Reproduce Windows loading the supported executable at 0x00C30000. */
+    DWORD image_size=nt->OptionalHeader.SizeOfImage;BYTE *rebased=VirtualAlloc(NULL,image_size,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE);CHECK(rebased);
+    for(DWORD cursor=0;cursor<image_size;){
+        MEMORY_BASIC_INFORMATION info;CHECK(VirtualQuery((BYTE *)image+cursor,&info,sizeof(info)));
+        size_t count=(BYTE *)info.BaseAddress+info.RegionSize-((BYTE *)image+cursor);if(count>image_size-cursor)count=image_size-cursor;
+        if(info.State==MEM_COMMIT&&!(info.Protect&(PAGE_GUARD|PAGE_NOACCESS)))memcpy(rebased+cursor,(BYTE *)image+cursor,count);
+        cursor+=(DWORD)count;
+    }
+    const DWORD relocated_base=0xc30000,delta=relocated_base-nt->OptionalHeader.ImageBase;
+    IMAGE_DATA_DIRECTORY reloc=nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC];
+    for(DWORD cursor=0;cursor<reloc.Size;){
+        IMAGE_BASE_RELOCATION *block=(IMAGE_BASE_RELOCATION *)(rebased+reloc.VirtualAddress+cursor);CHECK(block->SizeOfBlock>=8);
+        WORD *fixups=(WORD *)(block+1);
+        for(DWORD j=0;j<(block->SizeOfBlock-8)/2;j++)if((fixups[j]>>12)==IMAGE_REL_BASED_HIGHLOW)*(DWORD *)(rebased+block->VirtualAddress+(fixups[j]&4095))+=delta;
+        cursor+=block->SizeOfBlock;
+    }
+    CHECK(validate_image_at(rebased,relocated_base));CHECK(validate_display_modes(rebased,relocated_base));CHECK(validate_aa_backend(rebased,relocated_base));
+    rebased[0x4b530]^=1;CHECK(!validate_image_at(rebased,relocated_base));rebased[0x4b530]^=1;
+    rebased[0x48834]^=1;CHECK(!validate_image_at(rebased,relocated_base));rebased[0x48834]^=1;
+    CHECK(validate_image_at(rebased,relocated_base));CHECK(VirtualFree(rebased,0,MEM_RELEASE));
+
     CHECK(*(DWORD *)((BYTE *)image+0x5fa2e0)==nt->OptionalHeader.ImageBase+0x48e70);
     void **actual=(void **)((BYTE *)image+0x7a5a7c);DWORD protection,ignored;
     CHECK(VirtualProtect(actual,108,PAGE_READWRITE,&protection));void *saved=actual[24];actual[24]=NULL;
