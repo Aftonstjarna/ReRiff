@@ -1,7 +1,8 @@
 #include "engine_menu.c"
 #define CHECK(c) do { if(!(c)){fprintf(stderr,"FAIL %d: %s\n",__LINE__,#c);return 1;} }while(0)
 static BYTE menu[512],group[512],audio[512],screen[700],sample[1024],title[1024],rows[256][1024],sprites[40][512],vanilla_rows[3][1024],vanilla_arrows[4][512],vanilla_lines[3][512];
-static void *vtable[27],*item_vtable[32];
+static void *vtable[27],*item_methods[49];
+static void **item_vtable=item_methods+1;
 static int delegated,initialized,cleaned,ticked,base_ticked,focused,created,added;
 static int restart_calls,removed,sprites_created,colours;
 static void *fake_ui=screen;
@@ -10,6 +11,15 @@ static EnableFn native_enable;
 static void __thiscall mock_tick(void *self){(void)self;ticked++;}
 static void __thiscall mock_base_tick(void *self);
 static int pointer_hover=-1;static BOOL accept_press;
+static int native_directions,direction_polls;
+static void __thiscall mock_native_direction(void *row,DWORD key,unsigned device){
+    if(device!=0||((int *)row)[38]!=1)abort();
+    int id=((int *)row)[key==64?39:40];
+    if(id<1501||id>1510)abort();
+    void *target=server_rows[id-1500];
+    if(!(*((BYTE *)target+372)&1)||!(*(DWORD *)((BYTE *)target+76)&1))abort();
+    native_directions++;focused=id;((int *)menu)[11]=id;
+}
 static void __thiscall mock_enable(void *self,BYTE enabled){
     if(enabled)native_enable(self,TRUE);
     else *(DWORD *)((BYTE *)self+76)=0;
@@ -94,7 +104,7 @@ static BOOL graphics_cycle(void **items,int count,int start,int field,const int 
 static BOOL notice_accept;static int notices;static WCHAR notice_text[128];
 static BOOL mock_notice(const WCHAR *text){notices++;wcsncpy(notice_text,text,127);return notice_accept;}
 static float * __cdecl mock_resolution(float *out,int screen_id){if(screen_id)abort();out[0]=1920;out[1]=1080;return out;}
-static DWORD mock_direction(void){return held_input;}
+static DWORD mock_direction(void){direction_polls++;return held_input;}
 static void *__cdecl mock_allocate(size_t size){if(size!=532)abort();return calloc(1,sizeof(FakeReel));}
 static void *__cdecl mock_reel_ctor(void *self,void *parent,float spacing,int direction){
     (void)parent;if(spacing!=row_gap||direction!=1)abort();*(void ***)self=fake_reel_table;constructed++;return self;
@@ -129,6 +139,7 @@ int main(int argc,char **argv){
     HMODULE image=LoadLibraryExW(game,NULL,DONT_RESOLVE_DLL_REFERENCES);CHECK(image);
     IMAGE_NT_HEADERS32 *nt=(IMAGE_NT_HEADERS32 *)((BYTE *)image+((IMAGE_DOS_HEADER *)image)->e_lfanew);
     CHECK(validate_image_at((BYTE *)image,nt->OptionalHeader.ImageBase));
+    CHECK(*(DWORD *)((BYTE *)image+0x5fa2e0)==nt->OptionalHeader.ImageBase+0x48e70);
     void **actual=(void **)((BYTE *)image+0x7a5a7c);DWORD protection,ignored;
     CHECK(VirtualProtect(actual,108,PAGE_READWRITE,&protection));void *saved=actual[24];actual[24]=NULL;
     CHECK(!validate_image_at((BYTE *)image,nt->OptionalHeader.ImageBase));actual[24]=saved;VirtualProtect(actual,108,protection,&ignored);
@@ -146,6 +157,7 @@ int main(int argc,char **argv){
     reel_tick=mock_reel_tick;reel_move=mock_reel_move;reel_selection=mock_reel_selection;reel_bar=mock_reel_bar;
     fake_reel_table[0]=(void *)mock_reel_delete;reel_vtable=fake_reel_table;direction_input=mock_direction;
     item_vtable[9]=(void *)mock_scale;item_vtable[3]=(void *)mock_visible;item_vtable[4]=(void *)mock_colour;
+    item_vtable[28]=(void *)mock_native_direction;
     *(void ***)menu=vtable;vtable[13]=(void *)mock_title;vtable[25]=(void *)mock_menu_focus;
     *(void ***)group=item_vtable;*(void ***)audio=item_vtable;((void **)menu)[36]=title;((void **)menu)[46]=screen;
     ((void **)menu)[67]=group;((void **)menu)[83]=audio;
@@ -190,6 +202,19 @@ int main(int argc,char **argv){
     CHECK(!navigate_direction(menu,0,352));
     held_input=128;last_direction=0;int native_before=base_ticked;tick_entry(menu);CHECK(base_ticked==native_before);held_input=0;
     open_servers();CHECK(server_page&&focused==1501&&native_reel&&bars==2&&destroyed==1);
+    CHECK(server_native_navigation&&(*(void ***)server_rows[1])[28]==(void *)server_scroll_direction);
+    void *saved_server_rows[10];memcpy(saved_server_rows,server_rows+1,sizeof(saved_server_rows));
+    /* Three full cycles each way through the original handler. The scroll
+     * adapter must expose even the wrapped target before native focus checks. */
+    for(int pass=0;pass<2;pass++)for(int step=0;step<30;step++){
+        int old=focused-1501,key=pass?64:128,next=(old+(pass?9:1))%10;
+        ((DirectionFn)(*(void ***)server_rows[old+1])[28])(server_rows[old+1],key,0);
+        CHECK(focused==1501+next&&logical_selection==next&&pending_focus==-1);
+        CHECK(next>=page_first&&next<page_first+visible_rows);
+    }
+    CHECK(focused==1501&&native_directions==60&&page_first==0);
+    int polls_before=direction_polls;native_before=base_ticked;held_input=128;
+    tick_entry(menu);held_input=0;CHECK(direction_polls==polls_before&&base_ticked==native_before+1);
     CHECK(!wcscmp(label(5),L"Force Offline")&&pending.enabled&&((unsigned *)toggles[2][1])[100]==75);
     select_action(5);CHECK(!pending.enabled&&((unsigned *)toggles[2][1])[100]==74);
     select_action(6);select_action(7);CHECK(!pending.enabled&&((unsigned *)toggles[2][1])[100]==74);
@@ -221,6 +246,8 @@ int main(int argc,char **argv){
     open_servers();request_restart=mock_restart;restart_ok=FALSE;select_action(8);CHECK(restart_calls==1&&!restarting);
     restart_ok=TRUE;select_action(8);CHECK(restart_calls==2&&restarting);restart_started=GetTickCount()-15001;tick_entry(menu);CHECK(!restarting);
     cleanup_entry(menu,NULL,NULL);CHECK(cleaned==1&&!page_owner&&!native_reel&&destroyed==constructed&&removed==26);
+    CHECK(!server_native_navigation);
+    for(int i=0;i<10;i++)CHECK(*(void ***)saved_server_rows[i]==item_vtable);
     main_init_original=mock_init;main_cleanup_original=mock_cleanup;main_tick_original=mock_tick;native_resolution=mock_resolution;queue_update_notice=mock_notice;
     wcscpy(update_notice_path,config_path);wcscat(update_notice_path,L".update.ini");
     CHECK(WritePrivateProfileStringW(L"update",L"version",MENU_WIDE(RERIFF_VERSION),update_notice_path));

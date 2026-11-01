@@ -1,3 +1,15 @@
+# ReRiff 1.2.2-12 — Native Servers menu wraparound
+
+- Wrap Up from the first Servers entry to the last, and Down from the last
+  entry to the first. Scroll the selected entry into view, including on wrap.
+- Reuse the original control direction handler and its native held-key repeat.
+  Extend its ID links with a scrolling adapter that reveals the target before
+  native focus moves. Disable custom direction polling on the Servers page.
+- Retain mouse, scrollbar, toggles, save/restart and original Settings behavior.
+  Restore the original control method tables before cleanup.
+- Verify three complete loops in both directions, visibility/input of every
+  native link target, absence of competing polling, and cleanup restoration.
+
 # ReRiff 1.2.2-11 — Restore native Graphics row wraparound
 
 - Extend the game's original directional focus links into a complete settings

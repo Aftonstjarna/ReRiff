@@ -62,10 +62,23 @@ original cleanup ownership.
 Only wheel and Page/Home/End events are queued by the window procedure. Pointer
 button and motion events pass untouched to the game for native dragging. Up=64
 and Down=128 use the original input device masks from
-`gaFileSelectInterface.tickInput`. One logical selection owns navigation; while
-directional input is held, base menu navigation is gated as in that file picker.
-Repeat begins at 250ms and accelerates to 20ms, advancing at most once per tick.
-Focus is deferred until input dispatch returns, then both screen focus and the
+`gaFileSelectInterface.tickInput` for the Settings root. One logical selection
+owns root navigation; while directional input is held, base menu navigation
+is gated as in that file picker.
+
+The Servers page uses the original native direction handler (elUIItem slot 28,
+VA 0x448E70, dispatching mode-1 ID links through 0x44AA60). All ten rows form a
+closed Up/Down loop. A private copy of the 48-method elUIItemText table retains
+its RTTI locator and chains the original direction method after revealing its
+target with the existing native reel/row-layout adapter. This is necessary
+because the native handler rejects hidden or input-disabled targets. It does
+not select a row itself or implement repeat: the original screen owns focus,
+keyboard/controller input and held-key repeat. Custom direction polling is
+bypassed on this page. Cleanup restores the original method tables before
+removing rows. Tests cover three loops each way, wrap visibility, native dispatch,
+no competing polling and cleanup restoration.
+Root repeat begins at 250ms and accelerates to 20ms, advancing at most once per tick.
+Root focus is deferred until input dispatch returns, then both screen focus and the
 original menu focus bookkeeping are updated. Hidden controls have no input masks. The game recursively assigns the screen
 mask after initScreens, so masks are reconciled before dispatch and afterwards,
 using the active screen mask rather than a saved initialization mask. Existing

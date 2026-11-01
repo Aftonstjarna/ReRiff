@@ -12,6 +12,11 @@ static HWND scroll_window;static WNDPROC scroll_previous;static int wheel_remain
 static int logical_selection,pending_focus=-1,last_direction;
 static DWORD direction_started,next_repeat;
 static BOOL dispatching_menu;
+typedef void (__thiscall *DirectionFn)(void *,DWORD,unsigned);
+static DirectionFn server_direction_original;
+/* Preserve the original RTTI locator plus all 48 elUIItemText methods. */
+static void *server_direction_table[49],**server_original_tables[10];
+static BOOL server_native_navigation;
 
 typedef void *(__cdecl *ReelCtorFn)(void *,void *,float,int);
 typedef void (__cdecl *ReelAddFn)(void *,void *,void *);
@@ -147,6 +152,44 @@ static void scroll_to(void *menu,int first,BOOL select_edge){
     pending_focus=row_id(logical_selection);
 }
 static BOOL active_list(void *menu){return scroll_ready&&((int *)menu)[102]==0&&(server_page||(((int *)menu)[62]==0&&(*((BYTE *)((void **)menu)[67]+372)&1)));}
+static void __thiscall server_scroll_direction(void *row,DWORD key,unsigned device){
+    if(server_native_navigation&&server_page&&page_owner&&active_list(page_owner)&&(key==64||key==128)){
+        int id=((int *)row)[key==64?39:40],index=id-SERVER_ACTION_BASE-1;
+        if(index>=0&&index<10){
+            /* Reveal the native link target before the original handler tests
+             * its visibility/input mask. The game owns focus and key repeat. */
+            int first=page_first;
+            if(index<first)first=index;
+            if(index>=first+visible_rows)first=index-visible_rows+1;
+            logical_selection=index;scroll_to(page_owner,first,FALSE);
+            pending_focus=-1;
+        }
+    }
+    server_direction_original(row,key,device);
+}
+static BOOL connect_server_navigation(void){
+    void **table=*(void ***)server_rows[1];
+    if(!readable(table-1,sizeof(server_direction_table))||!table[28])return FALSE;
+    for(int i=0;i<10;i++)if(!server_rows[i+1]||*(void ***)server_rows[i+1]!=table)return FALSE;
+    memcpy(server_direction_table,table-1,sizeof(server_direction_table));
+    server_direction_original=(DirectionFn)table[28];server_direction_table[29]=(void *)server_scroll_direction;
+    for(int i=0;i<10;i++){
+        void *row=server_rows[i+1];server_original_tables[i]=*(void ***)row;
+        ((int *)row)[38]=1;
+        ((int *)row)[39]=SERVER_ACTION_BASE+(i+9)%10+1;
+        ((int *)row)[40]=SERVER_ACTION_BASE+(i+1)%10+1;
+        ((int *)row)[41]=((int *)row)[42]=-1;
+        *(void ***)row=server_direction_table+1;
+    }
+    server_native_navigation=TRUE;log_line("Native Servers wraparound direction links connected.");return TRUE;
+}
+static void disconnect_server_navigation(void){
+    for(int i=0;i<10;i++)if(server_original_tables[i]){
+        if(server_rows[i+1])*(void ***)server_rows[i+1]=server_original_tables[i];
+        server_original_tables[i]=NULL;
+    }
+    server_native_navigation=FALSE;
+}
 static DWORD poll_direction(void){
     if(!readable(input_manager,sizeof(void *))||!readable(*input_manager,sizeof(void *)))return 0;
     void *manager=*input_manager;
@@ -160,6 +203,7 @@ static DWORD poll_direction(void){
 }
 static DWORD (*direction_input)(void)=poll_direction;
 static BOOL navigate_direction(void *menu,DWORD held,DWORD now){
+    if(server_page&&server_native_navigation)return FALSE;
     if(!active_list(menu)){last_direction=0;return FALSE;}
     int direction=held==64?-1:held==128?1:0;
     if(!held){last_direction=0;return FALSE;}
@@ -304,6 +348,7 @@ static BOOL init_scroll(void *menu,void *sample){
     scroll_ready=TRUE;layout_scroll(menu);return TRUE;
 }
 static void cleanup_scroll(void *menu){
+    disconnect_server_navigation();
     InterlockedExchange(&scroll_active,0);InterlockedExchange(&scroll_delta,0);InterlockedExchange(&scroll_requested,-1);
     scroll_ready=FALSE;pending_focus=-1;release_native_reel();
     for(int i=0;i<extra_count;i++)if(scroll_extras[i]){
