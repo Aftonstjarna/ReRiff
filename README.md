@@ -5,6 +5,21 @@ Linux/Proton. ReRiff provides a local or shared server, a native Windows launche
 and client configuration tools. The game still runs through Proton on Linux and
 retains its existing .NET Framework requirements.
 
+**Experimental builds include a native in-game Servers menu**, integrated into
+Riff Racer's own menu system with controller navigation. Select local or external
+servers, toggle networking and launcher skipping, and save settings from inside
+the game. Server connection changes apply on the next game start.
+
+The screenshots below show the [experimental client](https://github.com/Aftonstjarna/ReRiff/releases/tag/experimental).
+
+**Native in-game server menu**
+
+![ReRiff's native in-game Servers menu with server selection, networking, launcher skipping, and save controls](docs/images/reriff-in-game-menu.png)
+
+**Separate launcher and updater**
+
+![ReRiff launcher with server addresses, networking settings, and GitHub updates](docs/images/reriff-launcher.png)
+
 [Download the latest release](https://github.com/Aftonstjarna/ReRiff/releases/latest)
 · [Install and update](#install-or-update)
 · [Steam launch options](#launch-through-steam)
