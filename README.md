@@ -24,7 +24,8 @@ keeps its original place on the main menu; restoring its online features is the
 next stage of work.
 
 The experimental main menu shows the running **ReRiff version** in its bottom-right
-corner. After a successful unattended update, a click-through notification says
+corner, at half the font size of the menu entries. After a successful unattended
+update, a click-through notification says
 **ReRiff has updated to …**, including the experimental revision. It appears once
 at the next main menu, independently of the server-address notification.
 

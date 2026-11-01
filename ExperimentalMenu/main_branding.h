@@ -9,10 +9,14 @@ static WCHAR update_notice_path[MAX_PATH];
 static void position_watermark(void *menu){
     if(!watermark||watermark_owner!=menu)return;
     float resolution[2];native_resolution(resolution,0);
-    float sx=((float *)menu)[14]*0.5f,sy=((float *)menu)[15]*0.5f;
-    if(sx<=0||sy<=0||resolution[0]<=0||resolution[1]<=0)return;
-    scale_item(watermark,sx,sy);
-    move_item(watermark,resolution[0]-48*sx,resolution[1]-48*sy-((float *)watermark)[13]*sy);
+    float sx=((float *)menu)[14],sy=((float *)menu)[15];
+    float height=((float *)watermark)[13],half_gap=((float *)menu)[73];
+    if(sx<=0||sy<=0||height<=0||half_gap<=0||resolution[0]<=0||resolution[1]<=0)return;
+    /* Original init stores half its row interval at +292. Each interval is
+     * 1.5 times the chosen menu font height; the text itself is unscaled. */
+    float target_height=half_gap*(2.0f/3.0f),scale=target_height/height;
+    scale_item(watermark,scale,scale);
+    move_item(watermark,resolution[0]-24*sx,resolution[1]-24*sy-target_height);
     if(*(DWORD *)((BYTE *)watermark+76))enable_input(watermark,FALSE);
 }
 static void deliver_update_notice(void){
