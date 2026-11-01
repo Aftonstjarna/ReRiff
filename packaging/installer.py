@@ -52,7 +52,9 @@ def default_music_dir():
                     if len(values) == 1:
                         value = values[0].replace('${HOME}', str(home)).replace('$HOME', str(home))
                         if Path(value).is_absolute():
-                            return Path(value)
+                            # XDG uses HOME itself to disable a special folder.
+                            # Default to Music rather than exposing all of HOME.
+                            return home/'Music' if Path(value) == home else Path(value)
                 except ValueError:
                     pass
     return home/'Music'
