@@ -251,6 +251,10 @@ static BOOL launch_game(void) {
     if (window) PostMessageW(window,WM_GAME_RUNNING,0,0);
     CloseHandle(process.hThread);
     BOOL closed=WaitForSingleObject(process.hProcess,INFINITE)==WAIT_OBJECT_0;
+    DWORD game_exit;
+    if(closed&&GetExitCodeProcess(process.hProcess,&game_exit)){
+        WCHAR detail[128];_snwprintf(detail,128,L"Game process %lu exited with code 0x%08lX.",(unsigned long)process.dwProcessId,(unsigned long)game_exit);detail[127]=0;log_message(detail);
+    }
     BOOL again=restart&&WaitForSingleObject(restart,0)==WAIT_OBJECT_0;
     if(restart)CloseHandle(restart);
     CloseHandle(process.hProcess);

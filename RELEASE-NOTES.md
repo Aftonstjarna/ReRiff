@@ -1,3 +1,22 @@
+# ReRiff 1.2.3-7 — Experimental Direct3D reset compatibility
+
+- Preserve Direct3D's complete original device method table when attaching the AA
+  hook. Extend only Present/Reset (and PresentEx/ResetEx on 9Ex), rather than
+  substituting a fixed-size copy of public interface entries.
+- Forward calls from other devices sharing that table without AA rendering,
+  resource cleanup or borderless background suppression.
+- Add real-device regressions for native table identity, AA output, graphics-state
+  preservation, reset/recreation and unrelated-device isolation on D3D9 and D3D9Ex.
+- Log the game's hexadecimal process exit code in `logs/ReRiff-launcher.log`,
+  including failures such as `0xC0000005`.
+
+The Windows report confirms an access violation at address `0x00000001` during
+borderless Apply. A fixed-size replacement device table is a compatibility risk
+near this failure; these changes remove it. D3D9/9Ex rendering and reset checks
+pass through Wine, but the affected Windows borderless path still needs retesting.
+The report does not establish the exact native call stack or prove this was the
+only cause. Menu injection and client News delivery are confirmed in the latest logs.
+
 # ReRiff 1.2.3-6 — Experimental live-image guard correction
 
 - Stop interpreting the live Windows PE header as unchanged file metadata when
