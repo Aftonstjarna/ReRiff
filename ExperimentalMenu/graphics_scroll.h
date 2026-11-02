@@ -23,6 +23,9 @@ static void graphics_layout(void *menu){
     row_visible(((void **)menu)[62],FALSE,0);row_visible(((void **)menu)[63],FALSE,0);row_visible(((void **)menu)[73],FALSE,0);
     if(ui_slider_rail)ui_slider_y=((float *)ui_slider_rail)[9];
     ui_slider_art();
+    /* Like the dynamic volume-style slider thumb, AA must follow its bar
+     * after static row positions are restored by the reel layout. */
+    aa_position_knob(menu);
 }
 static void graphics_scroll_to(void *menu,int first,BOOL follow){
     first=clamp_index(first,0,4-graphics_visible);
