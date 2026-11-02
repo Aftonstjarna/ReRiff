@@ -411,9 +411,31 @@ int main(int argc,char **argv){
     ((int *)gm)[11]=RESOLUTION_FOCUS_ID;aa_graphics_tick(gm);CHECK(watched_colour[0]==1&&watched_colour[1]==1);
     aa_graphics_input(gm,AA_CONTROL_ID);CHECK(aa_pending&&!aa_requested&&((unsigned *)aa_knob)[100]==74);
     CHECK(((float *)aa_label)[12]==820&&((float *)aa_label)[13]==80);
+    float native_thumb_x=((float *)aa_knob)[8];
+    graphics_layout(gm);CHECK(((float *)aa_knob)[8]==native_thumb_x);
+    const float thumb_scales[]={0.25f,0.5f,1.0f,1.5f,2.0f};
+    int thumb_visible=graphics_visible;
+    for(unsigned si=0;si<sizeof(thumb_scales)/sizeof(thumb_scales[0]);si++){
+        ((float *)gm)[15]=thumb_scales[si];
+        for(int flip=0;flip<4;flip++){
+            aa_graphics_input(gm,AA_CONTROL_ID);
+            aa_sync_art(gm);float expected_x=((float *)aa_knob)[8];
+            graphics_visible=2;graphics_scroll_to(gm,1,FALSE);
+            CHECK(((float *)aa_knob)[8]==expected_x&&((float *)aa_knob)[9]==((float *)aa_bar)[9]);
+            CHECK(((unsigned *)aa_knob)[100]==(aa_pending?74u:75u));
+            CHECK(((unsigned *)aa_knob)[101]==(aa_pending?5u:3u));
+            graphics_scroll_to(gm,2,FALSE);graphics_scroll_to(gm,0,FALSE);
+            CHECK(((float *)aa_knob)[8]==expected_x&&((float *)aa_knob)[9]==((float *)aa_bar)[9]);
+        }
+    }
+    ((float *)gm)[15]=0.5f;graphics_visible=thumb_visible;aa_sync_art(gm);graphics_layout(gm);
     aa_graphics_input(gm,3);CHECK(aa_requested&&aa_attach_calls==1&&delegated==3);
     GetPrivateProfileStringW(L"graphics",L"antialiasing",L"",value,32,config_path);CHECK(!wcscmp(value,L"true"));
     aa_graphics_input(gm,AA_CONTROL_ID);CHECK(!aa_pending&&aa_requested);
+    ((int *)gm)[11]=UI_SCALE_CONTROL_ID;aa_graphics_input_state(gm);
+    CHECK(*(DWORD *)((BYTE *)ui_slider_label+64)==0);
+    CHECK(*(DWORD *)((BYTE *)graphics_test_items[2]+64)==0&&*(DWORD *)((BYTE *)graphics_test_items[3]+64)==0);
+    CHECK(((int *)ui_slider_label)[41]==-1&&((int *)ui_slider_label)[42]==-1);
     ((int *)gm)[11]=AA_CONTROL_ID;aa_graphics_tick(gm);CHECK(*(DWORD *)((BYTE *)aa_label+64)==768&&*(DWORD *)((BYTE *)graphics_test_items[2]+64)==0);
     ((int *)gm)[11]=RESOLUTION_FOCUS_ID;aa_graphics_tick(gm);
     CHECK(((int *)gm)[77]==0&&*(DWORD *)((BYTE *)aa_label+64)==0);

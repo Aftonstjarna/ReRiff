@@ -47,6 +47,9 @@ int main(void){
     ((float *)label)[12]=400;((float *)label)[13]=80;label[372]=1;*(DWORD *)(label+76)=1;
     ((int *)menu)[11]=UI_SCALE_CONTROL_ID;((int *)menu)[102]=0;ui_slider_pending=0;
     repeat_mask=512;ui_slider_tick(menu);CHECK(ui_slider_pending==25&&((float *)knob)[8]==125);
+    CHECK(((int *)menu)[11]==UI_SCALE_CONTROL_ID);
+    repeat_mask=256;ui_slider_tick(menu);CHECK(ui_slider_pending==0&&((int *)menu)[11]==UI_SCALE_CONTROL_ID);
+    repeat_mask=512;ui_slider_tick(menu);CHECK(ui_slider_pending==25&&((int *)menu)[11]==UI_SCALE_CONTROL_ID);
     ui_slider_tick(menu);CHECK(ui_slider_pending==30);
     repeat_mask=0;mouse_down=TRUE;mouse_point[0]=500;mouse_point[1]=300;
     ui_slider_tick(menu);CHECK(ui_slider_pending==100&&ui_slider_dragging&&((float *)knob)[8]==500);

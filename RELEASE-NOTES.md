@@ -1,3 +1,19 @@
+# ReRiff 1.2.3-8 — Experimental graphics control alignment and focus
+
+- Keep the AA toggle thumb aligned after scrolling/layout. Reapply the original
+  fullscreen-toggle positioning rule from the bar's current position rather than
+  restoring a stale pre-toggle thumb position.
+- Handle UI Scale Left/Right through the original Audio-style pressed/repeat
+  polling only. Remove duplicate button-activation shortcuts so adjustment keeps
+  focus on the slider; retain Up/Down row navigation and mouse dragging.
+- Add regression coverage for repeated AA toggles and scrolling at five scales,
+  plus slider direction adjustment and focus/input ownership checks.
+
+The 1.2.3-7 Windows retest confirmed Borderless Apply/Keep, a change to 1920x1200
+rendering on a 1280x800 display, AA reset/resource recreation and exit code zero.
+These graphical/input corrections pass local native regression checks; their
+appearance and focus behaviour still need an in-game retest.
+
 # ReRiff 1.2.3-7 — Experimental Direct3D reset compatibility
 
 - Preserve Direct3D's complete original device method table when attaching the AA

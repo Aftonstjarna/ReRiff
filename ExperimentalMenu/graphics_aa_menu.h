@@ -28,6 +28,14 @@ static void graphics_save_prompt_result(void *menu,int choice){
     else{aa_pending=graphics_saved_aa;borderless_pending=graphics_saved_borderless;ui_slider_pending=graphics_saved_scale;graphics_input_original(menu,2000);}
 }
 static BOOL (*attach_antialiasing)(void)=aa_attach;
+static void aa_position_knob(void *menu){
+    if(aa_menu_owner!=menu||!aa_bar||!aa_knob)return;
+    /* Original gaGraphicsOptions.setTogglebarVars (0x0600117D): derive
+     * the thumb from the current bar, not a cached pre-toggle position. */
+    float scale=((float *)menu)[15],pos[2]={((float *)aa_bar)[8],((float *)aa_bar)[9]};
+    if(!aa_pending)pos[0]-=((float *)aa_bar)[12]*scale;
+    pos[0]+=(aa_pending?-25:25)*scale;sprite_position(aa_knob,pos);
+}
 #include "graphics_scroll.h"
 static void aa_connect_navigation(void *menu){
     void *full=((void **)menu)[62],*apply=((void **)menu)[66];
@@ -70,9 +78,7 @@ static void aa_sync_art(void *menu){
     move_item(aa_label,((float *)aa_label)[8],((float *)aa_label)[9]);
     if(!aa_bar||!aa_knob)return;
     sprite_def(aa_knob,aa_pending?74:75);sprite_origin(aa_knob,aa_pending?5:3);
-    float scale=((float *)menu)[15],pos[2]={((float *)aa_bar)[8],((float *)aa_bar)[9]};
-    if(!aa_pending)pos[0]-=((float *)aa_bar)[12]*scale;
-    pos[0]+=(aa_pending?-25:25)*scale;sprite_position(aa_knob,pos);
+    aa_position_knob(menu);
     if(borderless_label){
         raw_text(borderless_label,borderless_pending?L"FULLSCREEN: BORDERLESS":*((BYTE *)menu+305)?L"FULLSCREEN: EXCLUSIVE":L"FULLSCREEN: OFF (WINDOWED)");
         ((float *)borderless_label)[12]=aa_hit_width;((float *)borderless_label)[13]=aa_hit_height;
@@ -88,7 +94,9 @@ static void aa_graphics_input_state(void *menu){
     row_visible(((void **)menu)[66],TRUE,mask);
     row_visible(borderless_label,TRUE,mask);row_visible(borderless_bar,TRUE,mask);row_visible(borderless_knob,TRUE,mask);
     row_visible(ui_slider_label,TRUE,mask);row_visible(ui_slider_rail,TRUE,0);row_visible(ui_slider_knob,TRUE,0);
-    if(ui_slider_label)*(DWORD *)((BYTE *)ui_slider_label+64)=((int *)menu)[11]==UI_SCALE_CONTROL_ID?768:0;
+    /* Native Audio sliders poll Left/Right and held-repeat themselves. Do not
+     * also register those keys as button activation shortcuts for this row. */
+    if(ui_slider_label)*(DWORD *)((BYTE *)ui_slider_label+64)=0;
     BOOL focused=((int *)menu)[11]==AA_CONTROL_ID;
     BOOL borderless=((int *)menu)[11]==BORDERLESS_CONTROL_ID||((int *)menu)[11]==DISPLAY_LEFT_ID||((int *)menu)[11]==DISPLAY_RIGHT_ID;
     BOOL resolution=((int *)menu)[11]==RESOLUTION_FOCUS_ID;

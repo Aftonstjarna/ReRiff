@@ -552,3 +552,25 @@ visible AA output, state restoration, Reset/Present and ResetEx/PresentEx, plus
 another device's reset/present leaving primary AA textures/surfaces intact.
 Run the fixture normally and with `--ex`. Both passed through Wine; actual Windows
 crash resolution still requires a new run, and a dump is needed if it persists.
+
+### Windows validation and dynamic Graphics controls (1.2.3-8)
+
+The supplied 1.2.3-7 Windows session logs show successful borderless confirmation,
+then another successful 1920x1200 render reset on a 1280x800 monitor. AA resources
+were released/recreated and the launcher recorded exit code `0x00000000`.
+This validates that tested path on that client; it is not a blanket display claim.
+
+The AA thumb formula still matches original `gaGraphicsOptions.setTogglebarVars`
+(token 0x0600117D): sprites 74/75, origins 5/3, bar-width displacement when Off and
+25 times menu scale inset. Its graphical regression came from Graphics scrolling
+restoring the initial thumb X after a toggle. Recompute the thumb from the current
+bar after layout, like the dynamic slider thumb, without modifying static anchors.
+The fixture first reproduced a failure on the old code, then passed repeated
+On/Off cycles, scrolling and scale factors 0.25/0.5/1/1.5/2 with the correction.
+
+Original Audio slider tick (token 0x0600119A) polls pressed/repeated masks 256/512.
+UI Scale does the same; registering those keys again as button shortcuts gives
+multiple activation owners. Its shortcut mask now stays zero while Left/Right
+remain owned by the Audio-style polling. Native direction links at +A4/+A8 stay
+-1: the original direction handler at VA 0x44AA60 explicitly ignores -1 targets.
+Up/Down links retain the native Graphics loop and Apply access.
