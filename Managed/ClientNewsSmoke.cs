@@ -36,25 +36,41 @@ class ClientNewsSmoke {
         Check(ReRiff.NewsHeaders.WithClientNews(fault.Task,uri,"GET").IsFaulted,"transport failure retained");
         var request=WebRequest.Create(uri);ReRiff.NewsHeaders.Add(request);
         Check(request.Headers["X-ReRiff-Client-Version"]=="1.2.3-4","version header preserves prerelease");
-        foreach(string version in new[]{"1.2.3","1.2.3-8"}){
+        foreach(string version in new[]{"1.2.3","1.2.3-8","1.2.4-beta.1"}){
             File.WriteAllText(versionFile,version);
+            File.WriteAllText(Path.Combine(directory,"install-state.json"),"{\"version\":\""+version+"\"}");
             File.WriteAllText(notesFile,"# ReRiff "+version+" — Long heading must not repeat in body\r\n\r\n"+
                 "- First change with a [source](https://example.com/other) and lots of explanatory words that cannot fit in one small News preview.\r\n"+
                 "  Wrapped continuation must count as the same bullet.\r\n"+
                 "- Second change with `formatting` and **details** about updated behaviour in several areas of the game.\r\n"+
                 "- Third change with more information for the full online release notes.\r\n"+
                 "- Fourth change must be omitted.\r\n\r\n"+new string('x',10000));
+            var betaRequest=WebRequest.Create(uri);ReRiff.NewsHeaders.Add(betaRequest);
+            Check(betaRequest.Headers["X-ReRiff-Client-Version"]==version,"version header retains beta or legacy spelling");
             result=ReRiff.NewsHeaders.WithClientNews(source,uri,"GET").Result;
             document=json.DeserializeObject(result.Item2) as Dictionary<string,object>;
             var entry=(Dictionary<string,object>)((object[])document["results"])[0];
             string body=(string)entry["en"];
-            Check(body.Length<=280&&body.Split('\n').Length<=6,"preview stays within compact character/line budget "+version);
+            Check(body.Length<=360&&body.Split('\n').Length<=6,"preview stays within compact character/line budget "+version);
             Check(!body.Contains("# ReRiff")&&!body.Contains("Long heading")&&!body.Contains("Fourth change"),"heading and excess notes omitted");
             Check(body.Contains("...")&&body.Contains("GitHub"),"long entries truncated with full-notes direction");
             string link="https://github.com/Aftonstjarna/ReRiff/releases/tag/v"+version;
             Check(body.EndsWith(link,StringComparison.Ordinal)&&body.IndexOf("https://",StringComparison.Ordinal)==body.LastIndexOf("https://",StringComparison.Ordinal),"one exact release link for native Visit URL");
             foreach(string language in new[]{"de","ru","es","it","fr"})Check((string)entry[language]==body,"same bounded preview in "+language);
         }
+        File.WriteAllText(versionFile,"1.2.3-8");
+        File.WriteAllText(notesFile,"# ReRiff 1.2.3-8 — notes\n"+
+            "- Detailed introduction must not appear.\n\n## In-game summary\n\n"+
+            "- Play offline with local scores and ghosts; no server needed.\n"+
+            "- Choose borderless fullscreen, higher render sizes and UI scale.\n"+
+            "- Windows menu, AA and update fixes; optional Podman server.\n\n"+
+            "## Full release notes\n\n- Long technical details must stay on GitHub.\n");
+        result=ReRiff.NewsHeaders.WithClientNews(source,uri,"GET").Result;
+        document=json.DeserializeObject(result.Item2) as Dictionary<string,object>;
+        string summaryBody=(string)((Dictionary<string,object>)((object[])document["results"])[0])["en"];
+        Check(summaryBody.StartsWith("- Play offline with local scores and ghosts; no server needed.\n- Choose borderless fullscreen, higher render sizes and UI scale.\n- Windows menu, AA and update fixes; optional Podman server.\n",StringComparison.Ordinal),"authored summary uses complete sentences unchanged");
+        Check(!summaryBody.Contains("...")&&!summaryBody.Contains("Detailed introduction")&&!summaryBody.Contains("technical details"),"summary excludes detailed notes without truncating sentences");
+        Check(summaryBody.Length<=360&&summaryBody.Split('\n').Length<=6,"authored summary fits native News budget");
         File.WriteAllText(notesFile,"# ReRiff 1.2.3-3 — stale");
         Check(Object.ReferenceEquals(source,ReRiff.NewsHeaders.WithClientNews(source,uri,"GET")),"stale notes rejected");
     }

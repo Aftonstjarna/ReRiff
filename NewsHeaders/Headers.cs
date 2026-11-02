@@ -13,7 +13,7 @@ namespace ReRiff {
                 string version;
                 if (File.Exists(state)) {
                     Match match = Regex.Match(File.ReadAllText(state),
-                        "\"version\"\\s*:\\s*\"([0-9]{1,4}\\.[0-9]{1,4}\\.[0-9]{1,4}(?:-[1-9][0-9]*)?)\"");
+                        "\"version\"\\s*:\\s*\"([0-9]{1,4}\\.[0-9]{1,4}\\.[0-9]{1,4}(?:-(?:beta\\.)?[1-9][0-9]*)?)\"");
                     if (!match.Success) return;
                     version = match.Groups[1].Value;
                 } else {
@@ -21,7 +21,7 @@ namespace ReRiff {
                     if (!File.Exists(file)) return;
                     version = File.ReadAllText(file).Trim();
                 }
-                Match baseVersion = Regex.Match(version, @"\A([0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4})(?:-[1-9][0-9]*)?\z");
+                Match baseVersion = Regex.Match(version, @"\A([0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4})(?:-(?:beta\.)?[1-9][0-9]*)?\z");
                 if (baseVersion.Success)
                     request.Headers["X-ReRiff-Client-Version"] = version;
             } catch (IOException) { }

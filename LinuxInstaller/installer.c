@@ -25,7 +25,7 @@
  X(gtk_file_chooser_button_new) X(gtk_file_chooser_set_filename) X(gtk_file_chooser_get_filename) \
  X(gtk_check_button_new_with_label) X(gtk_toggle_button_set_active) X(gtk_toggle_button_get_active) \
  X(gtk_entry_new) X(gtk_entry_set_text) X(gtk_entry_get_text) \
- X(gtk_button_new_with_label) X(gtk_button_set_label) X(gtk_widget_set_sensitive) \
+ X(gtk_link_button_new_with_label) X(gtk_button_new_with_label) X(gtk_button_set_label) X(gtk_widget_set_sensitive) \
  X(gtk_progress_bar_new) X(gtk_progress_bar_pulse) X(gtk_progress_bar_set_fraction) \
  X(gtk_scrolled_window_new) X(gtk_text_view_new) X(gtk_text_view_set_editable) \
  X(gtk_text_view_set_cursor_visible) X(gtk_text_view_get_buffer) X(gtk_text_buffer_set_text) \
@@ -166,7 +166,8 @@ static void create_window(Setup *s) {
     char *music=ui.g_build_filename(ui.g_get_home_dir(),"Music",NULL);
     ui.gtk_entry_set_text((GtkEntry *)s->music_path,music);ui.g_free(music);
     ui.gtk_box_pack_start((GtkBox *)box,s->music_path,FALSE,FALSE,0);
-    s->status=label("Choose the game folder, then click Install.");ui.gtk_box_pack_start((GtkBox *)box,s->status,FALSE,FALSE,0);
+    ui.gtk_box_pack_start((GtkBox *)box,ui.gtk_link_button_new_with_label("https://github.com/Aftonstjarna/ReRiff","ReRiff on GitHub — releases, help and source"),FALSE,FALSE,0);
+    s->status=label("Choose the game folder, then click Install. A GitHub shortcut is saved beside the game.");ui.gtk_box_pack_start((GtkBox *)box,s->status,FALSE,FALSE,0);
     s->progress=ui.gtk_progress_bar_new();ui.gtk_box_pack_start((GtkBox *)box,s->progress,FALSE,FALSE,0);
     GtkWidget *scroll=ui.gtk_scrolled_window_new(NULL,NULL);s->details=ui.gtk_text_view_new();
     ui.gtk_text_view_set_editable((GtkTextView *)s->details,FALSE);ui.gtk_text_view_set_cursor_visible((GtkTextView *)s->details,FALSE);
