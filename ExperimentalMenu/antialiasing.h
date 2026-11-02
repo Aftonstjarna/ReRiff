@@ -13,7 +13,6 @@ static IDirect3DSurface9 *aa_surface;
 static IDirect3DPixelShader9 *aa_shader;
 static AABlob *aa_code;
 static UINT aa_width,aa_height;
-static void *aa_methods[134];
 static HRESULT (WINAPI *aa_present_original)(IDirect3DDevice9 *,const RECT *,const RECT *,HWND,const RGNDATA *);
 static HRESULT (WINAPI *aa_reset_original)(IDirect3DDevice9 *,D3DPRESENT_PARAMETERS *);
 static HRESULT (WINAPI *aa_present_ex_original)(IDirect3DDevice9Ex *,const RECT *,const RECT *,HWND,const RGNDATA *,DWORD);
@@ -104,14 +103,16 @@ static void aa_draw(IDirect3DDevice9 *device){
     if(state)IDirect3DStateBlock9_Release(state);IDirect3DSurface9_Release(back);
 }
 static BOOL (*aa_skip_background_present)(void);
-static HRESULT WINAPI aa_present(IDirect3DDevice9 *self,const RECT *a,const RECT *b,HWND window,const RGNDATA *dirty){if(aa_skip_background_present&&aa_skip_background_present())return D3D_OK;aa_draw(self);return aa_present_original(self,a,b,window,dirty);}
+static HRESULT WINAPI aa_present(IDirect3DDevice9 *self,const RECT *a,const RECT *b,HWND window,const RGNDATA *dirty){if(self!=aa_device)return aa_present_original(self,a,b,window,dirty);if(aa_skip_background_present&&aa_skip_background_present())return D3D_OK;aa_draw(self);return aa_present_original(self,a,b,window,dirty);}
 static HRESULT WINAPI aa_reset(IDirect3DDevice9 *self,D3DPRESENT_PARAMETERS *params){
+    if(self!=aa_device)return aa_reset_original(self,params);
     char trace[192];snprintf(trace,sizeof(trace),"D3D9 Reset: %ux%u windowed=%d refresh=%u thread=%lu owner=%lu.",params->BackBufferWidth,params->BackBufferHeight,params->Windowed,params->FullScreen_RefreshRateInHz,(unsigned long)GetCurrentThreadId(),(unsigned long)GetWindowThreadProcessId(params->hDeviceWindow,NULL));log_line(trace);
     log_line("D3D9 Reset: releasing AA resources.");aa_release_resources();log_line("D3D9 Reset: calling original device.");
     HRESULT result=aa_reset_original(self,params);log_line(SUCCEEDED(result)?"D3D9 Reset: original device succeeded.":"D3D9 Reset: original device failed.");return result;
 }
-static HRESULT WINAPI aa_present_ex(IDirect3DDevice9Ex *self,const RECT *a,const RECT *b,HWND window,const RGNDATA *dirty,DWORD flags){if(aa_skip_background_present&&aa_skip_background_present())return D3D_OK;aa_draw((IDirect3DDevice9 *)self);return aa_present_ex_original(self,a,b,window,dirty,flags);}
+static HRESULT WINAPI aa_present_ex(IDirect3DDevice9Ex *self,const RECT *a,const RECT *b,HWND window,const RGNDATA *dirty,DWORD flags){if((IDirect3DDevice9 *)self!=aa_device)return aa_present_ex_original(self,a,b,window,dirty,flags);if(aa_skip_background_present&&aa_skip_background_present())return D3D_OK;aa_draw((IDirect3DDevice9 *)self);return aa_present_ex_original(self,a,b,window,dirty,flags);}
 static HRESULT WINAPI aa_reset_ex(IDirect3DDevice9Ex *self,D3DPRESENT_PARAMETERS *params,D3DDISPLAYMODEEX *mode){
+    if((IDirect3DDevice9 *)self!=aa_device)return aa_reset_ex_original(self,params,mode);
     log_line("D3D9 ResetEx: releasing AA resources.");aa_release_resources();log_line("D3D9 ResetEx: calling original device.");
     HRESULT result=aa_reset_ex_original(self,params,mode);log_line(SUCCEEDED(result)?"D3D9 ResetEx: original device succeeded.":"D3D9 ResetEx: original device failed.");return result;
 }
@@ -139,10 +140,21 @@ static BOOL aa_attach_renderer(void *renderer){
     BOOL extended=*(void **)(pc+0x7c)!=NULL;unsigned entries=extended?134:119;
     void **table=*(void ***)device;if(!readable(table,entries*sizeof(void *)))return aa_attach_problem("COM method table is unreadable",table);
     HMODULE owner=NULL;if(!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,(const WCHAR *)table[0],&owner)||owner!=GetModuleHandleW(L"d3d9.dll"))return aa_attach_problem("COM QueryInterface is outside d3d9.dll",table[0]);
-    memcpy(aa_methods,table,entries*sizeof(void *));
-    aa_present_original=(void *)table[17];aa_reset_original=(void *)table[16];aa_methods[17]=(void *)aa_present;aa_methods[16]=(void *)aa_reset;
-    if(extended){aa_present_ex_original=(void *)table[121];aa_reset_ex_original=(void *)table[132];aa_methods[121]=(void *)aa_present_ex;aa_methods[132]=(void *)aa_reset_ex;}
-    InterlockedExchangePointer((void *volatile *)device,aa_methods);aa_device=device;log_line("Post-process antialiasing attached to the original D3D9 device.");return TRUE;
+    /* Preserve the runtime-owned method table and its complete layout. A
+     * replacement containing only public COM entries need not preserve private
+     * runtime dispatch entries used internally during Reset/Present. Extend only
+     * the original public slots and forward other devices without AA work. */
+    MEMORY_BASIC_INFORMATION memory;DWORD protection;
+    if(!VirtualQuery(table,&memory,sizeof(memory)))return aa_attach_problem("COM method protection is unavailable",table);
+    DWORD writable=(memory.Protect&(PAGE_EXECUTE|PAGE_EXECUTE_READ|PAGE_EXECUTE_READWRITE|PAGE_EXECUTE_WRITECOPY))?PAGE_EXECUTE_READWRITE:PAGE_READWRITE;
+    if(!VirtualProtect(table,entries*sizeof(void *),writable,&protection))return aa_attach_problem("COM methods are not writable",table);
+    aa_present_original=(void *)table[17];aa_reset_original=(void *)table[16];
+    if(extended){aa_present_ex_original=(void *)table[121];aa_reset_ex_original=(void *)table[132];}
+    aa_device=device;
+    InterlockedExchangePointer(table+17,(void *)aa_present);InterlockedExchangePointer(table+16,(void *)aa_reset);
+    if(extended){InterlockedExchangePointer(table+121,(void *)aa_present_ex);InterlockedExchangePointer(table+132,(void *)aa_reset_ex);}
+    DWORD ignored;VirtualProtect(table,entries*sizeof(void *),protection,&ignored);
+    log_line("Post-process AA extends native D3D9 method slots; original device table preserved.");return TRUE;
 }
 static BOOL aa_attach(void){
     BYTE *base=(BYTE *)GetModuleHandleW(NULL);void **renderer=(void **)(base+0x7fcc44);
