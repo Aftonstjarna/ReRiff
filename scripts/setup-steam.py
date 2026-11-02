@@ -94,6 +94,8 @@ def main():
     for name in ('steam-launcher.sh', 'start-server-host.sh', 'stop-server-host.sh', 'server-control.py','apply-client-update.py'):
         shutil.copy2(Path(__file__).with_name(name), dest/name)
         (dest/name).chmod(0o755)
+    shutil.copy2(Path(__file__).with_name('steam-launcher.sh'), game/'ReRiff-Launcher.sh')
+    (game/'ReRiff-Launcher.sh').chmod(0o755)
     for name in ('ReRiff-Launcher.exe','ReRiff-Updater.exe'):
         shutil.copy2(artifacts/name,game/name)
     subprocess.run([sys.executable,str(Path(__file__).with_name('install-client-config.py')),

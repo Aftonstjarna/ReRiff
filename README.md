@@ -1,74 +1,38 @@
 # ReRiff
 
-Restore Riff Racer's local and shared-server features on Windows and Linux/Proton.
-ReRiff includes a launcher, automatic updates, and a **native in-game Servers
-menu** with controller navigation. Choose a server, keep or disable networking,
-save settings, or use **Save and restart** to apply changes immediately.
+Play Riff Racer on Windows or Linux/Proton with restored offline and shared-server
+features.
 
 [Download stable 1.2.3](https://github.com/Aftonstjarna/ReRiff/releases/latest)
 · [Install and update](#install-or-update)
 · [Steam launch options](#launch-through-steam)
 · [Server settings](#server-settings)
+· [Graphics settings](#graphics-settings)
 · [Troubleshooting](#troubleshooting)
-· [Server administration and technical details](#server-administration-and-technical-details)
+· [Server administration](#server-administration-and-technical-details)
+
+- **Singleplayer:** generate tracks and keep scores and ghosts without a server.
+- **Shared servers:** use Primary and Secondary addresses for leaderboards and ghosts.
+- **In-game settings:** manage server preferences and save, restart or exit.
+- **Graphics:** borderless/exclusive fullscreen, higher render resolutions,
+  antialiasing and adjustable UI scale.
+- **Launcher and updates:** edit settings, opt into betas, or update automatically
+  when skipping the launcher.
+- **Optional local server:** install and manage a Podman server from the launcher.
+
+**Launcher — ReRiff 1.2.3**
+
+![ReRiff 1.2.3 launcher with server addresses, singleplayer, optional local server and update preferences](docs/images/reriff-launcher.png)
 
 **Settings → Servers**
 
-ReRiff adds **Servers** as the first entry in the original **Settings** screen.
-Existing settings entries remain available with their original actions. Both
-Settings lists keep vanilla row spacing and separator lines; scroll to reach
-additional entries. The scrollbar reuses the game’s local-track file picker
-control. Use the wheel, drag the scrollbar, press Page Up/Down or Home/End,
-or navigate up/down with the controller. The Servers list wraps between its
-first and last entries using the game's native navigation, scrolling the
-selected entry into view. Friends
-keeps its original place on the main menu; restoring its online features is the
-next stage of work.
+![In-game server preferences with launcher skipping, Primary-only and Singleplayer switches](docs/images/reriff-in-game-menu.png)
 
-The main menu shows the running **ReRiff version** in its bottom-right
-corner, at half the font size of the menu entries. After a successful unattended
-update, a click-through notification says
-**ReRiff has updated to …**, including the experimental revision. It appears once
-at the next main menu, independently of the server-address notification.
+**Settings → Graphics**
 
-**Settings → Graphics → Antialiasing** adds an optional on/off switch using
-the original fullscreen-toggle artwork. Choose **Apply** to save it and enable
-post-process edge smoothing. It is Off by default and uses the original
-Direct3D 9 renderer on Windows and Proton; unsupported devices fall back to Off.
-Back without Apply discards the pending change.
+![Graphics settings with resolution, fullscreen mode, antialiasing and UI scale](docs/images/reriff-graphics.png)
 
-**Settings → Graphics** now includes a fullscreen selector with **Off (Windowed)**,
-**Borderless** and **Exclusive** modes. In Borderless, the render resolution can
-exceed the monitor resolution and is scaled down to the window. Display changes
-use the native **Keep/Revert** dialog and revert after 10 seconds without confirmation.
-**Alt+Enter** switches between windowed and the selected fullscreen mode.
-
-**UI Scale** uses a volume-style slider: **0 (Auto)** retains the game's built-in
-scaling; **25** is Small, **50** the 1080p reference, **75** Large and **100** Very
-Large. Apply saves the selection. Graphics scrolls when its rows do not fit.
-
-**Singleplayer** stores scores and ghosts inside the game without a local server.
-For shared-server play, configure Primary and optional Secondary addresses.
-The launcher can optionally download and manage a separate Podman server;
-see [Server settings](#server-settings).
-
-**Native in-game Servers menu — including Save and restart** (earlier layout shown; open Settings → Servers in 1.2.3)
-
-![ReRiff native in-game Servers menu with Save and restart, server selection, and controller navigation](docs/images/reriff-in-game-menu.png)
-
-**Launcher and updater** (shown with an earlier experimental build)
-
-![ReRiff launcher with server addresses, networking settings, and GitHub updates](docs/images/reriff-launcher.png)
-
-Open **Settings → Servers**. The original Friends entry remains on the main menu. **Save settings** keeps the page open;
-**Save and return** returns to the parent menu, and **Save and
-restart** saves and restarts the game without another launcher window.
-**Save and exit** saves settings and closes the game. Changes
-to the active server otherwise apply on the next game start. The launcher's
-**Play** button uses saved settings; **Save settings** stores edits separately.
-
-Linux still runs the Windows game through Proton. The native in-game menu does
-not remove the game's existing .NET Framework requirements.
+Linux uses Proton; the game still requires its Windows .NET Framework setup.
 
 ## Install or update
 
@@ -139,6 +103,10 @@ collector includes it automatically.
 
 ### Automatic client updates
 
+Upcoming installers add a ReRiff GitHub web shortcut beside the game and a
+repository link in setup. These additions are not included in stable 1.2.3.
+
+
 Click **Update from GitHub** while the game is closed. The launcher downloads
 the latest stable release for your platform, verifies its SHA256 and package
 contents, applies the update with backups and rollback, then reopens itself.
@@ -146,8 +114,11 @@ The title bar shows the running version. Settings and saved data are retained.
 
 If you are using a prerelease, **uncheck Use experimental releases (prereleases)** while the
 game is closed to install stable 1.2.3. This works even when your installed
-version has a revision suffix such as `1.2.3-8`. Superseded prereleases are
-archived; they are not offered as current updates.
+version has a revision suffix such as `1.2.3-8`. New test releases use `X.X.X-beta.N` (for example, `1.2.4-beta.1`); older
+`X.X.X-N` releases remain recognized. Stable stays the default update channel.
+Launchers from stable 1.2.3 do not recognize the new beta names; install the first
+beta manually, or update to a stable launcher with beta-name support first.
+Superseded prereleases may be drafted or deleted after stable is verified; they are not offered as current updates.
 
 If your launcher cannot apply an update, install the current release manually.
 Client updates do not update the Docker server.
@@ -155,9 +126,9 @@ Client updates do not update the Docker server.
 ### In-game Servers menu and launcher skipping
 
 Open **Settings → Servers** and use the original
-fullscreen-style on/off switches for **Skip launcher**, **External only**, and
-**Force Offline** (Off enables networking; On disables it without clearing server
-addresses). After changing Skip launcher, choose
+fullscreen-style on/off switches for **Skip launcher**, **Primary server only**,
+and **Singleplayer** (Off uses configured servers; On selects local play without
+clearing saved addresses). After changing Skip launcher, choose
 **Save settings** or **Save and return**. The next start uses this preference;
 Back without saving discards the change. The preference is stored in
 `server.ini` as `[launcher] skip_launcher=true` or `false`. The launcher's
@@ -186,7 +157,7 @@ server example. Updates also install `server.ini.example` alongside the game.
 Copy the address into `external_url` to select it; the example does not change
 your active server.
 
-**Save and restart**, the third button from the bottom, saves your changes and
+**Save and restart** saves your changes and
 restarts the game immediately so the new server settings take effect. It waits
 for the current game to exit before starting a replacement and skips the
 launcher window during that restart. A save or restart-handoff failure leaves
@@ -213,37 +184,51 @@ quotes. Steam's forwarded command must point to `Game.exe` beside the launcher.
 Put launcher flags such as `--skip-launcher` before `%command%`; game arguments
 forwarded after `Game.exe` are retained. Use the current launcher for Steam command forwarding.
 
-On Linux, set Steam launch options to the installed bridge, using your game path:
+On Linux, use the shell bridge to launch the Windows EXE through Steam's Proton.
+**Stable 1.2.3** installs it at `localserver/steam-launcher.sh`:
 
 ```text
 "/path/to/Riff Racer/localserver/steam-launcher.sh" -- %command%
 ```
 
+**Upcoming installers** also place the bridge beside `ReRiff-Launcher.exe` as
+**ReRiff-Launcher.sh**. If that file is present, use:
+
+```text
+"/path/to/Riff Racer/ReRiff-Launcher.sh" -- %command%
+```
+
 To skip the launcher window:
 
 ```text
-"/path/to/Riff Racer/localserver/steam-launcher.sh" --skip-launcher -- %command%
+"/path/to/Riff Racer/ReRiff-Launcher.sh" --skip-launcher -- %command%
 ```
 
 To test an unattended update on Linux, use:
 
 ```text
-"/path/to/Riff Racer/localserver/steam-launcher.sh" --test-auto-update -- %command%
+"/path/to/Riff Racer/ReRiff-Launcher.sh" --test-auto-update -- %command%
 ```
+
+For stable 1.2.3, substitute `localserver/steam-launcher.sh` in these examples.
 
 Remove `--test-auto-update` after testing. It implies skipping the launcher for
 that invocation. Current bridges also recognize this flag after `%command%`.
+
+Both bridge locations retain the same argument forwarding; the old path remains
+supported for existing Steam launch options. Do not use the Windows `.exe`
+directly before `%command%` on Linux.
 
 The Windows launcher runs in Steam's Proton prefix. Singleplayer storage runs
 inside the game; the launcher does not start a local Python server. Keep your existing
 working Proton and .NET setup. In Steam, find the game path with **Properties →
 Installed Files → Browse**, then edit **Properties → General → Launch Options**.
-Do not put the Windows EXE directly before `%command%` on Linux; use the bridge
-above. The launcher waits for the game to exit so Steam keeps the session active.
+The launcher waits for the game to exit so Steam keeps the session active.
 
 The News screen shows a short preview of the installed client version's patch
 notes while preserving custom server announcements. Choose the original **Visit
-URL** action to open that version's complete GitHub release notes. Client notes ship with the
+URL** action to open that version's complete GitHub release notes. Upcoming builds
+use authored summaries of up to three complete points, with more room for detail. Client notes ship with the
 installer and do not depend on updating the shared server. Delivery diagnostics
 are recorded in `logs/ReRiff-news.log`.
 
@@ -270,7 +255,7 @@ folder; diagnostics are in `logs/ReRiff-podman.log` and
 binds only to localhost and is managed independently of Play and client updates.
 Client installers include the control helper, not the server image/backend.
 Podman itself keeps its engine/image storage in its normal location. This launcher
-feature has no original game equivalent; it does not replace native in-game controls.
+feature is optional; singleplayer does not require Podman.
 
 When backing out of Servers or Graphics with unsaved changes, a native confirmation
 asks whether to apply or discard them. Back inside that prompt keeps editing.
@@ -279,6 +264,12 @@ GitHub prereleases are offered through **Use experimental releases (prereleases)
 
 In-game **Settings → Servers** keeps graphical mode toggles and offers
 **Save and exit** to save settings and close the game, alongside **Save and restart**.
+
+The Servers menu offers **Save settings**, **Reload saved settings**, then
+**Return without saving**, **Save and return**, **Save and restart**, and
+**Save and exit**. The last two save your preferences before restarting or closing
+the game. The main menu displays the running client version; startup notifications
+show the selected server or singleplayer and announce successful unattended updates.
 
 Both addresses blank selects singleplayer. The game probes each configured server's
 `/classes/Version` endpoint in order. If neither responds, it starts singleplayer
@@ -315,6 +306,21 @@ into singleplayer without moving or modifying the old data. Stop the old backend
 before this first import to get a consistent snapshot. Existing server addresses
 are preserved; choose Singleplayer to replace a previously configured localhost
 backend. Shared servers continue to run in Docker or Podman.
+
+## Graphics settings
+
+Choose **Off (Windowed)**, **Borderless** or **Exclusive** fullscreen. Borderless
+can render above the monitor resolution and scale down to fit the display.
+**Alt+Enter** switches between windowed and the selected fullscreen mode.
+
+**Antialiasing** smooths edges and starts Off. **UI Scale** is independent of
+render resolution: **0 (Auto)** uses the game's automatic size, **25** is Small,
+**50** the 1080p reference, **75** Large and **100** Very Large. Scroll to reach
+settings that do not fit on screen.
+
+Choose **Apply** to save changes. Display changes show a Keep/Revert confirmation
+and revert after **10 seconds** unless accepted. Backing out with unsaved edits
+prompts to apply or discard them.
 
 ## Shared leaderboards and ghosts
 
@@ -364,6 +370,14 @@ location. By default, verified originals from the previously recorded backup
 directory are copied into the game's `bak` folder; the previous copies are kept.
 
 ## Troubleshooting
+
+**High-rate FLAC produces an overlong track:** a 96 kHz / 24-bit source can
+produce a track much longer than its audio. This also reproduces with the
+original engine plus the offline patch. A separately resampled 44.1 kHz / 24-bit
+copy produced the expected analysis span in the comparison. Keep the original
+music and generate a fresh track from the resampled copy; reusing the old cached
+analysis retains the bug. See [issue #2](https://github.com/Aftonstjarna/ReRiff/issues/2).
+
 
 For a white-screen crash on Windows, install the complete package with
 `ReRiff-Setup.exe` first; copying the launcher alone leaves required helpers

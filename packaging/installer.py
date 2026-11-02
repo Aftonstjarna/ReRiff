@@ -296,6 +296,11 @@ def install(bundle, game, backups, platform, dry_run=False, restore=False, music
                 raise ValueError('A native Python 3 interpreter is required for local server startup.')
             script = '#!/bin/sh\nset -eu\nunset PYTHONHOME\nexport PYTHONNOUSERSITE=1\nexport PYTHONPATH='+shlex.quote(str(root/'python-libs'))+'\nexec '+shlex.quote(interpreter)+' '+shlex.quote(str(root/'trace-server.py'))+' --server-dir '+shlex.quote(str(root/'server'))+'\n'
             plan['localserver/start-server.sh'] = script.encode()
+        # Web shortcuts use each platform's existing browser association.
+        if platform == 'windows':
+            plan['ReRiff GitHub.url'] = b'[InternetShortcut]\r\nURL=https://github.com/Aftonstjarna/ReRiff\r\n'
+        else:
+            plan['ReRiff GitHub.desktop'] = b'[Desktop Entry]\nType=Link\nName=ReRiff on GitHub\nURL=https://github.com/Aftonstjarna/ReRiff\nIcon=web-browser\n'
         if not (game/'server.ini').exists():
             plan['server.ini'] = b'[server]\n; External server example: https://riffapi.hobune.stream/\n; To use it, set external_url = https://riffapi.hobune.stream/\nexternal_url =\nfallback_url =\ntimeout_seconds = 5\nnetworking_enabled = true\nshow_server_popup = true\n\n[launcher]\nskip_launcher = false\nauto_update_on_skip = false\n'
         next_state = {'version': manifest['version'], 'backup_dir': str(backups),

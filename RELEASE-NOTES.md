@@ -1,5 +1,13 @@
 # ReRiff 1.2.3 — Singleplayer, display controls and client updates
 
+## In-game summary
+
+- Play offline with local scores and ghosts; no server needed.
+- Choose borderless fullscreen, higher render sizes and UI scale.
+- Windows menu, AA and update fixes; optional Podman server.
+
+## Full release notes
+
 Combines the tested changes from experimental 1.2.3-1 through 1.2.3-8.
 
 - Play singleplayer without running a local server. Scores and ghosts stay on
