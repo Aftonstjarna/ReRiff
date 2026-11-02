@@ -59,7 +59,8 @@ static void channel_title(void) {
 
 static void log_message(const WCHAR *text) {
     WCHAR name[CAP]; char utf8[4096]; DWORD written;
-    path(name, L"ReRiff-launcher.log");
+    path(name,L"logs");CreateDirectoryW(name,NULL);
+    path(name, L"logs\\ReRiff-launcher.log");
     int bytes = WideCharToMultiByte(CP_UTF8, 0, text, -1, utf8, sizeof(utf8)-3, NULL, NULL);
     if (!bytes) return;
     utf8[bytes-1]='\r'; utf8[bytes]='\n';
@@ -188,20 +189,6 @@ static BOOL external_only(void) {
     return !_wcsicmp(value,L"true")||!wcscmp(value,L"1")||!_wcsicmp(value,L"yes");
 }
 
-static BOOL needs_local_server(void) {
-    WCHAR address[4096],host[256],enabled[32];
-    WritePrivateProfileStringW(NULL,NULL,NULL,ini);
-    GetPrivateProfileStringW(L"server",L"networking_enabled",L"true",enabled,32,ini);
-    if(!_wcsicmp(enabled,L"false") || !_wcsicmp(enabled,L"no") || !wcscmp(enabled,L"0"))return FALSE;
-    if(external_only())return FALSE;
-    GetPrivateProfileStringW(L"server",L"fallback_url",L"",address,4096,ini);
-    URL_COMPONENTSW parts;ZeroMemory(&parts,sizeof(parts));parts.dwStructSize=sizeof(parts);
-    parts.lpszHostName=host;parts.dwHostNameLength=256;
-    return *address && InternetCrackUrlW(address,0,0,&parts)
-        && parts.nScheme==INTERNET_SCHEME_HTTP && parts.nPort==5144
-        && (!_wcsicmp(host,L"localhost") || !wcscmp(host,L"127.0.0.1"));
-}
-
 #include "update_progress.h"
 #include "auto_update.h"
 
@@ -250,84 +237,7 @@ static BOOL stop_server(void) {
     return ok;
 }
 
-/* 1: ReRiff, 0: no reachable server, -1: another HTTP service. */
-static int health(void) {
-    HINTERNET session=InternetOpenW(L"ReRiffLauncher/1", INTERNET_OPEN_TYPE_DIRECT, NULL, NULL, 0);
-    if (!session) return 0;
-    DWORD limit=500;
-    InternetSetOptionW(session, INTERNET_OPTION_CONNECT_TIMEOUT, &limit, sizeof(limit));
-    InternetSetOptionW(session, INTERNET_OPTION_RECEIVE_TIMEOUT, &limit, sizeof(limit));
-    InternetSetOptionW(session, INTERNET_OPTION_SEND_TIMEOUT, &limit, sizeof(limit));
-    HINTERNET request=InternetOpenUrlW(session,RERIFF_HEALTH_URL,NULL,0,
-        INTERNET_FLAG_RELOAD|INTERNET_FLAG_NO_CACHE_WRITE|INTERNET_FLAG_NO_UI|INTERNET_FLAG_NO_COOKIES,0);
-    int result=0;
-    if (request) {
-        char buffer[8192]; DWORD count=0, code=0, size=sizeof(code);
-        result=-1;
-        if (HttpQueryInfoW(request,HTTP_QUERY_STATUS_CODE|HTTP_QUERY_FLAG_NUMBER,&code,&size,NULL)
-            && code==200 && InternetReadFile(request,buffer,sizeof(buffer)-1,&count)) {
-            buffer[count]=0;
-            if (strstr(buffer,"\"server\"") && strstr(buffer,"\"RiffApiLocal\"")) result=1;
-        }
-        InternetCloseHandle(request);
-    }
-    InternetCloseHandle(session);
-    return result;
-}
-
-static BOOL start_server(void) {
-    HANDLE mutex=CreateMutexW(NULL,FALSE,L"Local\\ReRiffServerStart5144");
-    if (!mutex) return FALSE;
-    DWORD lock=WaitForSingleObject(mutex,15000);
-    if (lock!=WAIT_OBJECT_0 && lock!=WAIT_ABANDONED) {
-        wcscpy(message,L"Another launcher is starting the server. Try again shortly."); CloseHandle(mutex); return FALSE;
-    }
-    BOOL ok=FALSE;
-    int state=health();
-    if (state==1) { ok=TRUE; goto finish; }
-    if (state<0) { wcscpy(message,L"Port 5144 is used by an unrecognized HTTP service."); goto finish; }
-    WCHAR command[CAP], executable[CAP]; PROCESS_INFORMATION process;
-    if (is_wine()) {
-        typedef char * (__cdecl *unix_name_fn)(LPCWSTR);
-        union { FARPROC address; unix_name_fn function; } conversion;
-        conversion.address=GetProcAddress(GetModuleHandleW(L"kernel32.dll"),"wine_get_unix_file_name");
-        unix_name_fn unix_name=conversion.function;
-        path(executable,L"localserver\\start-server-host.sh");
-        if (GetFileAttributesW(executable)==INVALID_FILE_ATTRIBUTES || !unix_name) {
-            wcscpy(message,L"localserver/start-server-host.sh is missing, or Wine path conversion is unavailable."); goto finish;
-        }
-        char *unix_path=unix_name(executable);
-        if (!unix_path) { wcscpy(message,L"Could not translate the server path for Proton."); goto finish; }
-        WCHAR host_path[CAP];
-        MultiByteToWideChar(CP_UTF8,0,unix_path,-1,host_path,CAP);
-        HeapFree(GetProcessHeap(),0,unix_path);
-        /* Wine's start /unix bridge launches the Linux backend, not Windows Python. */
-        WCHAR system[CAP]; GetSystemDirectoryW(system,CAP);
-        _snwprintf(command,CAP,L"\"%ls\\start.exe\" /unix /bin/sh \"%ls\"",system,host_path);
-    } else {
-        path(executable,L"localserver\\windows-python\\python.exe");
-        if (GetFileAttributesW(executable)==INVALID_FILE_ATTRIBUTES)
-            path(executable,L"localserver\\windows-venv\\Scripts\\python.exe");
-        WCHAR runner[CAP], source[CAP]; path(runner,L"localserver\\trace-server.py"); path(source,L"localserver\\server");
-        if (GetFileAttributesW(executable)!=INVALID_FILE_ATTRIBUTES)
-            _snwprintf(command,CAP,L"\"%ls\" \"%ls\" --server-dir \"%ls\"",executable,runner,source);
-        else
-            _snwprintf(command,CAP,L"py.exe -3 \"%ls\" --server-dir \"%ls\"",runner,source);
-    }
-    command[CAP-1]=0;
-    if (!spawn(command,TRUE,&process)) {
-        wcscpy(message,L"Could not start the backend. On Windows, install Python 3 and Flask or create localserver/windows-venv."); goto finish;
-    }
-    CloseHandle(process.hThread); CloseHandle(process.hProcess);
-    for (int i=0;i<48;i++) {
-        if (health()==1) { ok=TRUE; break; }
-        Sleep(250);
-    }
-    if (!ok) wcscpy(message,L"The backend did not become ready. Check localserver/server-console.log and ReRiff-launcher.log.");
-finish:
-    ReleaseMutex(mutex); CloseHandle(mutex); return ok;
-}
-
+#include "podman_server.h"
 #include "song_sync.h"
 
 static BOOL launch_game(void) {
@@ -341,6 +251,10 @@ static BOOL launch_game(void) {
     if (window) PostMessageW(window,WM_GAME_RUNNING,0,0);
     CloseHandle(process.hThread);
     BOOL closed=WaitForSingleObject(process.hProcess,INFINITE)==WAIT_OBJECT_0;
+    DWORD game_exit;
+    if(closed&&GetExitCodeProcess(process.hProcess,&game_exit)){
+        WCHAR detail[128];_snwprintf(detail,128,L"Game process %lu exited with code 0x%08lX.",(unsigned long)process.dwProcessId,(unsigned long)game_exit);detail[127]=0;log_message(detail);
+    }
     BOOL again=restart&&WaitForSingleObject(restart,0)==WAIT_OBJECT_0;
     if(restart)CloseHandle(restart);
     CloseHandle(process.hProcess);
@@ -348,17 +262,15 @@ static BOOL launch_game(void) {
     if(!closed){wcscpy(message,L"Could not wait for Game.exe to close.");return FALSE;}
     if(!again)return TRUE;
     log_message(L"Game closed for Save and restart; applying saved server settings.");
-    if(needs_local_server()&&!start_server())return FALSE;
     }
 }
 
 static DWORD WINAPI worker(LPVOID parameter) {
     int action=(int)(INT_PTR)parameter;
     BOOL play=action==1;
-    BOOL local=needs_local_server();
-    BOOL ok=action==3?check_updates():action==2?stop_server():(local?start_server():TRUE);
+    BOOL ok=action==3?check_updates():action==2?podman_action(podman_state==2?L"stop":podman_state==1?L"start":L"install"):action==0?podman_action(L"status"):TRUE;
     if (ok && play) ok=launch_game();
-    if (ok && action<2) wcscpy(message,!local?(play?L"Game closed. No local backend was needed.":L"Saved settings do not require local server startup."):(play?L"Game closed. Local server remains running.":L"Local server is ready."));
+    if (ok && action<2) wcscpy(message,play?L"Game closed.":L"Ready. Singleplayer runs inside the game; configured servers are checked at game startup.");
     log_message(message);
     PostMessageW(window,WM_COMPLETE,ok,update_handoff?2:play);
     return 0;
@@ -368,7 +280,7 @@ static void begin(int action) {
     if (busy) return;
     busy=TRUE;playing=action==1;
     EnableWindow(play_button,FALSE);EnableWindow(save_button,FALSE);EnableWindow(stop_button,FALSE);EnableWindow(update_button,FALSE);EnableWindow(experimental_checkbox,FALSE);
-    SetWindowTextW(status,action==3?L"Checking published GitHub releases...":action==2?L"Stopping this installation's local server...":L"Checking server settings...");
+    SetWindowTextW(status,action==3?L"Checking published GitHub releases...":action==2?(podman_state==2?L"Stopping the local Podman server...":podman_state==1?L"Starting the local Podman server...":L"Downloading and installing the optional Podman server image..."):L"Checking server settings...");
     HANDLE thread=CreateThread(NULL,4*1024*1024,worker,(LPVOID)(INT_PTR)action,STACK_SIZE_PARAM_IS_A_RESERVATION,NULL);
     if (thread) CloseHandle(thread);
     else { busy=FALSE; EnableWindow(play_button,TRUE);EnableWindow(save_button,TRUE);EnableWindow(stop_button,TRUE);EnableWindow(update_button,TRUE);EnableWindow(experimental_checkbox,TRUE);SetWindowTextW(status,L"Could not start launcher worker."); }
@@ -463,34 +375,35 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
     if (event==WM_CREATE) {
         window=hwnd;font=CreateFontW(-16,0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,0,0,CLEARTYPE_QUALITY,0,L"Segoe UI");
         control(L"STATIC",L"Riff Racer — Server settings",0,22,18,600,30,0);
-        control(L"STATIC",L"External server",0,22,66,145,24,0);
+        control(L"STATIC",L"Primary server",0,22,66,145,24,0);
         external=control(L"EDIT",L"",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,172,62,448,28,EXTERNAL);
-        control(L"STATIC",L"Fallback server",0,22,108,145,24,0);
+        control(L"STATIC",L"Secondary server",0,22,108,145,24,0);
         fallback=control(L"EDIT",L"",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,172,104,448,28,FALLBACK);
         control(L"STATIC",L"Timeout (seconds)",0,22,150,145,24,0);
         timeout_edit=control(L"EDIT",L"5",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,172,146,95,28,TIMEOUT);
-        popup=control(L"BUTTON",L"Show the selected server when the game starts",BS_AUTOCHECKBOX|WS_TABSTOP,22,191,590,28,POPUP);
-        only_checkbox=control(L"BUTTON",L"External server only (no local autostart or fallback)",BS_AUTOCHECKBOX|WS_TABSTOP,22,225,590,28,EXTERNAL_ONLY);
-        networking_checkbox=control(L"BUTTON",L"Enable networking (keep saved addresses when disabled)",BS_AUTOCHECKBOX|WS_TABSTOP,22,259,600,28,NETWORKING);
+        popup=control(L"BUTTON",L"Show the selected server or singleplayer when the game starts",BS_AUTOCHECKBOX|WS_TABSTOP,22,191,590,28,POPUP);
+        only_checkbox=control(L"BUTTON",L"Primary server only (skip secondary server)",BS_AUTOCHECKBOX|WS_TABSTOP,22,225,590,28,EXTERNAL_ONLY);
+        networking_checkbox=control(L"BUTTON",L"Use servers (otherwise play singleplayer)",BS_AUTOCHECKBOX|WS_TABSTOP,22,259,600,28,NETWORKING);
         skip_checkbox=control(L"BUTTON",L"Skip launcher",BS_AUTOCHECKBOX|WS_TABSTOP,22,293,165,28,SKIP_LAUNCHER);
         auto_update_checkbox=control(L"BUTTON",L"Auto-update when skipping launcher",BS_AUTOCHECKBOX|WS_TABSTOP,195,293,425,28,AUTO_UPDATE_SKIP);
-        control(L"STATIC",L"Stop local server affects this installation's Python backend, not Docker.",0,22,332,600,24,0);
-        status=control(L"STATIC",L"Checking server settings...",0,22,359,600,62,0);
-        control(L"BUTTON",L"Use local server",WS_TABSTOP,22,445,145,34,LOCAL);
-        stop_button=control(L"BUTTON",L"Stop local server",WS_TABSTOP,180,445,150,34,STOP);
+        control(L"STATIC",L"If neither server responds, the game uses singleplayer automatically.",0,22,332,600,24,0);
+        status=control(L"STATIC",L"Checking server settings...",0,22,359,600,50,0);
+        podman_hint=control(L"STATIC",L"Local server: http://127.0.0.1:5144 — enter in Secondary server",0,22,417,600,22,0);
+        control(L"BUTTON",L"Singleplayer",WS_TABSTOP,22,445,145,34,LOCAL);
+        stop_button=control(L"BUTTON",L"Install local server",WS_TABSTOP,180,445,150,34,STOP);
         save_button=control(L"BUTTON",L"Save settings",WS_TABSTOP,345,445,130,34,SAVE);
         play_button=control(L"BUTTON",L"Play",WS_TABSTOP|BS_DEFPUSHBUTTON,490,445,130,34,PLAY);
         update_button=control(L"BUTTON",L"Update from GitHub",WS_TABSTOP,22,489,155,30,UPDATE);
-        experimental_checkbox=control(L"BUTTON",L"Use experimental builds",BS_AUTOCHECKBOX|WS_TABSTOP,195,489,420,30,EXPERIMENTAL);
+        experimental_checkbox=control(L"BUTTON",L"Use experimental releases (prereleases)",BS_AUTOCHECKBOX|WS_TABSTOP,195,489,420,30,EXPERIMENTAL);
         SendMessageW(experimental_checkbox,BM_SETCHECK,installed_experimental?BST_CHECKED:BST_UNCHECKED,0);
-        channel_title();
+        channel_title();podman_controls();
         reload_settings_controls();
         SetTimer(hwnd,1,500,NULL);
         begin(FALSE);return 0;
     }
     if (event==WM_COMMAND) {
         switch (LOWORD(wp)) {
-            case LOCAL:SendMessageW(networking_checkbox,BM_SETCHECK,BST_CHECKED,0);SendMessageW(only_checkbox,BM_SETCHECK,BST_UNCHECKED,0);update_networking_controls();SetWindowTextW(fallback,L"http://127.0.0.1:5144");break;
+            case LOCAL:SendMessageW(networking_checkbox,BM_SETCHECK,BST_UNCHECKED,0);update_networking_controls();break;
             case NETWORKING:case EXTERNAL_ONLY:update_networking_controls();break;
             case STOP:begin(2);break;
             case EXPERIMENTAL:
@@ -510,6 +423,7 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
         requested_experimental=installed_experimental;
         SendMessageW(experimental_checkbox,BM_SETCHECK,installed_experimental?BST_CHECKED:BST_UNCHECKED,0);
         busy=FALSE;playing=FALSE;EnableWindow(play_button,TRUE);EnableWindow(save_button,TRUE);EnableWindow(stop_button,TRUE);EnableWindow(update_button,TRUE);EnableWindow(experimental_checkbox,TRUE);SetWindowTextW(status,message);
+        podman_controls();
         if (lp) ShowWindow(window,SW_RESTORE);return 0;
     }
     if (event==WM_CLOSE) {
@@ -556,7 +470,7 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE previous,LPWSTR command,int sho
             /* Network/preflight failures leave installed files intact. Play
              * the existing version rather than blocking a skipped launch. */
         }
-        if ((needs_local_server()&&!start_server())||!launch_game()) {log_message(message);return 1;}
+        if (!launch_game()) {log_message(message);return 1;}
         return 0;
     }
     WNDCLASSW cls;ZeroMemory(&cls,sizeof(cls));cls.lpfnWndProc=procedure;cls.hInstance=instance;cls.lpszClassName=L"ReRiffNativeLauncher";

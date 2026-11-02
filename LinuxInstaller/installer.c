@@ -99,11 +99,9 @@ static void install_clicked(GtkWidget *widget,gpointer data) {
         ui.g_free(exe);ui.g_free(game);return;
     }
     ui.g_free(exe);
-    const char *state=getenv("XDG_STATE_HOME");
-    char *base=state&&state[0]=='/'?strdup(state):ui.g_build_filename(ui.g_get_home_dir(),".local","state",NULL);
-    char *logs=ui.g_build_filename(base,"reriff",NULL);ui.g_free(base);
+    char *logs=ui.g_build_filename(game,"logs",NULL);
     if(ui.g_mkdir_with_parents(logs,0700)){
-        set_status(s,"Could not create the installer log folder. Check your home-folder permissions.");
+        set_status(s,"Could not create the installer log folder. Check the game-folder permissions.");
         ui.g_free(logs);ui.g_free(game);return;
     }
     ui.g_free(s->log_path);s->log_path=ui.g_build_filename(logs,"installer-XXXXXX.log",NULL);ui.g_free(logs);

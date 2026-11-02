@@ -4,6 +4,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <commdlg.h>
+#include <shellapi.h>
 #include <wchar.h>
 #include <stdio.h>
 
@@ -25,7 +26,12 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE previous,LPWSTR arguments,int s
         _snwprintf(command,CAP,L"\"%ls\\python\\python.exe\" \"%ls\\installer.py\" --platform windows %ls",root,root,arguments);
     }
     command[CAP-1]=0;
-    _snwprintf(log,CAP,L"%ls\\installer.log",root);log[CAP-1]=0;
+    if(!interactive){
+        int count=0;WCHAR **args=CommandLineToArgvW(GetCommandLineW(),&count);
+        if(args){for(int i=1;i+1<count;i++)if(!wcscmp(args[i],L"--game-dir")){wcsncpy(game,args[i+1],CAP-1);game[CAP-1]=0;break;}LocalFree(args);}
+    }
+    _snwprintf(log,CAP,L"%ls\\logs",*game?game:root);log[CAP-1]=0;CreateDirectoryW(log,NULL);
+    _snwprintf(log,CAP,L"%ls\\logs\\installer.log",*game?game:root);log[CAP-1]=0;
     SECURITY_ATTRIBUTES security={sizeof(security),NULL,TRUE};
     HANDLE output=CreateFileW(log,GENERIC_WRITE,FILE_SHARE_READ,&security,CREATE_ALWAYS,FILE_ATTRIBUTE_NORMAL,NULL);
     STARTUPINFOW start;PROCESS_INFORMATION process;ZeroMemory(&start,sizeof(start));ZeroMemory(&process,sizeof(process));start.cb=sizeof(start);
@@ -39,7 +45,7 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE previous,LPWSTR arguments,int s
     CloseHandle(output);CloseHandle(process.hThread);WaitForSingleObject(process.hProcess,INFINITE);
     DWORD code=1;GetExitCodeProcess(process.hProcess,&code);CloseHandle(process.hProcess);
     if(interactive){
-        if(code)MessageBoxW(NULL,L"Installation failed. See installer.log beside ReRiff-Setup.exe for details. Existing saves are retained.",L"ReRiff setup",MB_OK|MB_ICONERROR);
+        if(code){_snwprintf(command,CAP,L"Installation failed. See %ls for details. Existing saves are retained.",log);MessageBoxW(NULL,command,L"ReRiff setup",MB_OK|MB_ICONERROR);}
         else MessageBoxW(NULL,L"ReRiff installed. Use ReRiff-Launcher.exe beside Game.exe. Your settings and saved server data were preserved.",L"ReRiff setup",MB_OK|MB_ICONINFORMATION);
     }
     return (int)code;

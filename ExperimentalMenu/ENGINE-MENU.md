@@ -17,7 +17,7 @@ The original `gaOptionsMenu.tick` runs on Audio, where its slider hit tests and
 drag latches belong; stale slider latches are cleared before root activation. Cleanup removes the added screen rows
 before original cleanup so repeated visits cannot accumulate controls or IDs.
 
-Skip launcher, External only and Force Offline use the original fullscreen switch
+Skip launcher, Primary server only and Singleplayer use the original fullscreen switch
 artwork: sprite 73 is the bar, 74/75 the on/off thumb. The thumb uses the same
 right/left origins, bar-width displacement and 25×scale inset established by
 ILSpy `gaGraphicsOptions.setTogglebarVars` (0x0600117D). The guarded original
@@ -25,12 +25,12 @@ sprite creation, sprite-definition, origin and position routines create/update
 them. Their six screen-owned sprites have no input masks or menu IDs; the whole
 labelled row remains the only mouse/controller activation target. The original
 Settings colour callback is forwarded and its focus/pressed colour also tints
-both graphics. Force Offline displays the inverse of the saved
+both graphics. Singleplayer displays the inverse of the saved
 `networking_enabled` value: Off by default, with networking enabled. Existing
-preferences retain their meaning. Cleanup removes all six graphics as well as the ten text rows.
+disabled-networking preferences now select working singleplayer. Cleanup removes all six graphics as well as the ten text rows.
 
 Server settings, save/reload, skip-launcher, and Save and restart retain the
-existing behavior. No endpoint, DLL, or online Friends behavior changes here.
+existing behavior. Friends retains its original behavior; endpoint selection is handled by ClientConfig.
 The module creates no menu windows; navigation reads the same game input device
 and held-button masks as the original file picker.
 
@@ -125,7 +125,7 @@ Hook installation occurs during client initialization and
 the new label appears when the original Settings menu initializes. If initialization
 already happened, return to/recreate Settings. The DLL stays loaded for the
 process lifetime. Installation and refusal reasons go to
-`ReRiff-engine-menu.log` beside Game.exe; no URLs or account data are logged.
+`logs/ReRiff-engine-menu.log` under the game folder; no URLs or account data are logged.
 
 ## Evidence and guards
 
@@ -243,13 +243,13 @@ reinstall exercises notification delivery without a duplicate test release.
 ## Experimental graphics antialiasing
 
 `graphics_aa_menu.h` adds ID 1601 to the original gaGraphicsOptions screen,
-retaining resolution, fullscreen and Apply actions. Three rows are centered
+retaining resolution, fullscreen and Apply actions. Four rows are centered
 using the measured vanilla row interval. Native fullscreen sprites render the
 new switch. Left/right shortcuts belong to the focused row; Apply persists
 `[graphics] antialiasing=true/false`, while Back discards pending changes.
 The original native direction handler (VA 0x44AA60) uses mode 1 at item +0x98
 and Up/Down target IDs at +0x9C/+0xA0. Extend vanilla's two-row loop to
-Resolution → Fullscreen (ID 4) → AA → Resolution. Both resolution arrows wrap
+Resolution → Fullscreen (ID 4) → Borderless (ID 1602) → AA → Resolution. Both resolution arrows wrap
 Up to AA; AA wraps Down to the original left resolution arrow (ID 1). Apply
 (ID 3) retains its activation and has Up to AA and Down to Resolution when
 mouse-focused. Restore all four modified controls' navigation fields on cleanup.
@@ -257,6 +257,87 @@ Keyboard/controller directions and
 held-key repeat continue through the original screen handler; there is no
 competing custom direction poller. Ghidra direction/focus exports are in
 build/graphics-evidence, checked against original instruction bytes.
+
+The original resolution text is passive. Extend its hover area with the original
+`elUI.createBlankButton` (RVA 0x222F0, ID 1604), centered between the arrow controls.
+It participates in native hit testing and focus, highlights the resolution label
+with the native palette, and restores arrow shortcuts. Clicking the text focuses
+the row without changing the selected mode. Borderless uses the original
+fullscreen switch sprites, and enabling it clears exclusive Fullscreen.
+
+`display_modes.h` extends the original PC interface slots 0/1/2/5 for mode count,
+lookup, current mode and mode changes. Additional render presets, up to 7680×4320,
+are bounded by device texture limits and exposed only while Graphics builds its
+native mode list. Original 24-byte mode records have separate content and render
+dimensions. Borderless keeps both pairs at the selected render resolution and
+uses the original windowed renderer reset. Physical monitor dimensions apply
+only to the HWND, rather than splitting the game's internal coordinate spaces.
+The existing window is made borderless and sized to its monitor; no additional
+device, window or presentation loop is created.
+
+Window style/position changes must run on the HWND's owner thread. The menu runs
+on a worker that the original renderer can wait for; calling SetWindowLong or
+SetWindowPos synchronously there deadlocks after an otherwise successful reset.
+Extend the existing window procedure with a registered private message and queue
+style/restoration work through its original message pump. Preserve and forward
+all other messages to the original procedure. A cross-thread regression holds the
+owner without pumping messages while verifying the worker returns, then drains
+the original queue and checks the resulting style. Native catalog entries with
+zero render dimensions are normalized to their selected content dimensions.
+Style work is queued only when the window differs from the desired state;
+minimized windows are left alone.
+
+The original PC pointer getter (vtable RVA 0x5FDC00, slot 11, function RVA
+0x0F8780) copies the coordinates produced by the game's own input update
+(RVA 0x15B940). That update uses window pixels. Borderless presentation can
+scale a larger back buffer into that window, so the getter extension multiplies
+the original result by back-buffer/client size. It preserves the native polling,
+button states, focus handling and optional coordinate normalization. Inactive
+sentinels and relative pointer mode pass through. No separate mouse polling or
+menu hit-test implementation is introduced. The original table entries and
+getter bytes are checked before installation.
+
+Main-menu centering reuses the eleven original row containers at menu +248 and
+their child artwork bounds. Moving the parents through native `elUIItem.setPos`
+moves the labels, icons and hit transforms together, retaining the original
+row spacing, input IDs and navigation. Local testing confirmed visible centering;
+the user confirmed matching hover after this pointer correction.
+The row hit rectangle also extends left through its icon with padding of one
+tenth of the native row interval. Compensating child positions preserves the
+artwork's visible placement; the original row continues to own hover/click input.
+The user subsequently reported that resolution changes are functioning. This
+does not by itself verify every Alt-Tab, revert or restart path.
+
+Apply delegates to the original `gaGraphicsOptions.handleScreenInput(3)` for the
+renderer handoff, menu rescaling and overlay setup. Borderless-only changes force
+the native dirty check without discarding the actual previous mode/fullscreen
+snapshot. This reuses `gaGraphicsConfirm` (table RVA 0x7A5918, state 26), its original
+localized message, Keep/Revert buttons and revert implementation. Its init,
+tick and input hooks use the original countdown fields, with a monotonic
+10-second deadline started by the original screen-entry callback (slot 2,
+thunk RVA 0x2EB814, fixup RVA 0x7A598C). Resource initialization can happen long
+before the overlay opens and must not start the deadline. Whole remaining
+seconds are fed to the native timer so its
+truncation cannot revert at nine seconds. The previous mode and fullscreen flag
+use the original globals at RVAs 0x7EC1F8 and 0x7EBF04. Revert also restores the
+previous borderless state and window style/position, and runs only once. Keep
+persists render dimensions and display flags in `[graphics]`; startup restores
+that confirmed mode through the original renderer.
+
+Menu rescaling and resolution callbacks use the signed managed bridge to invoke
+original methods `gaStateManager.rescaleMenus` (token 0x060012A5) and
+`gaGame.onResolutionAdjusted` (0x060010DC). The native and managed helpers must be
+updated together. Original PC entries and confirmation thunks are validated
+against the supported EXE before patching. The display fixture checks extended
+catalog bounds, coherent content/render sizes, native pointer mapping at client
+center/edges, inactive/relative/windowed pass-through, Win32 message forwarding,
+idle/minimized window behavior, actual Win32 borderless styling,
+Keep/Reject, failure rollback, the 9999/10000ms boundary and startup restoration;
+its renderer and original-confirmation callbacks are fixtures, so physical driver
+and live-game behavior need separate verification.
+
+Added option labels use uppercase text, including ANTIALIASING, BORDERLESS
+FULLSCREEN and the Servers page actions; the root entry stays titled Servers; original labels are retained.
 
 The original renderer was cross-checked with Ghidra, the separate RiffRacer
 recovery sources and original bytes. wsGraphicsDevice (primary vtable RVA
@@ -292,3 +373,215 @@ The real software-rendered D3D9 fixture verifies changed/smoothed edge pixels,
 state restoration, enabled-AA reset/recreation and Off cleanup. Full-race visual
 and performance checks, physical Windows drivers, Ex reset paths and third-party renderer
 wrappers remain experimental validation targets.
+
+## Display experiments held from stable 1.2.2
+
+The display-mode, borderless and confirmation hooks are retained only on the
+experimental branch. Stable is based on tested revision 1.2.2-12 and does not
+include these hooks or the associated resolution-hover prototype. Live testing
+found that keyboard/mouse input can stop after borderless applies even when
+controller confirmation works. Reversion can freeze after a successful device
+reset. Servers Save and restart after borderless may leave audio playing with
+no visible window; it is not yet established whether the old process remains
+or a restarted window is invisible. Preserve this evidence for further native
+input, window-thread and shutdown investigation; fixture success is insufficient.
+
+Latest restart evidence (2026-11-01 local test): the native menu logs
+`Save and restart requested.` followed by the 15-second fallback
+`Save and restart: game did not close; request canceled.` The launcher log does
+not show a corresponding new completed restart handoff for that latest attempt.
+This identifies failure to exit the old game for that attempt; it does not
+establish the window/process state of every earlier report. A later process
+check found no remaining Game.exe, after the test instance had been closed.
+
+Singleplayer integration retains these same ten rows and original scrolling.
+Use Singleplayer and the Singleplayer switch set `networking_enabled=false`
+without clearing either server address. Use configured servers re-enables primary,
+optional secondary, then in-process singleplayer selection after restart.
+
+
+### Independent UI scaling (unreleased)
+
+The Graphics slider retains the original Audio slider artwork (sprites 51/54),
+0/100 endpoint placement, button masks, repeat input and drag latch. 0 selects
+Auto; 25 is Small, 50 matches the 1080p reference, 75 is Large and 100 is Very
+Large. The saved value is `[graphics] ui_scale`; absent settings default to 0.
+The idle menu state is 0 (as in native Settings), not transition state 1.
+Graphics uses the native file-picker reel when rows exceed the available height.
+
+The current manual-scale experiment extends original `gaUI.setupFontScale`
+(token 0x060012C0) and `gaMenu.setupMenuScale`. Layout and pointer coordinates
+remain on the physical canvas. The font setup alone receives the manual factor;
+native menu design-reference constants size artwork and spacing. No per-item
+transforms, render-group creation or pointer rescaling are added. Auto restores
+the original reference constants and ratios.
+
+The native and managed helpers must be updated together. Fixtures cover sizing
+factors, physical-resolution and pointer preservation, reference restoration,
+and slider repeat, drag, bounds and transition guards. Manual scale and display
+confirmation still require live validation. Earlier render-group experiments
+were unsuitable for PC screens; passing matrix tests did not establish correct
+live rendering. Auto was confirmed working by the user on November 1.
+
+### Servers menu simplification
+
+The redundant USE SINGLEPLAYER / USE CONFIGURED SERVERS actions are removed.
+SKIP LAUNCHER, PRIMARY SERVER ONLY and SINGLEPLAYER retain their native graphical
+toggles. Save, reload, restart, back and return remain; SAVE AND EXIT first saves
+successfully, then sends the original game window WM_CLOSE. A save failure leaves
+the game running. Stable internal IDs are mapped to nine visible rows, including
+native wraparound and the original scrolling reel; removed actions are not inputs.
+
+Alt+Enter toggles borderless/windowed through the existing owner-thread style path
+without a renderer reset, preserving the selected render resolution. Held-key
+repeat is ignored. The original native handler retains exclusive-fullscreen
+Alt+Enter. The window hook remains installed in windowed mode and throughout
+gameplay; this does not make an already hung message pump responsive.
+
+### Fullscreen selector and resolution visibility
+
+Graphics now has four rows: resolution, fullscreen mode, antialiasing and UI
+scale. The fullscreen mode cycles OFF (WINDOWED), BORDERLESS and EXCLUSIVE.
+It reuses `elUI.createButtonSprite` (token 0x060016E5, native RVA 0x222C0),
+original resolution sprites 59/60, origins 3/5, native Up/Down links, and
+left/right input masks. Original fullscreen fields remain the Apply authority;
+the separate original toggle artwork is hidden, not removed from its owner.
+
+Original `gaGraphicsOptions.showResolutionText` (token 0x06001177, IL RVA
+0x2EC76C) returns immediately if the selected index at menu +300 is unchanged.
+Otherwise it hides all text-vector entries at +280/+284, then shows the chosen
+entry. A scrolling adapter that hides that entry must explicitly restore only
+that selected entry when it becomes visible again. Calling the original function
+with the unchanged selection cannot restore it. These semantics were checked
+against the original IL; this integration is an intentional mod, not recovery credit.
+
+### Native Apply focus
+
+Original `gaGraphicsOptions.initScreens` explicitly clears menu-item flag bit 1
+at Apply item +372 (IL offsets 0x0ABD..0x0AD4, AND 253). This excludes the existing
+button from the normal directional-focus lifecycle. ReRiff uses original
+`elUIItem.setAsMenuItem` at RVA 0x4B530 to opt it in, retaining its original sprite,
+highlight/activation handlers and Apply action. The native Up/Down ID loop now
+runs Resolution → Fullscreen mode → AA → UI Scale → Apply → Resolution.
+Cleanup restores the original flag and navigation fields.
+
+### Back with unsaved changes
+
+Servers and Graphics compare pending values against their loaded/saved baseline.
+Back (selection 2000) opens the original `gaQuitConfirmMenu` yes/no overlay,
+state 9, through original `gaStateManager.setOverlayState` / `popOverlayState`
+(tokens 0x0600129B/0x0600129C). Its native artwork, focus, Escape/controller Back,
+transitions and cleanup are retained. There is no general original unsaved-settings
+handler; the integration supplies dirty tracking and save/discard callbacks only.
+During this use, selection 2 applies and selection 1 discards. The original
+quit action is never forwarded. Escape/Back inside the overlay cancels the prompt
+and keeps editing. Callbacks run only after the native overlay is removed.
+The actual timed display Keep/Revert overlay remains separate.
+
+The final four Servers actions are Return without saving, Save and return,
+Save and restart, Save and exit. Their original internal IDs remain 9, 10,
+8 and 11; native link targets and scrolling use the visible-order map.
+
+## Windows image relocation guards (1.2.3-4)
+
+The original Game.exe SHA-256 is
+`2d1af8a01ec6b1e3477ff6dbe4a44895828e2ac71449344fec9d7d99e87a58e2`
+(8,635,392 bytes), preferred PE image base `0x00400000`. Windows logs showed
+the same executable loaded at `0x00C30000`, where fixed absolute operands in
+otherwise identical function prologues invalidated the old startup checks.
+
+The checked prologue RVAs and 32-bit absolute operand offsets are:
+`50AF0+6`, `43800+6`, `8E8D0+6`, `4B530+9`, `8F580+6`, `8E9D0+6`,
+`22030+6`, `48830+4`, `482B0+6`. Each operand has an original PE HIGHLOW
+relocation entry. The guard now requires that entry, compares its exact expected
+relocated value, and compares every remaining instruction byte unchanged.
+The `4B530` guard includes all 13 bytes through the four-byte operand. No opcode
+or operand masks are used; the original executable hash check remains required.
+
+`test_engine.c` applies the original relocation table to a mapped fixture at the
+observed Windows base. The original and relocated images pass; opcode/operand
+mutations are rejected. This is runtime-hook validation evidence, not additional
+byte-for-byte recovered source or proof of live Windows gameplay compatibility.
+
+### Discardable relocation section
+
+The original `.reloc` section characteristics are `0x42000040`, including
+`IMAGE_SCN_MEM_DISCARDABLE`. Windows may unmap these records after applying them.
+Requiring the live relocation directory to be readable therefore rejected a
+legitimate loaded image even after the 1.2.3-4 address correction. Keep the records
+from the same SHA-256-verified file handle instead; continue checking every live
+instruction byte and its exact adjusted operand. The regression fixture protects
+the mapped relocation region with `PAGE_NOACCESS` and verifies that valid entry
+checks pass while opcode/operand mutations still fail. The log now reports the
+specific failed guard line and build version for remaining runtime differences.
+
+### Live-header independence
+
+1.2.3-5 Windows logs reach the first prologue guard (`RVA 0x50AF0`) after
+vtable/thunk validation, with all 200,596 verified relocation bytes available.
+The prior helper still read the live optional header and required its ImageBase
+and relocation directory to match unmodified PE32 file metadata. That condition
+is unnecessary: preferred-base metadata and bounds now come from the same
+hash-verified file as the relocation records. Every live prologue byte and adjusted
+absolute operand is still checked, with an original HIGHLOW entry required.
+
+The added fixture changes live ImageBase/relocation-directory fields while live
+relocation pages are inaccessible; valid instructions pass and an altered operand
+fails. This models a loader state, not proof that those specific header values
+occurred on the affected PC. Failure diagnostics now record the live PE magic,
+base field and prologue bytes so any remaining difference can be identified.
+Microsoft documents that CLR validation may modify an in-memory managed image:
+https://learn.microsoft.com/en-us/dotnet/framework/unmanaged-api/hosting/corvalidateimage-function
+
+### Direct3D device table preservation
+
+The Windows 1.2.3-6 crash report records `0xC0000005`, unknown module, fault
+address `0x00000001`, and CLR `System.AccessViolationException` with only the
+outer `_WinMainCRTStartup` frame. Native logs put it during/reset-after Borderless
+Apply. This suggests an invalid function pointer but does not identify the caller.
+
+The previous AA hook substituted a 119/134-entry copy for the device's native
+method table. That preserves the public COM interface only, not necessarily the
+runtime's full internal dispatch layout. Keep the native table pointer instead
+and atomically replace only the original public Present/Reset and Ex slots.
+Record the original callbacks before publishing hooks; callbacks for other devices
+sharing a table forward directly without touching primary-device resources.
+
+`test_antialiasing.c` verifies original table pointer identity, unmodified methods,
+visible AA output, state restoration, Reset/Present and ResetEx/PresentEx, plus
+another device's reset/present leaving primary AA textures/surfaces intact.
+Run the fixture normally and with `--ex`. Both passed through Wine; actual Windows
+crash resolution still requires a new run, and a dump is needed if it persists.
+
+### Windows validation and dynamic Graphics controls (1.2.3-8)
+
+The supplied 1.2.3-7 Windows session logs show successful borderless confirmation,
+then another successful 1920x1200 render reset on a 1280x800 monitor. AA resources
+were released/recreated and the launcher recorded exit code `0x00000000`.
+This validates that tested path on that client; it is not a blanket display claim.
+
+The AA thumb formula still matches original `gaGraphicsOptions.setTogglebarVars`
+(token 0x0600117D): sprites 74/75, origins 5/3, bar-width displacement when Off and
+25 times menu scale inset. Its graphical regression came from Graphics scrolling
+restoring the initial thumb X after a toggle. Recompute the thumb from the current
+bar after layout, like the dynamic slider thumb, without modifying static anchors.
+The fixture first reproduced a failure on the old code, then passed repeated
+On/Off cycles, scrolling and scale factors 0.25/0.5/1/1.5/2 with the correction.
+
+Original Audio slider tick (token 0x0600119A) polls pressed/repeated masks 256/512.
+UI Scale does the same; registering those keys again as button shortcuts gives
+multiple activation owners. Its shortcut mask now stays zero while Left/Right
+remain owned by the Audio-style polling. Native direction links at +A4/+A8 stay
+-1: the original direction handler at VA 0x44AA60 explicitly ignores -1 targets.
+Up/Down links retain the native Graphics loop and Apply access.
+
+### Stable 1.2.3 News preview
+
+Client News now omits the repeated Markdown heading and shows at most three
+short entries (48 characters each, shortened at a word boundary), followed by a
+single exact-version GitHub release URL. Embedded source links are flattened so
+only the intended full-notes URL remains. The original `gaNewsMenu.initScreens`
+(token 0x060014A7) already detects http/https/www URLs in the localized body and
+extracts a link for its original Visit URL control. ReRiff reuses that path;
+no extra popup, scrolling system or native control replacement is introduced.
+The full current-version notes remain in the installed file and on GitHub.

@@ -35,6 +35,15 @@ class ClientUpdateTest(unittest.TestCase):
         self.work = self.root/'work'
         self.work.mkdir()
 
+    def test_preflight_failure_log_is_in_game_logs(self):
+        args=['apply-client-update.py','--work',str(self.work),'--prepare','--archive',str(self.root/'missing.zip'),'--sha256','0'*64,'--game-dir',str(self.game),'--platform','windows']
+        with mock.patch.object(sys,'argv',args):
+            self.assertEqual(update.main(),1)
+        self.assertTrue((self.work/'failure').is_file())
+        self.assertTrue((self.game/'logs/update.log').is_file())
+        self.assertFalse((self.work/'update.log').exists())
+        self.assertIn('FileNotFoundError',(self.game/'logs/update.log').read_text())
+
     def package(self, platform, bad_member=None, launcher=b'new launcher'):
         files = {name: (ROOT/'packaging'/name).read_bytes() for name in ['installer.py', 'shared_patch.py']}
         files['payload/ReRiff-Launcher.exe'] = launcher

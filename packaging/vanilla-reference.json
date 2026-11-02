@@ -1,0 +1,37 @@
+{
+  "source": {
+    "tool": "DepotDownloader",
+    "app_id": 351990,
+    "depot_id": 351991,
+    "build_id": 1687655,
+    "manifest_id": "8951408038967536554"
+  },
+  "algorithm": "SHA256",
+  "scope": "Top-level original Windows executable and DLL files",
+  "files": {
+    "Game.exe": {
+      "size": 8635392,
+      "sha256": "2d1af8a01ec6b1e3477ff6dbe4a44895828e2ac71449344fec9d7d99e87a58e2"
+    },
+    "Parse.NetFx45.dll": {
+      "size": 30208,
+      "sha256": "4e2f65147faec13ae5333337e3c7cd9e25028f3119fe817e059b1d2eab678522"
+    },
+    "Parse.dll": {
+      "size": 209408,
+      "sha256": "21757cde7fa348089fe6398f50bc225371e38208b556df47c18a18259cf86ccb"
+    },
+    "ParseOctane.dll": {
+      "size": 75776,
+      "sha256": "d661606db8658adb54d5be18b3e3a3a6f07c8e738f2d78556ece42355f8e62e4"
+    },
+    "libfftw3f-3.dll": {
+      "size": 2312789,
+      "sha256": "554b77df210e85252f20e6e611a1debefff5f64756bcc35e04072b754e4e795a"
+    },
+    "steam_api.dll": {
+      "size": 104872,
+      "sha256": "abfedd473b3f4a9597bbdc90d20f4b6f696bb2ebb937a03177461df695430ad6"
+    }
+  }
+}

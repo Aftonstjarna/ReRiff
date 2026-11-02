@@ -53,7 +53,7 @@ namespace ReRiff {
             recordingException = true;
             try {
                 string folder = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-                File.AppendAllText(Path.Combine(folder, "ReRiff-network.log"),
+                File.AppendAllText(LogPath(folder, "ReRiff-network.log"),
                     DateTime.UtcNow.ToString("o") + Environment.NewLine + error.ToString() + Environment.NewLine);
             } catch (Exception) {
                 // Diagnostics must never change exception propagation or fail startup.
@@ -64,10 +64,14 @@ namespace ReRiff {
         private static extern int ReRiffStartEngineMenu();
 
         private static void StartEngineMenu() {
-            try { NativeReelBridge.Configure(); ReRiffStartEngineMenu(); }
-            catch (DllNotFoundException) { }
-            catch (EntryPointNotFoundException) { }
-            catch (BadImageFormatException) { }
+            try {
+                NativeReelBridge.Configure();
+                int result=ReRiffStartEngineMenu();
+                NativeReelBridge.Log("Engine menu startup result="+result+"; CLR="+Environment.Version+"; process bits="+(IntPtr.Size*8));
+            }
+            catch (DllNotFoundException error) { NativeReelBridge.Log(error.ToString()); }
+            catch (EntryPointNotFoundException error) { NativeReelBridge.Log(error.ToString()); }
+            catch (BadImageFormatException error) { NativeReelBridge.Log(error.ToString()); }
         }
 
         [DllImport("ReRiff.Notify.dll", CharSet = CharSet.Unicode,
@@ -76,7 +80,7 @@ namespace ReRiff {
 
         private static void ShowServerPopup(string endpoint) {
             try {
-                ReRiffShowServerToastW(endpoint == Disabled ? "Networking disabled" : endpoint);
+                ReRiffShowServerToastW(Singleplayer.IsEndpoint(endpoint) ? "Singleplayer" : endpoint);
             } catch (DllNotFoundException) { }
               catch (EntryPointNotFoundException) { }
               catch (BadImageFormatException) { }
@@ -97,8 +101,7 @@ namespace ReRiff {
                 string enabled;
                 if (values.TryGetValue("networking_enabled", out enabled)
                     && (enabled.Equals("false", StringComparison.OrdinalIgnoreCase) || enabled == "0" || enabled.Equals("no", StringComparison.OrdinalIgnoreCase))) {
-                    Log(folder, Disabled, "networking_disabled");
-                    return Disabled;
+                    return Local(folder, "singleplayer_selected");
                 }
                 values.TryGetValue("external_url", out external);
                 values.TryGetValue("fallback_url", out fallback);
@@ -118,17 +121,22 @@ namespace ReRiff {
                 string reason;
                 if (external.Length > 0 && Available(external, timeout)) {
                     endpoint = external; reason = "external_available";
-                } else if (fallback.Length > 0) {
-                    endpoint = fallback; reason = "configured_fallback";
+                } else if (fallback.Length > 0 && Available(fallback, timeout)) {
+                    endpoint = fallback; reason = "secondary_available";
                 } else {
-                    endpoint = Disabled; reason = externalOnly ? "external_only_unavailable" : "no_available_configured_address";
+                    return Local(folder, "servers_unavailable");
                 }
                 Log(folder, endpoint, reason);
                 return endpoint;
             } catch (Exception e) {
-                Log(folder, Disabled, "configuration_error:" + e.GetType().Name);
-                return Disabled;
+                return Local(folder, "configuration_error:" + e.GetType().Name);
             }
+        }
+
+        private static string Local(string folder, string reason) {
+            string endpoint = Singleplayer.Start(folder);
+            Log(folder, "singleplayer", reason);
+            return endpoint;
         }
 
         private static Dictionary<string, string> ReadIni(string path) {
@@ -175,9 +183,13 @@ namespace ReRiff {
               catch (IOException) { return false; }
         }
 
+        internal static string LogPath(string folder,string name) {
+            string logs=Path.Combine(folder,"logs");Directory.CreateDirectory(logs);
+            return Path.Combine(logs,name);
+        }
         private static void Log(string folder, string endpoint, string reason) {
             try {
-                File.AppendAllText(Path.Combine(folder, "ReRiff-client.log"),
+                File.AppendAllText(LogPath(folder, "ReRiff-client.log"),
                     DateTime.UtcNow.ToString("o") + " endpoint=" + endpoint + " reason=" + reason + Environment.NewLine);
             } catch (IOException) { }
               catch (UnauthorizedAccessException) { }

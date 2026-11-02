@@ -5,7 +5,9 @@ $GameDir = [IO.Path]::GetFullPath($GameDir)
 if (-not (Test-Path (Join-Path $GameDir 'Game.exe'))) {
     throw 'Game.exe was not found. Pass -GameDir with your Riff Racer folder.'
 }
-$report = Join-Path $env:TEMP ('ReRiff-startup-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.txt')
+$logDir = Join-Path $GameDir 'logs'
+New-Item -ItemType Directory -Force $logDir | Out-Null
+$report = Join-Path $logDir ('ReRiff-startup-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.txt')
 $lines = New-Object 'System.Collections.Generic.List[string]'
 $lines.Add('ReRiff Windows startup report; collected ' + (Get-Date -Format o))
 $lines.Add('Game folder: ' + $GameDir)
@@ -19,7 +21,7 @@ foreach ($name in @('Game.exe','ParseOctane.dll','Parse.NetFx45.dll','ReRiff-Lau
         $lines.Add(('{0}: {1} bytes; SHA256={2}' -f $name,$item.Length,$hash))
     } else { $lines.Add($name + ': MISSING') }
 }
-foreach ($name in @('ReRiff-launcher.log','ReRiff-client.log','ReRiff-network.log','ReRiff-engine-menu.log','localserver\install-state.json','localserver\client-channel.ini')) {
+foreach ($name in @('logs\ReRiff-launcher.log','logs\ReRiff-client.log','logs\ReRiff-network.log','logs\ReRiff-engine-menu.log','localserver\install-state.json','localserver\client-channel.ini')) {
     $lines.Add(''); $lines.Add('--- ' + $name + ' ---')
     $path = Join-Path $GameDir $name
     if (Test-Path $path) {
