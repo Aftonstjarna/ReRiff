@@ -1,0 +1,24 @@
+name: Song identity and existing API regressions
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: sudo apt-get update && sudo apt-get install -y g++ nlohmann-json3-dev
+      - run: python -m pip install Flask
+      - run: make -C native
+      - run: python -m unittest discover -s docs/tests -p test_song_sync.py
+      - run: python docs/tests/run_api_suites.py
+      - run: docker build -t riffapi-song-sync:test .
+      - name: Test the packaged registry library
+        run: >-
+          docker run --rm --network none
+          -v "$PWD/docs/tests:/app/docs/tests:ro" -w /app
+          riffapi-song-sync:test
+          python -m unittest discover -s docs/tests -p test_song_sync.py

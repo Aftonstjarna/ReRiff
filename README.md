@@ -128,3 +128,10 @@ Want the full reverse-engineering story — how the API surface was recovered fr
 
 License: The Unlicense (public domain) - see LICENSE.
 
+
+## Shared-song identity
+
+[Song synchronization](docs/SONG-SYNC.md) lets compatible clients link cached song
+IDs for identical source audio, sharing existing scores and ghosts without
+rewriting stored history. Stock clients retain their previous behavior; automatic
+linking requires the documented registration handshake.

@@ -1,9 +1,10 @@
 """Tests for Parse __op operations."""
 import json
+import os
 import urllib.request
 import urllib.error
 
-BASE = "http://127.0.0.1:5144"
+BASE = os.environ.get("RIFFAPI_TEST_URL", "http://127.0.0.1:5144")
 HEADERS = {"X-Parse-Application-Id": "T", "Content-Type": "application/json"}
 
 
