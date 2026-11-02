@@ -5,7 +5,7 @@ ReRiff includes a launcher, automatic updates, and a **native in-game Servers
 menu** with controller navigation. Choose a server, keep or disable networking,
 save settings, or use **Save and restart** to apply changes immediately.
 
-[Download stable 1.2.2](https://github.com/Aftonstjarna/ReRiff/releases/latest)
+[Download stable 1.2.3](https://github.com/Aftonstjarna/ReRiff/releases/latest)
 · [Install and update](#install-or-update)
 · [Steam launch options](#launch-through-steam)
 · [Server settings](#server-settings)
@@ -14,7 +14,7 @@ save settings, or use **Save and restart** to apply changes immediately.
 
 **Settings → Servers**
 
-ReRiff 1.2.2 adds **Servers** as the first entry in the original **Settings** screen.
+ReRiff adds **Servers** as the first entry in the original **Settings** screen.
 Existing settings entries remain available with their original actions. Both
 Settings lists keep vanilla row spacing and separator lines; scroll to reach
 additional entries. The scrollbar reuses the game’s local-track file picker
@@ -37,13 +37,22 @@ post-process edge smoothing. It is Off by default and uses the original
 Direct3D 9 renderer on Windows and Proton; unsupported devices fall back to Off.
 Back without Apply discards the pending change.
 
-**Display experiments are not part of stable 1.2.2.** Unlocked resolutions,
-borderless fullscreen and the modified display confirmation/revert screen remain
-on the experimental branch. Input loss and restart/window visibility issues are
-still under investigation there. Stable keeps the original resolution and
-fullscreen behavior.
+**Settings → Graphics** now includes a fullscreen selector with **Off (Windowed)**,
+**Borderless** and **Exclusive** modes. In Borderless, the render resolution can
+exceed the monitor resolution and is scaled down to the window. Display changes
+use the native **Keep/Revert** dialog and revert after 10 seconds without confirmation.
+**Alt+Enter** switches between windowed and the selected fullscreen mode.
 
-**Native in-game Servers menu — including Save and restart** (earlier layout shown; open Settings → Servers in 1.2.2)
+**UI Scale** uses a volume-style slider: **0 (Auto)** retains the game's built-in
+scaling; **25** is Small, **50** the 1080p reference, **75** Large and **100** Very
+Large. Apply saves the selection. Graphics scrolls when its rows do not fit.
+
+**Singleplayer** stores scores and ghosts inside the game without a local server.
+For shared-server play, configure Primary and optional Secondary addresses.
+The launcher can optionally download and manage a separate Podman server;
+see [Server settings](#server-settings).
+
+**Native in-game Servers menu — including Save and restart** (earlier layout shown; open Settings → Servers in 1.2.3)
 
 ![ReRiff native in-game Servers menu with Save and restart, server selection, and controller navigation](docs/images/reriff-in-game-menu.png)
 
@@ -53,7 +62,8 @@ fullscreen behavior.
 
 Open **Settings → Servers**. The original Friends entry remains on the main menu. **Save settings** keeps the page open;
 **Save and return** returns to the parent menu, and **Save and
-restart** saves and restarts the game without another launcher window. Changes
+restart** saves and restarts the game without another launcher window.
+**Save and exit** saves settings and closes the game. Changes
 to the active server otherwise apply on the next game start. The launcher's
 **Play** button uses saved settings; **Save settings** stores edits separately.
 
@@ -77,8 +87,8 @@ without overwriting the backup.
 
 **Windows:** download and extract `ReRiff-<version>-windows.zip`, run
 `ReRiff-Setup.exe`, and select the game's `Game.exe`. Keep the ZIP contents
-together until setup finishes. Portable Python and server dependencies are
-included. Local DLL patching uses the game's .NET Framework runtime.
+together until setup finishes. Portable Python is included for setup and updates; singleplayer runs inside
+the game without a Python server. Local DLL patching uses the game's .NET Framework runtime.
 The package targets x64 Windows; the launcher is native x86 Win32.
 
 **Linux/Proton (x86_64):** install Python 3.10 or newer. The Linux
@@ -114,15 +124,16 @@ Replace `<version>` with the downloaded release number. Omit `--game-dir` to
 search common Steam libraries (including Flatpak Steam). Use `--cli` to force
 terminal mode, or `--gui` to request the window.
 Explicit options such as `--game-dir`, `--dry-run`, `--restore`, and `--help`
-keep their terminal behavior for scripts and automatic updates. Do not use `sudo`. The installer bundles the
-server libraries and places the backend in `localserver/` beside `Game.exe`.
+keep their terminal behavior for scripts and automatic updates. Do not use `sudo`.
+Update and optional-server control helpers live in `localserver/` beside `Game.exe`;
+the server image is downloaded separately when requested from the launcher.
 It does not change Steam's selected Proton version or launch options.
 The Linux installer includes the DLL patcher's runtime; a separate Mono or .NET
 installation is not required. If an older package reports that Mono is required,
 download the current complete Linux installer or retry the update.
 
 If Windows selects an external server but game features stay offline, include
-`ReRiff-network.log` from the game folder when reporting the failure. It records
+`logs/ReRiff-network.log` from the game folder when reporting the failure. It records
 bounded network and assembly-loading exception details. The startup report
 collector includes it automatically.
 
@@ -133,9 +144,9 @@ the latest stable release for your platform, verifies its SHA256 and package
 contents, applies the update with backups and rollback, then reopens itself.
 The title bar shows the running version. Settings and saved data are retained.
 
-If you are using a prerelease, **uncheck Use experimental builds** while the
-game is closed to install stable 1.2.2. This works even when your installed
-version has a revision suffix such as `1.2.2-12`. Superseded prereleases are
+If you are using a prerelease, **uncheck Use experimental releases (prereleases)** while the
+game is closed to install stable 1.2.3. This works even when your installed
+version has a revision suffix such as `1.2.3-8`. Superseded prereleases are
 archived; they are not offered as current updates.
 
 If your launcher cannot apply an update, install the current release manually.
@@ -160,7 +171,7 @@ installed game; it is disabled once installation is committed, so replacement
 or rollback can finish safely. It is Off by default, follows
 the installed stable/experimental channel, and resumes the game after an update
 with the original arguments. A failed check starts the installed version and
-records details in `ReRiff-launcher.log`. Existing settings and saved data are
+records details in `logs/ReRiff-launcher.log`. Existing settings and saved data are
 preserved. To test this path without a duplicate GitHub release, close the game
 and run `ReRiff-Launcher.exe --skip-launcher --test-auto-update`. This one launch
 can reinstall the same published version using the normal verified updater,
@@ -223,53 +234,87 @@ To test an unattended update on Linux, use:
 Remove `--test-auto-update` after testing. It implies skipping the launcher for
 that invocation. Current bridges also recognize this flag after `%command%`.
 
-The Windows launcher runs in Steam's Proton prefix and starts or reuses the
-native Linux Python server when local operation is enabled. Keep your existing
+The Windows launcher runs in Steam's Proton prefix. Singleplayer storage runs
+inside the game; the launcher does not start a local Python server. Keep your existing
 working Proton and .NET setup. In Steam, find the game path with **Properties →
 Installed Files → Browse**, then edit **Properties → General → Launch Options**.
 Do not put the Windows EXE directly before `%command%` on Linux; use the bridge
 above. The launcher waits for the game to exit so Steam keeps the session active.
 
+The News screen shows a short preview of the installed client version's patch
+notes while preserving custom server announcements. Choose the original **Visit
+URL** action to open that version's complete GitHub release notes. Client notes ship with the
+installer and do not depend on updating the shared server. Delivery diagnostics
+are recorded in `logs/ReRiff-news.log`.
+
 ## Server settings
 
 The launcher edits `server.ini` beside `Game.exe`:
 
-- **External server:** the preferred shared server address, including its port.
-- **Fallback server:** normally `http://127.0.0.1:5144` for local play.
-- **External server only:** disables local autostart and fallback. An unavailable
-  external server leaves game networking disabled.
-- **Use local server:** selects local operation.
-- **Stop local server:** stops only this installation's Python backend. An
-  already stopped server succeeds; Docker and unrelated services are untouched.
+- **Primary server:** preferred shared Docker/Podman server address, including its port.
+- **Secondary server:** optional fallback address, including the launcher-managed
+  local Podman server at `http://127.0.0.1:5144`.
+- **Primary server only:** skips the secondary server; singleplayer remains available.
+- **Singleplayer:** selects local play while retaining both saved server addresses.
+- **Use servers:** enables primary → secondary → singleplayer selection.
+- **Install / Start / Stop local server:** optionally downloads and manages the
+  official server image with Podman. Install Podman separately and start its local
+  runtime first (a local Podman machine on Windows). Install creates a stopped
+  container; Start makes it available at `http://127.0.0.1:5144`. Enter that address
+  in **Secondary server**, enable **Use servers**, leave **Primary server only**
+  unchecked, and save. The Primary server is tried first.
 
-Both addresses blank disables Parse networking. Server selection is fixed for
-the game session, so restart the game after changing settings. The optional
-server notification fades automatically and does not take controller focus.
-Windowed mode gives the most reliable overlay visibility.
+Optional-server configuration and data stay in `localserver/podman/` in the game
+folder; diagnostics are in `logs/ReRiff-podman.log` and
+`logs/ReRiff-localserver.log`. Stop retains configuration and data. The container
+binds only to localhost and is managed independently of Play and client updates.
+Client installers include the control helper, not the server image/backend.
+Podman itself keeps its engine/image storage in its normal location. This launcher
+feature has no original game equivalent; it does not replace native in-game controls.
 
-Example client configuration:
+When backing out of Servers or Graphics with unsaved changes, a native confirmation
+asks whether to apply or discard them. Back inside that prompt keeps editing.
+Fresh installs show the launcher; Skip launcher and automatic updating start off.
+GitHub prereleases are offered through **Use experimental releases (prereleases)**.
+
+In-game **Settings → Servers** keeps graphical mode toggles and offers
+**Save and exit** to save settings and close the game, alongside **Save and restart**.
+
+Both addresses blank selects singleplayer. The game probes each configured server's
+`/classes/Version` endpoint in order. If neither responds, it starts singleplayer
+inside the game process. In-game **Settings → Servers → Singleplayer** replaces
+Force Offline; its native switch, input and scrolling are retained.
 
 ```ini
 [server]
 external_url = http://your-server:5144
-fallback_url = http://127.0.0.1:5144
+fallback_url = http://your-secondary-server:5144
 timeout_seconds = 5
 show_server_popup = true
 external_only = false
+networking_enabled = true
 ```
 
-The client probes the external `/classes/Version` endpoint at initialization and
-uses the fallback if that probe fails, unless external-only mode is enabled.
-A failed upload does not switch databases or retry on another server. Local and
-remote databases are separate and are not automatically synchronized. Missing,
-unreadable, or invalid configuration disables Parse networking; there is no
-hidden localhost destination. URL credentials, query strings and fragments are
-not accepted. Unrelated Steam networking remains enabled.
+Set `networking_enabled = false` to force singleplayer without probing either
+server. Saved addresses remain intact. Save settings, then restart the game to
+apply a selection. The optional startup notification displays Singleplayer or
+the chosen server.
 
-On native Windows the bundled portable Python runs the local backend. On Proton
-the launcher bridges to native Linux Python. The backend stays running after the
-game closes; use **Stop local server** when needed. Keep one local backend per
-installation/port. Automatic local startup expects port 5144.
+Selection stays fixed for the game session. Failed writes are never replayed to
+another database. Singleplayer, primary and secondary databases remain separate;
+remote scores are not automatically synchronized into singleplayer. Missing or
+invalid configuration selects singleplayer. URL credentials, query strings and
+fragments are not accepted.
+
+Singleplayer keeps scores, profiles, track metadata and ghost files in the game's
+`singleplayer/` folder using the original Parse SDK. Its loopback endpoint exists
+only inside the game process, on a temporary port, and ends when the game closes.
+The original game continues to own track generation, progression and its saves.
+On first use, existing `localserver/server/data/classes` and `files` are copied
+into singleplayer without moving or modifying the old data. Stop the old backend
+before this first import to get a consistent snapshot. Existing server addresses
+are preserved; choose Singleplayer to replace a previously configured localhost
+backend. Shared servers continue to run in Docker or Podman.
 
 ## Shared leaderboards and ghosts
 
@@ -341,13 +386,13 @@ If a different failure persists, send the generated startup report.
   once. Updated launchers distinguish actual host-helper completion from Wine's
   wrapper exit status, including when no local backend is running.
 - **Cannot connect over LAN:** check the saved external URL and port, container
-  port mapping/host networking, TCP firewall rule, and `ReRiff-client.log`. A
+  port mapping/host networking, TCP firewall rule, and `logs/ReRiff-client.log`. A
   public-URL setting alone does not expose a port. Restart the game to reselect.
 - **Same song has separate leaderboards:** update the server and both launchers,
   ensure the exact source files are accessible, and relaunch each client. Metadata
   alone cannot recover unknown cached identities.
 - **Server will not start:** check `localserver/server-console.log` and
-  `ReRiff-launcher.log`; another service may already occupy port 5144.
+  `logs/ReRiff-launcher.log`; another service may already occupy port 5144.
 - **Update fails:** inspect the temporary `update.log` reported by the launcher.
   Download or preflight failure keeps the old launcher open; installation errors
   retain or roll back files. Keep the game's original runtime dependencies.
@@ -468,10 +513,13 @@ override it explicitly. Normal stored News announcements are retained.
 For a local server, open `http://127.0.0.1:5144/admin`. For a shared server, use
 its configured address with `/admin`.
 
-- Client selection: `ReRiff-client.log` beside `Game.exe`.
-- Launcher and updates: `ReRiff-launcher.log`; update errors also identify a
-  temporary folder containing `update.log`.
-- Local backend: `localserver/server-console.log` and
+- Client selection: `logs/ReRiff-client.log` under the game folder.
+- Launcher and updates: `logs/ReRiff-launcher.log`; update errors also identify a
+  working folder for extracted update files. The update log is `logs/update.log`.
+- Native menu startup: `logs/ReRiff-engine-menu.log`; network errors: `logs/ReRiff-network.log`.
+- Setup: `logs/installer.log` on Windows and `logs/installer-*.log` on Linux.
+  Startup collection reports are also saved under `logs/`.
+- Legacy local backend: `localserver/server-console.log` and
   `localserver/server/data/traces/`.
 - Docker: `docker logs reriff-server` and `/data/traces/` inside the container.
 
@@ -510,14 +558,13 @@ python3 -m pip install Flask
 python3 riffapi-local.py
 ```
 
-It runs the same server implementation used by Docker and installed clients,
+It runs the same server implementation used by the Docker/Podman image,
 with tracing enabled, binds to localhost, and uses `data/` beside this root script.
 `RERIFF_DATA_DIR` (or the legacy `RIFFAPI_DATA_DIR`) can select another data folder.
 Source-based song registration also needs the built native catalog library; set
-`RERIFF_CATALOG_LIBRARY` to its path in `build/server-sync/`. Docker and the
-installers include that library automatically. Set `RERIFF_NEWS_LIBRARY` to
+`RERIFF_CATALOG_LIBRARY` to its path in `build/server-sync/`. Docker/Podman images include that library automatically. Set `RERIFF_NEWS_LIBRARY` to
 `build/server-sync/libreriff-news.so` for version-aware News in a source-based
-server. Installed and Docker servers already include both libraries.
+server. The Docker/Podman image already includes both libraries; singleplayer needs neither.
 
 ## Build and release
 

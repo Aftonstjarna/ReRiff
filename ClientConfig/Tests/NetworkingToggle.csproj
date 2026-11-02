@@ -1,4 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><EnableDefaultCompileItems>false</EnableDefaultCompileItems></PropertyGroup>
-  <ItemGroup><Compile Include="NetworkingToggle.cs" /><Compile Include="../ClientConfig.cs" /></ItemGroup>
+  <PropertyGroup>
+    <OutputType>Exe</OutputType><TargetFramework>net45</TargetFramework>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="RoutingSmoke.cs" />
+    <ProjectReference Include="../ClientConfig.csproj" />
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net45" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
 </Project>

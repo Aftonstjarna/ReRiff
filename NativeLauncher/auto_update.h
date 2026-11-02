@@ -98,6 +98,8 @@ static BOOL update_version_newer(const int remote[4],const int local[4]) {
     for(int i=0;i<4;i++)if(remote[i]!=local[i])return remote[i]>local[i];
     return FALSE;
 }
+#include "release_channel.h"
+#define UPDATE_JSON_LIMIT (2*1024*1024)
 static BOOL should_install_automatic_update(const int remote[4],const int local[4]) {
     return update_version_newer(remote,local)||(force_auto_reinstall&&!memcmp(remote,local,4*sizeof(int)));
 }
@@ -114,56 +116,47 @@ static BOOL save_auto_resume(const WCHAR *work) {
 
 static BOOL check_updates(void) {
     WCHAR temporary[CAP],work[CAP],api[CAP],sums[CAP],archive[CAP],url[CAP],filename[256],hash_w[65],command[CAP],name[CAP],source[CAP];
-    BOOL ok=FALSE;PROCESS_INFORMATION process;char expected[65]="",body[65536],version[64];int a,b,c,x,y,z;char tail;
+    BOOL ok=FALSE;PROCESS_INFORMATION process;char expected[65]="",*body=NULL,version[64];char selected_tag[80];int remote_version[4],local_version[4];
     const WCHAR *failure=requested_experimental?L"No experimental client release is available, or GitHub could not be reached":L"Could not read the GitHub release";
     work[0]=0;
     HINTERNET session=InternetOpenW(L"ReRiffLauncher/" RERIFF_VERSION,INTERNET_OPEN_TYPE_PRECONFIG,NULL,NULL,0);
     if(!session){wcscpy(message,L"Could not connect to GitHub.");return FALSE;}
+    body=HeapAlloc(GetProcessHeap(),0,UPDATE_JSON_LIMIT);if(!body)goto done;
     DWORD limit=15000;InternetSetOptionW(session,INTERNET_OPTION_CONNECT_TIMEOUT,&limit,sizeof(limit));
     InternetSetOptionW(session,INTERNET_OPTION_RECEIVE_TIMEOUT,&limit,sizeof(limit));
     if(!GetTempPathW(CAP,temporary)||!GetTempFileNameW(temporary,L"rru",0,work))goto done;
     DeleteFileW(work);if(!CreateDirectoryW(work,NULL))goto done;
     _snwprintf(api,CAP,L"%ls\\release.json",work);api[CAP-1]=0;
-    if(!update_download(session,requested_experimental?L"https://api.github.com/repos/Aftonstjarna/ReRiff/releases/tags/experimental":L"https://api.github.com/repos/Aftonstjarna/ReRiff/releases/latest",api,65535))goto done;
+    if(!update_download(session,requested_experimental?L"https://api.github.com/repos/Aftonstjarna/ReRiff/releases?per_page=100":L"https://api.github.com/repos/Aftonstjarna/ReRiff/releases/latest",api,UPDATE_JSON_LIMIT-1))goto done;
     FILE *file=_wfopen(api,L"rb");if(!file)goto done;
-    size_t n=fread(body,1,sizeof(body)-1,file);body[n]=0;fclose(file);
-    char *tag=strstr(body,"\"tag_name\"");
-    if(!tag||!(tag=strchr(tag,':'))||!(tag=strchr(tag,'"')))goto done;
-    tag++;if(*tag=='v')tag++;size_t length=strcspn(tag,"\"");
-    if(length>=sizeof(version))goto done;memcpy(version,tag,length);version[length]=0;
-    if(requested_experimental){
-        if(strcmp(version,"experimental"))goto done;
-        char *asset=strstr(body,"ReRiff-");
-        if(!asset||sscanf(asset,"ReRiff-%d.%d.%d-",&a,&b,&c)!=3)goto done;
-        snprintf(version,sizeof(version),"%d.%d.%d",a,b,c);
+    size_t n=fread(body,1,UPDATE_JSON_LIMIT-1,file);body[n]=0;fclose(file);
+    if(!select_github_release(body,requested_experimental,version,selected_tag)
+       ||!parse_update_version(version,remote_version)||!parse_update_version(RERIFF_VERSION,local_version))goto done;
+    if(!force_auto_reinstall&&requested_experimental==installed_experimental&&!update_version_newer(remote_version,local_version)){
+        wcscpy(message,L"You have the latest published release on this channel.");ok=TRUE;goto done;
     }
-    if(sscanf(version,"%d.%d.%d%c",&a,&b,&c,&tail)!=3||a<0||a>9999||b<0||b>9999||c<0||c>9999
-       ||sscanf(RERIFF_VERSION,"%d.%d.%d",&x,&y,&z)!=3)goto done;
-    if(!force_auto_reinstall && requested_experimental==installed_experimental && !requested_experimental && (a<x||(a==x&&(b<y||(b==y&&c<=z))))){wcscpy(message,L"You have the latest published release.");ok=TRUE;goto done;}
     if(automatic_update){
-        /* The experimental tag has a compatibility filename with no revision.
-         * Read exact release metadata so unattended launches never reinstall
-         * the same revision or downgrade to an older build. */
-        WCHAR metadata[CAP];_snwprintf(metadata,CAP,L"%ls\\latest-release.json",work);metadata[CAP-1]=0;
-        _snwprintf(url,CAP,L"https://github.com/Aftonstjarna/ReRiff/releases/download/%ls/release.json",requested_experimental?L"experimental":L"invalid");
-        if(!requested_experimental){WCHAR tag_w[64];MultiByteToWideChar(CP_UTF8,0,version,-1,tag_w,64);_snwprintf(url,CAP,L"https://github.com/Aftonstjarna/ReRiff/releases/download/v%ls/release.json",tag_w);}
+        /* Verify package metadata agrees with the selected GitHub release. */
+        WCHAR metadata[CAP],tag_w[80];_snwprintf(metadata,CAP,L"%ls\\latest-release.json",work);metadata[CAP-1]=0;
+        MultiByteToWideChar(CP_UTF8,0,selected_tag,-1,tag_w,80);
+        _snwprintf(url,CAP,L"https://github.com/Aftonstjarna/ReRiff/releases/download/%ls/release.json",tag_w);
         url[CAP-1]=0;
         failure=L"Could not read the exact update version";
         if(!update_download(session,url,metadata,65535))goto done;
         file=_wfopen(metadata,L"rb");if(!file)goto done;
-        n=fread(body,1,sizeof(body)-1,file);body[n]=0;fclose(file);
+        n=fread(body,1,UPDATE_JSON_LIMIT-1,file);body[n]=0;fclose(file);
         char *value=strstr(body,"\"version\"");
         if(!value||!(value=strchr(value,':'))||!(value=strchr(value,'"')))goto done;
-        value++;length=strcspn(value,"\"");if(length>=sizeof(version))goto done;
+        value++;size_t length=strcspn(value,"\"");if(length>=sizeof(version))goto done;
         char exact[64];memcpy(exact,value,length);exact[length]=0;
-        int remote[4],local[4];if(!parse_update_version(exact,remote)||!parse_update_version(RERIFF_VERSION,local)||remote[0]!=a||remote[1]!=b||remote[2]!=c)goto done;
+        int remote[4],local[4];if(!parse_update_version(exact,remote)||!parse_update_version(RERIFF_VERSION,local)||memcmp(remote,remote_version,sizeof(remote)))goto done;
         BOOL same=!memcmp(remote,local,sizeof(remote));
         if(!should_install_automatic_update(remote,local)){wcscpy(message,L"No newer release on the installed channel; starting the game.");ok=TRUE;goto done;}
         if(force_auto_reinstall&&same)log_message(L"TEST: unattended reinstall of the current published version; resume will skip the update check.");
     }
     failure=L"Could not read the release checksums";
     WCHAR version_w[64],release_tag[80];MultiByteToWideChar(CP_UTF8,0,version,-1,version_w,64);
-    if(requested_experimental)wcscpy(release_tag,L"experimental");else _snwprintf(release_tag,80,L"v%ls",version_w);
+    MultiByteToWideChar(CP_UTF8,0,selected_tag,-1,release_tag,80);
     _snwprintf(filename,256,L"ReRiff-%ls-%ls",version_w,is_wine()?L"linux.run":L"windows.zip");filename[255]=0;
     _snwprintf(sums,CAP,L"%ls\\SHA256SUMS",work);sums[CAP-1]=0;
     _snwprintf(url,CAP,L"https://github.com/Aftonstjarna/ReRiff/releases/download/%ls/SHA256SUMS",release_tag);url[CAP-1]=0;
@@ -194,7 +187,7 @@ static BOOL check_updates(void) {
     /* Wine start /unix can finish before the native Unix process. Use the
      * tool's completion markers, not the start.exe exit code, on both OSes. */
     ULONGLONG deadline=GetTickCount64()+120000;
-    failure=L"Installer preflight failed; see update.log";
+    failure=L"Installer preflight failed; see logs\\update.log in the game folder";
     for(;;){
         if(automatic_update&&progress_cancelled())goto done;
         _snwprintf(name,CAP,L"%ls\\failure",work);name[CAP-1]=0;
@@ -223,6 +216,7 @@ static BOOL check_updates(void) {
     CloseHandle(process.hThread);CloseHandle(process.hProcess);
     update_handoff=TRUE;wcscpy(message,automatic_update?L"Installing the verified update. The game will start automatically.":L"Installing the verified update. The launcher will reopen automatically.");ok=TRUE;
 done:
+    if(body)HeapFree(GetProcessHeap(),0,body);
     InternetCloseHandle(session);
     if(automatic_update&&progress_cancelled()){wcscpy(message,L"Update canceled; starting the installed game.");return FALSE;}
     if(!ok){_snwprintf(message,1024,L"%ls. Installed files were retained. Details: %ls",failure,work);message[1023]=0;}

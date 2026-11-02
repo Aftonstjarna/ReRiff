@@ -11,6 +11,8 @@
   <ItemGroup>
     <Compile Include="SigningSmoke.cs" />
     <Compile Include="NativeReelBridgeSmoke.cs" />
+    <Compile Include="ClientNewsSmoke.cs" />
+    <Reference Include="System.Web.Extensions" />
     <ProjectReference Include="../ClientConfig/ClientConfig.csproj" />
     <ProjectReference Include="../NewsHeaders/NewsHeaders.csproj" />
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net45" Version="1.0.3" PrivateAssets="all" />

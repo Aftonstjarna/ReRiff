@@ -1,0 +1,44 @@
+/* Hash-pinned original gaMenu derivatives: slot 9 is setupMenuScale. */
+static const DWORD ui_menu_tables[]={
+    0x7a2af4, /* gaIncreaseMultiplierConfirmation */
+    0x7a2ba0, /* gaIncreaseMultiplierScreen */
+    0x7a2c90, /* gaPauseMenu */
+    0x7a38ec, /* gaPostRaceMenu */
+    0x7a3bfc, /* gaResults */
+    0x7a3d38, /* gaResultsAchievements */
+    0x7a3de8, /* gaResultsShare */
+    0x7a3e80, /* gaResultsShareConfirm */
+    0x7a3f10, /* gaResultsTokens */
+    0x7a4048, /* gaResultsVersus */
+    0x7a416c, /* gaResultsXP */
+    0x7a42a0, /* gaSyncResults */
+    0x7a4618, /* gaTrackSummary */
+    0x7a4d68, /* gaVehicleSelect */
+    0x7a52bc, /* gaAdOverlay */
+    0x7a54bc, /* gaFileSelectInterface */
+    0x7a56c4, /* gaMenu */
+    0x7a5888, /* gaControlsOptions */
+    0x7a5918, /* gaGraphicsConfirm */
+    0x7a59c0, /* gaGraphicsOptions */
+    0x7a5a7c, /* gaOptionsMenu */
+    0x7a6c84, /* gaChallengeScreen */
+    0x7a6d38, /* gaCredits */
+    0x7a6dd8, /* gaCustomise */
+    0x7a6f94, /* gaDriverProfileMenu */
+    0x7a7024, /* gaDRMPopup */
+    0x7a70b8, /* gaFriendsMenu */
+    0x7a7144, /* gaGameCenterWait */
+    0x7a71e8, /* gaGhostSelect */
+    0x7a72cc, /* gaLeaderboards */
+    0x7a73ac, /* gaDemoMenu */
+    0x7a7470, /* gaMainMenu */
+    0x7a7524, /* gaNewsMenu */
+    0x7a7650, /* gaNewTrackScreen */
+    0x7a76e0, /* gaNoConnectionScreen */
+    0x7a786c, /* gaPurchaseMenu */
+    0x7a7900, /* gaQuitConfirmMenu */
+    0x7a79c8, /* gaRecentTracksMenu */
+    0x7a7a5c, /* gaRetentionPopup */
+    0x7a7af0, /* gaSplashScreen */
+    0x7a7b74, /* gaTrackCreatorScreen */
+};

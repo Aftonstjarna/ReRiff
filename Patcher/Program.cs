@@ -15,6 +15,7 @@ if (args.Length == 4 && args[0] == "--retarget-helpers") {
         reference.Attributes &= ~AssemblyAttributes.PublicKey;
         updated++;
     }
+    if(source.Assembly.Name=="Parse.NetFx45") InstallClientNews(source,args[2]);
     if (updated == 0) throw new InvalidOperationException("No existing helper references found.");
     if (source.IsILOnly) {
         var writer = new ModuleWriterOptions(source);
@@ -58,6 +59,7 @@ if (args.Length == 4 && args[0] == "--news-header") {
     body.Insert(headerIndex+3, body[headerIndex-3].Clone());
     body.Insert(headerIndex+4, body[headerIndex-2].Clone());
     body.Insert(headerIndex+5, Instruction.Create(OpCodes.Call, sdk.Import(add)));
+    InstallClientNews(sdk,Path.GetDirectoryName(args[2])!);
     execute.Body.SimplifyBranches(); execute.Body.OptimizeBranches();
     var headerOptions = new ModuleWriterOptions(sdk); headerOptions.MetadataOptions.Flags |= MetadataFlags.PreserveAll;
     sdk.Write(args[3], headerOptions);
@@ -117,3 +119,24 @@ var patched = check.Types.Single(t => t.Name == "wsNetworkParseImpl").Methods.Si
 if (!patched.Body.Instructions.Any(i => i.Operand is IMethod m && m.FullName.Contains("ReRiff.ClientConfig::GetServer")))
     throw new InvalidOperationException("Patch verification failed.");
 Console.WriteLine("Verified: ParseOctane.open calls ReRiff.ClientConfig.GetServer directly.");
+
+
+static void InstallClientNews(ModuleDefMD sdk,string helperFolder) {
+    var execute=sdk.Types.Single(t=>t.FullName=="Parse.Internal.HttpClient").Methods.Single(m=>m.Name=="ExecuteAsync");
+    if(execute.Body.Instructions.Any(i=>i.Operand is IMethod m&&m.FullName.Contains("ReRiff.NewsHeaders::WithClientNews")))return;
+    using var helper=ModuleDefMD.Load(Path.Combine(helperFolder,"ReRiff.NewsHeaders.dll"));
+    var wrapper=helper.Types.Single(t=>t.FullName=="ReRiff.NewsHeaders").Methods.Single(m=>m.Name=="WithClientNews");
+    if(execute.ReturnType.FullName!=wrapper.Parameters[0].Type.FullName)
+        throw new InvalidOperationException("Unexpected original Parse HTTP task result.");
+    var uri=execute.Body.Instructions.Select(i=>i.Operand).OfType<IMethod>().First(m=>m.Name=="get_Uri"&&m.DeclaringType.FullName=="Parse.Internal.HttpRequest");
+    var method=execute.Body.Instructions.Select(i=>i.Operand).OfType<IMethod>().First(m=>m.Name=="get_Method"&&m.DeclaringType.FullName=="Parse.Internal.HttpRequest");
+    var returns=execute.Body.Instructions.Where((i,index)=>i.OpCode==OpCodes.Ret && !(index>0 && execute.Body.Instructions[index-1].Operand is IMethod previous && previous.FullName.Contains("::OfflineTask"))).ToArray();
+    foreach(var ret in returns){
+        // Leave the original task on the stack, including its cancellation/errors.
+        // Mutate the return instruction so existing branches also run the wrapper.
+        int at=execute.Body.Instructions.IndexOf(ret);ret.OpCode=OpCodes.Ldarg_1;ret.Operand=null;
+        foreach(var instruction in new[]{Instruction.Create(OpCodes.Callvirt,sdk.Import(uri)),Instruction.Create(OpCodes.Ldarg_1),Instruction.Create(OpCodes.Callvirt,sdk.Import(method)),Instruction.Create(OpCodes.Call,sdk.Import(wrapper)),Instruction.Create(OpCodes.Ret)})
+            execute.Body.Instructions.Insert(++at,instruction);
+    }
+    execute.Body.SimplifyBranches();execute.Body.OptimizeBranches();
+}

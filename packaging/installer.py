@@ -287,8 +287,9 @@ def install(bundle, game, backups, platform, dry_run=False, restore=False, music
                 if path.is_file():
                     plan['localserver/windows-python/'+path.relative_to(runtime).as_posix()] = path.read_bytes()
             plan['localserver/windows-python/python313._pth'] = b'python313.zip\n.\n..\n../python-libs\nimport site\n'
-            plan['localserver/start-server.cmd'] = b'@echo off\r\n"%~dp0windows-python\\python.exe" "%~dp0trace-server.py" --server-dir "%~dp0server"\r\n'
-        else:
+            if not manifest.get('singleplayer'):
+                plan['localserver/start-server.cmd'] = b'@echo off\r\n"%~dp0windows-python\\python.exe" "%~dp0trace-server.py" --server-dir "%~dp0server"\r\n'
+        elif not manifest.get('singleplayer'):
             root = game/'localserver'
             interpreter = sys.executable or shutil.which('python3')
             if not interpreter:
@@ -296,7 +297,7 @@ def install(bundle, game, backups, platform, dry_run=False, restore=False, music
             script = '#!/bin/sh\nset -eu\nunset PYTHONHOME\nexport PYTHONNOUSERSITE=1\nexport PYTHONPATH='+shlex.quote(str(root/'python-libs'))+'\nexec '+shlex.quote(interpreter)+' '+shlex.quote(str(root/'trace-server.py'))+' --server-dir '+shlex.quote(str(root/'server'))+'\n'
             plan['localserver/start-server.sh'] = script.encode()
         if not (game/'server.ini').exists():
-            plan['server.ini'] = b'[server]\n; External server example: https://riffapi.hobune.stream/\n; To use it, set external_url = https://riffapi.hobune.stream/\nexternal_url =\nfallback_url = http://127.0.0.1:5144\ntimeout_seconds = 5\nshow_server_popup = true\n\n[launcher]\nskip_launcher = false\nauto_update_on_skip = false\n'
+            plan['server.ini'] = b'[server]\n; External server example: https://riffapi.hobune.stream/\n; To use it, set external_url = https://riffapi.hobune.stream/\nexternal_url =\nfallback_url =\ntimeout_seconds = 5\nnetworking_enabled = true\nshow_server_popup = true\n\n[launcher]\nskip_launcher = false\nauto_update_on_skip = false\n'
         next_state = {'version': manifest['version'], 'backup_dir': str(backups),
                       'patched': {n: digest(plan[n] if n in plan else (game/n).read_bytes()) for n in manifest['required_existing']} if local_patching else ({n: digest(plan[n]) for n in originals} if originals else state.get('patched',manifest.get('required_existing',{})))}
         if platform == 'linux':
@@ -356,6 +357,20 @@ def install(bundle, game, backups, platform, dry_run=False, restore=False, music
             link_music_folder(game, Path(next_state['music_dir']))
         except OSError as error:
             print('Music link was not applied; game installation completed: '+str(error))
+    # Preserve older diagnostics while keeping the game root clear.
+    logs=game/'logs'
+    try:
+        logs.mkdir(exist_ok=True)
+        for name in ('ReRiff-client.log','ReRiff-network.log','ReRiff-engine-menu.log','ReRiff-launcher.log','installer.log'):
+            old=game/name
+            if old.is_file():
+                target=logs/name
+                if target.exists():
+                    import time
+                    target=logs/('legacy-'+str(time.time_ns())+'-'+name)
+                old.rename(target)
+    except OSError as error:
+        print('Could not relocate legacy diagnostics: '+str(error))
     print(('Original DLLs restored.' if restore else 'ReRiff '+manifest['version']+' installed.')+'\nGame: '+str(game)+'\nBackups: '+str(backups)+'\nExisting settings and saved data preserved.')
     return plan
 

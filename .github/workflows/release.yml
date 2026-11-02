@@ -28,6 +28,13 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & .\build\signing-smoke\SigningSmoke.exe
           exit $LASTEXITCODE
+      - name: Test singleplayer routing on Microsoft .NET Framework
+        shell: pwsh
+        run: |
+          dotnet build ClientConfig/Tests/Tests.csproj -c Release -o build/routing-smoke
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & .\build\routing-smoke\Tests.exe
+          exit $LASTEXITCODE
   release:
     if: github.repository == 'Aftonstjarna/ReRiff'
     needs: windows-loader
@@ -67,11 +74,6 @@ jobs:
           fi
       - name: Fetch verified compiler and Windows Python
         run: python packaging/fetch_release_tools.py --directory "$RUNNER_TEMP/release-tools"
-      - name: Fetch pinned offline server dependencies
-        run: >-
-          python -m pip download --dest "$RUNNER_TEMP/wheels"
-          --only-binary=:all: --platform win_amd64 --python-version 313
-          --implementation cp --abi cp313 -r packaging/requirements.txt
       - name: Build client helper
         run: dotnet build ClientConfig/ClientConfig.csproj -c Release -o build
       - name: Build client version header adapter
@@ -84,12 +86,6 @@ jobs:
         run: |
           python scripts/build-windows-launcher.py --zig "$RUNNER_TEMP/release-tools/zig-x86_64-linux-0.14.1/zig"
           python scripts/verify-windows-manifests.py
-      - name: Build Linux and Windows server identity libraries
-        # Native catalog matches the platform running Python, not the x86 game.
-        # Portable Windows Python and supported Linux release targets are x64.
-        run: >-
-          python scripts/build-song-catalog.py
-          --zig "$RUNNER_TEMP/release-tools/zig-x86_64-linux-0.14.1/zig"
       - name: Build and test native Linux setup
         run: |
           sudo apt-get update
@@ -99,7 +95,6 @@ jobs:
       - name: Package Windows and Linux installers
         run: >-
           python packaging/build_release.py --local-patching
-          --wheels-dir "$RUNNER_TEMP/wheels"
           --python-zip "$RUNNER_TEMP/release-tools/python.zip"
       - name: Verify installer safety and rollback
         env:
@@ -108,15 +103,19 @@ jobs:
           python -m unittest discover -s packaging -p test_installer.py -v
           python -m unittest discover -s packaging -p test_helper_upgrade.py -v
           python -m unittest discover -s packaging -p test_linux_music.py -v
+      - name: Build server libraries and dependencies for News regression tests
+        run: |
+          python -m pip install -r packaging/requirements.txt
+          python scripts/build-song-catalog.py --zig "$RUNNER_TEMP/release-tools/zig-x86_64-linux-0.14.1/zig"
       - name: Verify stable and numbered-prerelease News comparisons
         env:
           PYTHONNOUSERSITE: '1'
-          PYTHONPATH: build/release/linux/payload/localserver/python-libs
         run: python scripts/test_news_versions.py
       - name: Verify automatic update extraction, rollback and Steam forwarding
         run: |
           python scripts/test_client_update.py
           python scripts/test_steam_bridge.py
+          python scripts/test_podman_server.py
       - name: Validate Linux self-extractor
         run: sh "dist/v$(cat VERSION)/ReRiff-$(cat VERSION)-linux.run" --help
       - name: Verify published archive checksums and installed channel
@@ -133,6 +132,12 @@ jobs:
               channel.read(marker)
               assert channel['client']['channel'] == manifest['channel'] == os.environ['RERIFF_RELEASE_CHANNEL']
               assert hashlib.sha256(marker.read_bytes()).hexdigest() == manifest['files'][name]
+              helper = 'payload/localserver/podman-server.py'
+              assert hashlib.sha256((root / helper).read_bytes()).hexdigest() == manifest['files'][helper]
+              assert not (root / 'payload/localserver/podman/config.json').exists()
+              notes = 'payload/localserver/client-release-notes.md'
+              assert hashlib.sha256((root / notes).read_bytes()).hexdigest() == manifest['files'][notes]
+              assert (root / notes).read_text().startswith('# ReRiff ' + manifest['version'] + ' ')
               menu = (root / 'payload/ReRiff.Notify.dll').read_bytes()
               assert b'ReRiffStartEngineMenu' in menu
               assert 'SAVE AND RESTART'.encode('utf-16-le') in menu

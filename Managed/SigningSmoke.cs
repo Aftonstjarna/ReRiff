@@ -11,13 +11,15 @@ class SigningSmoke {
                 throw new Exception("Unsigned assembly: " + assembly.FullName);
         }
         NativeReelBridgeSmoke.Run();
+        ClientNewsSmoke.Run();
         string root = AppDomain.CurrentDomain.BaseDirectory;
         File.WriteAllText(Path.Combine(root, "server.ini"),
             "[server]\nnetworking_enabled=false\nshow_server_popup=false\n");
-        if (ReRiff.ClientConfig.CanSend()) throw new Exception("Expected offline fixture");
+        if (!ReRiff.ClientConfig.CanSend() || !ReRiff.Singleplayer.IsEndpoint(ReRiff.ClientConfig.GetServer()))
+            throw new Exception("Expected in-process singleplayer fixture");
         try { throw new WebException("ReRiff network diagnostic fixture"); }
         catch (WebException) { }
-        string diagnostic = Path.Combine(root, "ReRiff-network.log");
+        string diagnostic = Path.Combine(root, "logs", "ReRiff-network.log");
         if (Type.GetType("Mono.Runtime") == null
             && (!File.Exists(diagnostic) || !File.ReadAllText(diagnostic).Contains("ReRiff network diagnostic fixture")))
             throw new Exception("First-chance network diagnostic was not recorded");
@@ -26,7 +28,7 @@ class SigningSmoke {
         File.WriteAllText(Path.Combine(local, "install-state.json"), "{\"version\":\"1.2.1-2\"}");
         WebRequest request = WebRequest.Create("http://127.0.0.1/classes/News");
         ReRiff.NewsHeaders.Add(request);
-        if (request.Headers["X-ReRiff-Client-Version"] != "1.2.1")
+        if (request.Headers["X-ReRiff-Client-Version"] != "1.2.1-2")
             throw new Exception("Revision version header was not set");
         Console.WriteLine("PASS: signed x86 .NET Framework caller loads both signed helpers; offline routing and revision header work.");
         return 0;

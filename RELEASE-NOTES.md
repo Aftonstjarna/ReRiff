@@ -1,3 +1,207 @@
+# ReRiff 1.2.3 — Singleplayer, display controls and client updates
+
+Combines the tested changes from experimental 1.2.3-1 through 1.2.3-8.
+
+- Play singleplayer without running a local server. Scores and ghosts stay on
+  this PC; existing local-server data can be imported without changing its source.
+- Try the Primary server, then Secondary, then singleplayer. Retain saved
+  addresses when selecting singleplayer; Primary-only skips Secondary.
+- Install an optional Podman server from the launcher, then start or stop it there.
+  The server image is downloaded on request, with persistent configuration/data
+  under localserver/podman. Use http://127.0.0.1:5144 as Secondary. Podman itself
+  is installed separately; the client installer no longer bundles the backend.
+- Choose windowed, borderless or exclusive fullscreen through the native Graphics
+  selector. Render above monitor resolution and scale down in borderless mode.
+  Keep or revert display changes with the original confirmation and 10-second
+  timeout; Alt+Enter switches windowed/current fullscreen mode.
+- Adjust UI Scale with the native volume-style slider: 0 is original Auto,
+  25 Small, 50 the 1080p reference, 75 Large and 100 Very Large. Retain native
+  spacing, scrolling, mouse/controller navigation and a selectable Apply button.
+- Fix Windows native-menu loading and Direct3D AA/reset compatibility. Keep
+  toggle artwork aligned after layout and slider focus during Left/Right input.
+- Simplify Servers to graphical mode switches and clear save actions. Prompt to
+  apply/discard changes when backing out of Graphics or Servers. Offer Return
+  without saving, Save and return, Save and restart, and Save and exit in order.
+- Treat numbered GitHub prereleases as experimental updates. Keep Skip launcher
+  and unattended updating off on fresh installs, preserving existing preferences.
+- Show the installed client version's concise patch notes in native News, with
+  the original Visit URL action opening the full GitHub release notes. Preserve
+  custom server announcements and send the complete client revision to servers.
+- Keep launcher/client/menu/News/update diagnostics under the game's logs folder,
+  including the game process exit code. Preserve verified vanilla DLL backups.
+
+Windows live testing confirmed native menus, Borderless Apply/Keep, higher render
+resolution, AA resource recreation, clean exit, toggle alignment and slider focus.
+D3D9/9Ex and installer/updater regression checks also pass. Friends-list restoration
+and a native Linux game executable are not included; Linux uses Proton.
+
+# ReRiff 1.2.3-8 — Experimental graphics control alignment and focus
+
+- Keep the AA toggle thumb aligned after scrolling/layout. Reapply the original
+  fullscreen-toggle positioning rule from the bar's current position rather than
+  restoring a stale pre-toggle thumb position.
+- Handle UI Scale Left/Right through the original Audio-style pressed/repeat
+  polling only. Remove duplicate button-activation shortcuts so adjustment keeps
+  focus on the slider; retain Up/Down row navigation and mouse dragging.
+- Add regression coverage for repeated AA toggles and scrolling at five scales,
+  plus slider direction adjustment and focus/input ownership checks.
+
+The 1.2.3-7 Windows retest confirmed Borderless Apply/Keep, a change to 1920x1200
+rendering on a 1280x800 display, AA reset/resource recreation and exit code zero.
+These graphical/input corrections pass local native regression checks; their
+appearance and focus behaviour still need an in-game retest.
+
+# ReRiff 1.2.3-7 — Experimental Direct3D reset compatibility
+
+- Preserve Direct3D's complete original device method table when attaching the AA
+  hook. Extend only Present/Reset (and PresentEx/ResetEx on 9Ex), rather than
+  substituting a fixed-size copy of public interface entries.
+- Forward calls from other devices sharing that table without AA rendering,
+  resource cleanup or borderless background suppression.
+- Add real-device regressions for native table identity, AA output, graphics-state
+  preservation, reset/recreation and unrelated-device isolation on D3D9 and D3D9Ex.
+- Log the game's hexadecimal process exit code in `logs/ReRiff-launcher.log`,
+  including failures such as `0xC0000005`.
+
+The Windows report confirms an access violation at address `0x00000001` during
+borderless Apply. A fixed-size replacement device table is a compatibility risk
+near this failure; these changes remove it. D3D9/9Ex rendering and reset checks
+pass through Wine, but the affected Windows borderless path still needs retesting.
+The report does not establish the exact native call stack or prove this was the
+only cause. Menu injection and client News delivery are confirmed in the latest logs.
+
+# ReRiff 1.2.3-6 — Experimental live-image guard correction
+
+- Stop interpreting the live Windows PE header as unchanged file metadata when
+  validating native UI prologues. Use the preferred base, image bounds and
+  relocation records from the same hash-verified original executable instead.
+- Retain exact live opcode and relocated-operand comparisons. Add regression
+  coverage for adjusted header metadata with discarded relocation pages, including
+  rejection of an altered operand under those conditions.
+- Log live PE header details and bytes at the first guarded function if native
+  menu validation still fails on the affected Windows installation.
+
+The 1.2.3-5 Windows logs confirm client notes are being delivered to native News
+results, but menu injection still fails at the first native prologue guard.
+This correction passes the modeled loader-state tests; in-game Windows success
+still needs confirmation. No server update is required for client News delivery.
+
+# ReRiff 1.2.3-5 — Experimental Windows guard and client News fixes
+
+- Preserve relocation records from the same hash-verified original executable
+  instead of requiring its discardable `.reloc` section to remain mapped. Add
+  a regression test with that section inaccessible and detailed menu-guard errors.
+- Install the current client revision's patch notes and merge them into the
+  original Parse News result. Retain native News rendering and custom server posts;
+  replace built-in placeholder/status posts with the current client's notes.
+- Preserve the complete experimental revision in the client version header.
+  Verify upgrades from the current transport and older signed client variants.
+- Add `logs/ReRiff-news.log` for client-note delivery diagnostics.
+
+This remains an experimental debugging build. Native and original-SDK regressions
+pass locally; the Windows menu fix still needs confirmation on the affected PC.
+The release popup depends on native menu startup and a successful unattended update.
+Existing display/manual-scale experiments retain their testing limitations.
+
+# ReRiff 1.2.3-4 — Experimental Windows menu loading and optional server
+
+- Fix native-menu startup guards for the original Windows executable when Windows
+  loads it at a different address. Validate exact relocated operands against the
+  original PE relocation table, while retaining the executable hash check.
+- Replace the launcher’s legacy Stop local server action with Install, Start and
+  Stop for an optional per-game Podman server. Download the official server image
+  only when Install is selected; client installers do not bundle the backend.
+- Keep server configuration and persistent data in `localserver/podman/`, expose
+  it only at `http://127.0.0.1:5144`, and show that address for the Secondary server
+  field. The configured Primary server remains first in the connection order.
+- Keep Podman diagnostics in the game’s `logs/` folder. Manage only the container
+  belonging to this game folder; retain data when stopping the server.
+
+This is an experimental debugging build. Install Podman separately and start its
+local runtime before installing the optional server. Automated tests cover rebased
+menu guards and server ownership/lifecycle; Windows gameplay still needs live
+validation. The reported missing release popup and News patch notes are not fixed
+in this revision. Existing display and manual UI scaling experiments remain under test.
+
+# ReRiff 1.2.3-3 — Experimental Servers action order
+
+- Order the final Servers actions as RETURN WITHOUT SAVING, SAVE AND RETURN,
+  SAVE AND RESTART, then SAVE AND EXIT.
+- Rename BACK WITHOUT SAVING to RETURN WITHOUT SAVING, retaining native
+  scrolling and wraparound navigation.
+
+This is a debugging build. The missing native menus reported on Windows remain
+under investigation; menu startup details are in `logs/ReRiff-engine-menu.log`.
+
+# ReRiff 1.2.3-2 — Experimental launcher, save prompts and diagnostics
+
+- Treat numbered GitHub prereleases as experimental launcher updates. Select
+  the newest supported prerelease by its full version, skip drafts and stable
+  releases, and use that release's own assets and checksums.
+- Add Apply to native Graphics navigation and highlighting, retaining the
+  original Apply sprite and save handler.
+- Prompt to apply or discard unsaved Servers and Graphics changes when backing
+  out. Reuse the original game's yes/no overlay and its input lifecycle;
+  pressing Back on the prompt keeps editing.
+- Write launcher, client, network, menu, updater and setup diagnostics under
+  `logs/` in the game folder. Preserve legacy root logs when updating; startup
+  collection reports use the same folder. Add explicit native-menu startup errors.
+- Keep Skip launcher and automatic updates off on fresh installs. Preserve
+  existing preferences when updating.
+
+This remains experimental. Apply hover/controller navigation and save prompts
+need in-game validation on Windows and Proton. Missing native menus on one
+Windows install are under investigation; collect `logs/ReRiff-engine-menu.log`
+and `logs/ReRiff-client.log` for diagnosis. Borderless focus, restart and manual
+UI scaling retain the testing limitations documented for 1.2.3-1.
+
+# ReRiff 1.2.3-1 — Experimental singleplayer and native menu updates
+
+- Replace the client-managed Python server with in-process singleplayer storage.
+  Reuse the original Parse SDK; retain scores and ghosts across sessions and
+  import existing local-server data without modifying the source database.
+- Try the primary server, then the secondary server, then singleplayer.
+  Primary-only skips the secondary; the Singleplayer toggle retains saved URLs.
+  Client installers no longer bundle the Python backend or its web dependencies.
+- Simplify Settings → Servers by removing duplicate plaintext mode buttons while
+  retaining native graphical toggles, scrolling and wraparound navigation.
+  Add SAVE AND EXIT, which saves settings before requesting a normal game close.
+- Replace separate fullscreen switches with a resolution-style selector using
+  original arrow sprites and input: OFF (WINDOWED), BORDERLESS and EXCLUSIVE.
+  Restore the selected resolution value after scrolling away and back.
+- Improve native menu hover, icon alignment and graphics navigation. Add a
+  volume-style UI SCALE slider: 0 uses the game's built-in Auto scaling; 25 is
+  Small, 50 is the 1080p reference, 75 is Large and 100 is Very Large.
+- Continue borderless fullscreen and higher render-resolution experiments with
+  the original Keep/Revert confirmation and 10-second timeout. Add Alt+Enter
+  switching between windowed and the selected fullscreen mode.
+
+This is a prerelease. Auto scaling has been confirmed in-game. Manual UI scaling,
+borderless focus/input, confirmation/revert and restart after borderless still
+need live testing; previous builds showed freezes or lingering audio. The server
+menu and display fixtures, original-SDK singleplayer tests, and installer/updater
+checks pass, but they do not establish complete Windows gameplay compatibility.
+Stable 1.2.2 is unchanged.
+
+# ReRiff 1.2.2-13 — Unreleased display experiments
+
+Held on the experimental branch; **not published or included in stable 1.2.2**.
+
+- Prototype native resolution-text hover, GPU-bounded render presets, borderless
+  fullscreen, and the original Keep/Revert overlay with a 10-second deadline.
+- Delegate Apply to the original Graphics handler and move window styling onto
+  the original HWND message thread. Normalize native zero render dimensions.
+- Start the deadline at native screen entry and log renderer reset stages,
+  confirmation state and button activation for diagnosis.
+- Keep Graphics and Servers action labels uppercase, while the main Settings
+  entry remains titled Servers.
+
+Known live failures: keyboard/mouse input can stop after borderless applies;
+controller confirmation has sometimes worked. Confirmation/reversion can freeze.
+Save and restart after borderless may leave lingering audio or an invisible game
+window. Process/window ownership and complete input restoration remain unresolved.
+Fixture checks do not establish that these paths work in the actual game.
+
 # ReRiff 1.2.2 — Native Settings, Linux setup and automatic updates
 
 Combines the working changes from experimental 1.2.2-1 through 1.2.2-12.

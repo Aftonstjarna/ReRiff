@@ -78,34 +78,12 @@ def build(args):
         copy(ROOT/'build'/name, payload/name)
     copy(ROOT/'build/ReRiff.NewsHeaders.dll', payload/'ReRiff.NewsHeaders.dll')
     copy(ROOT/'VERSION', payload/'localserver/client-version.txt')
+    (payload/'localserver/client-release-notes.md').write_text(notes,encoding='utf-8')
     (payload/'localserver/client-channel.ini').write_text('[client]\nchannel='+channel+'\n')
-    for name in ('trace-server.py','server_routing.py','steam-launcher.sh','start-server-host.sh','stop-server-host.sh','server-control.py','apply-client-update.py'):
-        copy(ROOT/'scripts'/name,payload/'localserver'/name)
-    (payload/'localserver/client-channel.ini').write_text('[client]\nchannel='+channel+'\n')
-    for path in (ROOT/'vendor/riffapi-local-extended').iterdir():
-        if path.is_file():
-            copy(path,payload/'localserver/server'/path.name)
-    copy(ROOT/'VERSION',payload/'localserver/server/VERSION')
-    copy(ROOT/'LICENSE',payload/'localserver/licenses/ReRiff.txt')
-    copy(ROOT/'ServerSync/third_party/LICENSE.MIT',payload/'localserver/licenses/nlohmann-json.txt')
-    libs = payload/'localserver/python-libs'
-    for requirement in (ROOT/'packaging/requirements.txt').read_text().splitlines():
-        name, version_pin = requirement.split('==')
-        normalized = name.lower().replace('-', '_')
-        wheel = next((p for p in args.wheels_dir.glob('*.whl') if p.name.lower().startswith(normalized+'-'+version_pin+'-')), None)
-        if wheel is None:
-            raise ValueError('Missing pinned wheel: '+requirement)
-        with zipfile.ZipFile(wheel) as archive:
-            for item in archive.infolist():
-                # MarkupSafe has a supported pure-Python fallback. Do not bundle
-                # platform-specific accelerators into the shared library tree.
-                if item.is_dir() or item.filename.endswith(('.pyd','.so','.pyc')):
-                    continue
-                dest = libs/item.filename
-                if '..' in Path(item.filename).parts or Path(item.filename).is_absolute():
-                    raise ValueError('Unsafe wheel path')
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                dest.write_bytes(archive.read(item))
+    # Multiplayer backend dependencies belong in the container image. The
+    # installed client retains only updater and legacy-server cleanup tools.
+    for name in ('steam-launcher.sh', 'stop-server-host.sh', 'server-control.py', 'apply-client-update.py', 'podman-server.py'):
+        copy(ROOT/'scripts'/name, payload/'localserver'/name)
     output.mkdir(parents=True, exist_ok=True)
     commit = subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
     for platform in ('linux','windows'):
@@ -115,10 +93,6 @@ def build(args):
             copy(ROOT/'build/linux-patcher/Patcher', folder/'patcher/ReRiff-Patcher')
             for name in ('LICENSE.TXT', 'THIRD-PARTY-NOTICES.TXT'):
                 copy(ROOT/'build/linux-patcher'/name, folder/'patcher'/('dotnet-'+name))
-        library = 'reriff-catalog.dll' if platform == 'windows' else 'libreriff-catalog.so'
-        copy(ROOT/'build/server-sync'/library, folder/'payload/localserver/server'/library)
-        news_library = library.replace('catalog', 'news')
-        copy(ROOT/'build/server-sync'/news_library, folder/'payload/localserver/server'/news_library)
         if platform == 'linux':
             copy(ROOT/'build/ReRiff-Setup', folder/'ReRiff-Setup')
         if platform == 'windows':
@@ -126,7 +100,7 @@ def build(args):
             with zipfile.ZipFile(args.python_zip) as archive:
                 archive.extractall(folder/'python')
             (folder/'python/python313._pth').write_text('python313.zip\n.\n..\nimport site\n')
-        manifest = {'channel':channel,'version':version,'commit':commit,'platform':platform,'patches':patches,
+        manifest = {'singleplayer': True, 'channel':channel,'version':version,'commit':commit,'platform':platform,'patches':patches,
                     'update_only':update_only,
                     'vanilla_originals':json.loads((ROOT/'packaging/original-client.json').read_text()) if args.local_patching else {},
                     'compatible_existing':json.loads((ROOT/'packaging/compatible-client.json').read_text()) if args.local_patching else {},
@@ -190,6 +164,6 @@ if __name__=='__main__':
     inputs.add_argument('--patch-dir',type=Path,help='Use versioned deltas without accessing original game DLLs')
     inputs.add_argument('--update-only',action='store_true',help='Update only ReRiff components; include no game-derived binary patches')
     inputs.add_argument('--local-patching',action='store_true',help='Include the source-built patcher for vanilla installs, without game DLLs or binary deltas')
-    parser.add_argument('--wheels-dir',type=Path,required=True)
+    parser.add_argument('--wheels-dir',type=Path,help=argparse.SUPPRESS) # Legacy build invocation; no server wheels are packaged.
     parser.add_argument('--python-zip',type=Path,required=True)
     build(parser.parse_args())

@@ -14,3 +14,18 @@ mkdir -p build/experimental-engine-menu
   -Wl,--image-base,0x10000000 -luser32 -lgdi32 -ladvapi32 -static
 "$zig_tool" cc -target x86-windows-gnu -municode -Wl,--subsystem,windows -O2 -Wall -Wextra -Werror \
   NativeLauncher/test_notification.c -o build/experimental-engine-menu/test-notification.exe -luser32 -static
+"$zig_tool" cc -target x86-windows-gnu -O2 -Wall -Wextra -Werror \
+  ExperimentalMenu/test_display_modes.c -o build/experimental-engine-menu/test-display.exe \
+  -Wl,--image-base,0x10000000 -luser32 -lgdi32 -ladvapi32 -static
+
+"$zig_tool" cc -target x86-windows-gnu -O2 -Wall -Wextra -Werror \
+  ExperimentalMenu/test_ui_scale.c -o build/experimental-engine-menu/test-ui-scale.exe \
+  -Wl,--image-base,0x10000000 -luser32 -lgdi32 -ladvapi32 -static
+
+"$zig_tool" cc -target x86-windows-gnu -O2 -Wall -Wextra -Werror \
+  ExperimentalMenu/test_save_prompt.c -o build/experimental-engine-menu/test-save-prompt.exe \
+  -Wl,--image-base,0x10000000 -luser32 -lgdi32 -ladvapi32 -static
+
+"$zig_tool" cc -target x86-windows-gnu -O2 -Wall -Wextra -Werror \
+  ExperimentalMenu/test_antialiasing.c -o build/experimental-engine-menu/test-antialiasing.exe \
+  -luser32 -lgdi32 -ladvapi32 -static
