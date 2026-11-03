@@ -15,3 +15,11 @@
   contribute verified new findings there. Preserve original hashes, exact bytes,
   metadata tokens and provenance; keep intentional ReRiff patches separate from
   byte-for-byte original reconstruction and do not claim matching without comparison.
+
+# ReRiff research submissions
+
+- Keep new reverse-engineering notes in ReRiff and submit them with
+  `bash scripts/submit-decomp-research.sh reports/NOTE.md`. See `reports/AGENTS.md`.
+- Do not write research notes directly into the live decomp checkout. The
+  coordinator tracks snapshots, provenance and review status outside that tree;
+  direct untracked files stop recovery. Submission grants no matching-byte credit.
