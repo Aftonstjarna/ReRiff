@@ -10,6 +10,8 @@
 
 Experimental test build. Display transitions, Alt-Tab, confirmation controls
 and windowed pointer alignment need in-game testing on Linux and Windows.
+Server ID/migration support is published separately in the experimental Docker
+image; updating the client does not update an existing Docker server.
 
 - Restore the selected windowed client dimensions when leaving borderless.
 - Map absolute windowed pointer coordinates to the actual render dimensions;
