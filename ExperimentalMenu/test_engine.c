@@ -404,6 +404,9 @@ int main(int argc,char **argv){
     display_installed=graphics_bridge_ready=TRUE;borderless_pending=FALSE;*((BYTE *)gm+305)=FALSE;
     aa_graphics_input(gm,BORDERLESS_CONTROL_ID);CHECK(!borderless_pending&&!*((BYTE *)gm+305));
     CHECK(((int *)borderless_bar)[15]==100&&((int *)borderless_knob)[15]==100);
+    CHECK(((int *)borderless_bar)[41]==-1&&((int *)borderless_bar)[42]==-1);
+    CHECK(((int *)borderless_knob)[41]==-1&&((int *)borderless_knob)[42]==-1);
+    CHECK(((int *)borderless_label)[41]==-1&&((int *)borderless_label)[42]==-1);
     aa_graphics_input(gm,DISPLAY_RIGHT_ID);CHECK(borderless_pending&&!*((BYTE *)gm+305));
     aa_graphics_input(gm,DISPLAY_RIGHT_ID);CHECK(!borderless_pending&&*((BYTE *)gm+305));
     aa_graphics_input(gm,DISPLAY_RIGHT_ID);CHECK(!borderless_pending&&!*((BYTE *)gm+305));

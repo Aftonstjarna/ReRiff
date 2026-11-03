@@ -55,8 +55,10 @@ static void aa_connect_navigation(void *menu){
     ((int *)borderless_label)[38]=1;((int *)borderless_label)[39]=((int *)left)[2];
     ((int *)borderless_label)[40]=AA_CONTROL_ID;((int *)borderless_label)[41]=((int *)borderless_label)[42]=-1;
     void *mode_arrows[2]={borderless_bar,borderless_knob};
-    for(int i=0;i<2;i++){((int *)mode_arrows[i])[38]=1;((int *)mode_arrows[i])[39]=((int *)left)[2];((int *)mode_arrows[i])[40]=AA_CONTROL_ID;((int *)mode_arrows[i])[41]=DISPLAY_LEFT_ID;((int *)mode_arrows[i])[42]=DISPLAY_RIGHT_ID;}
-    ((int *)borderless_label)[41]=DISPLAY_LEFT_ID;((int *)borderless_label)[42]=DISPLAY_RIGHT_ID;
+    for(int i=0;i<2;i++){((int *)mode_arrows[i])[38]=1;((int *)mode_arrows[i])[39]=((int *)left)[2];((int *)mode_arrows[i])[40]=AA_CONTROL_ID;((int *)mode_arrows[i])[41]=((int *)items[2+i])[41];((int *)mode_arrows[i])[42]=((int *)items[2+i])[42];}
+    /* Native resolution arrows activate through their shortcut masks. Left/Right
+     * focus links would compete with that activation and must stay native. */
+    ((int *)borderless_label)[41]=((int *)borderless_label)[42]=-1;
     ((int *)aa_label)[38]=1;((int *)aa_label)[39]=BORDERLESS_CONTROL_ID;
     ((int *)aa_label)[40]=UI_SCALE_CONTROL_ID;
     if(ui_slider_label){((int *)ui_slider_label)[38]=1;((int *)ui_slider_label)[39]=AA_CONTROL_ID;((int *)ui_slider_label)[40]=((int *)apply)[2];((int *)ui_slider_label)[41]=((int *)ui_slider_label)[42]=-1;}

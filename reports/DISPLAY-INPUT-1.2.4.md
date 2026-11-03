@@ -52,3 +52,9 @@ The fullscreen centre rectangle now ends before the arrow hitboxes, its click
 only focuses the row, and each arrow uses priority 100 and its own native
 focus colour. Activation logs record the selected direction and resulting mode.
 The native regression suite passes; another desktop interaction test is needed.
+
+Fullscreen arrow Left/Right focus links now copy the original resolution arrows'
+links rather than pointing to the added arrows. Their shortcut masks already
+own those actions; a second focus-navigation path competes with activation.
+The centre label also has no Left/Right focus target, matching that single-owner
+model. This is an intentional integration correction, not original recovery.
