@@ -2,8 +2,9 @@
 #include <array>
 #include <optional>
 
-static std::optional<std::array<unsigned,3>> news_version(const std::string& text) {
-    std::array<unsigned,3> result{};
+static std::optional<std::array<unsigned,4>> news_version(const std::string& text) {
+    // Stable sorts after beta and legacy numbered prereleases of the same base version.
+    std::array<unsigned,4> result{0,0,0,10000};
     size_t pos=0;
     for (size_t i=0;i<3;i++) {
         const size_t start=pos;
@@ -13,6 +14,16 @@ static std::optional<std::array<unsigned,3>> news_version(const std::string& tex
         }
         if (start==pos) return std::nullopt;
         if (i<2 && (pos==text.size() || text[pos++]!='.')) return std::nullopt;
+    }
+    if(pos<text.size()) {
+        if(text[pos++]!='-')return std::nullopt;
+        if(text.compare(pos,5,"beta.")==0)pos+=5;
+        if(pos==text.size() || text[pos]<'1' || text[pos]>'9')return std::nullopt;
+        const size_t start=pos;result[3]=0;
+        while(pos<text.size() && text[pos]>='0' && text[pos]<='9') {
+            if(pos-start>=4)return std::nullopt;
+            result[3]=result[3]*10+static_cast<unsigned>(text[pos++]-'0');
+        }
     }
     return pos==text.size()?std::optional(result):std::nullopt;
 }
