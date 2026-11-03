@@ -16,6 +16,7 @@
 !vendor/riffapi-local-extended/riffapi-local.py
 !vendor/riffapi-local-extended/song_catalog.py
 !vendor/riffapi-local-extended/news_adapter.py
+!vendor/riffapi-local-extended/server_identity.py
 !vendor/riffapi-local-extended/admin.html
 !vendor/riffapi-local-extended/LICENSE
 !vendor/riffapi-local-extended/ORIGIN.txt

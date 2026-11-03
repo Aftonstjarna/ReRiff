@@ -46,6 +46,9 @@ def main():
         port=engine('port',name,'5144/tcp').splitlines()[0].rsplit(':',1)[1]
         base='http://127.0.0.1:'+port
         ready()
+        identity=json.loads(request('/')[1])['serverId']
+        assert str(uuid.UUID(identity))==identity
+        assert json.loads(request('/classes/Version')[1])['results'][0]['ServerID']==identity
         assert engine('exec',name,'id','-u')=='10001'
         assert request('/admin')[0]==200
         request('/classes/News','POST',{'ID':17,'Status':'Active','enTitle':'Normal news','en':'Announcement survives'})
@@ -84,6 +87,8 @@ def main():
         port=engine('port',name,'5144/tcp').splitlines()[0].rsplit(':',1)[1]
         base='http://127.0.0.1:'+port
         ready()
+        assert json.loads(request('/')[1])['serverId']==identity
+        assert json.loads(request('/classes/Version')[1])['results'][0]['ServerID']==identity
         assert json.loads(request('/classes/Score/'+oid)[1])['Score']==12345
         shared_scores()
         assert request('/files/container.ghost')[1]==binary

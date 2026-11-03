@@ -378,3 +378,33 @@ The vendored extended backend originates from
 at revision `d6b98d2845bfbc8ee2888f805f8f0dc36bb73ede`, based on
 rebane2001/riffapi-local. Its Unlicense is retained. ReRiff source is MIT licensed;
 bundled dependencies retain their licenses.
+
+### Changing a server address
+
+Each updated server stores its persistent UUID in `/data/server-id`. The root
+response, `/classes/Version` and `X-ReRiff-Server-ID` response header expose the
+same ID through LAN or public addresses. Keep this file with the persistent
+volume and backups. Clients record observed address/ID pairs in
+`localserver/server-identities.txt`; matching IDs identify alternate addresses.
+This does not merge different servers or move local singleplayer saves.
+
+For a one-time migration of this existing LAN server's saved file links, set
+these container environment values before starting the updated server:
+
+```ini
+RERIFF_PUBLIC_URL=https://reriff.example.net
+RERIFF_MIGRATE_FROM_ORIGIN=http://192.168.0.211:5144
+```
+
+The migration runs before the server accepts requests. It updates only matching
+Parse File URLs for files present in that data volume. Existing objects, IDs,
+scores, ghosts and binary files are retained. Original JSON records and a
+completion manifest are saved under `/data/migrations/file-origin-*`; later
+starts skip the completed migration. Remove `RERIFF_MIGRATE_FROM_ORIGIN` after
+success and keep `RERIFF_PUBLIC_URL`. Do not copy a server ID between independent
+stores to force a match.
+
+A matching identity does not bypass a reverse proxy or Cloudflare rejection.
+The game's API requests must still reach the backend; root-page availability
+alone does not verify history queries or file downloads. Existing clients and
+servers without the ID header continue to connect using their original routing.

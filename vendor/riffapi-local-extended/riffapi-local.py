@@ -66,6 +66,13 @@ LOG_LOCK = threading.Lock()
 def ensure_dirs():
     os.makedirs(CLASSES_DIR, exist_ok=True)
     os.makedirs(FILES_DIR, exist_ok=True)
+    _identity_module.server_id(DATA_DIR)
+    legacy = os.environ.get('RERIFF_MIGRATE_FROM_ORIGIN', '').strip()
+    if legacy:
+        public = os.environ.get('RERIFF_PUBLIC_URL', '').strip()
+        if not public:
+            raise ValueError('RERIFF_MIGRATE_FROM_ORIGIN requires RERIFF_PUBLIC_URL')
+        _identity_module.migrate_file_origins(DATA_DIR, legacy, public)
 
 
 def log_line(text):
@@ -527,6 +534,10 @@ def query_class(cls):
     args = request.args
 
     if cls in CANNED_CLASSES:
+        if cls == 'Version':
+            result = json.loads(responses[cls])
+            result['results'][0]['ServerID'] = _identity_module.server_id(DATA_DIR)
+            return jsonify(result)
         return Response(responses[cls], mimetype="application/json")
 
     if cls == "_Installation":
@@ -814,6 +825,7 @@ def logout():
 def index():
     return jsonify({
         "server": "RiffApiLocal",
+        "serverId": _identity_module.server_id(DATA_DIR),
         "note": "Parse-compatible local server for Riff Racer with persistent ghosts.",
         "dataDir": DATA_DIR,
     })
@@ -952,6 +964,20 @@ def admin_log():
         with open(LOG_FILE, "r", encoding="utf-8", errors="replace") as f:
             out = f.readlines()[-lines_n:]
     return jsonify({"lines": [l.rstrip("\n") for l in out]})
+
+
+_identity_spec = importlib.util.spec_from_file_location(
+    'reriff_server_identity', os.path.join(BASE_DIR, 'server_identity.py'))
+_identity_module = importlib.util.module_from_spec(_identity_spec)
+_identity_spec.loader.exec_module(_identity_module)
+
+
+@app.after_request
+def identity_headers(response):
+    response.headers['X-ReRiff-Server-ID'] = _identity_module.server_id(DATA_DIR)
+    if (request.path == '/' or request.path.startswith(('/classes/', '/users/', '/login', '/reriff/'))):
+        response.headers['Cache-Control'] = 'no-store, private'
+    return response
 
 
 _catalog_spec = importlib.util.spec_from_file_location(
