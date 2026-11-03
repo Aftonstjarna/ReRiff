@@ -43,7 +43,7 @@ static void move_item(void *item,float x,float y){if(item){float pos[2]={x,y};sp
 static void row_visible(void *item,BOOL visible,DWORD mask){
     if(!item)return;
     if(!!(*((BYTE *)item+372)&1)!=!!visible)show_item(item,(BYTE)visible);
-    DWORD wanted=visible?mask:0;
+    DWORD wanted=visible&&!menu_overlay_active()?mask:0;
     if(*(DWORD *)((BYTE *)item+76)!=wanted){enable_input(item,wanted!=0);*(DWORD *)((BYTE *)item+76)=wanted;}
 }
 static void *scroll_sprite(void *parent,BOOL screen,int sprite,float x,float y,int origin){
@@ -151,7 +151,7 @@ static void scroll_to(void *menu,int first,BOOL select_edge){
     if(first!=old||laid_first!=first)layout_scroll(menu);
     pending_focus=row_id(logical_selection);
 }
-static BOOL active_list(void *menu){return scroll_ready&&((int *)menu)[102]==0&&(server_page||(((int *)menu)[62]==0&&(*((BYTE *)((void **)menu)[67]+372)&1)));}
+static BOOL active_list(void *menu){return scroll_ready&&!menu_overlay_active()&&((int *)menu)[102]==0&&(server_page||(((int *)menu)[62]==0&&(*((BYTE *)((void **)menu)[67]+372)&1)));}
 static void __thiscall server_scroll_direction(void *row,DWORD key,unsigned device){
     if(server_native_navigation&&server_page&&page_owner&&active_list(page_owner)&&(key==64||key==128)){
         int id=((int *)row)[key==64?39:40],index=server_action_index(id-SERVER_ACTION_BASE);

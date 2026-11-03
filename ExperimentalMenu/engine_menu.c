@@ -216,6 +216,7 @@ static void update_toggles(void *menu) {
     }
 }
 static BOOL graphics_scroll_wheel(int delta);
+static BOOL menu_overlay_active(void);
 #include "settings_scroll.h"
 #include "save_prompt.h"
 static void server_save_prompt_result(void *menu,int choice);
@@ -617,6 +618,8 @@ static BOOL validate_image_at(BYTE *base,uintptr_t address_base) {
 
 static BOOL validate_image(BYTE *base) { return validate_image_at(base,(uintptr_t)base); }
 
+#include "flac_sample_rate.h"
+
 __declspec(dllexport) BOOL __cdecl ReRiffConfigureNativeReel(void **methods,int count) {
     WCHAR path[MAX_PATH];DWORD length=GetModuleFileNameW(NULL,path,MAX_PATH);
     if(!length||length>=MAX_PATH||!supported_file(path)||count!=7||!readable(methods,7*sizeof(void *)))return FALSE;
@@ -662,6 +665,7 @@ __declspec(dllexport) BOOL __cdecl ReRiffStartEngineMenu(void) {
     HMODULE pinned;
     if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_PIN,
         (const WCHAR *)(uintptr_t)&ReRiffStartEngineMenu,&pinned)) return FALSE;
+    if(!install_flac_sample_rate(base))log_line("FLAC sample-rate patch guard refused; original decoder retained.");
     void **table=(void **)(base+0x7a5a7c); DWORD protection;
     if (!VirtualProtect(table,27*sizeof(void *),PAGE_READWRITE,&protection)) return FALSE;
     original_init=(ScreenFn)table[15]; original_cleanup=(ScreenFn)table[16]; original_input=(InputFn)table[24];

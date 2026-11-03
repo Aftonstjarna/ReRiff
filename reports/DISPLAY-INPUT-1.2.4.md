@@ -38,3 +38,17 @@ pointer test verifies scaling against the actual client rectangle.
 In-game Linux and Windows checks are still required for click alignment,
 Alt-Tab/focus, selector repeat and save/display confirmation. The build retains
 the separately tested FLAC resampling patch; no server data or caches are reset.
+
+## Selector follow-up
+
+Original sprite creation at VA 0x004222C0 consumes five stack arguments and
+sets native menu-item/selectable bits 0x06, then stores its shortcut at +0x40.
+Original item setScale at VA 0x00448A10 writes X/Y to +0xAC/+0xB0, not the
+origin/priority fields at +0x38/+0x3C. The regression fixture previously wrote
+its mock scale into those origin/priority fields; it now models the verified
+scale offsets. No matching-byte reconstruction credit is claimed.
+
+The fullscreen centre rectangle now ends before the arrow hitboxes, its click
+only focuses the row, and each arrow uses priority 100 and its own native
+focus colour. Activation logs record the selected direction and resulting mode.
+The native regression suite passes; another desktop interaction test is needed.

@@ -32,7 +32,7 @@ static void __thiscall mock_visible(void *self,BYTE visible){
 }
 static void __thiscall mock_colour(void *self,const float *value){if(self==colour_watch&&value)memcpy(watched_colour,value,sizeof(watched_colour));colours++;}
 static void __thiscall mock_menu_colour(void *self,int id,const float *value){(void)self;(void)id;(void)value;}
-static void __thiscall mock_scale(void *self,const float *value){((float *)self)[14]=value[0];((float *)self)[15]=value[1];}
+static void __thiscall mock_scale(void *self,const float *value){((float *)self)[43]=value[0];((float *)self)[44]=value[1];}
 static void __thiscall mock_def(void *self,unsigned id){((unsigned *)self)[100]=id;}
 static void __thiscall mock_origin(void *self,unsigned id){((unsigned *)self)[101]=id;}
 static void __thiscall mock_position(void *self,const float *pos){((float *)self)[8]=pos[0];((float *)self)[9]=pos[1];}
@@ -339,10 +339,10 @@ int main(int argc,char **argv){
     CHECK(notices==2&&!wcscmp(notice_text,L"ReRiff has updated to " MENU_WIDE(RERIFF_VERSION))&&GetFileAttributesW(update_notice_path)==INVALID_FILE_ATTRIBUTES);
     deliver_update_notice();CHECK(notices==2);
     ((float *)menu)[73]=48;((float *)watermark)[13]=64;branded_main_tick(menu);
-    CHECK(((float *)watermark)[14]==0.5f&&((float *)watermark)[15]==0.5f);
+    CHECK(((float *)watermark)[43]==0.5f&&((float *)watermark)[44]==0.5f);
     CHECK(((float *)watermark)[8]==1908&&((float *)watermark)[9]==1036);
     ((float *)menu)[73]=24;branded_main_tick(menu);
-    CHECK(((float *)watermark)[15]==0.25f&&((float *)watermark)[9]==1052);
+    CHECK(((float *)watermark)[44]==0.25f&&((float *)watermark)[9]==1052);
     branded_main_cleanup(menu,NULL,NULL);CHECK(!watermark&&!watermark_owner&&removed==25);
     branded_main_tick(menu);CHECK(watermark&&notices==2);branded_main_cleanup(menu,NULL,NULL);CHECK(!watermark&&removed==26);
     CHECK(validate_graphics_aa_menu((BYTE *)image,nt->OptionalHeader.ImageBase));
@@ -388,10 +388,22 @@ int main(int argc,char **argv){
     CHECK(graphics_cycle(nav_items,8,3,40,from_apply_down,5));
     CHECK(graphics_cycle(nav_items,8,3,39,from_apply_up,5));
     CHECK(((int *)borderless_bar)[2]==DISPLAY_LEFT_ID&&((int *)borderless_knob)[2]==DISPLAY_RIGHT_ID);
+    ((int *)gm)[11]=BORDERLESS_CONTROL_ID;aa_graphics_input_state(gm);
+    CHECK(*(DWORD *)((BYTE *)borderless_label+64)==0);
+    CHECK(*(DWORD *)((BYTE *)borderless_bar+64)==256&&*(DWORD *)((BYTE *)borderless_knob+64)==512);
+    BYTE overlay_fixture[64]={0};void *overlay_value=overlay_fixture;
+    overlay_manager=&overlay_value;((void **)overlay_fixture)[11]=gm;
+    aa_graphics_input_state(gm);graphics_layout(gm);
+    CHECK(!*(DWORD *)((BYTE *)borderless_label+76)&&!*(DWORD *)((BYTE *)aa_label+76));
+    CHECK(!*(DWORD *)((BYTE *)graphics_test_items[4]+76));
+    ((void **)overlay_fixture)[11]=NULL;aa_graphics_input_state(gm);graphics_layout(gm);
+    CHECK(*(DWORD *)((BYTE *)borderless_label+76));overlay_manager=NULL;
     CHECK(((unsigned *)borderless_bar)[100]==59&&((unsigned *)borderless_knob)[100]==60);
     CHECK(((float *)aa_label)[9]==580&&((float *)borderless_label)[9]==500);
     CHECK(!graphics_test_items[0][372]&&!graphics_test_items[4][372]);
     display_installed=graphics_bridge_ready=TRUE;borderless_pending=FALSE;*((BYTE *)gm+305)=FALSE;
+    aa_graphics_input(gm,BORDERLESS_CONTROL_ID);CHECK(!borderless_pending&&!*((BYTE *)gm+305));
+    CHECK(((int *)borderless_bar)[15]==100&&((int *)borderless_knob)[15]==100);
     aa_graphics_input(gm,DISPLAY_RIGHT_ID);CHECK(borderless_pending&&!*((BYTE *)gm+305));
     aa_graphics_input(gm,DISPLAY_RIGHT_ID);CHECK(!borderless_pending&&*((BYTE *)gm+305));
     aa_graphics_input(gm,DISPLAY_RIGHT_ID);CHECK(!borderless_pending&&!*((BYTE *)gm+305));

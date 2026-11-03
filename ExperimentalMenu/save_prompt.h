@@ -6,6 +6,9 @@ typedef void (*SavePromptResult)(void *,int);
 static SaveOverlayFn overlay_push,overlay_pop;
 static void **overlay_manager;
 static BOOL prompt_installed;
+static BOOL menu_overlay_active(void){
+    return readable(overlay_manager,4)&&readable(*overlay_manager,48)&&((void **)*overlay_manager)[11]!=NULL;
+}
 static void *save_prompt_owner;
 static SavePromptResult save_prompt_result;
 static int save_prompt_choice=-1;

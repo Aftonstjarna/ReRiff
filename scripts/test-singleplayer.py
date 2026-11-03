@@ -23,6 +23,9 @@ run(['mcs', '-sdk:4', '-target:library', '-keyfile:Managed/ReRiff.snk',
 run(['mcs', '-r:'+str(output/'ReRiff.ClientConfig.dll'),
      '-out:'+str(output/'RoutingSmoke.exe'), 'ClientConfig/Tests/RoutingSmoke.cs'])
 run(['mono', str(output/'RoutingSmoke.exe')])
+run(['mcs', '-r:'+str(output/'ReRiff.ClientConfig.dll'),
+     '-out:'+str(output/'ServerIdentitySmoke.exe'), 'ClientConfig/Tests/ServerIdentitySmoke.cs'])
+run(['mono', str(output/'ServerIdentitySmoke.exe')])
 if args.game_dir:
     for name in ('Parse.dll', 'Parse.NetFx45.dll'):
         shutil.copy2(args.game_dir/name, output/name)
