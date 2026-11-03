@@ -39,6 +39,12 @@ jobs:
           fi
           echo "publish=$publish" >> "$GITHUB_OUTPUT"
 
+      - name: Validate standalone host Compose file
+        run: |
+          cp docker/server.env.example docker/server.env
+          docker compose -f docker/compose.host.yaml config --quiet
+          rm docker/server.env
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 

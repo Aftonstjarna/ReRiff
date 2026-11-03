@@ -467,9 +467,17 @@ def _log_response(resp):
 # Files API
 # ---------------------------------------------------------------------------
 
+def address_aliases():
+    settings = globals().get('FILE_ORIGINS', {
+        'public': os.environ.get('RERIFF_PUBLIC_URL', ''),
+        'lan': os.environ.get('RERIFF_LAN_URL', ''),
+    })
+    return {key: _identity_module.origin(value) for key, value in settings.items() if value}
+
+
 def host_base():
-    host = request.host or "127.0.0.1:5144"
-    return "http://%s" % host
+    return _identity_module.client_origin(address_aliases(), request.host, request.host_url)
+
 
 
 @app.route("/files/<path:filename>", methods=["POST"])
@@ -826,6 +834,7 @@ def index():
     return jsonify({
         "server": "RiffApiLocal",
         "serverId": _identity_module.server_id(DATA_DIR),
+        "addresses": address_aliases(),
         "note": "Parse-compatible local server for Riff Racer with persistent ghosts.",
         "dataDir": DATA_DIR,
     })
@@ -974,6 +983,11 @@ _identity_spec.loader.exec_module(_identity_module)
 
 @app.after_request
 def identity_headers(response):
+    if response.is_json and not response.direct_passthrough:
+        body = response.get_json(silent=True)
+        aliases = address_aliases()
+        if aliases and _identity_module.remap_file_urls(body, set(aliases.values()), host_base(), FILES_DIR):
+            response.set_data(app.json.dumps(body) + '\n')
     response.headers['X-ReRiff-Server-ID'] = _identity_module.server_id(DATA_DIR)
     if (request.path == '/' or request.path.startswith(('/classes/', '/users/', '/login', '/reriff/'))):
         response.headers['Cache-Control'] = 'no-store, private'

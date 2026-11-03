@@ -4,12 +4,11 @@ import logging
 import os
 from pathlib import Path
 import signal
-from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parent.parent
 
 
-def create_app(data_dir=None, public_url=None):
+def create_app(data_dir=None, public_url=None, lan_url=None):
     spec = importlib.util.spec_from_file_location('riffserver', ROOT/'server/riffapi-local.py')
     backend = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(backend)
@@ -19,12 +18,11 @@ def create_app(data_dir=None, public_url=None):
     backend.FILES_DIR = str(data/'files')
     backend.LOG_FILE = str(data/'requests.log')
     public = (public_url if public_url is not None else os.environ.get('RERIFF_PUBLIC_URL', '')).strip().rstrip('/')
-    if public:
-        parsed = urlsplit(public)
-        if (parsed.scheme not in ('http', 'https') or not parsed.hostname or parsed.username
-                or parsed.password or parsed.query or parsed.fragment or parsed.path not in ('', '/')):
-            raise ValueError('RERIFF_PUBLIC_URL must be an HTTP(S) origin, without credentials or a path.')
-        backend.host_base = lambda: public
+    lan = (lan_url if lan_url is not None else os.environ.get('RERIFF_LAN_URL', '')).strip().rstrip('/')
+    backend.FILE_ORIGINS = {
+        key: backend._identity_module.origin(value)
+        for key, value in {'public': public, 'lan': lan}.items() if value
+    }
     backend.ensure_dirs()
     spec = importlib.util.spec_from_file_location('reriff_trace', ROOT/'trace-server.py')
     trace = importlib.util.module_from_spec(spec)

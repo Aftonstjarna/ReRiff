@@ -9,6 +9,7 @@ services:
       - reriff-data:/data
     environment:
       RERIFF_PUBLIC_URL: "${RERIFF_PUBLIC_URL:-}"
+      RERIFF_LAN_URL: "${RERIFF_LAN_URL:-}"
     restart: unless-stopped
     stop_grace_period: 30s
     read_only: true

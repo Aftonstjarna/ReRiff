@@ -13,3 +13,7 @@ data/
 *.exe
 *.log
 server.ini
+
+# Local deployment settings.
+.env
+server.env

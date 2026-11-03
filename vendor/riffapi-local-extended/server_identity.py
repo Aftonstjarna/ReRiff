@@ -61,6 +61,46 @@ def server_id(data_dir):
     return value
 
 
+def client_origin(addresses, host, fallback):
+    """Use a configured origin matching Host; never trust forwarded host input.
+
+    NPM preserves the public Host even when its upstream transport is HTTP.
+    Configured schemes therefore take precedence over that transport's scheme.
+    """
+    for value in addresses.values():
+        if value and urlsplit(value).netloc.lower() == host.lower():
+            return value
+    return addresses.get('public') or addresses.get('lan') or origin(fallback)
+
+
+def remap_file_urls(value, aliases, target, files_dir):
+    """Adapt owned Parse File links in a response; leave stored objects untouched."""
+    from urllib.parse import quote
+    changed = False
+    if isinstance(value, dict):
+        url, name = value.get('url'), value.get('name')
+        if value.get('__type') == 'File' and isinstance(url, str) and isinstance(name, str):
+            parsed = urlsplit(url)
+            try:
+                source = origin(parsed.scheme + '://' + parsed.netloc)
+            except ValueError:
+                source = None
+            if (source in aliases and not parsed.query and not parsed.fragment
+                    and parsed.path == '/files/' + quote(name, safe='')
+                    and Path(name).name == name and '\\' not in name
+                    and (Path(files_dir) / name).is_file()):
+                replacement = target + parsed.path
+                if replacement != url:
+                    value['url'] = replacement
+                    changed = True
+        for child in value.values():
+            changed = remap_file_urls(child, aliases, target, files_dir) or changed
+    elif isinstance(value, list):
+        for child in value:
+            changed = remap_file_urls(child, aliases, target, files_dir) or changed
+    return changed
+
+
 def migrate_file_origins(data_dir, old_origin, new_origin):
     """Run before accepting requests. Preserve objects/IDs and backup every edit.
 

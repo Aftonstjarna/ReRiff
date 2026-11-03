@@ -21,3 +21,7 @@
 !vendor/riffapi-local-extended/LICENSE
 !vendor/riffapi-local-extended/ORIGIN.txt
 **/__pycache__/
+
+# Runtime deployment settings are never build inputs.
+**/server.env
+**/.env

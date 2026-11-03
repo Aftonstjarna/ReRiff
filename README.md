@@ -379,32 +379,60 @@ at revision `d6b98d2845bfbc8ee2888f805f8f0dc36bb73ede`, based on
 rebane2001/riffapi-local. Its Unlicense is retained. ReRiff source is MIT licensed;
 bundled dependencies retain their licenses.
 
-### Changing a server address
+### Public and LAN addresses for one server
 
-Each updated server stores its persistent UUID in `/data/server-id`. The root
-response, `/classes/Version` and `X-ReRiff-Server-ID` response header expose the
-same ID through LAN or public addresses. Keep this file with the persistent
-volume and backups. Clients record observed address/ID pairs in
-`localserver/server-identities.txt`; matching IDs identify alternate addresses.
-This does not merge different servers or move local singleplayer saves.
-
-For a one-time migration of this existing LAN server's saved file links, set
-these container environment values before starting the updated server:
+Configure both addresses as permanent aliases of the same persistent store:
 
 ```ini
 RERIFF_PUBLIC_URL=https://reriff.example.net
-RERIFF_MIGRATE_FROM_ORIGIN=http://192.168.0.211:5144
+RERIFF_LAN_URL=http://192.0.2.10:5144
 ```
 
-The migration runs before the server accepts requests. It updates only matching
-Parse File URLs for files present in that data volume. Existing objects, IDs,
-scores, ghosts and binary files are retained. Original JSON records and a
-completion manifest are saved under `/data/migrations/file-origin-*`; later
-starts skip the completed migration. Remove `RERIFF_MIGRATE_FROM_ORIGIN` after
-success and keep `RERIFF_PUBLIC_URL`. Do not copy a server ID between independent
-stores to force a match.
+Replace those examples in your private `server.env`. Both routes use `/data` and
+its persistent `server-id`; they do not create separate profiles or history.
+Responses return file URLs using the configured address matching the request's
+Host. Public HTTPS is retained behind an HTTP reverse-proxy upstream. NPM must
+preserve the original Host header. The server ignores unconfigured forwarded
+hosts when choosing file URLs.
 
-A matching identity does not bypass a reverse proxy or Cloudflare rejection.
-The game's API requests must still reach the backend; root-page availability
-alone does not verify history queries or file downloads. Existing clients and
-servers without the ID header continue to connect using their original routing.
+Saved Parse File URLs belonging to either alias are adapted in API responses;
+the stored JSON, object IDs and binary files remain unchanged. LAN uploads and
+downloads therefore do not require the public DNS or an internet connection.
+Clients should configure Public as Primary, LAN as Secondary, and leave
+Primary-only unchecked. Cloudflare must still permit public API requests.
+
+For an image-only Linux host deployment, copy `docker/compose.host.yaml` to
+`compose.yaml` beside the existing `data` folder. It uses the experimental image,
+host networking, `server.env` and the bind mount `./data:/data`. No repository
+checkout or image build is needed. Set the two addresses in `server.env`, then:
+
+```sh
+docker compose config --quiet
+docker compose pull
+docker compose up -d
+docker compose logs --tail=100
+```
+
+When moving an existing `docker run` container into Compose, first stop and
+rename that container so the new service can use `reriff-server`. Retain its
+existing data directory; do not create a different named volume.
+
+```sh
+docker update --restart=no reriff-server
+docker stop reriff-server
+docker rename reriff-server reriff-server-before-compose
+docker compose up -d
+```
+
+Do not set `RERIFF_MIGRATE_FROM_ORIGIN` when LAN and Public must coexist. If it
+was previously configured, remove it from `server.env`. Even links already
+migrated to Public are adapted for LAN responses when both aliases are present.
+The older explicit one-time file-origin migration remains available for retiring
+an address permanently; backups and its completion manifest are retained under
+`/data/migrations/file-origin-*`.
+
+Each server stores its UUID in `/data/server-id`. Keep that file with the data
+volume and backups. Root JSON, `/classes/Version` and the `X-ReRiff-Server-ID`
+header expose the same ID. Updated clients remember observed address/ID pairs
+in `localserver/server-identities.txt`. Do not copy an ID between independent
+stores to force them to match; identity does not merge different data stores.
