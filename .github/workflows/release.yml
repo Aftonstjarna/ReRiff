@@ -59,7 +59,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           version=$(cat VERSION)
-          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[1-9][0-9]*)?$ ]]
+          if [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+-[0-9]+$ ]]; then
+            echo 'Use X.X.X-beta.N for new prereleases; the old X.X.X-N scheme is retired.'
+            exit 1
+          fi
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-beta\.[1-9][0-9]*)?$ ]]
           if [[ "$version" == *-* && "$RERIFF_RELEASE_CHANNEL" != experimental ]]; then
             echo 'Revision suffixes are reserved for experimental prereleases.'
             exit 1

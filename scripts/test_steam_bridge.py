@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import tempfile
+import shutil
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -16,9 +17,12 @@ class SteamBridgeTest(unittest.TestCase):
             proton.write_text('#!/usr/bin/env python3\nimport json,os,sys\nopen(os.environ["RERIFF_CAPTURE"],"w").write(json.dumps(sys.argv[1:]))\n')
             proton.chmod(0o755)
             game = str(root/'game folder/Game.exe')
+            bridge = root/'ReRiff-Launcher.sh'
+            shutil.copy2(ROOT/'scripts/steam-launcher.sh', bridge)
+            bridge.chmod(0o755)
             for flags, suffix in [(['--skip-launcher','--test-auto-update'], []), ([], ['--test-auto-update','--no-auto-update']), (['--show-launcher'], [])]:
                 with self.subTest(flags=flags, suffix=suffix):
-                    subprocess.run(['bash', str(ROOT/'scripts/steam-launcher.sh'), *flags, '--', str(proton), 'waitforexitandrun', game,
+                    subprocess.run([str(bridge), *flags, '--', str(proton), 'waitforexitandrun', game,
                                     'space value', 'quote"value', '音楽', *suffix], check=True, env={**os.environ, 'RERIFF_CAPTURE':str(capture)})
                     argv = json.loads(capture.read_text())
                     self.assertEqual(argv[:2], ['waitforexitandrun', str(root/'game folder/ReRiff-Launcher.exe')])

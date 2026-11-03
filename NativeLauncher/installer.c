@@ -46,7 +46,8 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE previous,LPWSTR arguments,int s
     DWORD code=1;GetExitCodeProcess(process.hProcess,&code);CloseHandle(process.hProcess);
     if(interactive){
         if(code){_snwprintf(command,CAP,L"Installation failed. See %ls for details. Existing saves are retained.",log);MessageBoxW(NULL,command,L"ReRiff setup",MB_OK|MB_ICONERROR);}
-        else MessageBoxW(NULL,L"ReRiff installed. Use ReRiff-Launcher.exe beside Game.exe. Your settings and saved server data were preserved.",L"ReRiff setup",MB_OK|MB_ICONINFORMATION);
+        else if(MessageBoxW(NULL,L"ReRiff installed. Use ReRiff-Launcher.exe beside Game.exe. Your settings and saved server data were preserved.\n\nA ReRiff GitHub shortcut is saved beside the game. Open the GitHub repository now?",L"ReRiff setup",MB_YESNO|MB_DEFBUTTON2|MB_ICONINFORMATION)==IDYES)
+            ShellExecuteW(NULL,L"open",L"https://github.com/Aftonstjarna/ReRiff",NULL,NULL,SW_SHOWNORMAL);
     }
     return (int)code;
 }

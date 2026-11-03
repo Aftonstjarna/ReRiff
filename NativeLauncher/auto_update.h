@@ -84,13 +84,15 @@ static BOOL update_command(WCHAR *out,const WCHAR *work,const WCHAR *archive,con
     out[CAP-1]=0;return TRUE;
 }
 
-/* Stable sorts after numbered prereleases of the same base version. */
+/* Stable sorts after beta and legacy numbered prereleases of the same base version. */
 static BOOL parse_update_version(const char *text,int value[4]) {
     int used=0,revision_used=0;value[3]=1000000;
-    if(strspn(text,"0123456789.-")!=strlen(text)||sscanf(text,"%d.%d.%d%n",value,value+1,value+2,&used)!=3)return FALSE;
+    if(strspn(text,"0123456789.-beta")!=strlen(text)||sscanf(text,"%d.%d.%d%n",value,value+1,value+2,&used)!=3)return FALSE;
     for(int i=0;i<3;i++)if(value[i]<0||value[i]>9999)return FALSE;
     if(text[used]){
-        if(text[used]!='-'||sscanf(text+used+1,"%d%n",value+3,&revision_used)!=1||text[used+1+revision_used]||value[3]<1||value[3]>=1000000)return FALSE;
+        if(text[used++]!='-')return FALSE;
+        if(!strncmp(text+used,"beta.",5))used+=5;
+        if(text[used]<'1'||text[used]>'9'||sscanf(text+used,"%d%n",value+3,&revision_used)!=1||text[used+revision_used]||value[3]<1||value[3]>=1000000)return FALSE;
     }
     return TRUE;
 }

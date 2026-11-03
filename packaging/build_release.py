@@ -31,7 +31,7 @@ def build(args):
         raise ValueError('Invalid release channel')
     version = (ROOT/'VERSION').read_text().strip()
     notes = release_notes((ROOT/'RELEASE-NOTES.md').read_text(encoding='utf-8'), version)
-    if not re.fullmatch(r'\d+\.\d+\.\d+(?:-[1-9]\d*)?', version):
+    if not re.fullmatch(r'\d+\.\d+\.\d+(?:-(?:beta\.)?[1-9]\d*)?', version):
         raise ValueError('Invalid VERSION')
     # Retain the flag understood by existing automatic updaters: packages
     # contain no game-derived deltas. vanilla_originals enables local patching.
@@ -73,6 +73,8 @@ def build(args):
         print(name, 'delta:',len(encoded),'bytes')
     payload = common/'payload'
     copy(ROOT/'scripts/Collect-ReRiffStartup.ps1', payload/'Collect-ReRiffStartup.ps1')
+    # Discoverable beside the Windows launcher; retain the old bridge path below.
+    copy(ROOT/'scripts/steam-launcher.sh', payload/'ReRiff-Launcher.sh')
     copy(ROOT/'packaging/server.ini.example', payload/'server.ini.example')
     for name in ('ReRiff.ClientConfig.dll','ReRiff.Notify.dll','ReRiff-Launcher.exe','ReRiff-Updater.exe'):
         copy(ROOT/'build'/name, payload/name)

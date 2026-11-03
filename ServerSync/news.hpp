@@ -3,7 +3,7 @@
 #include <optional>
 
 static std::optional<std::array<unsigned,4>> news_version(const std::string& text) {
-    // Stable sorts after numbered prereleases of the same base version.
+    // Stable sorts after beta and legacy numbered prereleases of the same base version.
     std::array<unsigned,4> result{0,0,0,10000};
     size_t pos=0;
     for (size_t i=0;i<3;i++) {
@@ -16,7 +16,9 @@ static std::optional<std::array<unsigned,4>> news_version(const std::string& tex
         if (i<2 && (pos==text.size() || text[pos++]!='.')) return std::nullopt;
     }
     if(pos<text.size()) {
-        if(text[pos++]!='-' || pos==text.size() || text[pos]<'1' || text[pos]>'9')return std::nullopt;
+        if(text[pos++]!='-')return std::nullopt;
+        if(text.compare(pos,5,"beta.")==0)pos+=5;
+        if(pos==text.size() || text[pos]<'1' || text[pos]>'9')return std::nullopt;
         const size_t start=pos;result[3]=0;
         while(pos<text.size() && text[pos]>='0' && text[pos]<='9') {
             if(pos-start>=4)return std::nullopt;

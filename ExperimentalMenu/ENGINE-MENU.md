@@ -574,3 +574,14 @@ multiple activation owners. Its shortcut mask now stays zero while Left/Right
 remain owned by the Audio-style polling. Native direction links at +A4/+A8 stay
 -1: the original direction handler at VA 0x44AA60 explicitly ignores -1 targets.
 Up/Down links retain the native Graphics loop and Apply access.
+
+### Stable 1.2.3 News preview
+
+Client News now omits the repeated Markdown heading and shows at most three
+short entries (48 characters each, shortened at a word boundary), followed by a
+single exact-version GitHub release URL. Embedded source links are flattened so
+only the intended full-notes URL remains. The original `gaNewsMenu.initScreens`
+(token 0x060014A7) already detects http/https/www URLs in the localized body and
+extracts a link for its original Visit URL control. ReRiff reuses that path;
+no extra popup, scrolling system or native control replacement is introduced.
+The full current-version notes remain in the installed file and on GitHub.
