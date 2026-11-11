@@ -32,6 +32,8 @@ remains the default download and update channel.
 
 ### Launcher updates
 
+- Use standard edit borders for server and timeout fields under Wine, avoiding
+  the extra themed focus outline while retaining text editing and Tab navigation.
 - Select experimental releases by GitHub publication time. Stable updates use
   GitHub Latest; release metadata supplies the package version and installer.
 - Handle escaped release tags, pagination and channel changes while retaining

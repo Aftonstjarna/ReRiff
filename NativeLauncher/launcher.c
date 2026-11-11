@@ -311,6 +311,18 @@ static void begin(int action) {
 
 static HWND control(const WCHAR *cls,const WCHAR *text,DWORD style,int x,int y,int w,int h,int id) {
     HWND handle=CreateWindowExW(0,cls,text,WS_CHILD|WS_VISIBLE|style,x,y,w,h,window,(HMENU)(INT_PTR)id,GetModuleHandleW(NULL),NULL);
+    /* Use the standard edit border under Wine. Its themed focus decoration
+     * can remain visible above unrelated windows after the launcher loses focus.
+     * Keep the native EDIT control, keyboard focus and text handling. */
+    if(handle&&is_wine()&&!_wcsicmp(cls,L"EDIT")){
+        HMODULE theme=LoadLibraryExW(L"uxtheme.dll",NULL,LOAD_LIBRARY_SEARCH_SYSTEM32);
+        if(theme){
+            typedef HRESULT (WINAPI *ThemeFn)(HWND,LPCWSTR,LPCWSTR);
+            ThemeFn set_theme=(ThemeFn)GetProcAddress(theme,"SetWindowTheme");
+            if(set_theme)set_theme(handle,L"",L"");
+            FreeLibrary(theme);
+        }
+    }
     SendMessageW(handle,WM_SETFONT,(WPARAM)font,TRUE);return handle;
 }
 
