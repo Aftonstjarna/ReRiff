@@ -114,7 +114,7 @@ static void aa_graphics_input_state(void *menu){
     /* Native resolution arrows alone own Left/Right; the label has no
      * activation shortcut, so one press advances exactly one mode. */
     if(borderless_label)*(DWORD *)((BYTE *)borderless_label+64)=0;
-    if(focused||borderless||scaling)for(int i=62;i<=65;i++)if(((void **)menu)[i])*(DWORD *)((BYTE *)((void **)menu)[i]+64)=0;
+    if(focused||borderless||scaling||((int *)menu)[11]==3)for(int i=62;i<=65;i++)if(((void **)menu)[i])*(DWORD *)((BYTE *)((void **)menu)[i]+64)=0;
     if(resolution){
         *(DWORD *)((BYTE *)((void **)menu)[62]+64)=0;
         *(DWORD *)((BYTE *)((void **)menu)[64]+64)=256;
@@ -184,6 +184,11 @@ static void __thiscall aa_graphics_init(void *menu,void *screen,void *lower){
     graphics_saved_resolution=((int *)menu)[75];graphics_saved_full=*((BYTE *)menu+305)!=0;
     graphics_saved_borderless=borderless_pending;graphics_saved_aa=aa_pending;graphics_saved_scale=ui_slider_pending;graphics_exit_after_apply=FALSE;
     aa_sync_art(menu);graphics_scroll_init(menu,gap);
+    /* Native screen navigation otherwise spends the first direction press
+     * acquiring focus. Start on the visible resolution row using the same
+     * screen focus and menu bookkeeping used when revealing scrolled rows. */
+    int initial_id=((int *)left)[2];
+    focus_row(menu,initial_id);((InputFn)(*(void ***)menu)[25])(menu,initial_id);
 }
 static void __thiscall aa_graphics_cleanup(void *menu,void *screen,void *lower){
     if(aa_menu_owner==menu){
@@ -243,9 +248,10 @@ static void __thiscall aa_graphics_colour(void *menu,int id,const float *colour)
     if(menu==aa_menu_owner&&id==UI_SCALE_CONTROL_ID){if(ui_slider_label)colour_item(ui_slider_label,colour);if(ui_slider_rail)colour_item(ui_slider_rail,colour);if(ui_slider_knob)colour_item(ui_slider_knob,colour);if(ui_slider_min)colour_item(ui_slider_min,colour);if(ui_slider_max)colour_item(ui_slider_max,colour);}
     if(menu==aa_menu_owner&&id==AA_CONTROL_ID){if(aa_label)colour_item(aa_label,colour);if(aa_bar)colour_item(aa_bar,colour);if(aa_knob)colour_item(aa_knob,colour);}
     if(menu==aa_menu_owner&&(id==BORDERLESS_CONTROL_ID||id==DISPLAY_LEFT_ID||id==DISPLAY_RIGHT_ID)){
+        static const float normal[4]={1,1,1,0.9f};
         if(borderless_label)colour_item(borderless_label,colour);
-        if(id==DISPLAY_LEFT_ID&&borderless_bar)colour_item(borderless_bar,colour);
-        if(id==DISPLAY_RIGHT_ID&&borderless_knob)colour_item(borderless_knob,colour);
+        if(borderless_bar)colour_item(borderless_bar,normal);
+        if(borderless_knob)colour_item(borderless_knob,normal);
     }
 }
 static void __thiscall aa_graphics_tick(void *menu){
@@ -261,9 +267,8 @@ static void __thiscall aa_graphics_tick(void *menu){
     aa_graphics_input_state(menu);graphics_scroll_tick(menu);graphics_tick_original(menu);aa_graphics_input_state(menu);graphics_layout(menu);
     if(menu==aa_menu_owner){
         static const float normal[4]={1,1,1,0.9f};
-        int mode_focus=((int *)menu)[11];
-        colour_item(borderless_bar,mode_focus==DISPLAY_LEFT_ID?graphics_focus_colour:normal);
-        colour_item(borderless_knob,mode_focus==DISPLAY_RIGHT_ID?graphics_focus_colour:normal);
+        colour_item(borderless_bar,normal);
+        colour_item(borderless_knob,normal);
         colour_item(((void **)menu)[66],((int *)menu)[11]==3?graphics_focus_colour:normal);
         static int last_focus=-999;int focus=((int *)menu)[11];
         if(last_focus!=focus){void *button=((void **)menu)[66];char trace[180];snprintf(trace,sizeof(trace),"Graphics focus=%d Apply id=%d flags=%u mask=%lu up=%d down=%d.",focus,((int *)button)[2],*((BYTE *)button+372),(unsigned long)*(DWORD *)((BYTE *)button+76),((int *)button)[39],((int *)button)[40]);log_line(trace);last_focus=focus;}
@@ -278,7 +283,9 @@ static void __thiscall aa_graphics_tick(void *menu){
         if(begin&&end&&end>=begin&&end-begin<256&&readable(begin,(size_t)(end-begin)*sizeof(void *)))
             for(void **it=begin;it!=end;it++)if(readable(*it,484))colour_item(*it,graphics_focus_colour);
     }
-    if(aa_menu_owner==menu&&(((int *)menu)[11]==AA_CONTROL_ID||((int *)menu)[11]==BORDERLESS_CONTROL_ID||((int *)menu)[11]==DISPLAY_LEFT_ID||((int *)menu)[11]==DISPLAY_RIGHT_ID||((int *)menu)[11]==UI_SCALE_CONTROL_ID)){
+    /* Vanilla's two-row highlight state retains Resolution when Apply gains
+     * focus. Extend the existing non-resolution reset to the Apply row too. */
+    if(aa_menu_owner==menu&&(((int *)menu)[11]==3||((int *)menu)[11]==AA_CONTROL_ID||((int *)menu)[11]==BORDERLESS_CONTROL_ID||((int *)menu)[11]==DISPLAY_LEFT_ID||((int *)menu)[11]==DISPLAY_RIGHT_ID||((int *)menu)[11]==UI_SCALE_CONTROL_ID)){
         static const float normal[4]={1,1,1,0.9f};
         colour_item(((void **)menu)[73],normal);
         void **begin=((void ***)menu)[70],**end=((void ***)menu)[71];

@@ -1,4 +1,4 @@
-"""Exercise shipped AppImages without system Python/Podman or FUSE."""
+"""Exercise the native client and optional server AppImage without host Python."""
 import argparse
 import configparser
 import hashlib
@@ -13,14 +13,14 @@ import urllib.request
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--runtime', type=Path, required=True)
+    parser.add_argument('--client', '--runtime', dest='client', type=Path, required=True)
     parser.add_argument('--server', type=Path, required=True)
     args = parser.parse_args()
-    runtime, image = args.runtime.resolve(), args.server.resolve()
+    runtime, image = args.client.resolve(), args.server.resolve()
     env = dict(os.environ, PATH='/no-system-tools', APPIMAGE_EXTRACT_AND_RUN='1')
     for key in ('LD_PRELOAD', 'LD_LIBRARY_PATH', 'PYTHONPATH', 'PYTHONHOME'):
         env.pop(key, None)
-    subprocess.run([str(runtime), '--self-test'], env=env, check=True, timeout=90)
+    subprocess.run([str(image), '--self-test'], env=env, check=True, timeout=90)
     with tempfile.TemporaryDirectory(prefix='reriff portable ü ') as temporary:
         game = Path(temporary)/'game with spaces'
         root = game/'localserver';control = root/'native';control.mkdir(parents=True)
@@ -33,7 +33,7 @@ def main():
             nonlocal seq
             seq += 1
             result = Path(temporary)/f'result-{seq}.ini'
-            run = subprocess.run([str(runtime), '--server-control', name, '--root', str(root),
+            run = subprocess.run([str(runtime), '--client-host', 'server-control', name, '--root', str(root),
                                   '--result', str(result), *map(str, extra)], env=env,
                                  capture_output=True, text=True, timeout=100)
             if not result.exists():

@@ -1,4 +1,4 @@
-"""Bundled Linux Python entry point; no user site packages or system Python."""
+"""Optional server AppImage entry point; the client does not use Python."""
 import os
 from pathlib import Path
 import runpy
@@ -11,16 +11,9 @@ def main():
     sys.path.insert(0, str(ROOT))
     args = sys.argv[1:]
     if not args:
-        raise SystemExit('Use --python SCRIPT, --server-control ACTION, or --serve.')
+        raise SystemExit('Use --server-control ACTION or --serve.')
     mode, *args = args
-    if mode == '--python':
-        if not args:
-            raise SystemExit('A Python script is required.')
-        script = Path(args[0]).resolve()
-        sys.argv = [str(script), *args[1:]]
-        sys.path.insert(0, str(script.parent))
-        runpy.run_path(str(script), run_name='__main__')
-    elif mode == '--server-control':
+    if mode == '--server-control':
         sys.argv = [str(ROOT/'local_server.py'), *args]
         runpy.run_path(sys.argv[0], run_name='__main__')
     elif mode == '--serve':

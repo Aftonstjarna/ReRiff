@@ -78,6 +78,8 @@ jobs:
           fi
       - name: Fetch verified compiler and Windows Python
         run: python packaging/fetch_release_tools.py --directory "$RUNNER_TEMP/release-tools"
+      - name: Verify Windows private Python bootstrap pins
+        run: python scripts/verify-python-runtime.py --archive "$RUNNER_TEMP/release-tools/python.zip"
       - name: Build client helper
         run: dotnet build ClientConfig/ClientConfig.csproj -c Release -o build
       - name: Build client version header adapter
@@ -93,20 +95,26 @@ jobs:
       - name: Install Linux setup build dependencies
         timeout-minutes: 5
         run: |
-          sudo apt-get -o APT::Update::Error-Mode=any -o Acquire::Retries=1 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 update
-          sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 install -y libgtk-3-dev xvfb
+          # Bypass the hosted runner's failing Azure mirror redirector while
+          # retaining Ubuntu's signed package indexes and normal validation.
+          sources="$RUNNER_TEMP/reriff-ubuntu.list"
+          printf '%s\n' \
+            'deb [signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] https://archive.ubuntu.com/ubuntu noble main universe' \
+            'deb [signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] https://archive.ubuntu.com/ubuntu noble-updates main universe' \
+            'deb [signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] https://security.ubuntu.com/ubuntu noble-security main universe' > "$sources"
+          apt_options=(-o "Dir::Etc::sourcelist=$sources" -o 'Dir::Etc::sourceparts=-' -o APT::Update::Error-Mode=any -o Acquire::Retries=1 -o Acquire::https::Timeout=20)
+          sudo apt-get "${apt_options[@]}" update
+          sudo apt-get "${apt_options[@]}" install -y libgtk-3-dev xvfb
       - name: Build and test native Linux setup
         run: |
           python scripts/build-linux-installer.py --zig "$RUNNER_TEMP/release-tools/zig-x86_64-linux-0.14.1/zig"
           python scripts/test-linux-installer.py --zig "$RUNNER_TEMP/release-tools/zig-x86_64-linux-0.14.1/zig"
-      - name: Build self-contained Linux runtime and optional server
+      - name: Build optional Linux server AppImage
         run: RERIFF_BUILD_ENGINE=docker bash scripts/build-linux-runtime.sh
-      - name: Test AppImages without host Python, Podman or FUSE
-        run: >-
-          build/linux-runtime/ReRiff-Runtime-x86_64.AppImage --python
-          scripts/test-linux-runtime.py
-          --runtime build/linux-runtime/ReRiff-Runtime-x86_64.AppImage
-          --server build/linux-runtime/ReRiff-Server-x86_64.AppImage
+      - name: Test native client and server without host Python, Podman or FUSE
+        run: |
+          python scripts/test_native_client.py --helper build/linux-patcher/Patcher
+          python scripts/test-linux-runtime.py --client build/linux-patcher/Patcher --server build/linux-runtime/ReRiff-Server-x86_64.AppImage
       - name: Package Windows and Linux installers
         run: >-
           python packaging/build_release.py --local-patching
@@ -151,11 +159,15 @@ jobs:
               assert channel['client']['channel'] == manifest['channel'] == os.environ['RERIFF_RELEASE_CHANNEL']
               assert hashlib.sha256(marker.read_bytes()).hexdigest() == manifest['files'][name]
               helper = 'payload/localserver/podman-server.py'
-              assert hashlib.sha256((root / helper).read_bytes()).hexdigest() == manifest['files'][helper]
+              if platform == 'windows':
+                  assert hashlib.sha256((root / helper).read_bytes()).hexdigest() == manifest['files'][helper]
+                  assert not (root/'python').exists()
               assert not (root / 'payload/localserver/podman/config.json').exists()
               if platform == 'linux':
-                  runtime = root/'payload/localserver/ReRiff-Runtime-x86_64.AppImage'
+                  runtime = root/'payload/localserver/ReRiff-ClientHost'
                   assert runtime.is_file()
+                  assert not (root/'payload/localserver/ReRiff-Runtime-x86_64.AppImage').exists()
+                  assert not list((root/'payload/localserver').glob('*.py'))
                   assert not (root/'payload/localserver/ReRiff-Server-x86_64.AppImage').exists()
               notes = 'payload/localserver/client-release-notes.md'
               assert hashlib.sha256((root / notes).read_bytes()).hexdigest() == manifest['files'][notes]

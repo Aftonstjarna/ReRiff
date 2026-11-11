@@ -41,6 +41,7 @@ class InstallerTests(unittest.TestCase):
             # source-patcher package exercised separately below.
             legacy=self.root/'legacy-update';shutil.copytree(self.bundle,legacy);self.bundle=legacy
             manifest=json.loads((legacy/'manifest.json').read_text());manifest.pop('vanilla_originals')
+            manifest.pop('native_linux',None)  # This fixture deliberately exercises the legacy Python installer.
             (legacy/'manifest.json').write_text(json.dumps(manifest))
         names=('ParseOctane.dll','Parse.NetFx45.dll')
         update_only=json.loads((self.bundle/'manifest.json').read_text()).get('update_only',False)

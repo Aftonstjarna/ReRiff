@@ -32,8 +32,8 @@ with tempfile.TemporaryDirectory(prefix='reriff-gui-test-') as temp:
     invalid = work/'Wrong game folder'
     invalid.mkdir()
     (work/'installer.py').write_text('''import argparse, pathlib, time, sys
-p=argparse.ArgumentParser(); p.add_argument('--platform'); p.add_argument('--game-dir'); p.add_argument('--music-dir'); p.add_argument('--no-music-link',action='store_true'); a=p.parse_args()
-assert a.platform=='linux'
+p=argparse.ArgumentParser(); p.add_argument('--bundle'); p.add_argument('--game-dir'); p.add_argument('--music-dir'); p.add_argument('--no-music-link',action='store_true'); a=p.parse_args()
+assert a.bundle
 game=pathlib.Path(a.game_dir)
 time.sleep(0.4)
 marker=game/'fixture-runs'
@@ -45,10 +45,10 @@ if not marker.exists():
 assert a.music_dir==a.game_dir and not a.no_music_link
 print('GUI install succeeded: '+str(game), flush=True)
 ''')
-    # Fixture runtime has the same argv contract as the real bundled AppImage.
-    runtime = work/'payload/localserver/ReRiff-Runtime-x86_64.AppImage'
+    # Fixture executable follows the native client's install argument contract.
+    runtime = work/'payload/localserver/ReRiff-ClientHost'
     runtime.parent.mkdir(parents=True)
-    runtime.write_text('#!/bin/sh\n[ "$1" = --python ] || exit 2\nshift\nexec '+shlex.quote(sys.executable)+' "$@"\n')
+    runtime.write_text('#!/bin/sh\n[ "$1" = --client-host ] && [ "$2" = install ] || exit 2\nshift 2\nexec '+shlex.quote(sys.executable)+' '+shlex.quote(str(work/'installer.py'))+' "$@"\n')
     runtime.chmod(0o755)
     # No test process may touch the real user's home or logs.
     (work/'home').mkdir()

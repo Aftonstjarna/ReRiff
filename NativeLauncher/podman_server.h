@@ -14,9 +14,10 @@ static BOOL podman_action(const WCHAR *action){
     if(!wcscmp(action,L"status")&&GetFileAttributesW(config)==INVALID_FILE_ATTRIBUTES){podman_state=0;return TRUE;}
     if(GetFileAttributesW(script)==INVALID_FILE_ATTRIBUTES){wcscpy(message,L"The optional Podman helper is missing. Reinstall the complete client package.");return FALSE;}
     if(!GetTempPathW(CAP,temporary)||!GetTempFileNameW(temporary,L"rrp",0,result))return FALSE;DeleteFileW(result);
+    if(!ensure_private_python(window,folder,TRUE)){wcscpy(message,L"Python setup was canceled or failed.");return FALSE;}
     WCHAR python[CAP];path(python,L"localserver\\windows-python\\python.exe");
     if(GetFileAttributesW(python)==INVALID_FILE_ATTRIBUTES){wcscpy(message,L"The installed Python helper is missing. Reinstall the complete client package.");return FALSE;}
-    _snwprintf(command,CAP,L"\"%ls\" \"%ls\" %ls --result \"%ls\"",python,script,action,result);
+    _snwprintf(command,CAP,L"\"%ls\" -X utf8 \"%ls\" %ls --result \"%ls\"",python,script,action,result);
     command[CAP-1]=0;PROCESS_INFORMATION process;
     if(!spawn(command,TRUE,&process)){wcscpy(message,L"Could not run the optional Podman helper.");return FALSE;}
     CloseHandle(process.hThread);CloseHandle(process.hProcess);

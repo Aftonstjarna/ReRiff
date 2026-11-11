@@ -368,7 +368,10 @@ int main(int argc,char **argv){
     ((int *)graphics_test_items[2])[39]=((int *)graphics_test_items[3])[39]=4;
     ((int *)graphics_test_items[2])[40]=((int *)graphics_test_items[3])[40]=4;
     graphics_init_original=mock_init;graphics_cleanup_original=mock_cleanup;graphics_tick_original=mock_tick;menu_item=mock_graphics_menu_item;graphics_input_original=mock_graphics_input;graphics_button_sprite=mock_button_sprite;graphics_colour_original=mock_menu_colour;
-    attach_antialiasing=mock_aa_attach;aa_requested=aa_fault=0;aa_graphics_init(gm,NULL,NULL);
+    attach_antialiasing=mock_aa_attach;aa_requested=aa_fault=0;
+    focused=((int *)gm)[11]=-1;aa_graphics_init(gm,NULL,NULL);
+    CHECK(focused==1&&((int *)gm)[11]==1);
+    CHECK(((int *)graphics_test_items[2])[40]==BORDERLESS_CONTROL_ID);
     CHECK((*((BYTE *)graphics_test_items[6]+372)&2)!=0);
     CHECK(aa_label&&aa_bar&&aa_knob&&!aa_pending&&((int *)aa_label)[2]==AA_CONTROL_ID);
     CHECK(resolution_hover&&((int *)resolution_hover)[2]==RESOLUTION_FOCUS_ID);
@@ -424,6 +427,15 @@ int main(int argc,char **argv){
     CHECK(!memcmp(watched_colour,apply_focus_colour,sizeof(watched_colour)));
     CHECK(*(DWORD *)(graphics_test_items[6]+76)==*(DWORD *)(screen+40));
     ((int *)gm)[11]=RESOLUTION_FOCUS_ID;aa_graphics_tick(gm);CHECK(watched_colour[0]==1&&watched_colour[1]==1);
+    /* Moving from Resolution to Apply must clear the prior row's colour and
+     * Left/Right shortcuts, while Apply keeps its own native highlight. */
+    colour_watch=resolution_text;aa_graphics_tick(gm);
+    CHECK(!memcmp(watched_colour,apply_focus_colour,sizeof(watched_colour)));
+    ((int *)gm)[11]=3;aa_graphics_tick(gm);
+    CHECK(watched_colour[0]==1&&watched_colour[1]==1&&watched_colour[2]==1);
+    CHECK(!*(DWORD *)(graphics_test_items[2]+64)&&!*(DWORD *)(graphics_test_items[3]+64));
+    colour_watch=graphics_test_items[6];aa_graphics_tick(gm);
+    CHECK(!memcmp(watched_colour,apply_focus_colour,sizeof(watched_colour)));
     aa_graphics_input(gm,AA_CONTROL_ID);CHECK(aa_pending&&!aa_requested&&((unsigned *)aa_knob)[100]==74);
     CHECK(((float *)aa_label)[12]==820&&((float *)aa_label)[13]==80);
     float native_thumb_x=((float *)aa_knob)[8];

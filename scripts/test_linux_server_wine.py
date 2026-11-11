@@ -23,8 +23,8 @@ def main():
         with socket.socket() as sock:
             sock.bind(('127.0.0.1', 0));port = sock.getsockname()[1]
         (local/'native/config.json').write_text(json.dumps({'schema': 1, 'port': port}))
-        for name in ('ReRiff-Runtime-x86_64.AppImage', 'ReRiff-Server-x86_64.AppImage'):
-            shutil.copy2(ROOT/'build/linux-runtime'/name, local/name)
+        shutil.copy2(ROOT/'build/linux-patcher/Patcher', local/'ReRiff-ClientHost')
+        shutil.copy2(ROOT/'build/linux-runtime/ReRiff-Server-x86_64.AppImage', local/'ReRiff-Server-x86_64.AppImage')
         shutil.copy2(ROOT/'scripts/linux-runtime.sh', local/'linux-runtime.sh')
         args.prefix.mkdir(parents=True, exist_ok=True)
         env = dict(os.environ, WINEPREFIX=str(args.prefix.resolve()), WINEDEBUG='-all',
@@ -33,7 +33,7 @@ def main():
             subprocess.run(['xvfb-run', '-a', args.wine, str(ROOT/'build/test-linux-server.exe'),
                             'Z:'+str(game)], env=env, check=True, timeout=180)
         finally:
-            subprocess.run([str(local/'ReRiff-Runtime-x86_64.AppImage'), '--server-control',
+            subprocess.run([str(local/'ReRiff-ClientHost'), '--client-host', 'server-control',
                             'stop', '--root', str(local), '--result', str(local/'cleanup.ini')],
                            check=True, timeout=40)
 

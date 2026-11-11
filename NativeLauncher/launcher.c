@@ -79,6 +79,8 @@ static BOOL is_wine(void) {
     return GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "wine_get_version") != NULL;
 }
 
+#include "python_runtime.h"
+
 static BOOL append_command_character(WCHAR *out,size_t *used,WCHAR value) {
     if(*used>=CAP-1)return FALSE;
     out[(*used)++]=value;out[*used]=0;return TRUE;

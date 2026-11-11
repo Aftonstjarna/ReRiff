@@ -18,7 +18,7 @@ with tempfile.TemporaryDirectory(prefix='reriff-stop-test-') as temporary:
     (server/'server').mkdir(parents=True)
     for name in ('server-control.py', 'stop-server-host.sh', 'linux-runtime.sh'):
         shutil.copyfile(ROOT/'scripts'/name, server/name)
-    shutil.copy2(ROOT/'build/linux-runtime/ReRiff-Runtime-x86_64.AppImage', server/'ReRiff-Runtime-x86_64.AppImage')
+    shutil.copy2(ROOT/'build/linux-patcher/Patcher', server/'ReRiff-ClientHost')
     runner = server/'trace-server.py'
     runner.write_text('import time\nfrom pathlib import Path\nPath(__file__).with_name("ready").touch()\nwhile True: time.sleep(1)\n')
     owned = subprocess.Popen([sys.executable, str(runner), '--server-dir', str(server/'server')])

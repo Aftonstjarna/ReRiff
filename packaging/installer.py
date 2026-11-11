@@ -230,6 +230,24 @@ def install(bundle, game, backups, platform, dry_run=False, restore=False, music
     if not (game/'Game.exe').is_file():
         raise ValueError(f'Game.exe was not found in {game}')
     manifest = json.loads((bundle/'manifest.json').read_text())
+    if platform == 'linux' and manifest.get('native_linux'):
+        # Upgrade compatibility for already-installed Python-based launchers.
+        # Fresh Linux setup and updates invoke this executable directly.
+        helper=bundle/'payload/localserver/ReRiff-ClientHost'
+        expected=manifest['files'].get('payload/localserver/ReRiff-ClientHost')
+        if not expected or digest(helper.read_bytes()) != expected:
+            raise ValueError('Native client helper checksum mismatch')
+        helper.chmod(helper.stat().st_mode | 0o100)
+        command=[str(helper),'--client-host','install','--bundle',str(bundle),'--game-dir',str(game)]
+        if backups is not None: command += ['--backup-dir',str(backups)]
+        if dry_run: command.append('--dry-run')
+        if restore: command.append('--restore')
+        if music_dir is not None: command += ['--music-dir',str(music_dir)]
+        if music_link is False: command.append('--no-music-link')
+        result=subprocess.run(command,timeout=180)
+        if result.returncode:
+            raise ValueError('Native Linux installer failed; see its diagnostics above.')
+        return {}
     for name, expected in manifest['files'].items():
         relative = Path(name)
         if relative.is_absolute() or '..' in relative.parts or ':' in name:
@@ -281,7 +299,10 @@ def install(bundle, game, backups, platform, dry_run=False, restore=False, music
                 plan[relative] = path.read_bytes()
         if platform == 'windows':
             runtime = bundle/'python'
-            if not (runtime/'python.exe').is_file():
+            if manifest.get('python_runtime') == 'download':
+                if not (game/'localserver/windows-python/python.exe').is_file():
+                    raise ValueError('Run ReRiff-Setup.exe to install the private Python runtime first.')
+            elif not (runtime/'python.exe').is_file():
                 raise ValueError('Windows portable Python runtime is missing.')
             for path in runtime.rglob('*'):
                 if path.is_file():

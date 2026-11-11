@@ -40,7 +40,7 @@ def build(args):
         tracked=subprocess.check_output(['git','ls-tree','-r','--name-only','HEAD'],cwd=ROOT,text=True).splitlines()
         if any(name.endswith('.rrpatch') for name in tracked):
             raise ValueError('Remove game-derived deltas from the committed source tree before building a public update release.')
-    if digest(args.python_zip.read_bytes()) != PYTHON_SHA:
+    if args.python_zip and digest(args.python_zip.read_bytes()) != PYTHON_SHA:
         raise ValueError('Portable Python checksum does not match the Python.org release.')
     output = ROOT/'dist'/('v'+version)
     stage = ROOT/'build/release'
@@ -91,21 +91,22 @@ def build(args):
     for platform in ('linux','windows'):
         folder = stage/platform
         shutil.copytree(common,folder)
-        if args.local_patching and platform == 'linux':
-            copy(ROOT/'build/linux-patcher/Patcher', folder/'patcher/ReRiff-Patcher')
-            for name in ('LICENSE.TXT', 'THIRD-PARTY-NOTICES.TXT'):
-                copy(ROOT/'build/linux-patcher'/name, folder/'patcher'/('dotnet-'+name))
         if platform == 'linux':
             copy(ROOT/'build/ReRiff-Setup', folder/'ReRiff-Setup')
-            copy(ROOT/'build/linux-runtime/ReRiff-Runtime-x86_64.AppImage',
-                 folder/'payload/localserver/ReRiff-Runtime-x86_64.AppImage')
+            # The existing self-contained patcher also owns setup and updates.
+            # No Python runtime or Python helpers are installed on Linux.
+            if (folder/'patcher').exists():
+                shutil.rmtree(folder/'patcher')
+            copy(ROOT/'build/linux-patcher/Patcher', folder/'payload/localserver/ReRiff-ClientHost')
+            for name in ('LICENSE.TXT', 'THIRD-PARTY-NOTICES.TXT'):
+                copy(ROOT/'build/linux-patcher'/name, folder/'payload/localserver/licenses'/('dotnet-'+name))
+            copy(ROOT/'Patcher/dnlib-LICENSE.txt', folder/'payload/localserver/licenses/dnlib-LICENSE.txt')
+            for name in ('apply-client-update.py', 'server-control.py', 'podman-server.py'):
+                (folder/'payload/localserver'/name).unlink(missing_ok=True)
         if platform == 'windows':
             copy(ROOT/'build/ReRiff-Setup.exe',folder/'ReRiff-Setup.exe')
-            with zipfile.ZipFile(args.python_zip) as archive:
-                archive.extractall(folder/'python')
-            (folder/'python/python313._pth').write_text('python313.zip\n.\n..\nimport site\n')
         manifest = {'singleplayer': True, 'channel':channel,'version':version,'commit':commit,'platform':platform,'patches':patches,
-                    'update_only':update_only,
+                    'update_only':update_only, 'native_linux':platform == 'linux', 'python_runtime':'download' if platform == 'windows' else 'server-only',
                     'vanilla_originals':json.loads((ROOT/'packaging/original-client.json').read_text()) if args.local_patching else {},
                     'compatible_existing':json.loads((ROOT/'packaging/compatible-client.json').read_text()) if args.local_patching else {},
                     'client_upgrades':json.loads((ROOT/'packaging/client-upgrades.json').read_text()) if args.local_patching else {},
@@ -128,7 +129,7 @@ work=$(mktemp -d "${TMPDIR:-/tmp}/reriff-install.XXXXXXXX")
 trap 'rm -rf "$work"' EXIT HUP INT TERM
 line=$(awk '/^__RERIFF_PAYLOAD__$/ { print NR+1; exit }' "$0")
 tail -n +"$line" "$0" | tar -xz -C "$work"
-chmod +x "$work/payload/localserver/ReRiff-Runtime-x86_64.AppImage"
+chmod +x "$work/payload/localserver/ReRiff-ClientHost"
 # Explicit installer arguments preserve the headless updater interface.
 mode=auto
 case "${1:-}" in
@@ -142,7 +143,7 @@ fi
 if [ "$mode" = gui ] || { [ "$mode" = auto ] && [ "$#" -eq 0 ] && { [ -n "${DISPLAY:-}" ] || [ -n "${WAYLAND_DISPLAY:-}" ]; }; }; then
   "$work/ReRiff-Setup"
 else
-  "$work/payload/localserver/ReRiff-Runtime-x86_64.AppImage" --python "$work/installer.py" --platform linux "$@"
+  "$work/payload/localserver/ReRiff-ClientHost" --client-host install --bundle "$work" "$@"
 fi
 exit $?
 __RERIFF_PAYLOAD__
@@ -170,5 +171,5 @@ if __name__=='__main__':
     inputs.add_argument('--update-only',action='store_true',help='Update only ReRiff components; include no game-derived binary patches')
     inputs.add_argument('--local-patching',action='store_true',help='Include the source-built patcher for vanilla installs, without game DLLs or binary deltas')
     parser.add_argument('--wheels-dir',type=Path,help=argparse.SUPPRESS) # Legacy build invocation; no server wheels are packaged.
-    parser.add_argument('--python-zip',type=Path,required=True)
+    parser.add_argument('--python-zip',type=Path,help='Optional pinned Python archive verification for build compatibility; never bundled')
     build(parser.parse_args())

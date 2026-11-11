@@ -72,14 +72,14 @@ static BOOL update_command(WCHAR *out,const WCHAR *work,const WCHAR *archive,con
         if(!update_host_path(tool,host_tool)||!update_host_path(work,host_work)||!update_host_path(folder,host_game)
            ||!update_host_path(archive,host_archive))return FALSE;
         GetSystemDirectoryW(system,CAP);
-        if(prepare)_snwprintf(out,CAP,L"\"%ls\\start.exe\" /wait /unix /bin/sh \"%ls\" --python \"%ls\" --work \"%ls\" --prepare --archive \"%ls\" --sha256 %ls --game-dir \"%ls\" --platform linux",system,host_runtime,host_tool,host_work,host_archive,hash,host_game);
-        else _snwprintf(out,CAP,L"\"%ls\\start.exe\" /wait /unix /bin/sh \"%ls\" --python \"%ls\" --work \"%ls\"",system,host_runtime,host_tool,host_work);
+        if(prepare)_snwprintf(out,CAP,L"\"%ls\\start.exe\" /wait /unix /bin/sh \"%ls\" update --work \"%ls\" --prepare --archive \"%ls\" --sha256 %ls --game-dir \"%ls\" --platform linux",system,host_runtime,host_work,host_archive,hash,host_game);
+        else _snwprintf(out,CAP,L"\"%ls\\start.exe\" /wait /unix /bin/sh \"%ls\" update --work \"%ls\"",system,host_runtime,host_work);
     }else{
         if(prepare)path(python,L"localserver\\windows-python\\python.exe");
         else {_snwprintf(python,CAP,L"%ls\\runtime\\python.exe",work);python[CAP-1]=0;}
         if(GetFileAttributesW(python)==INVALID_FILE_ATTRIBUTES)return FALSE;
-        if(prepare)_snwprintf(out,CAP,L"\"%ls\" \"%ls\" --work \"%ls\" --prepare --archive \"%ls\" --sha256 %ls --game-dir \"%ls\" --platform windows",python,tool,work,archive,hash,folder);
-        else _snwprintf(out,CAP,L"\"%ls\" \"%ls\" --work \"%ls\"",python,tool,work);
+        if(prepare)_snwprintf(out,CAP,L"\"%ls\" -X utf8 \"%ls\" --work \"%ls\" --prepare --archive \"%ls\" --sha256 %ls --game-dir \"%ls\" --platform windows",python,tool,work,archive,hash,folder);
+        else _snwprintf(out,CAP,L"\"%ls\" -X utf8 \"%ls\" --work \"%ls\"",python,tool,work);
     }
     if(prepare){
         size_t length=wcslen(out);
@@ -102,6 +102,7 @@ static BOOL save_auto_resume(const WCHAR *work) {
 }
 
 static BOOL check_updates(void) {
+    if(!is_wine()&&!ensure_private_python(window,folder,TRUE)){wcscpy(message,L"Python setup was canceled or failed; the installed client was retained.");return FALSE;}
     WCHAR temporary[CAP],work[CAP],api[CAP],sums[CAP],archive[CAP],url[CAP],filename[256],hash_w[65],command[CAP],name[CAP],source[CAP];
     BOOL ok=FALSE;PROCESS_INFORMATION process;char expected[65]="",*body=NULL;GithubRelease selected={0};ReleasePackage package;
     const WCHAR *failure=L"Could not read the GitHub release list";
@@ -176,7 +177,7 @@ static BOOL check_updates(void) {
     failure=L"Could not start installer preflight";
     if(automatic_update)progress_report(PROGRESS_PREPARE,-1);
     _snwprintf(name,CAP,L"%ls\\apply-client-update.py",work);name[CAP-1]=0;
-    if(!CopyFileW(source,name,TRUE)||!update_command(command,work,archive,hash_w,TRUE)||!spawn(command,TRUE,&process))goto done;
+    if((!is_wine()&&!CopyFileW(source,name,TRUE))||!update_command(command,work,archive,hash_w,TRUE)||!spawn(command,TRUE,&process))goto done;
     CloseHandle(process.hThread);CloseHandle(process.hProcess);
     /* Wine start /unix can finish before the native Unix process. Use the
      * tool's completion markers, not the start.exe exit code, on both OSes. */

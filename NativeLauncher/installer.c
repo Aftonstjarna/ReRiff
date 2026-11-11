@@ -9,6 +9,7 @@
 #include <stdio.h>
 
 #define CAP 32768
+#include "python_runtime.h"
 int WINAPI wWinMain(HINSTANCE instance,HINSTANCE previous,LPWSTR arguments,int show) {
     (void)instance;(void)previous;(void)show;
     WCHAR root[CAP],command[CAP],game[CAP]=L"",log[CAP];
@@ -21,15 +22,21 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE previous,LPWSTR arguments,int s
         dialog.Flags=OFN_FILEMUSTEXIST|OFN_PATHMUSTEXIST|OFN_NOCHANGEDIR;
         if(!GetOpenFileNameW(&dialog))return 0;
         WCHAR *end=wcsrchr(game,L'\\');if(!end)return 1;*end=0;
-        _snwprintf(command,CAP,L"\"%ls\\python\\python.exe\" \"%ls\\installer.py\" --platform windows --game-dir \"%ls\"",root,root,game);
-    }else{
-        _snwprintf(command,CAP,L"\"%ls\\python\\python.exe\" \"%ls\\installer.py\" --platform windows %ls",root,root,arguments);
+
     }
-    command[CAP-1]=0;
+
     if(!interactive){
         int count=0;WCHAR **args=CommandLineToArgvW(GetCommandLineW(),&count);
         if(args){for(int i=1;i+1<count;i++)if(!wcscmp(args[i],L"--game-dir")){wcsncpy(game,args[i+1],CAP-1);game[CAP-1]=0;break;}LocalFree(args);}
     }
+    if(!*game){if(interactive)MessageBoxW(NULL,L"Choose a game folder before installing Python.",L"ReRiff setup",MB_OK|MB_ICONERROR);return 1;}
+    _snwprintf(command,CAP,L"%ls\\Game.exe",game);command[CAP-1]=0;
+    if(GetFileAttributesW(command)==INVALID_FILE_ATTRIBUTES){if(interactive)MessageBoxW(NULL,L"Game.exe was not found in that folder.",L"ReRiff setup",MB_OK|MB_ICONERROR);return 1;}
+    if(!ensure_private_python(NULL,game,interactive))return 1;
+    const WCHAR *bootstrap=L"import runpy,sys;sys.path.insert(0,sys.argv[1]);sys.argv=sys.argv[2:];runpy.run_path(sys.argv[0],run_name='__main__')";
+    if(interactive)_snwprintf(command,CAP,L"\"%ls\\localserver\\windows-python\\python.exe\" -X utf8 -c \"%ls\" \"%ls\" \"%ls\\installer.py\" --platform windows --game-dir \"%ls\"",game,bootstrap,root,root,game);
+    else _snwprintf(command,CAP,L"\"%ls\\localserver\\windows-python\\python.exe\" -X utf8 -c \"%ls\" \"%ls\" \"%ls\\installer.py\" --platform windows %ls",game,bootstrap,root,root,arguments);
+    command[CAP-1]=0;
     _snwprintf(log,CAP,L"%ls\\logs",*game?game:root);log[CAP-1]=0;CreateDirectoryW(log,NULL);
     _snwprintf(log,CAP,L"%ls\\logs\\installer.log",*game?game:root);log[CAP-1]=0;
     SECURITY_ATTRIBUTES security={sizeof(security),NULL,TRUE};
@@ -39,7 +46,7 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE previous,LPWSTR arguments,int s
     start.hStdOutput=output;start.hStdError=output;start.hStdInput=GetStdHandle(STD_INPUT_HANDLE);
     if(output==INVALID_HANDLE_VALUE || !CreateProcessW(NULL,command,NULL,NULL,TRUE,CREATE_NO_WINDOW,NULL,root,&start,&process)){
         if(output!=INVALID_HANDLE_VALUE)CloseHandle(output);
-        if(interactive)MessageBoxW(NULL,L"Extract the complete Windows ZIP before running setup. Portable Python and installer.py must be beside the installer.",L"ReRiff setup failed",MB_OK|MB_ICONERROR);
+        if(interactive)MessageBoxW(NULL,L"Extract the complete Windows ZIP before running setup. installer.py must be beside the installer, and the private Python installation must be complete.",L"ReRiff setup failed",MB_OK|MB_ICONERROR);
         return 1;
     }
     CloseHandle(output);CloseHandle(process.hThread);WaitForSingleObject(process.hProcess,INFINITE);

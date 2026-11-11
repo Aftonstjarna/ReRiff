@@ -1,11 +1,11 @@
-/* Optional native Linux backend. All host Python is inside the AppImages. */
+/* Optional Linux backend. Only the server AppImage contains Python. */
 static BOOL linux_server_action(const WCHAR *action){
     WCHAR bridge[CAP],host_bridge[CAP],root[CAP],host_root[CAP],system[CAP],command[CAP];
     WCHAR result[CAP],host_result[CAP],temporary[CAP],asset[CAP]=L"",host_asset[CAP]=L"",hash_w[65]=L"";
-    path(bridge,L"localserver\\ReRiff-Runtime-x86_64.AppImage");
-    if(GetFileAttributesW(bridge)==INVALID_FILE_ATTRIBUTES){wcscpy(message,L"The bundled Linux runtime is missing. Install the complete Linux client package.");return FALSE;}
+    path(bridge,L"localserver\\ReRiff-ClientHost");
+    if(GetFileAttributesW(bridge)==INVALID_FILE_ATTRIBUTES){wcscpy(message,L"The native Linux client helper is missing. Install the complete Linux client package.");return FALSE;}
     path(bridge,L"localserver\\linux-runtime.sh");path(root,L"localserver");
-    if(GetFileAttributesW(bridge)==INVALID_FILE_ATTRIBUTES){wcscpy(message,L"The bundled Linux runtime is missing. Install the complete Linux client package.");return FALSE;}
+    if(GetFileAttributesW(bridge)==INVALID_FILE_ATTRIBUTES){wcscpy(message,L"The native Linux client helper is missing. Install the complete Linux client package.");return FALSE;}
     if(!update_host_path(bridge,host_bridge)||!update_host_path(root,host_root))return FALSE;
     if(!GetTempPathW(CAP,temporary)||!GetTempFileNameW(temporary,L"rrl",0,result))return FALSE;DeleteFileW(result);
     if(!update_host_path(result,host_result))return FALSE;
@@ -31,8 +31,8 @@ static BOOL linux_server_action(const WCHAR *action){
         MultiByteToWideChar(CP_UTF8,0,expected,-1,hash_w,65);
     }
     GetSystemDirectoryW(system,CAP);
-    if(*asset)_snwprintf(command,CAP,L"\"%ls\\start.exe\" /wait /unix /bin/sh \"%ls\" --server-control %ls --root \"%ls\" --result \"%ls\" --asset \"%ls\" --sha256 %ls",system,host_bridge,action,host_root,host_result,host_asset,hash_w);
-    else _snwprintf(command,CAP,L"\"%ls\\start.exe\" /wait /unix /bin/sh \"%ls\" --server-control %ls --root \"%ls\" --result \"%ls\"",system,host_bridge,action,host_root,host_result);
+    if(*asset)_snwprintf(command,CAP,L"\"%ls\\start.exe\" /wait /unix /bin/sh \"%ls\" server-control %ls --root \"%ls\" --result \"%ls\" --asset \"%ls\" --sha256 %ls",system,host_bridge,action,host_root,host_result,host_asset,hash_w);
+    else _snwprintf(command,CAP,L"\"%ls\\start.exe\" /wait /unix /bin/sh \"%ls\" server-control %ls --root \"%ls\" --result \"%ls\"",system,host_bridge,action,host_root,host_result);
     command[CAP-1]=0;PROCESS_INFORMATION process;
     if(!spawn(command,TRUE,&process)){wcscpy(message,L"Could not start the bundled Linux helper.");return FALSE;}
     CloseHandle(process.hThread);CloseHandle(process.hProcess);

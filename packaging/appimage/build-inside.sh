@@ -3,7 +3,7 @@ set -euo pipefail
 umask 022
 [[ $(uname -m) == x86_64 ]]
 cd /src
-export APPDIR=/build/ReRiff.AppDir OUTPATH=/out
+export APPDIR=/build/ReRiff.AppDir OUTPATH=/out OUTNAME=ReRiff-Server-x86_64.AppImage
 export DESKTOP=/build/reriff.desktop ICON=/src/packaging/appimage/reriff.svg
 export DEPLOY_PYTHON=1 DEPLOY_LOCALE=0 STRACE_MODE=0
 export VERSION
@@ -13,7 +13,7 @@ install -m755 packaging/appimage/AppRun.sh "$APPDIR/AppRun.sh"
 cat > "$DESKTOP" <<'DESKTOP'
 [Desktop Entry]
 Type=Application
-Name=ReRiff Runtime
+Name=ReRiff Local Server
 Exec=python3
 Icon=reriff
 Categories=Game;
@@ -28,11 +28,6 @@ cp LICENSE "$APPDIR/share/reriff/licenses/ReRiff.txt"
 cp /etc/ssl/certs/ca-certificates.crt "$APPDIR/share/reriff/ca-certificates.crt"
 cp -a /usr/share/licenses/. "$APPDIR/share/reriff/licenses/"
 pacman -Q > "$APPDIR/share/reriff/build-packages.txt"
-# Build the small client helper runtime before installing backend dependencies.
-"$APPDIR/AppRun" --self-test
-export OUTNAME=ReRiff-Runtime-x86_64.AppImage
-/opt/quick-sharun --make-appimage
-
 python -m pip install --break-system-packages --no-cache-dir -r docker/requirements.txt
 # Redeploy Python so the optional server gets Flask/Waitress and native wheels.
 site=$(python -c 'import sysconfig; print(sysconfig.get_path("purelib"))')
@@ -53,4 +48,4 @@ python -m pip list --format=json > "$APPDIR/share/reriff/python-packages.json"
 export OUTNAME=ReRiff-Server-x86_64.AppImage
 /opt/quick-sharun --make-appimage
 cd /out
-sha256sum ReRiff-*.AppImage > APPIMAGE-SHA256SUMS
+sha256sum ReRiff-Server-x86_64.AppImage > APPIMAGE-SHA256SUMS

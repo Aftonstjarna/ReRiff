@@ -2,6 +2,14 @@ using dnlib.DotNet;
 using dnlib.DotNet.Emit;
 using dnlib.DotNet.Writer;
 
+#if NET8_0_OR_GREATER
+if (args.Length > 0 && args[0] == "--client-host") {
+    if (!OperatingSystem.IsLinux()) throw new PlatformNotSupportedException("Linux client helper required.");
+    Environment.ExitCode = LinuxClientHost.Run(args.Skip(1).ToArray());
+    return;
+}
+#endif
+
 if (args.Length == 4 && args[0] == "--retarget-helpers") {
     using var source = ModuleDefMD.Load(args[1]);
     int updated = 0;

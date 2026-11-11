@@ -1,8 +1,8 @@
-# ReRiff 1.2.4-beta.2 — Linux runtime and menu testing
+# ReRiff 1.2.4-beta.2 — Python-free Linux setup and menu testing
 
 ## In-game summary
 
-- Linux setup and updates now include their own Python runtime.
+- Install and update on Linux without a Python runtime.
 - Download and manage an optional Linux server from the launcher.
 - Settings confirmations preserve scrolled graphics-menu rows.
 
@@ -13,8 +13,10 @@ remains the default download and update channel.
 
 ### Linux setup and optional local server
 
-- Bundle Python and helper libraries in an AnyLinux AppImage for installation
-  and updates. System Python and package layering are no longer required.
+- Use the existing self-contained patcher executable for Linux installation
+  and updates. The client needs neither Python nor a system .NET installation.
+- Keep Flask and Python inside the optional server AppImage. Archive the previous
+  client Python runtime and obsolete helpers during upgrades.
 - Offer a separate, checksum-verified local-server AppImage through the launcher.
   Linux users can install, start and stop it without Podman. Windows retains
   its existing Podman integration.
@@ -27,11 +29,15 @@ remains the default download and update channel.
 - Write local-server diagnostics under the game's `logs/` folder. Verify process
   ownership before stopping a server; keep unrelated listeners and processes
   untouched.
-- Include the runtime in Linux update preparation and installer rollback checks.
-  The server download is optional and remains separate from the client installer.
+- Use a private native helper for Linux update preparation and application,
+  retaining checksum, backup and rollback checks. The server download stays
+  separate from the client installer.
 
 ### Launcher updates
 
+- Windows setup and Python-dependent launcher actions ask before downloading
+  a verified private Python runtime into the game folder. No system Python,
+  PATH or registry changes are made; installers no longer bundle Python.
 - Use standard edit borders for server and timeout fields under Wine, avoiding
   the extra themed focus outline while retaining text editing and Tab navigation.
 - Select experimental releases by GitHub publication time. Stable updates use
@@ -42,6 +48,9 @@ remains the default download and update channel.
 
 ### Menus and documentation
 
+- Keep fullscreen-selector arrows white while highlighting the selected text.
+- Focus Resolution when Graphics opens so Down moves straight to Fullscreen.
+- Clear Resolution's highlight and arrow shortcuts when Apply is selected.
 - Preserve the graphics-menu scroll viewport while native confirmation dialogs
   own input. Hidden slider rows stay hidden and underlying controls stay inactive.
 - Audit native selector, slider, Apply and save-prompt integration against local
@@ -54,8 +63,8 @@ remains the default download and update channel.
 
 - Local checks cover installer safety, update preparation, native menu navigation,
   UI scale, save prompts, display handling and optional-server lifecycle.
-- The Linux AppImages passed tests without host Python, Podman or FUSE, including
-  an isolated Alpine container and a Wine launcher handoff.
+- Tests exercise Linux setup, updates and local-server controls without Python
+  on the client PATH. The server AppImage runs without host Python or FUSE.
 - Test the complete client on Windows and Linux/Proton. SteamOS/Bazzite and NixOS
   desktop integration still need real-machine testing. Graphics and confirmation
   behavior still need an in-game retest.

@@ -46,8 +46,12 @@ Unsupported DLLs or conflicting backup hashes stop installation for review.
 
 **Windows:** download and extract `ReRiff-<version>-windows.zip`, run
 `ReRiff-Setup.exe`, and select the game's `Game.exe`. Keep the ZIP contents
-together until setup finishes. The package supports x64 Windows and includes
-Python for setup and updates. DLL patching uses the game's .NET Framework runtime.
+together until setup finishes. The package supports x64 Windows. Development
+setup asks before downloading
+a verified private Python runtime into `localserver/windows-python/` for setup,
+updates and optional server controls. Stable 1.2.3 bundles this runtime. The
+private installation leaves system Python, PATH and the registry unchanged.
+DLL patching uses the game's .NET Framework runtime.
 
 **Linux/Proton (x86_64):** run the installer to open its setup window:
 
@@ -83,12 +87,11 @@ keep their terminal behavior for scripts and automatic updates. Do not use `sudo
 Setup keeps your Steam Proton selection and launch options. Update helpers live
 in `localserver/` beside `Game.exe`.
 
-**Linux changes in 1.2.4-beta.2:** beta builds bundle Python and helper
-libraries in an AnyLinux AppImage for setup and updates. The optional local
-server downloads as a separate AppImage. These builds run without system Python,
-Podman or administrator access. Stable 1.2.3 requires Python 3.10 or newer for
-Linux setup. The current development installer also includes the DLL patcher's
-runtime.
+**Development Linux builds:** setup and updates use the existing self-contained
+patcher and client helper. They require neither Python nor a separate .NET
+installation. Flask and Python are confined to the optional server AppImage,
+which is downloaded only when you install a local server. Stable 1.2.3 requires
+Python 3.10 or newer for Linux setup.
 
 If Windows selects an external server but game features stay offline, include
 `logs/ReRiff-network.log` from the game folder when reporting the failure.
@@ -244,10 +247,11 @@ The development Linux server stores configuration in
 `logs/ReRiff-localserver.log`. When replacing an older launcher-managed Podman
 server, existing `localserver/podman/data` and its configured port are reused
 in place; stop the old container first. The optional server application is
-`localserver/ReRiff-Server-x86_64.AppImage`; the client runtime is
-`localserver/ReRiff-Runtime-x86_64.AppImage`. Downloads are checked against the
-release's SHA-256 manifest before installation. Client installers contain the
-helper runtime and download the server separately.
+`localserver/ReRiff-Server-x86_64.AppImage`; the self-contained client helper is
+`localserver/ReRiff-ClientHost`. Downloads are checked against the release's
+SHA-256 manifest before installation. The Linux client installs no Python scripts
+or runtime. When upgrading a previous development install, its client Python
+runtime and obsolete helpers are archived in `bak/versions/` for recovery.
 
 Windows retains its Podman configuration under `localserver/podman/` and
 `logs/ReRiff-podman.log`. Shared Docker/Podman servers remain supported.
@@ -516,6 +520,7 @@ its configured address with `/admin`.
   working folder for extracted update files. The update log is `logs/update.log`.
 - Native menu startup: `logs/ReRiff-engine-menu.log`; network errors: `logs/ReRiff-network.log`.
 - Setup: `logs/installer.log` on Windows and `logs/installer-*.log` on Linux.
+  Private Python downloads: `logs/ReRiff-python-setup.log` on Windows.
   Startup collection reports are also saved under `logs/`.
 - Legacy local backend: `localserver/server-console.log` and
   `localserver/server/data/traces/`.
@@ -587,21 +592,22 @@ bash scripts/build-linux-runtime.sh
 ```
 
 The launcher, updater, notification DLL, and Windows setup are native Win32.
-The server's identity engine is C++; the existing server and installer tools
-use Python. The managed client helper retains its .NET Framework target.
+The server's identity engine is C++. The server backend and Windows installation
+tools use Python; Linux installation and updates use the self-contained patcher.
+The managed game helper retains its .NET Framework target.
 
-The Linux AppImages are built in an Arch container using a pinned AnyLinux
-sharun deployer. They include Python, shared libraries, CA certificates and
-dependency licenses. Run `scripts/test-linux-runtime.py` through the bundled
-runtime to test without system Python/Podman; the smoke check forces FUSE-free
-execution and checks lifecycle, persistence and port conflicts. SteamOS/Bazzite
-and NixOS desktop integration still need real-machine testing.
+The optional Linux server AppImage is built in an Arch container with a pinned
+AnyLinux sharun deployer. It includes Flask, Python, shared libraries, CA
+certificates and dependency licenses. The Linux client helper uses the existing
+self-contained .NET patcher runtime. Run `scripts/test_native_client.py` for
+installation/update regressions and `scripts/test-linux-runtime.py` for server
+lifecycle, persistence and port-conflict checks without host Python or Podman.
+SteamOS/Bazzite and NixOS desktop integration still need real-machine testing.
 
-For installer builds, build both AppImages and obtain the verified Windows
-portable Python archive, then run:
+For installer builds, build the client helpers and optional server AppImage, then run:
 
 ```sh
-python3 packaging/build_release.py --local-patching --python-zip /path/to/python.zip
+python3 packaging/build_release.py --local-patching
 ```
 
 Updating `VERSION` on `main` triggers a stable client release. The
