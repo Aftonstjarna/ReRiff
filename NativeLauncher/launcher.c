@@ -240,12 +240,35 @@ static BOOL stop_server(void) {
 #include "podman_server.h"
 #include "song_sync.h"
 
+static void finish_local_session(BOOL started){
+    if(!started)return;
+    WCHAR previous[1024];wcscpy(previous,message);
+    linux_server_action(L"stop");log_message(message);wcscpy(message,previous);
+}
+
 static BOOL launch_game(void) {
+    BOOL started_local=FALSE;
+    if(is_wine()&&!external_only()){
+        WCHAR config[CAP],enabled[16],primary[2048],secondary[2048];
+        path(config,L"localserver\\native\\config.json");
+        GetPrivateProfileStringW(L"server",L"networking_enabled",L"true",enabled,16,ini);
+        GetPrivateProfileStringW(L"server",L"external_url",L"",primary,2048,ini);
+        GetPrivateProfileStringW(L"server",L"fallback_url",L"",secondary,2048,ini);
+        BOOL use_network=_wcsicmp(enabled,L"false")&&wcscmp(enabled,L"0")&&_wcsicmp(enabled,L"no");
+        /* Only this installation's explicitly configured loopback backend is
+         * auto-started; downloading remains an explicit Install action. */
+        if(use_network&&GetFileAttributesW(config)!=INVALID_FILE_ATTRIBUTES){
+            if(linux_server_action(L"status")&&podman_state==1
+               &&(!_wcsicmp(primary,podman_address)||!_wcsicmp(secondary,podman_address))){
+                started_local=linux_server_action(L"start");log_message(message);
+            }
+        }
+    }
     for(;;){
     sync_cached_songs(ini);
     WCHAR command[CAP]; PROCESS_INFORMATION process;
-    if(!game_command(command)){wcscpy(message,L"The forwarded game command is too long.");return FALSE;}
-    if (!spawn(command,FALSE,&process)) { wcscpy(message,L"Could not start Game.exe beside the launcher."); return FALSE; }
+    if(!game_command(command)){wcscpy(message,L"The forwarded game command is too long.");finish_local_session(started_local);return FALSE;}
+    if (!spawn(command,FALSE,&process)) { wcscpy(message,L"Could not start Game.exe beside the launcher."); finish_local_session(started_local);return FALSE; }
     WCHAR event_name[96];restart_event_name(event_name,96,process.dwProcessId,FALSE);
     HANDLE restart=CreateEventW(NULL,TRUE,FALSE,event_name);
     if (window) PostMessageW(window,WM_GAME_RUNNING,0,0);
@@ -259,8 +282,8 @@ static BOOL launch_game(void) {
     if(restart)CloseHandle(restart);
     CloseHandle(process.hProcess);
     sync_cached_songs(ini);
-    if(!closed){wcscpy(message,L"Could not wait for Game.exe to close.");return FALSE;}
-    if(!again)return TRUE;
+    if(!closed){wcscpy(message,L"Could not wait for Game.exe to close.");finish_local_session(started_local);return FALSE;}
+    if(!again){finish_local_session(started_local);return TRUE;}
     log_message(L"Game closed for Save and restart; applying saved server settings.");
     }
 }
@@ -280,7 +303,7 @@ static void begin(int action) {
     if (busy) return;
     busy=TRUE;playing=action==1;
     EnableWindow(play_button,FALSE);EnableWindow(save_button,FALSE);EnableWindow(stop_button,FALSE);EnableWindow(update_button,FALSE);EnableWindow(experimental_checkbox,FALSE);
-    SetWindowTextW(status,action==3?L"Checking published GitHub releases...":action==2?(podman_state==2?L"Stopping the local Podman server...":podman_state==1?L"Starting the local Podman server...":L"Downloading and installing the optional Podman server image..."):L"Checking server settings...");
+    SetWindowTextW(status,action==3?L"Checking published GitHub releases...":action==2?(podman_state==2?L"Stopping the local server...":podman_state==1?L"Starting the local server...":L"Downloading and installing the optional local server..."):L"Checking server settings...");
     HANDLE thread=CreateThread(NULL,4*1024*1024,worker,(LPVOID)(INT_PTR)action,STACK_SIZE_PARAM_IS_A_RESERVATION,NULL);
     if (thread) CloseHandle(thread);
     else { busy=FALSE; EnableWindow(play_button,TRUE);EnableWindow(save_button,TRUE);EnableWindow(stop_button,TRUE);EnableWindow(update_button,TRUE);EnableWindow(experimental_checkbox,TRUE);SetWindowTextW(status,L"Could not start launcher worker."); }

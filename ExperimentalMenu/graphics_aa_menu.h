@@ -252,7 +252,10 @@ static void __thiscall aa_graphics_tick(void *menu){
     save_prompt_tick(menu);
     if(menu_overlay_active()){
         ui_slider_dragging=FALSE;InterlockedExchange(&graphics_scroll_active,0);
-        aa_graphics_input_state(menu);graphics_tick_original(menu);return;
+        aa_graphics_input_state(menu);graphics_tick_original(menu);
+        /* Input reconciliation exposes added rows. Preserve the existing reel
+         * viewport while the native overlay owns input, without ticking it. */
+        graphics_layout(menu);return;
     }
     if(menu==aa_menu_owner)ui_slider_tick(menu);
     aa_graphics_input_state(menu);graphics_scroll_tick(menu);graphics_tick_original(menu);aa_graphics_input_state(menu);graphics_layout(menu);

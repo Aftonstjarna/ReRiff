@@ -9,7 +9,7 @@ from urllib.parse import urlsplit
 ROOT = Path(__file__).resolve().parent.parent
 
 
-def create_app(data_dir=None, public_url=None):
+def create_app(data_dir=None, public_url=None, log_dir=None):
     spec = importlib.util.spec_from_file_location('riffserver', ROOT/'server/riffapi-local.py')
     backend = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(backend)
@@ -17,7 +17,9 @@ def create_app(data_dir=None, public_url=None):
     backend.DATA_DIR = str(data)
     backend.CLASSES_DIR = str(data/'classes')
     backend.FILES_DIR = str(data/'files')
-    backend.LOG_FILE = str(data/'requests.log')
+    logs = Path(log_dir).resolve() if log_dir is not None else data
+    logs.mkdir(parents=True, exist_ok=True)
+    backend.LOG_FILE = str(logs/'requests.log')
     public = (public_url if public_url is not None else os.environ.get('RERIFF_PUBLIC_URL', '')).strip().rstrip('/')
     if public:
         parsed = urlsplit(public)
@@ -29,7 +31,7 @@ def create_app(data_dir=None, public_url=None):
     spec = importlib.util.spec_from_file_location('reriff_trace', ROOT/'trace-server.py')
     trace = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(trace)
-    trace.instrument(backend, data/'traces')
+    trace.instrument(backend, logs/'traces')
     return backend.app
 
 

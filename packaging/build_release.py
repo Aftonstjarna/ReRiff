@@ -84,7 +84,7 @@ def build(args):
     (payload/'localserver/client-channel.ini').write_text('[client]\nchannel='+channel+'\n')
     # Multiplayer backend dependencies belong in the container image. The
     # installed client retains only updater and legacy-server cleanup tools.
-    for name in ('steam-launcher.sh', 'stop-server-host.sh', 'server-control.py', 'apply-client-update.py', 'podman-server.py'):
+    for name in ('steam-launcher.sh', 'stop-server-host.sh', 'server-control.py', 'apply-client-update.py', 'podman-server.py', 'linux-runtime.sh'):
         copy(ROOT/'scripts'/name, payload/'localserver'/name)
     output.mkdir(parents=True, exist_ok=True)
     commit = subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
@@ -97,6 +97,8 @@ def build(args):
                 copy(ROOT/'build/linux-patcher'/name, folder/'patcher'/('dotnet-'+name))
         if platform == 'linux':
             copy(ROOT/'build/ReRiff-Setup', folder/'ReRiff-Setup')
+            copy(ROOT/'build/linux-runtime/ReRiff-Runtime-x86_64.AppImage',
+                 folder/'payload/localserver/ReRiff-Runtime-x86_64.AppImage')
         if platform == 'windows':
             copy(ROOT/'build/ReRiff-Setup.exe',folder/'ReRiff-Setup.exe')
             with zipfile.ZipFile(args.python_zip) as archive:
@@ -122,11 +124,11 @@ def build(args):
                     archive.add(path,arcname=path.name,filter=lambda info: None if '__pycache__' in info.name else info)
             shell = '''#!/bin/sh
 set -eu
-command -v python3 >/dev/null 2>&1 || { echo "Python 3.10+ is required." >&2; exit 1; }
 work=$(mktemp -d "${TMPDIR:-/tmp}/reriff-install.XXXXXXXX")
 trap 'rm -rf "$work"' EXIT HUP INT TERM
 line=$(awk '/^__RERIFF_PAYLOAD__$/ { print NR+1; exit }' "$0")
 tail -n +"$line" "$0" | tar -xz -C "$work"
+chmod +x "$work/payload/localserver/ReRiff-Runtime-x86_64.AppImage"
 # Explicit installer arguments preserve the headless updater interface.
 mode=auto
 case "${1:-}" in
@@ -140,17 +142,18 @@ fi
 if [ "$mode" = gui ] || { [ "$mode" = auto ] && [ "$#" -eq 0 ] && { [ -n "${DISPLAY:-}" ] || [ -n "${WAYLAND_DISPLAY:-}" ]; }; }; then
   "$work/ReRiff-Setup"
 else
-  python3 "$work/installer.py" --platform linux "$@"
+  "$work/payload/localserver/ReRiff-Runtime-x86_64.AppImage" --python "$work/installer.py" --platform linux "$@"
 fi
 exit $?
 __RERIFF_PAYLOAD__
 '''
             run = output/f'ReRiff-{version}-linux.run'
             run.write_bytes(shell.encode()+archive_bytes.getvalue());run.chmod(0o755)
+    copy(ROOT/'build/linux-runtime/ReRiff-Server-x86_64.AppImage', output/'ReRiff-Server-x86_64.AppImage')
     # Source archive excludes original game files, player data, and caches.
     with (output/f'ReRiff-{version}-source.tar.gz').open('wb') as stream:
         subprocess.run(['git','archive','--format=tar.gz',f'--prefix=ReRiff-{version}/','HEAD'],cwd=ROOT,stdout=stream,check=True)
-    artifacts = sorted(p for p in output.iterdir() if p.suffix in ('.run','.zip','.gz'))
+    artifacts = sorted(p for p in output.iterdir() if p.suffix in ('.run','.zip','.gz','.AppImage'))
     (output/'SHA256SUMS').write_text(''.join(digest(p.read_bytes())+'  '+p.name+'\n' for p in artifacts))
     (output/'release.json').write_text(json.dumps({'version':version,'commit':commit,'artifacts':[p.name for p in artifacts]},indent=2)+'\n')
     (output/'RELEASE-NOTES.md').write_text(notes, encoding='utf-8')

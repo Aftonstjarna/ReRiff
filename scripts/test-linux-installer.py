@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import shlex
 import subprocess
+import sys
 import tempfile
 
 root = Path(__file__).resolve().parent.parent
@@ -44,6 +45,11 @@ if not marker.exists():
 assert a.music_dir==a.game_dir and not a.no_music_link
 print('GUI install succeeded: '+str(game), flush=True)
 ''')
+    # Fixture runtime has the same argv contract as the real bundled AppImage.
+    runtime = work/'payload/localserver/ReRiff-Runtime-x86_64.AppImage'
+    runtime.parent.mkdir(parents=True)
+    runtime.write_text('#!/bin/sh\n[ "$1" = --python ] || exit 2\nshift\nexec '+shlex.quote(sys.executable)+' "$@"\n')
+    runtime.chmod(0o755)
     # No test process may touch the real user's home or logs.
     (work/'home').mkdir()
     env.update(HOME=str(work/'home'), XDG_CONFIG_HOME=str(work/'config'),

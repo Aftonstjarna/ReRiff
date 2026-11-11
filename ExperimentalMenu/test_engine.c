@@ -473,6 +473,16 @@ int main(int argc,char **argv){
     graphics_scroll_to(gm,1,FALSE);CHECK(graphics_first==1&&(*((BYTE *)ui_slider_label+372)&1));
     CHECK(!(*((BYTE *)graphics_test_items[2]+372)&1));
     graphics_scroll_to(gm,0,FALSE);CHECK((*((BYTE *)graphics_test_items[2]+372)&1)&&!(*((BYTE *)ui_slider_label+372)&1));
+    /* A native confirmation suspends input, but must preserve the reel's
+     * viewport. Input-mask reconciliation must not reveal offscreen rows. */
+    overlay_value=overlay_fixture;overlay_manager=&overlay_value;((void **)overlay_fixture)[11]=gm;
+    int overlay_first=graphics_first,overlay_reel_ticks=ticks;
+    aa_graphics_tick(gm);
+    CHECK(!(*((BYTE *)ui_slider_label+372)&1));
+    CHECK(!(*((BYTE *)ui_slider_rail+372)&1)&&!(*((BYTE *)ui_slider_knob+372)&1));
+    CHECK(!*(DWORD *)((BYTE *)aa_label+76)&&!*(DWORD *)((BYTE *)graphics_test_items[6]+76));
+    CHECK(graphics_first==overlay_first&&ticks==overlay_reel_ticks);
+    ((void **)overlay_fixture)[11]=NULL;overlay_manager=NULL;
     aa_graphics_cleanup(gm,NULL,NULL);CHECK(!graphics_reel&&constructed==destroyed);
     ui_scope_set(NULL);TlsFree(ui_scope_tls);ui_scope_tls=TLS_OUT_OF_INDEXES;
     FreeLibrary(image);DeleteFileW(config_path);DeleteFileW(log_path);

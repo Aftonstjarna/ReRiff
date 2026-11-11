@@ -1,7 +1,7 @@
 # ReRiff
 
-Play Riff Racer on Windows or Linux/Proton with restored offline and shared-server
-features.
+Play Riff Racer on Windows or Linux/Proton with singleplayer, shared
+leaderboards and ghosts.
 
 [Download stable 1.2.3](https://github.com/Aftonstjarna/ReRiff/releases/latest)
 · [Install and update](#install-or-update)
@@ -18,7 +18,7 @@ features.
   antialiasing and adjustable UI scale.
 - **Launcher and updates:** edit settings, opt into betas, or update automatically
   when skipping the launcher.
-- **Optional local server:** install and manage a Podman server from the launcher.
+- **Optional local server:** download and manage a local server from the launcher.
 
 **Launcher — ReRiff 1.2.3**
 
@@ -32,32 +32,24 @@ features.
 
 ![Graphics settings with resolution, fullscreen mode, antialiasing and UI scale](docs/images/reriff-graphics.png)
 
-Linux uses Proton; the game still requires its Windows .NET Framework setup.
+Linux play requires Proton and the game's Windows .NET Framework setup.
 
 ## Install or update
 
-**Installers support vanilla and existing ReRiff installations.** Setup verifies
-the supported DLL hashes and patches the user's local copies when required.
-Original game executables, assets, and game-derived binary patches are not included.
+Install into an unmodified game or an existing ReRiff installation. Close the
+game and launcher first. Setup checks the game DLLs, applies the required patches
+and preserves settings, scores, ghosts and server data.
 
-Close the game and launcher before a manual installation. Existing settings,
-scores, ghosts, and server data are preserved. Client backups are
-kept in the game's `bak` folder. Keep this folder when updating. Unknown game DLL
-modifications are rejected rather than overwritten.
-Matching vanilla backups are checked by SHA256 and kept unchanged. Verified
-originals from an older recorded backup folder are copied into `bak` without
-changing that older folder. A conflicting backup hash stops installation
-without overwriting the backup.
+Keep the game's `bak` folder: it holds verified originals for restoration.
+Setup can copy verified originals from a previously recorded backup folder.
+Unsupported DLLs or conflicting backup hashes stop installation for review.
 
 **Windows:** download and extract `ReRiff-<version>-windows.zip`, run
 `ReRiff-Setup.exe`, and select the game's `Game.exe`. Keep the ZIP contents
-together until setup finishes. Portable Python is included for setup and updates; singleplayer runs inside
-the game without a Python server. Local DLL patching uses the game's .NET Framework runtime.
-The package targets x64 Windows; the launcher is native x86 Win32.
+together until setup finishes. The package supports x64 Windows and includes
+Python for setup and updates. DLL patching uses the game's .NET Framework runtime.
 
-**Linux/Proton (x86_64):** install Python 3.10 or newer. The Linux
-installer opens a native folder picker and setup window when run without
-arguments in a desktop session:
+**Linux/Proton (x86_64):** run the installer to open its setup window:
 
 ```sh
 sh ReRiff-<version>-linux.run
@@ -71,14 +63,13 @@ browse your music. Uncheck it to skip linking; this preference is retained for
 automatic updates. Existing non-empty Music folders inside the prefix are
 preserved. If Steam has not created the prefix yet, launch the game once and
 rerun setup to apply the link. Terminal installs accept `--music-dir '/your/music'`
-or `--no-music-link`. GTK 3 is required for the window and is available on many Steam desktops.
-The installer shows progress and details, keeps a log under
-`~/.local/state/reriff/` (or `$XDG_STATE_HOME/reriff/`), and reuses the same backup,
-verification, and rollback checks as Windows. Choosing a folder alone changes
-nothing. A failed installation can be retried from the window.
+or `--no-music-link`.
+
+The setup window requires GTK 3. It shows progress and writes diagnostics to
+`~/.local/state/reriff/` (or `$XDG_STATE_HOME/reriff/`). If installation fails,
+review the details and retry from the same window.
 
 For a terminal install or a machine without GTK:
-
 
 ```sh
 sh ReRiff-<version>-linux.run --game-dir '/path/to/steamapps/common/Riff Racer'
@@ -89,68 +80,63 @@ search common Steam libraries (including Flatpak Steam). Use `--cli` to force
 terminal mode, or `--gui` to request the window.
 Explicit options such as `--game-dir`, `--dry-run`, `--restore`, and `--help`
 keep their terminal behavior for scripts and automatic updates. Do not use `sudo`.
-Update and optional-server control helpers live in `localserver/` beside `Game.exe`;
-the server image is downloaded separately when requested from the launcher.
-It does not change Steam's selected Proton version or launch options.
-The Linux installer includes the DLL patcher's runtime; a separate Mono or .NET
-installation is not required. If an older package reports that Mono is required,
-download the current complete Linux installer or retry the update.
+Setup keeps your Steam Proton selection and launch options. Update helpers live
+in `localserver/` beside `Game.exe`.
+
+**Linux changes in 1.2.4-beta.2:** beta builds bundle Python and helper
+libraries in an AnyLinux AppImage for setup and updates. The optional local
+server downloads as a separate AppImage. These builds run without system Python,
+Podman or administrator access. Stable 1.2.3 requires Python 3.10 or newer for
+Linux setup. The current development installer also includes the DLL patcher's
+runtime.
 
 If Windows selects an external server but game features stay offline, include
-`logs/ReRiff-network.log` from the game folder when reporting the failure. It records
-bounded network and assembly-loading exception details. The startup report
-collector includes it automatically.
+`logs/ReRiff-network.log` from the game folder when reporting the failure.
+The startup report collector includes this log automatically.
 
 ### Automatic client updates
 
-Upcoming installers add a ReRiff GitHub web shortcut beside the game and a
-repository link in setup. These additions are not included in stable 1.2.3.
-
+Development installers add a GitHub shortcut beside the game and a repository
+link in setup.
 
 Click **Update from GitHub** while the game is closed. The launcher downloads
 the latest stable release for your platform, verifies its SHA256 and package
 contents, applies the update with backups and rollback, then reopens itself.
 The title bar shows the running version. Settings and saved data are retained.
 
-If you are using a prerelease, **uncheck Use experimental releases (prereleases)** while the
-game is closed to install stable 1.2.3. This works even when your installed
-version has a revision suffix such as `1.2.3-8`. New test releases use `X.X.X-beta.N` (for example, `1.2.4-beta.1`); older
-`X.X.X-N` releases remain recognized. Stable stays the default update channel.
-Launchers from stable 1.2.3 do not recognize the new beta names; install the first
-beta manually, or update to a stable launcher with beta-name support first.
-Superseded prereleases may be drafted or deleted after stable is verified; they are not offered as current updates.
+Stable is the default channel. Check **Use experimental releases (prereleases)**
+to test betas, or uncheck it to return to stable. New betas use `X.X.X-beta.N`,
+starting with `1.2.4-beta.1`; older `X.X.X-N` names remain supported.
+
+**Stable 1.2.3 launchers require a manual update to recognize beta names.**
+Development launchers select the most recently published GitHub prerelease;
+stable updates use GitHub Latest. The updater verifies the selected release's
+package and skips an already installed version unless you switch channels or
+request a test reinstall.
 
 If your launcher cannot apply an update, install the current release manually.
 Client updates do not update the Docker server.
 
 ### In-game Servers menu and launcher skipping
 
-Open **Settings → Servers** and use the original
-fullscreen-style on/off switches for **Skip launcher**, **Primary server only**,
-and **Singleplayer** (Off uses configured servers; On selects local play without
-clearing saved addresses). After changing Skip launcher, choose
-**Save settings** or **Save and return**. The next start uses this preference;
-Back without saving discards the change. The preference is stored in
-`server.ini` as `[launcher] skip_launcher=true` or `false`. The launcher's
-**Skip launcher** checkbox edits this same preference and refreshes when you
-save it in-game. Choose **Save settings** in the launcher to save checkbox edits.
+Open **Settings → Servers** to change **Skip launcher**, **Primary server only**
+and **Singleplayer**. Save your changes with **Save settings** or **Save and
+return**. **Return without saving** discards edits. The launcher edits the same
+preferences in `server.ini`.
 
-Beside it, **Auto-update when skipping launcher** enables an update check before
-starting the game without the launcher window. A small progress window shows
-checking, downloading, verification and installation. **Cancel** starts the
-installed game; it is disabled once installation is committed, so replacement
-or rollback can finish safely. It is Off by default, follows
-the installed stable/experimental channel, and resumes the game after an update
-with the original arguments. A failed check starts the installed version and
-records details in `logs/ReRiff-launcher.log`. Existing settings and saved data are
-preserved. To test this path without a duplicate GitHub release, close the game
-and run `ReRiff-Launcher.exe --skip-launcher --test-auto-update`. This one launch
-can reinstall the same published version using the normal verified updater,
-then resume the game without checking again. It will not downgrade to an older
-published version; the installed release must include this flag.
+**Skip launcher** takes effect on the next start. Fresh installs show the launcher.
 
-This option is configured in the launcher, with
-`[launcher] auto_update_on_skip=true` in `server.ini`.
+In the launcher, **Auto-update when skipping launcher** checks the selected
+release channel before starting the game. It starts Off. A progress window shows
+the check and installation. **Cancel** starts the installed game; cancellation
+is disabled during file replacement and rollback. A failed check starts the
+installed version and records details in `logs/ReRiff-launcher.log`.
+
+To test an unattended update, close the game and run
+`ReRiff-Launcher.exe --skip-launcher --test-auto-update`. This reinstalls the
+selected published package, then starts the game. It can replace a local
+development build with the channel's published version. The installed launcher
+must support this flag.
 
 New INI files include `https://riffapi.hobune.stream/` as a commented external
 server example. Updates also install `server.ini.example` alongside the game.
@@ -225,12 +211,10 @@ working Proton and .NET setup. In Steam, find the game path with **Properties �
 Installed Files → Browse**, then edit **Properties → General → Launch Options**.
 The launcher waits for the game to exit so Steam keeps the session active.
 
-The News screen shows a short preview of the installed client version's patch
-notes while preserving custom server announcements. Choose the original **Visit
-URL** action to open that version's complete GitHub release notes. Upcoming builds
-use authored summaries of up to three complete points, with more room for detail. Client notes ship with the
-installer and do not depend on updating the shared server. Delivery diagnostics
-are recorded in `logs/ReRiff-news.log`.
+Open **News** for the installed client's patch notes and server announcements.
+Choose **Visit URL** for that release's full notes on GitHub. Development builds
+show up to three concise summary points. Client notes ship with the installer;
+delivery diagnostics are recorded in `logs/ReRiff-news.log`.
 
 ## Server settings
 
@@ -238,43 +222,49 @@ The launcher edits `server.ini` beside `Game.exe`:
 
 - **Primary server:** preferred shared Docker/Podman server address, including its port.
 - **Secondary server:** optional fallback address, including the launcher-managed
-  local Podman server at `http://127.0.0.1:5144`.
+  local server at `http://127.0.0.1:5144`.
 - **Primary server only:** skips the secondary server; singleplayer remains available.
 - **Singleplayer:** selects local play while retaining both saved server addresses.
 - **Use servers:** enables primary → secondary → singleplayer selection.
-- **Install / Start / Stop local server:** optionally downloads and manages the
-  official server image with Podman. Install Podman separately and start its local
-  runtime first (a local Podman machine on Windows). Install creates a stopped
-  container; Start makes it available at `http://127.0.0.1:5144`. Enter that address
-  in **Secondary server**, enable **Use servers**, leave **Primary server only**
-  unchecked, and save. The Primary server is tried first.
+- **Install / Start / Stop local server:** downloads and manages an optional
+  server. Windows and stable 1.2.3 Linux builds require Podman. Development Linux
+  builds use a self-contained AppImage.
+  Enter `http://127.0.0.1:5144` in **Secondary server**, enable **Use servers**,
+  leave **Primary server only** unchecked, and save. The Primary server is tried
+  first. Install leaves the server stopped; Start runs it immediately.
 
-Optional-server configuration and data stay in `localserver/podman/` in the game
-folder; diagnostics are in `logs/ReRiff-podman.log` and
-`logs/ReRiff-localserver.log`. Stop retains configuration and data. The container
-binds only to localhost and is managed independently of Play and client updates.
-Client installers include the control helper, not the server image/backend.
-Podman itself keeps its engine/image storage in its normal location. This launcher
-feature is optional; singleplayer does not require Podman.
+In development Linux builds, an installed server starts with Play when its exact
+localhost address is configured and networking is enabled. A server started by that launch stops
+when the game closes; one already running is left running. Stop preserves data.
+The server binds only to localhost. A different service on its port is never
+adopted or stopped.
 
-When backing out of Servers or Graphics with unsaved changes, a native confirmation
-asks whether to apply or discard them. Back inside that prompt keeps editing.
-Fresh installs show the launcher; Skip launcher and automatic updating start off.
-GitHub prereleases are offered through **Use experimental releases (prereleases)**.
+The development Linux server stores configuration in
+`localserver/native/config.json`, saved data in `localserver/data`, and logs in
+`logs/ReRiff-localserver.log`. When replacing an older launcher-managed Podman
+server, existing `localserver/podman/data` and its configured port are reused
+in place; stop the old container first. The optional server application is
+`localserver/ReRiff-Server-x86_64.AppImage`; the client runtime is
+`localserver/ReRiff-Runtime-x86_64.AppImage`. Downloads are checked against the
+release's SHA-256 manifest before installation. Client installers contain the
+helper runtime and download the server separately.
 
-In-game **Settings → Servers** keeps graphical mode toggles and offers
-**Save and exit** to save settings and close the game, alongside **Save and restart**.
+Windows retains its Podman configuration under `localserver/podman/` and
+`logs/ReRiff-podman.log`. Shared Docker/Podman servers remain supported.
+
+Backing out of Servers or Graphics with unsaved changes prompts you to apply
+or discard them. Press Back inside the prompt to keep editing.
 
 The Servers menu offers **Save settings**, **Reload saved settings**, then
 **Return without saving**, **Save and return**, **Save and restart**, and
 **Save and exit**. The last two save your preferences before restarting or closing
-the game. The main menu displays the running client version; startup notifications
-show the selected server or singleplayer and announce successful unattended updates.
+the game. The main menu shows the client version. Startup notifications show the
+selected server or singleplayer and announce successful unattended updates.
 
 Both addresses blank selects singleplayer. The game probes each configured server's
 `/classes/Version` endpoint in order. If neither responds, it starts singleplayer
-inside the game process. In-game **Settings → Servers → Singleplayer** replaces
-Force Offline; its native switch, input and scrolling are retained.
+inside the game process. Use **Settings → Servers → Singleplayer** to select
+local play directly.
 
 ```ini
 [server]
@@ -298,10 +288,7 @@ invalid configuration selects singleplayer. URL credentials, query strings and
 fragments are not accepted.
 
 Singleplayer keeps scores, profiles, track metadata and ghost files in the game's
-`singleplayer/` folder using the original Parse SDK. Its loopback endpoint exists
-only inside the game process, on a temporary port, and ends when the game closes.
-The original game continues to own track generation, progression and its saves.
-On first use, existing `localserver/server/data/classes` and `files` are copied
+`singleplayer/` folder. On first use, existing `localserver/server/data/classes` and `files` are copied
 into singleplayer without moving or modifying the old data. Stop the old backend
 before this first import to get a consistent snapshot. Existing server addresses
 are preserved; choose Singleplayer to replace a previously configured localhost
@@ -378,7 +365,6 @@ copy produced the expected analysis span in the comparison. Keep the original
 music and generate a fresh track from the resampled copy; reusing the old cached
 analysis retains the bug. See [issue #2](https://github.com/Aftonstjarna/ReRiff/issues/2).
 
-
 For a white-screen crash on Windows, install the complete package with
 `ReRiff-Setup.exe` first; copying the launcher alone leaves required helpers
 missing. If the crash persists, run the included collector from the game folder:
@@ -415,14 +401,12 @@ If a different failure persists, send the generated startup report.
 
 ## Server administration and technical details
 
-The player installation and usage instructions are above. The following sections
-cover hosting, persistent data, server diagnostics, source builds, and recovery.
+Hosting, diagnostics and source build instructions follow.
 
 ## Docker server
 
-The experimental server changes are included in main. Deploy `:latest` for
-stable servers; existing `:experimental` deployments can switch to `:latest`
-while retaining the same environment and `/data` mount.
+Use `:latest` for stable server deployments. Keep the same environment and
+`/data` mount when updating or switching release channels.
 
 The published image is `ghcr.io/aftonstjarna/reriff:latest`. From this repository,
 use the supplied Compose configuration:
@@ -586,8 +570,8 @@ Client source builds use .NET SDK 8 and Zig 0.14.1:
 
 Managed helpers use the committed `Managed/ReRiff.snk` development key for a
 reproducible strong-name identity required by the Windows .NET Framework loader.
-This public development key is not a publisher certificate or an authentication
-secret. Update the patched Parse DLL references together with the helpers.
+This key provides assembly identity for the loader. Publisher signing requires
+a separate certificate. Update patched Parse DLL references with the helpers.
 
 ```sh
 dotnet build ClientConfig/ClientConfig.csproj -c Release -o build
@@ -598,24 +582,34 @@ python3 scripts/build-linux-patcher.py
 python3 scripts/build-linux-installer.py --zig /path/to/zig
 RERIFF_RELEASE_CHANNEL=stable python3 scripts/build-windows-launcher.py --zig /path/to/zig
 python3 scripts/build-song-catalog.py --zig /path/to/zig
+# Build-time container engine only; players do not need it.
+bash scripts/build-linux-runtime.sh
 ```
 
 The launcher, updater, notification DLL, and Windows setup are native Win32.
 The server's identity engine is C++; the existing server and installer tools
 use Python. The managed client helper retains its .NET Framework target.
 
-For installer builds, obtain the pinned wheels in `packaging/requirements.txt`
-and the verified Windows portable Python archive, then run:
+The Linux AppImages are built in an Arch container using a pinned AnyLinux
+sharun deployer. They include Python, shared libraries, CA certificates and
+dependency licenses. Run `scripts/test-linux-runtime.py` through the bundled
+runtime to test without system Python/Podman; the smoke check forces FUSE-free
+execution and checks lifecycle, persistence and port conflicts. SteamOS/Bazzite
+and NixOS desktop integration still need real-machine testing.
+
+For installer builds, build both AppImages and obtain the verified Windows
+portable Python archive, then run:
 
 ```sh
-python3 packaging/build_release.py --local-patching --wheels-dir /path/to/wheels --python-zip /path/to/python.zip
+python3 packaging/build_release.py --local-patching --python-zip /path/to/python.zip
 ```
 
 Updating `VERSION` on `main` triggers a stable client release. The
-`codex/experimental-client` branch publishes numbered prerelease revisions. It builds and checks both installers, then publishes assets and
-checksums. Each release contains only its own notes; the full changelog remains
-in [RELEASE-NOTES.md](RELEASE-NOTES.md). Stable releases are not overwritten. An existing prerelease can be
-promoted under its base version after the stable build passes all checks.
+`codex/experimental-client` branch publishes betas named `X.X.X-beta.N`.
+The workflow builds and checks both installers before publishing assets and
+checksums. Each release has its own notes; the full changelog is in
+[RELEASE-NOTES.md](RELEASE-NOTES.md). Publish the stable base version after its
+build passes all checks.
 
 The vendored extended backend originates from
 [rumbadebu/riffapi-local-extended](https://github.com/rumbadebu/riffapi-local-extended)
@@ -625,13 +619,9 @@ bundled dependencies retain their licenses.
 
 ## Original-game reconstruction and Linux-port status
 
-For original-game reconstruction work, the required baseline is a byte-for-byte
-matching source rebuild of the original Windows executable. That baseline has
-**not yet been achieved**. Matching reconstruction is tracked separately in
-[RiffRacerDecomp](https://github.com/Aftonstjarna/RiffRacerDecomp), which contains
-the recovered source, verification tools, and current byte-matching progress.
-The separate native Linux port's behavior tests do not establish a matching decompilation.
+[RiffRacerDecomp](https://github.com/Aftonstjarna/RiffRacerDecomp) tracks source
+recovery and byte comparisons against the original Windows executable. A fully
+byte-matching rebuild remains unfinished.
 
-The source recovery and separate native Linux port remain research work. They
-are not a replacement executable shipped in the player installer, and driving
-in the native port remains disabled pending recovery of the original integration.
+The native Linux port is also research work. Driving is disabled pending recovery
+of the original integration. Linux player releases run the Windows game through Proton.

@@ -20,30 +20,6 @@ int main(void){
     LPWSTR trial[]={L"ReRiff-Launcher.exe",L"--skip-launcher",L"--test-auto-update"};
     CHECK(parse_launcher_arguments(3,trial,&skip,&selftest)&&skip&&force_auto_reinstall&&!suppress_auto_update);
     CHECK(parse_launcher_arguments(7,args,&skip,&selftest)&&!force_auto_reinstall&&suppress_auto_update);
-    int remote[4],local[4];CHECK(parse_update_version("1.2.2-6",local)&&parse_update_version("1.2.2-6",remote)&&!update_version_newer(remote,local));
-    force_auto_reinstall=FALSE;CHECK(!should_install_automatic_update(remote,local));
-    force_auto_reinstall=TRUE;CHECK(should_install_automatic_update(remote,local));
-    CHECK(parse_update_version("1.2.2-5",remote)&&!should_install_automatic_update(remote,local));
-    CHECK(parse_update_version("1.2.2-7",remote)&&update_version_newer(remote,local));
-    CHECK(parse_update_version("1.2.2-5",remote)&&!update_version_newer(remote,local));
-    CHECK(parse_update_version("1.2.2",remote)&&update_version_newer(remote,local));
-    CHECK(parse_update_version("1.2.2-7",remote)&&parse_update_version("1.2.2",local)&&!update_version_newer(remote,local));
-    CHECK(!parse_update_version("1.2.2-0",remote)&&!parse_update_version("1.2.2-7junk",remote));
-    CHECK(parse_update_version("1.2.4-beta.2",local)&&parse_update_version("1.2.4-beta.10",remote)&&update_version_newer(remote,local));
-    CHECK(parse_update_version("1.2.4",remote)&&update_version_newer(remote,local));
-    CHECK(!parse_update_version("1.2.4-beta.0",remote)&&!parse_update_version("1.2.4-beta.01",remote)&&!parse_update_version("1.2.4-beta.1junk",remote));
-    char selected_version[64],selected_tag[80];
-    const char *releases="["
-      "{\"tag_name\":\"v9.0.0\",\"prerelease\":false,\"draft\":false},"
-      "{\"tag_name\":\"v1.2.3-2\",\"prerelease\":true,\"draft\":false,\"body\":\"prerelease false\"},"
-      "{\"tag_name\":\"v1.2.3-beta.10\",\"prerelease\":true,\"draft\":false,\"assets\":[{\"prerelease\":false}]},"
-      "{\"tag_name\":\"v2.0.0-1\",\"prerelease\":true,\"draft\":true},"
-      "{\"tag_name\":\"experimental\",\"prerelease\":true,\"draft\":false}]";
-    CHECK(select_github_release(releases,TRUE,selected_version,selected_tag)&&!strcmp(selected_version,"1.2.3-beta.10")&&!strcmp(selected_tag,"v1.2.3-beta.10"));
-    CHECK(select_github_release(releases,FALSE,selected_version,selected_tag)&&!strcmp(selected_version,"9.0.0"));
-    CHECK(!select_github_release("[{\"tag_name\":\"v1.2.3-1\",\"prerelease\":true,\"draft\":true}]",TRUE,selected_version,selected_tag));
-    CHECK(!select_github_release("[{\"tag_name\":\"v1.2.3-1\",\"prerelease\":true",TRUE,selected_version,selected_tag));
-    CHECK(!select_github_release("{\"tag_name\":\"v1.2.3-1\",\"prerelease\":true,\"draft\":false}",FALSE,selected_version,selected_tag));
     DeleteFileW(work);RemoveDirectoryW(name);DeleteFileW(ini);
-    puts("PASS: shared skip preference, opt-in automatic updates, resume arguments, loop suppression and exact revision ordering");return 0;
+    puts("PASS: shared skip preference, opt-in automatic updates, resume arguments, and loop suppression");return 0;
 }

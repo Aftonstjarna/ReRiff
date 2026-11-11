@@ -113,7 +113,8 @@ static void install_clicked(GtkWidget *widget,gpointer data) {
         close(fd);ui.g_free(game);set_status(s,"Enter a Linux music folder, or uncheck Link Linux music folder.");return;
     }
     char *script=ui.g_build_filename(s->bundle,"installer.py",NULL);
-    char *argv[]={"python3","-u",script,"--platform","linux","--game-dir",game,
+    char *runtime=ui.g_build_filename(s->bundle,"payload","localserver","ReRiff-Runtime-x86_64.AppImage",NULL);
+    char *argv[]={runtime,"--python",script,"--platform","linux","--game-dir",game,
         link_music?"--music-dir":"--no-music-link",link_music?(char *)music:NULL,NULL};
     posix_spawn_file_actions_t actions;int error=posix_spawn_file_actions_init(&actions);
     if(!error){
@@ -121,12 +122,12 @@ static void install_clicked(GtkWidget *widget,gpointer data) {
         if(!error)error=posix_spawn_file_actions_adddup2(&actions,fd,STDERR_FILENO);
         if(!error)error=posix_spawn_file_actions_addclose(&actions,fd);
         if(!error)error=posix_spawn_file_actions_addopen(&actions,STDIN_FILENO,"/dev/null",O_RDONLY,0);
-        if(!error)error=posix_spawnp(&s->child,"python3",&actions,NULL,argv,environ);
+        if(!error)error=posix_spawn(&s->child,runtime,&actions,NULL,argv,environ);
         posix_spawn_file_actions_destroy(&actions);
     }
-    close(fd);ui.g_free(script);ui.g_free(game);
+    close(fd);ui.g_free(runtime);ui.g_free(script);ui.g_free(game);
     ui.gtk_label_set_text((GtkLabel *)s->log_label,s->log_path);
-    if(error){s->child=0;set_status(s,"Could not start Python 3.10+. No game files were changed.");return;}
+    if(error){s->child=0;set_status(s,"Could not start the bundled Linux runtime. No game files were changed.");return;}
     s->finished=0;s->exit_code=0;
     ui.gtk_widget_set_sensitive(s->music_check,FALSE);ui.gtk_widget_set_sensitive(s->music_path,FALSE);
     ui.gtk_widget_set_sensitive(s->folder,FALSE);ui.gtk_widget_set_sensitive(s->button,FALSE);ui.gtk_widget_set_sensitive(s->close,FALSE);
@@ -194,16 +195,17 @@ int main(int argc,char **argv) {
     executable[n]=0;char *slash=strrchr(executable,'/');if(!slash)return 1;*slash=0;
     Setup s={0};s.bundle=executable;create_window(&s);
     char *script=ui.g_build_filename(s.bundle,"installer.py",NULL);
-    char *detect[]={"python3",script,"--print-game-dir",NULL},*out=NULL,*err=NULL;int status=1;GError *error=NULL;
+    char *runtime=ui.g_build_filename(s.bundle,"payload","localserver","ReRiff-Runtime-x86_64.AppImage",NULL);
+    char *detect[]={runtime,"--python",script,"--print-game-dir",NULL},*out=NULL,*err=NULL;int status=1;GError *error=NULL;
     if(ui.g_spawn_sync(NULL,detect,NULL,G_SPAWN_SEARCH_PATH,NULL,NULL,&out,&err,&status,&error)&&status==0&&out&&*out){
         out[strcspn(out,"\r\n")]=0;ui.gtk_file_chooser_set_filename((GtkFileChooser *)s.folder,out);
     }
     if(error)ui.g_error_free(error);ui.g_free(out);ui.g_free(err);
-    out=NULL;err=NULL;error=NULL;detect[2]="--print-music-dir";
+    out=NULL;err=NULL;error=NULL;detect[3]="--print-music-dir";
     if(ui.g_spawn_sync(NULL,detect,NULL,G_SPAWN_SEARCH_PATH,NULL,NULL,&out,&err,&status,&error)&&status==0&&out&&*out){
         out[strcspn(out,"\r\n")]=0;ui.gtk_entry_set_text((GtkEntry *)s.music_path,out);
     }
-    if(error)ui.g_error_free(error);ui.g_free(out);ui.g_free(err);ui.g_free(script);
+    if(error)ui.g_error_free(error);ui.g_free(out);ui.g_free(err);ui.g_free(script);ui.g_free(runtime);
     ui.gtk_widget_show_all(s.window);ui.gtk_main();ui.g_free(s.log_path);
     return s.exit_code;
 }

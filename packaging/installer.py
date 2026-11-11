@@ -348,7 +348,7 @@ def install(bundle, game, backups, platform, dry_run=False, restore=False, music
                     replace(version, before)
             replace(target, data)
             changed.append(relative)
-            if target.suffix == '.sh':
+            if target.suffix in ('.sh', '.AppImage'):
                 target.chmod(target.stat().st_mode | 0o111)
     except Exception:
         for relative in reversed(changed):

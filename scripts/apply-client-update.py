@@ -69,12 +69,26 @@ def prepare(archive, expected, work, game, platform, channel=None):
         raise ValueError('Expected an update-only package for this platform')
     if channel is not None and manifest.get("channel", "stable") != channel:
         raise ValueError("Release channel mismatch")
+    metadata_path = work/'latest-release.json'
+    if metadata_path.is_file():
+        # New launchers use release metadata rather than interpreting the tag.
+        # Bind that identity to the verified archive before loading installer code.
+        metadata = json.loads(metadata_path.read_text())
+        if manifest.get('version') != metadata.get('version'):
+            raise ValueError('Release package version mismatch')
+        if archive.name not in metadata.get('artifacts', []):
+            raise ValueError('Release package is not listed in metadata')
     installer = load_installer(root)
     installer.install(root, game, None, platform, dry_run=True)
     if platform == 'windows':
         # Apply from a private runtime so a future Python upgrade can replace
         # the installation's executable and DLLs without locking itself.
         shutil.copytree(game/'localserver/windows-python', work/'runtime')
+    elif (game/'localserver/ReRiff-Runtime-x86_64.AppImage').is_file():
+        # Apply from a private copy so replacing the installed runtime is safe.
+        for name in ('ReRiff-Runtime-x86_64.AppImage', 'linux-runtime.sh'):
+            shutil.copy2(game/'localserver'/name, work/name)
+        (work/'ReRiff-Runtime-x86_64.AppImage').chmod(0o755)
     (work/'prepared.json').write_text(json.dumps({'bundle': str(root), 'game': str(game), 'platform': platform}))
 
 
@@ -116,6 +130,13 @@ def apply(work):
     if plan['platform'] == 'linux':
         # start.exe /unix does not reliably wait for the Unix child. Confirm
         # owned-backend shutdown on the host before replacing server code.
+        native = game/'localserver/native/config.json'
+        if native.is_file():
+            import subprocess
+            result = work/'server-stop.ini'
+            subprocess.run([str(work/'ReRiff-Runtime-x86_64.AppImage'),
+                '--server-control', 'stop', '--root', str(game/'localserver'),
+                '--result', str(result)], check=True, timeout=30)
         controller = game/'localserver/server-control.py'
         if controller.is_file():
             spec = importlib.util.spec_from_file_location('reriff_update_stop', controller)

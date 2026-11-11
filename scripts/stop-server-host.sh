@@ -2,4 +2,4 @@
 set -eu
 server_root=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 unset PYTHONHOME PYTHONPATH
-exec python3 "$server_root/server-control.py" stop "$@" >> "$server_root/server-console.log" 2>&1
+exec /bin/sh "$server_root/linux-runtime.sh" --python "$server_root/server-control.py" stop "$@" >> "$server_root/../logs/ReRiff-localserver.log" 2>&1

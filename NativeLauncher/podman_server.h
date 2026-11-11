@@ -6,22 +6,17 @@ static void podman_controls(void){
     if(stop_button)SetWindowTextW(stop_button,podman_state==2?L"Stop local server":podman_state==1?L"Start local server":L"Install local server");
     if(podman_hint){WCHAR text[256];_snwprintf(text,256,L"Local server: %ls — enter in Secondary server",podman_address);SetWindowTextW(podman_hint,text);}
 }
+#include "linux_server.h"
 static BOOL podman_action(const WCHAR *action){
+    if(is_wine())return linux_server_action(action);
     WCHAR script[CAP],config[CAP],result[CAP],temporary[CAP],command[CAP];
     path(script,L"localserver\\podman-server.py");path(config,L"localserver\\podman\\config.json");
     if(!wcscmp(action,L"status")&&GetFileAttributesW(config)==INVALID_FILE_ATTRIBUTES){podman_state=0;return TRUE;}
     if(GetFileAttributesW(script)==INVALID_FILE_ATTRIBUTES){wcscpy(message,L"The optional Podman helper is missing. Reinstall the complete client package.");return FALSE;}
     if(!GetTempPathW(CAP,temporary)||!GetTempFileNameW(temporary,L"rrp",0,result))return FALSE;DeleteFileW(result);
-    if(is_wine()){
-        WCHAR host_script[CAP],host_result[CAP],system[CAP];
-        if(!update_host_path(script,host_script)||!update_host_path(result,host_result))return FALSE;
-        GetSystemDirectoryW(system,CAP);
-        _snwprintf(command,CAP,L"\"%ls\\start.exe\" /wait /unix /usr/bin/python3 \"%ls\" %ls --result \"%ls\"",system,host_script,action,host_result);
-    }else{
-        WCHAR python[CAP];path(python,L"localserver\\windows-python\\python.exe");
-        if(GetFileAttributesW(python)==INVALID_FILE_ATTRIBUTES){wcscpy(message,L"The installed Python helper is missing. Reinstall the complete client package.");return FALSE;}
-        _snwprintf(command,CAP,L"\"%ls\" \"%ls\" %ls --result \"%ls\"",python,script,action,result);
-    }
+    WCHAR python[CAP];path(python,L"localserver\\windows-python\\python.exe");
+    if(GetFileAttributesW(python)==INVALID_FILE_ATTRIBUTES){wcscpy(message,L"The installed Python helper is missing. Reinstall the complete client package.");return FALSE;}
+    _snwprintf(command,CAP,L"\"%ls\" \"%ls\" %ls --result \"%ls\"",python,script,action,result);
     command[CAP-1]=0;PROCESS_INFORMATION process;
     if(!spawn(command,TRUE,&process)){wcscpy(message,L"Could not run the optional Podman helper.");return FALSE;}
     CloseHandle(process.hThread);CloseHandle(process.hProcess);
