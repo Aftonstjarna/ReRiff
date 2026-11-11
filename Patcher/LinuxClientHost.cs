@@ -239,7 +239,12 @@ internal static class LinuxClientHost {
     static int Server(string action,Options options) {
         string root=options.Need("--root"),image=root+"/ReRiff-Server-x86_64.AppImage",result=options.Need("--result");
         try {
-            if(action=="install") {image=options.Need("--asset");if(HashFile(image)!=options.Get("--sha256").ToLowerInvariant())throw new IOException("Local server checksum mismatch.");File.SetUnixFileMode(image,File.GetUnixFileMode(image)|UnixFileMode.UserExecute);}
+            if(action=="install") {
+                image=options.Need("--asset");if(HashFile(image)!=options.Get("--sha256").ToLowerInvariant())throw new IOException("Local server checksum mismatch.");
+                // Container-built or shared assets may be executable but not
+                // owned by this user. Avoid changing their permissions.
+                var mode=File.GetUnixFileMode(image);if((mode&UnixFileMode.UserExecute)==0)File.SetUnixFileMode(image,mode|UnixFileMode.UserExecute);
+            }
             if(!File.Exists(image)) {
                 if(action!="status"&&action!="stop")throw new IOException("Install the optional local server first.");
                 Atomic(result,Encoding.Unicode.GetPreamble().Concat(Encoding.Unicode.GetBytes("[result]\nok=true\nstate=uninstalled\naddress=http://127.0.0.1:5144\nmessage=Local server is not installed.\n")).ToArray());return 0;

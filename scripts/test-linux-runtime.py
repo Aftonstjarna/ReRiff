@@ -48,7 +48,9 @@ def main():
         assert action('status')['state'] == 'uninstalled'
         action('install', '--asset', image, '--sha256', '0'*64, success=False)
         assert not (root/image.name).exists()
+        source_stat=image.stat()
         assert action('install', '--asset', image, '--sha256', digest)['state'] == 'stopped'
+        assert image.stat().st_ctime_ns==source_stat.st_ctime_ns, 'Executable source asset must remain unchanged'
         preserved = root/'data/persistence-check.txt';preserved.parent.mkdir(exist_ok=True)
         preserved.write_text('saved local data')
         try:
