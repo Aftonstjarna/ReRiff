@@ -38,7 +38,7 @@ jobs:
   release:
     if: github.repository == 'Aftonstjarna/ReRiff'
     needs: windows-loader
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
       RERIFF_RELEASE_CHANNEL: ${{ github.ref_name == 'codex/experimental-client' && 'experimental' || 'stable' }}
@@ -90,10 +90,13 @@ jobs:
         run: |
           python scripts/build-windows-launcher.py --zig "$RUNNER_TEMP/release-tools/zig-x86_64-linux-0.14.1/zig"
           python scripts/verify-windows-manifests.py
+      - name: Install Linux setup build dependencies
+        timeout-minutes: 5
+        run: |
+          sudo apt-get -o APT::Update::Error-Mode=any -o Acquire::Retries=1 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 update
+          sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 install -y libgtk-3-dev xvfb
       - name: Build and test native Linux setup
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev xvfb
           python scripts/build-linux-installer.py --zig "$RUNNER_TEMP/release-tools/zig-x86_64-linux-0.14.1/zig"
           python scripts/test-linux-installer.py --zig "$RUNNER_TEMP/release-tools/zig-x86_64-linux-0.14.1/zig"
       - name: Build self-contained Linux runtime and optional server
