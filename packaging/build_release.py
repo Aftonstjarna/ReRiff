@@ -71,6 +71,11 @@ def build(args):
         path.write_bytes(encoded)
         patches[name] = {'file': path.relative_to(common).as_posix(), 'original': metadata['original'], 'patched': metadata['patched']}
         print(name, 'delta:',len(encoded),'bytes')
+    font_pack=ROOT/'build/cjk-component/ReRiff-CJK.zip'
+    with zipfile.ZipFile(font_pack) as fonts:
+        if json.loads(fonts.read('component.json')).get('version')!=version:
+            raise ValueError('Rebuild the CJK component for this VERSION before packaging.')
+    copy(font_pack,common/'components/ReRiff-CJK.zip')
     payload = common/'payload'
     copy(ROOT/'scripts/Collect-ReRiffStartup.ps1', payload/'Collect-ReRiffStartup.ps1')
     # Discoverable beside the Windows launcher; retain the old bridge path below.
@@ -105,13 +110,16 @@ def build(args):
                 (folder/'payload/localserver'/name).unlink(missing_ok=True)
         if platform == 'windows':
             copy(ROOT/'build/ReRiff-Setup.exe',folder/'ReRiff-Setup.exe')
+            for name in ('ReRiff-Patcher.exe','ReRiff-Patcher.exe.config','dnlib.dll'):
+                copy(ROOT/'build/installer-patcher'/name,folder/'payload/localserver/language-host'/name)
             copy(ROOT/'scripts/windows-server-control.py',folder/'payload/localserver/windows-server-control.py')
             for name in ('local_server.py','host_process.py','windows_package.py'):
                 copy(ROOT/'LinuxRuntime'/name,folder/'payload/localserver'/name)
         manifest = {'singleplayer': True, 'channel':channel,'version':version,'commit':commit,'platform':platform,'patches':patches,
-                    'update_only':update_only, 'native_linux':platform == 'linux', 'python_runtime':'download' if platform == 'windows' else 'server-only',
+                    'update_only':update_only, 'native_linux':platform == 'linux', 'language_component':{'file':'components/ReRiff-CJK.zip','sha256':digest(font_pack.read_bytes())}, 'python_runtime':'download' if platform == 'windows' else 'server-only',
                     'vanilla_originals':json.loads((ROOT/'packaging/original-client.json').read_text()) if args.local_patching else {},
                     'compatible_existing':json.loads((ROOT/'packaging/compatible-client.json').read_text()) if args.local_patching else {},
+                    'client_patch_revision':2,'rebuild_existing':json.loads((ROOT/'packaging/client-rebuilds.json').read_text()),
                     'client_upgrades':json.loads((ROOT/'packaging/client-upgrades.json').read_text()) if args.local_patching else {},
                     'required_existing':json.loads((ROOT/'packaging/required-client.json').read_text()) if update_only else {},
                     'files':{p.relative_to(folder).as_posix():digest(p.read_bytes()) for p in sorted(folder.rglob('*')) if p.is_file()}}
@@ -154,6 +162,7 @@ __RERIFF_PAYLOAD__
             run = output/f'ReRiff-{version}-linux.run'
             run.write_bytes(shell.encode()+archive_bytes.getvalue());run.chmod(0o755)
     copy(ROOT/'build/linux-runtime/ReRiff-Server-x86_64.AppImage', output/'ReRiff-Server-x86_64.AppImage')
+    copy(font_pack,output/'ReRiff-CJK.zip')
     copy(ROOT/'build/windows-server/ReRiff-Server-windows.zip', output/'ReRiff-Server-windows.zip')
     # Source archive excludes original game files, player data, and caches.
     with (output/f'ReRiff-{version}-source.tar.gz').open('wb') as stream:

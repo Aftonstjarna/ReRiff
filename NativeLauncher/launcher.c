@@ -7,6 +7,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <shellapi.h>
+#include <commctrl.h>
 #include <wininet.h>
 #include <wchar.h>
 #include <stdio.h>
@@ -23,7 +24,7 @@
 #endif
 #define WM_COMPLETE (WM_APP + 1)
 #define WM_GAME_RUNNING (WM_APP + 2)
-enum { EXTERNAL=101, FALLBACK, TIMEOUT, POPUP, SAVE, PLAY, LOCAL, EXTERNAL_ONLY, STOP, UPDATE, EXPERIMENTAL, NETWORKING, SKIP_LAUNCHER, AUTO_UPDATE_SKIP };
+enum { EXTERNAL=101, FALLBACK, TIMEOUT, POPUP, SAVE, PLAY, LOCAL, EXTERNAL_ONLY, STOP, UPDATE, EXPERIMENTAL, NETWORKING, SKIP_LAUNCHER, AUTO_UPDATE_SKIP, CJK_INSTALL };
 static WCHAR folder[CAP], ini[CAP], message[1024];
 static WCHAR game_arguments[CAP];
 static BOOL force_show_launcher, suppress_auto_update, automatic_update, force_auto_reinstall;
@@ -38,6 +39,11 @@ static ULONGLONG settings_signature;
 static BOOL settings_observed=FALSE;
 static BOOL installed_experimental=FALSE, requested_experimental=FALSE;
 static HFONT font;
+static HWND launcher_tabs,language_checkbox,language_description;
+static HWND server_page_controls[40],language_page_controls[8];
+static unsigned server_page_count,language_page_count;
+static BOOL creating_languages,changing_language;
+static void language_controls(void);
 
 static void path(WCHAR *out, const WCHAR *relative) {
     _snwprintf(out, CAP, L"%ls\\%ls", folder, relative);
@@ -243,6 +249,7 @@ static BOOL stop_server(void) {
 
 #include "local_server.h"
 #include "song_sync.h"
+#include "languages.h"
 
 static void finish_local_session(BOOL started){
     if(!started)return;
@@ -295,7 +302,7 @@ static BOOL launch_game(void) {
 static DWORD WINAPI worker(LPVOID parameter) {
     int action=(int)(INT_PTR)parameter;
     BOOL play=action==1;
-    BOOL ok=action==3?check_updates():action==2?local_server_action(local_server_state==2?L"stop":local_server_state==1?L"start":L"install"):action==0?local_server_action(L"status"):TRUE;
+    BOOL ok=action==4?language_action(L"install"):action==5?language_action(L"disable"):action==3?check_updates():action==2?local_server_action(local_server_state==2?L"stop":local_server_state==1?L"start":L"install"):action==0?local_server_action(L"status"):TRUE;
     if (ok && play) ok=launch_game();
     if (ok && action<2) wcscpy(message,play?L"Game closed.":L"Ready. Singleplayer runs inside the game; configured servers are checked at game startup.");
     log_message(message);
@@ -305,16 +312,17 @@ static DWORD WINAPI worker(LPVOID parameter) {
 
 static void begin(int action) {
     if (busy) return;
-    busy=TRUE;playing=action==1;
+    busy=TRUE;playing=action==1;changing_language=action==4||action==5;
+    EnableWindow(language_checkbox,FALSE);
     EnableWindow(play_button,FALSE);EnableWindow(save_button,FALSE);EnableWindow(stop_button,FALSE);EnableWindow(update_button,FALSE);EnableWindow(experimental_checkbox,FALSE);
-    SetWindowTextW(status,action==3?L"Checking published GitHub releases...":action==2?(local_server_state==2?L"Stopping the local server...":local_server_state==1?L"Starting the local server...":L"Downloading and installing the optional local server..."):L"Checking server settings...");
+    SetWindowTextW(status,action==4?L"Installing and enabling CJK fonts...":action==5?L"Disabling CJK fonts...":action==3?L"Checking published GitHub releases...":action==2?(local_server_state==2?L"Stopping the local server...":local_server_state==1?L"Starting the local server...":L"Downloading and installing the optional local server..."):L"Checking server settings...");
     HANDLE thread=CreateThread(NULL,4*1024*1024,worker,(LPVOID)(INT_PTR)action,STACK_SIZE_PARAM_IS_A_RESERVATION,NULL);
     if (thread) CloseHandle(thread);
     else { busy=FALSE; EnableWindow(play_button,TRUE);EnableWindow(save_button,TRUE);EnableWindow(stop_button,TRUE);EnableWindow(update_button,TRUE);EnableWindow(experimental_checkbox,TRUE);SetWindowTextW(status,L"Could not start launcher worker."); }
 }
 
 static HWND control(const WCHAR *cls,const WCHAR *text,DWORD style,int x,int y,int w,int h,int id) {
-    HWND handle=CreateWindowExW(0,cls,text,WS_CHILD|WS_VISIBLE|style,x,y,w,h,window,(HMENU)(INT_PTR)id,GetModuleHandleW(NULL),NULL);
+    HWND handle=CreateWindowExW(0,cls,text,WS_CHILD|WS_VISIBLE|style,x,y+34,w,h,window,(HMENU)(INT_PTR)id,GetModuleHandleW(NULL),NULL);
     /* Use the standard edit border under Wine. Its themed focus decoration
      * can remain visible above unrelated windows after the launcher loses focus.
      * Keep the native EDIT control, keyboard focus and text handling. */
@@ -327,6 +335,7 @@ static HWND control(const WCHAR *cls,const WCHAR *text,DWORD style,int x,int y,i
             FreeLibrary(theme);
         }
     }
+    if(handle){if(creating_languages){if(language_page_count<8)language_page_controls[language_page_count++]=handle;}else if(server_page_count<40)server_page_controls[server_page_count++]=handle;}
     SendMessageW(handle,WM_SETFONT,(WPARAM)font,TRUE);return handle;
 }
 
@@ -403,6 +412,7 @@ static void reload_settings_controls(void) {
 }
 
 static void refresh_changed_settings(void) {
+    if(changing_language)return;
     ULONGLONG current;
     if(networking_checkbox&&read_settings_signature(&current)&&(!settings_observed||current!=settings_signature)){
         reload_settings_controls();
@@ -410,9 +420,28 @@ static void refresh_changed_settings(void) {
     }
 }
 
+static void language_controls(void){
+    WCHAR value[16];WritePrivateProfileStringW(NULL,NULL,NULL,ini);
+    GetPrivateProfileStringW(L"languages",L"cjk_enabled",GetPrivateProfileIntW(L"diagnostics",L"cjk_render_probe",0,ini)?L"true":L"false",value,16,ini);
+    SendMessageW(language_checkbox,BM_SETCHECK,(!_wcsicmp(value,L"true")||!wcscmp(value,L"1"))?BST_CHECKED:BST_UNCHECKED,0);
+}
+static void select_launcher_page(void){
+    BOOL languages=SendMessageW(launcher_tabs,TCM_GETCURSEL,0,0)==1;
+    for(unsigned i=0;i<server_page_count;i++){
+        HWND item=server_page_controls[i];
+        if(item!=status&&item!=play_button&&item!=update_button&&item!=experimental_checkbox)ShowWindow(item,languages?SW_HIDE:SW_SHOW);
+    }
+    for(unsigned i=0;i<language_page_count;i++)ShowWindow(language_page_controls[i],languages?SW_SHOW:SW_HIDE);
+    SetFocus(languages?language_checkbox:external);
+}
 static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
     if (event==WM_CREATE) {
         window=hwnd;font=CreateFontW(-16,0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,0,0,CLEARTYPE_QUALITY,0,L"Segoe UI");
+        INITCOMMONCONTROLSEX common={sizeof(common),ICC_TAB_CLASSES};InitCommonControlsEx(&common);
+        launcher_tabs=CreateWindowExW(0,WC_TABCONTROLW,L"",WS_CHILD|WS_VISIBLE|WS_TABSTOP,10,6,630,548,hwnd,NULL,GetModuleHandleW(NULL),NULL);
+        SendMessageW(launcher_tabs,WM_SETFONT,(WPARAM)font,TRUE);
+        TCITEMW tab={0};tab.mask=TCIF_TEXT;tab.pszText=L"Servers";SendMessageW(launcher_tabs,TCM_INSERTITEMW,0,(LPARAM)&tab);
+        tab.pszText=L"Languages";SendMessageW(launcher_tabs,TCM_INSERTITEMW,1,(LPARAM)&tab);
         control(L"STATIC",L"Riff Racer — Server settings",0,22,18,600,30,0);
         control(L"STATIC",L"Primary server",0,22,66,145,24,0);
         external=control(L"EDIT",L"",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,172,62,448,28,EXTERNAL);
@@ -435,13 +464,19 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
         update_button=control(L"BUTTON",L"Update from GitHub",WS_TABSTOP,22,489,155,30,UPDATE);
         experimental_checkbox=control(L"BUTTON",L"Use experimental releases (prereleases)",BS_AUTOCHECKBOX|WS_TABSTOP,195,489,420,30,EXPERIMENTAL);
         SendMessageW(experimental_checkbox,BM_SETCHECK,installed_experimental?BST_CHECKED:BST_UNCHECKED,0);
+        creating_languages=TRUE;
+        language_checkbox=control(L"BUTTON",L"Install and enable CJK fonts (Chinese, Japanese, Korean)",BS_AUTOCHECKBOX|WS_TABSTOP,22,26,590,32,CJK_INSTALL);
+        language_description=control(L"STATIC",L"Adds missing characters throughout the game, including file names, song metadata, leaderboards and pause screens.\n\nFonts stay in the game folder. High-resolution text is selected automatically. Restart the game after changing this option.\n\nFirst installation downloads about 107 MiB. Unchecking disables support and retains the installed fonts. This does not translate the menus.",0,22,76,585,220,0);
+        creating_languages=FALSE;language_controls();select_launcher_page();
         channel_title();local_server_controls();
         reload_settings_controls();
         SetTimer(hwnd,1,500,NULL);
         begin(FALSE);return 0;
     }
+    if(event==WM_NOTIFY&&((NMHDR *)lp)->hwndFrom==launcher_tabs&&((NMHDR *)lp)->code==TCN_SELCHANGE){select_launcher_page();return 0;}
     if (event==WM_COMMAND) {
         switch (LOWORD(wp)) {
+            case CJK_INSTALL:begin(SendMessageW(language_checkbox,BM_GETCHECK,0,0)==BST_CHECKED?4:5);break;
             case LOCAL:SendMessageW(networking_checkbox,BM_SETCHECK,BST_UNCHECKED,0);update_networking_controls();break;
             case NETWORKING:case EXTERNAL_ONLY:update_networking_controls();break;
             case STOP:begin(2);break;
@@ -458,11 +493,12 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
     if (event==WM_GAME_RUNNING) { SetWindowTextW(status,L"Game running. Keep the launcher open until the game closes.");ShowWindow(window,SW_MINIMIZE);return 0; }
     if (event==WM_COMPLETE) {
         if (lp==2) { DestroyWindow(hwnd);return 0; }
+        if(changing_language){settings_observed=read_settings_signature(&settings_signature);changing_language=FALSE;}
         if (lp==1) reload_settings_controls();
         requested_experimental=installed_experimental;
         SendMessageW(experimental_checkbox,BM_SETCHECK,installed_experimental?BST_CHECKED:BST_UNCHECKED,0);
         busy=FALSE;playing=FALSE;EnableWindow(play_button,TRUE);EnableWindow(save_button,TRUE);EnableWindow(stop_button,TRUE);EnableWindow(update_button,TRUE);EnableWindow(experimental_checkbox,TRUE);SetWindowTextW(status,message);
-        local_server_controls();
+        local_server_controls();language_controls();EnableWindow(language_checkbox,TRUE);
         if (lp) ShowWindow(window,SW_RESTORE);return 0;
     }
     if (event==WM_CLOSE) {
@@ -516,7 +552,7 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE previous,LPWSTR command,int sho
     cls.hCursor=LoadCursorW(NULL,IDC_ARROW);cls.hbrBackground=(HBRUSH)(COLOR_WINDOW+1);
     RegisterClassW(&cls);
     HWND handle=CreateWindowExW(0,cls.lpszClassName,L"ReRiff Launcher v" RERIFF_WIDE_LITERAL(RERIFF_VERSION),WS_OVERLAPPED|WS_CAPTION|WS_SYSMENU|WS_MINIMIZEBOX,
-        CW_USEDEFAULT,CW_USEDEFAULT,660,581,NULL,NULL,instance,NULL);
+        CW_USEDEFAULT,CW_USEDEFAULT,660,615,NULL,NULL,instance,NULL);
     if (!handle) return 1;
     ShowWindow(handle,show);UpdateWindow(handle);
     MSG msg;while (GetMessageW(&msg,NULL,0,0)>0) {if (!IsDialogMessageW(handle,&msg)) {TranslateMessage(&msg);DispatchMessageW(&msg);}}

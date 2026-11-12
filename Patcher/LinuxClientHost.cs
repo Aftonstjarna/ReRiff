@@ -44,7 +44,7 @@ internal static class LinuxClientHost {
     sealed class Options {
         public readonly Dictionary<string,string> Values=new();public readonly HashSet<string> Flags=new();
         public Options(string[] args) {
-            var switches=new HashSet<string>{"--dry-run","--restore","--no-music-link","--prepare","--cli","--help"};
+            var switches=new HashSet<string>{"--dry-run","--restore","--cjk","--no-cjk","--no-music-link","--prepare","--cli","--help"};
             var values=new HashSet<string>{"--bundle","--game-dir","--backup-dir","--music-dir","--root","--result","--asset","--sha256","--work","--archive","--channel","--platform"};
             for(int i=0;i<args.Length;i++) {string key=args[i];if(switches.Contains(key)){if(!Flags.Add(key))throw new ArgumentException("Duplicate option: "+key);}else if(values.Contains(key)&&i+1<args.Length){if(!Values.TryAdd(key,args[++i]))throw new ArgumentException("Duplicate option: "+key);}else throw new ArgumentException("Unknown or incomplete option: "+key);}
         }
@@ -56,13 +56,14 @@ internal static class LinuxClientHost {
         if(!OperatingSystem.IsLinux())throw new PlatformNotSupportedException("This client helper is for Linux.");
         Console.OutputEncoding=new UTF8Encoding(false);
         try {
+            if(args.Length>0 && args[0]=="language-component") return LanguageComponent.Run(args.Skip(1).ToArray());
             if(args.Length==0)throw new ArgumentException("Use install, update, server-control, stop-servers, print-game-dir or print-music-dir.");
             string command=args[0];int offset=command=="server-control"?2:1;var options=new Options(args.Skip(offset).ToArray());
             switch(command) {
                 case "print-game-dir":Console.WriteLine(AutoGame());break;
                 case "print-music-dir":Console.WriteLine(MusicDir());break;
                 case "install":
-                    if(options.Has("--help")){Console.WriteLine("ReRiff Linux setup: --game-dir PATH [--dry-run] [--restore] [--backup-dir PATH] [--music-dir PATH | --no-music-link]. No Python or system .NET required.");break;}
+                    if(options.Has("--help")){Console.WriteLine("ReRiff Linux setup: --game-dir PATH [--dry-run] [--restore] [--backup-dir PATH] [--music-dir PATH | --no-music-link] [--cjk | --no-cjk]. No Python or system .NET required.");break;}
                     Install(options.Need("--bundle"),options.Get("--game-dir",AutoGame()),options);break;
                 case "update":Update(options);break;
                 case "server-control":if(args.Length<2)throw new ArgumentException("Server action required.");return Server(args[1],options);
@@ -134,12 +135,16 @@ internal static class LinuxClientHost {
                 string name=pair.Key,current=Under(game,name);if(!File.Exists(current))throw new IOException("Required game DLL is missing: "+name);
                 string input=HashFile(current),expected=pair.Value!.GetValue<string>(),original=Text(vanilla,name);
                 JsonObject changes=Map(upgrades,name);var ready=new HashSet<string>(changes.Select(p=>p.Value!.GetValue<string>())){expected};
+                bool revision=manifest["client_patch_revision"]?.GetValue<int>()>=2;
+                var rebuilds=new HashSet<string>(manifest["rebuild_existing"]?[name]?.AsArray().Select(p=>p!.GetValue<string>())??Enumerable.Empty<string>());
+                if(revision)ready=new HashSet<string>{expected};
                 if(original==""){if(input!=expected)throw new IOException("Unsupported existing DLL: "+name);continue;}
-                if(input!=original&&input!=Text(legacy,name)&&!ready.Contains(input)&&!changes.ContainsKey(input))throw new IOException("Unsupported game DLL; retained: "+name);
+                if(input!=original&&input!=Text(legacy,name)&&!ready.Contains(input)&&!changes.ContainsKey(input)&&!rebuilds.Contains(input))throw new IOException("Unsupported game DLL; retained: "+name);
                 string saved=Under(backups,"originals/"+name);string? candidate=File.Exists(saved)?saved:previous!=""&&File.Exists(Under(previous,"originals/"+name))?Under(previous,"originals/"+name):input==original?current:null;
                 if(candidate!=null){byte[] data=File.ReadAllBytes(candidate);if(Hash(data)!=original)throw new IOException("Original backup hash mismatch: "+name);originals[name]=data;}
                 if(restore){if(!originals.TryGetValue(name,out var bytes))throw new IOException("Verified original backup missing: "+name);plan[name]=bytes;continue;}
                 if(ready.Contains(input))continue;
+                if(revision&&!originals.ContainsKey(name))throw new IOException("Verified original backup required for the CJK client upgrade: "+name);
                 bool fresh=originals.ContainsKey(name);string source=scratch+"/"+name,output=scratch+"/patched-"+name;
                 File.WriteAllBytes(source,fresh?originals[name]:File.ReadAllBytes(current));
                 void Patch(string[] flags,string from,string helper,string to) {
@@ -160,6 +165,12 @@ internal static class LinuxClientHost {
                 if(!plan.ContainsKey("localserver/ReRiff-ClientHost"))plan["localserver/ReRiff-ClientHost"]=File.ReadAllBytes(Self);
                 plan["ReRiff GitHub.desktop"]=Encoding.UTF8.GetBytes("[Desktop Entry]\nType=Link\nName=ReRiff on GitHub\nURL=https://github.com/Aftonstjarna/ReRiff\nIcon=web-browser\n");
                 if(!File.Exists(game+"/server.ini"))plan["server.ini"]=Encoding.UTF8.GetBytes("[server]\nexternal_url =\nfallback_url =\ntimeout_seconds = 5\nnetworking_enabled = true\nshow_server_popup = true\n\n[launcher]\nskip_launcher = false\nauto_update_on_skip = false\n");
+                bool cjk=options.Has("--cjk")||(!options.Has("--no-cjk")&&LanguageComponent.Enabled(game));
+                if(cjk||options.Has("--no-cjk")) {
+                    var component=Map(manifest,"language_component");
+                    string asset=cjk?Under(bundle,Text(component,"file")):"";
+                    foreach(var item in LanguageComponent.Plan(game,asset,Text(component,"sha256"),cjk))plan[item.Key]=item.Value;
+                }
                 var patched=new JsonObject();foreach(var pair in required)patched[pair.Key]=Hash(plan.TryGetValue(pair.Key,out var data)?data:File.ReadAllBytes(Under(game,pair.Key)));
                 bool music=!options.Has("--no-music-link")&&(options.Get("--music-dir")!=""||Flag(state,"music_link",true));
                 string musicPath=Path.GetFullPath(options.Get("--music-dir",Text(state,"music_dir",MusicDir())));

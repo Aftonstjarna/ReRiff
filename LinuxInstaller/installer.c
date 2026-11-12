@@ -47,7 +47,7 @@ static int load_gtk(void) {
     return 1;
 }
 typedef struct Setup {
-    GtkWidget *window,*folder,*button,*close,*status,*progress,*details,*log_label,*music_check,*music_path;
+    GtkWidget *window,*folder,*button,*close,*status,*progress,*details,*log_label,*music_check,*music_path,*cjk_check;
     char *bundle,*log_path;
     pid_t child;
     int finished,exit_code;
@@ -77,6 +77,7 @@ static gboolean child_tick(gpointer data) {
     s->child=0;s->finished=1;
     ui.gtk_progress_bar_set_fraction((GtkProgressBar *)s->progress,s->exit_code?0.0:1.0);
     ui.gtk_widget_set_sensitive(s->folder,TRUE);
+    ui.gtk_widget_set_sensitive(s->cjk_check,TRUE);
     ui.gtk_widget_set_sensitive(s->music_check,TRUE);
     ui.gtk_widget_set_sensitive(s->music_path,ui.gtk_toggle_button_get_active((GtkToggleButton *)s->music_check));
     ui.gtk_widget_set_sensitive(s->button,s->exit_code!=0);
@@ -114,7 +115,7 @@ static void install_clicked(GtkWidget *widget,gpointer data) {
     }
 
     char *runtime=ui.g_build_filename(s->bundle,"payload","localserver","ReRiff-ClientHost",NULL);
-    char *argv[]={runtime,"--client-host","install","--bundle",s->bundle,"--game-dir",game,
+    char *argv[]={runtime,"--client-host","install","--bundle",s->bundle,"--game-dir",game,ui.gtk_toggle_button_get_active((GtkToggleButton *)s->cjk_check)?"--cjk":"--no-cjk",
         link_music?"--music-dir":"--no-music-link",link_music?(char *)music:NULL,NULL};
     posix_spawn_file_actions_t actions;int error=posix_spawn_file_actions_init(&actions);
     if(!error){
@@ -129,6 +130,7 @@ static void install_clicked(GtkWidget *widget,gpointer data) {
     ui.gtk_label_set_text((GtkLabel *)s->log_label,s->log_path);
     if(error){s->child=0;set_status(s,"Could not start the bundled Linux runtime. No game files were changed.");return;}
     s->finished=0;s->exit_code=0;
+    ui.gtk_widget_set_sensitive(s->cjk_check,FALSE);
     ui.gtk_widget_set_sensitive(s->music_check,FALSE);ui.gtk_widget_set_sensitive(s->music_path,FALSE);
     ui.gtk_widget_set_sensitive(s->folder,FALSE);ui.gtk_widget_set_sensitive(s->button,FALSE);ui.gtk_widget_set_sensitive(s->close,FALSE);
     set_status(s,"Installing ReRiff… Please keep setup open until it finishes.");
@@ -150,16 +152,27 @@ static void music_toggled(GtkWidget *widget,gpointer data){
     (void)widget;Setup *s=data;
     ui.gtk_widget_set_sensitive(s->music_path,ui.gtk_toggle_button_get_active((GtkToggleButton *)s->music_check)&&!s->child);
 }
+static void language_folder_changed(GtkWidget *widget,gpointer data){
+    (void)widget;Setup *s=data;if(s->child)return;
+    char *game=ui.gtk_file_chooser_get_filename((GtkFileChooser *)s->folder);if(!game)return;
+    char *path=ui.g_build_filename(game,"server.ini",NULL);FILE *file=fopen(path,"r");int enabled=0,section=0;
+    if(file){char line[1024];while(fgets(line,sizeof(line),file)){char *p=line;while(*p==' '||*p=='\t')p++;
+        if(*p=='[')section=!strncasecmp(p,"[languages]",11);
+        else if(section&&!strncasecmp(p,"cjk_enabled",11)){char *eq=strchr(p,'=');if(eq){eq++;while(*eq==' '||*eq=='\t')eq++;enabled=!strncasecmp(eq,"true",4)||*eq=='1';}}
+    }fclose(file);}ui.gtk_toggle_button_set_active((GtkToggleButton *)s->cjk_check,enabled);ui.g_free(path);ui.g_free(game);
+}
 static void create_window(Setup *s) {
     s->window=ui.gtk_window_new(GTK_WINDOW_TOPLEVEL);
     ui.gtk_window_set_title((GtkWindow *)s->window,"ReRiff " RERIFF_VERSION " — Setup");
-    ui.gtk_window_set_default_size((GtkWindow *)s->window,640,600);
+    ui.gtk_window_set_default_size((GtkWindow *)s->window,640,650);
     ui.gtk_container_set_border_width((GtkContainer *)s->window,20);
     GtkWidget *box=ui.gtk_box_new(GTK_ORIENTATION_VERTICAL,12);ui.gtk_container_add((GtkContainer *)s->window,box);
     ui.gtk_box_pack_start((GtkBox *)box,label("Install ReRiff for Linux / Proton"),FALSE,FALSE,0);
     ui.gtk_box_pack_start((GtkBox *)box,label("Close Riff Racer and its launcher, then choose the game folder containing Game.exe. Settings, scores, and server data are kept. Original DLL backups are verified and stored in the game's bak folder."),FALSE,FALSE,0);
     s->folder=ui.gtk_file_chooser_button_new("Choose the Riff Racer game folder",GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER);
     ui.gtk_box_pack_start((GtkBox *)box,s->folder,FALSE,FALSE,0);
+    s->cjk_check=ui.gtk_check_button_new_with_label("Install and enable CJK fonts (Chinese, Japanese, Korean; about 107 MiB)");
+    ui.gtk_box_pack_start((GtkBox *)box,s->cjk_check,FALSE,FALSE,0);
     s->music_check=ui.gtk_check_button_new_with_label("Link Linux music folder into the Proton prefix");
     ui.gtk_toggle_button_set_active((GtkToggleButton *)s->music_check,TRUE);
     ui.gtk_box_pack_start((GtkBox *)box,s->music_check,FALSE,FALSE,0);
@@ -180,6 +193,7 @@ static void create_window(Setup *s) {
     ui.gtk_box_pack_start((GtkBox *)box,buttons,FALSE,FALSE,0);
     connect_signal(s->window,"delete-event",G_CALLBACK(close_window),s);
     connect_signal(s->window,"destroy",G_CALLBACK(window_destroyed),s);
+    connect_signal(s->folder,"file-set",G_CALLBACK(language_folder_changed),s);
     connect_signal(s->music_check,"toggled",G_CALLBACK(music_toggled),s);
     connect_signal(s->button,"clicked",G_CALLBACK(install_clicked),s);
     connect_signal(s->close,"clicked",G_CALLBACK(close_clicked),s);

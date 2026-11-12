@@ -21,6 +21,7 @@ static gboolean exercise(gpointer unused){
     }else if(stage==2&&test.finished){
         VERIFY(test.exit_code==7&&!test.child); /* First fixture run fails. */
         VERIFY(access(test.log_path,R_OK)==0);
+        ui.gtk_toggle_button_set_active((GtkToggleButton *)test.cjk_check,TRUE);
         ui.gtk_toggle_button_set_active((GtkToggleButton *)test.music_check,TRUE);
         ui.gtk_entry_set_text((GtkEntry *)test.music_path,game);
         install_clicked(NULL,&test);VERIFY(test.child>0);stage=3;

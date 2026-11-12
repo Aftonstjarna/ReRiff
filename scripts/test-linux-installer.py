@@ -32,17 +32,17 @@ with tempfile.TemporaryDirectory(prefix='reriff-gui-test-') as temp:
     invalid = work/'Wrong game folder'
     invalid.mkdir()
     (work/'installer.py').write_text('''import argparse, pathlib, time, sys
-p=argparse.ArgumentParser(); p.add_argument('--bundle'); p.add_argument('--game-dir'); p.add_argument('--music-dir'); p.add_argument('--no-music-link',action='store_true'); a=p.parse_args()
+p=argparse.ArgumentParser(); p.add_argument('--bundle'); p.add_argument('--game-dir'); p.add_argument('--music-dir'); p.add_argument('--cjk',action='store_true'); p.add_argument('--no-cjk',action='store_true'); p.add_argument('--no-music-link',action='store_true'); a=p.parse_args()
 assert a.bundle
 game=pathlib.Path(a.game_dir)
 time.sleep(0.4)
 marker=game/'fixture-runs'
 if not marker.exists():
-    assert a.no_music_link and not a.music_dir
+    assert a.no_music_link and not a.music_dir and a.no_cjk and not a.cjk
     marker.write_text('1')
     print('Expected fixture failure', flush=True)
     sys.exit(7)
-assert a.music_dir==a.game_dir and not a.no_music_link
+assert a.music_dir==a.game_dir and not a.no_music_link and a.cjk and not a.no_cjk
 print('GUI install succeeded: '+str(game), flush=True)
 ''')
     # Fixture executable follows the native client's install argument contract.

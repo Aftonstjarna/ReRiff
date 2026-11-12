@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Offline ReRiff installer for Linux/Proton and Windows. Close the game first."""
 import argparse
+import configparser
 import json
 import os
 from pathlib import Path
@@ -138,7 +139,10 @@ def patch_supported_client(bundle, game, backups, manifest, restore, previous_ba
         current_hash = digest(current)
         upgrade_outputs = upgrades.get(name, {})
         ready = {expected[name], *upgrade_outputs.values()}
-        if current_hash not in ({original_hash, legacy.get(name)} | ready | set(upgrade_outputs)):
+        revision = manifest.get('client_patch_revision', 0) >= 2
+        rebuilds = set(manifest.get('rebuild_existing', {}).get(name, []))
+        if revision: ready = {expected[name]}
+        if current_hash not in ({original_hash, legacy.get(name)} | ready | set(upgrade_outputs) | rebuilds):
             raise ValueError('Unsupported game DLL; refusing to overwrite: '+str(path))
         saved = backups/'originals'/name
         if saved.exists():
@@ -159,6 +163,8 @@ def patch_supported_client(bundle, game, backups, manifest, restore, previous_ba
         if restore:
             plan[name] = originals[name]
         elif current_hash not in ready:
+            if revision and name not in originals:
+                raise ValueError('Verified original backup required for the CJK client upgrade: '+name)
             needs_patch.append((name, name in originals, current_hash))
     if needs_patch:
         patcher = bundle/'patcher/ReRiff-Patcher.exe'
@@ -226,7 +232,7 @@ def unattended_update_context(bundle, game, platform):
         return False
 
 
-def install(bundle, game, backups, platform, dry_run=False, restore=False, music_dir=None, music_link=None):
+def install(bundle, game, backups, platform, dry_run=False, restore=False, music_dir=None, music_link=None, cjk=None):
     if not (game/'Game.exe').is_file():
         raise ValueError(f'Game.exe was not found in {game}')
     manifest = json.loads((bundle/'manifest.json').read_text())
@@ -240,6 +246,7 @@ def install(bundle, game, backups, platform, dry_run=False, restore=False, music
         helper.chmod(helper.stat().st_mode | 0o100)
         command=[str(helper),'--client-host','install','--bundle',str(bundle),'--game-dir',str(game)]
         if backups is not None: command += ['--backup-dir',str(backups)]
+        if cjk is not None: command.append("--cjk" if cjk else "--no-cjk")
         if dry_run: command.append('--dry-run')
         if restore: command.append('--restore')
         if music_dir is not None: command += ['--music-dir',str(music_dir)]
@@ -324,6 +331,26 @@ def install(bundle, game, backups, platform, dry_run=False, restore=False, music
             plan['ReRiff GitHub.desktop'] = b'[Desktop Entry]\nType=Link\nName=ReRiff on GitHub\nURL=https://github.com/Aftonstjarna/ReRiff\nIcon=web-browser\n'
         if not (game/'server.ini').exists():
             plan['server.ini'] = b'[server]\n; External server example: https://riffapi.hobune.stream/\n; To use it, set external_url = https://riffapi.hobune.stream/\nexternal_url =\nfallback_url =\ntimeout_seconds = 5\nnetworking_enabled = true\nshow_server_popup = true\n\n[launcher]\nskip_launcher = false\nauto_update_on_skip = false\n'
+        language_enabled = cjk
+        if language_enabled is None:
+            settings = configparser.ConfigParser(interpolation=None, strict=False)
+            try:
+                settings.read(game/'server.ini', encoding='utf-8-sig')
+                language_enabled = settings.getboolean('languages', 'cjk_enabled', fallback=settings.getboolean('diagnostics', 'cjk_render_probe', fallback=False))
+            except (configparser.Error, ValueError):
+                language_enabled = False
+        if language_enabled or cjk is False:
+            component = manifest.get('language_component', {})
+            with tempfile.TemporaryDirectory(prefix='reriff-font-plan-') as scratch:
+                command = [str(bundle/'patcher/ReRiff-Patcher.exe'), '--language-component', 'stage',
+                           '--game-dir', str(game), '--stage', scratch, '--enable', 'true' if language_enabled else 'false']
+                if language_enabled:
+                    command += ['--asset',str(bundle/component['file']),'--sha256',component['sha256']]
+                result = subprocess.run(command, capture_output=True, text=True, timeout=180)
+                if result.returncode:
+                    raise ValueError('CJK component preflight failed: '+result.stdout+result.stderr)
+                for path in Path(scratch).rglob('*'):
+                    if path.is_file(): plan[path.relative_to(scratch).as_posix()] = path.read_bytes()
         next_state = {'version': manifest['version'], 'backup_dir': str(backups),
                       'patched': {n: digest(plan[n] if n in plan else (game/n).read_bytes()) for n in manifest['required_existing']} if local_patching else ({n: digest(plan[n]) for n in originals} if originals else state.get('patched',manifest.get('required_existing',{})))}
         if platform == 'linux':
@@ -410,6 +437,8 @@ def main():
     parser.add_argument('--game-dir', type=Path)
     parser.add_argument('--backup-dir', type=Path)
     parser.add_argument('--platform', choices=('linux', 'windows'), default='windows' if os.name == 'nt' else 'linux')
+    parser.add_argument('--cjk', dest='cjk', action='store_true', default=None, help='Install and enable CJK fonts')
+    parser.add_argument('--no-cjk', dest='cjk', action='store_false', help='Disable CJK fonts and retain installed assets')
     parser.add_argument('--dry-run', action='store_true')
     parser.add_argument('--restore', action='store_true', help='Restore original game DLLs; retain server and saved data')
     args = parser.parse_args()
@@ -429,7 +458,7 @@ def main():
     try:
         install(Path(__file__).resolve().parent, game.expanduser().resolve(),
                 args.backup_dir.expanduser().resolve() if args.backup_dir else None,
-                args.platform, args.dry_run, args.restore, args.music_dir, args.music_link)
+                args.platform, args.dry_run, args.restore, args.music_dir, args.music_link, args.cjk)
     except (OSError, ValueError, KeyError) as error:
         parser.exit(1, 'Installation failed: '+str(error)+'\n')
 

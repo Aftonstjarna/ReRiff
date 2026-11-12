@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType><TargetFramework>net45</TargetFramework><PlatformTarget>x86</PlatformTarget>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="LanguageTextSmoke.cs" />
+    <Reference Include="ReRiff.NewsHeaders"><HintPath>../build/ReRiff.NewsHeaders.dll</HintPath></Reference>
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net45" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+</Project>

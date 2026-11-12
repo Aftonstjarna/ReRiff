@@ -4,6 +4,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <commdlg.h>
+#include <commctrl.h>
 #include <shellapi.h>
 #include <wchar.h>
 #include <stdio.h>
@@ -14,7 +15,7 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE previous,LPWSTR arguments,int s
     (void)instance;(void)previous;(void)show;
     WCHAR root[CAP],command[CAP],game[CAP]=L"",log[CAP];
     GetModuleFileNameW(NULL,root,CAP);WCHAR *slash=wcsrchr(root,L'\\');if(!slash)return 1;*slash=0;
-    BOOL interactive=!*arguments;
+    BOOL interactive=!*arguments,cjk=FALSE;
     if(interactive){
         OPENFILENAMEW dialog;ZeroMemory(&dialog,sizeof(dialog));dialog.lStructSize=sizeof(dialog);
         dialog.lpstrFilter=L"Riff Racer (Game.exe)\0Game.exe\0";dialog.lpstrFile=game;dialog.nMaxFile=CAP;
@@ -22,7 +23,15 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE previous,LPWSTR arguments,int s
         dialog.Flags=OFN_FILEMUSTEXIST|OFN_PATHMUSTEXIST|OFN_NOCHANGEDIR;
         if(!GetOpenFileNameW(&dialog))return 0;
         WCHAR *end=wcsrchr(game,L'\\');if(!end)return 1;*end=0;
-
+        WCHAR config[CAP];_snwprintf(config,CAP,L"%ls\\server.ini",game);
+        WCHAR value[16];GetPrivateProfileStringW(L"languages",L"cjk_enabled",GetPrivateProfileIntW(L"diagnostics",L"cjk_render_probe",0,config)?L"true":L"false",value,16,config);
+        TASKDIALOGCONFIG choice={0};choice.cbSize=sizeof(choice);choice.dwCommonButtons=TDCBF_OK_BUTTON|TDCBF_CANCEL_BUTTON;
+        choice.dwFlags=TDF_ALLOW_DIALOG_CANCELLATION;
+        if(!_wcsicmp(value,L"true")||!wcscmp(value,L"1"))choice.dwFlags|=TDF_VERIFICATION_FLAG_CHECKED;
+        choice.pszWindowTitle=L"ReRiff setup";choice.pszMainInstruction=L"Optional language support";
+        choice.pszContent=L"Add missing Chinese, Japanese and Korean characters throughout the game. Fonts stay in the game folder; menus are not translated. The font pack uses about 107 MiB. Your existing settings and saves are retained.";
+        choice.pszVerificationText=L"Install and enable CJK font support";
+        int selected=IDCANCEL;if(FAILED(TaskDialogIndirect(&choice,&selected,NULL,&cjk))||selected!=IDOK)return 0;
     }
 
     if(!interactive){
@@ -34,7 +43,7 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE previous,LPWSTR arguments,int s
     if(GetFileAttributesW(command)==INVALID_FILE_ATTRIBUTES){if(interactive)MessageBoxW(NULL,L"Game.exe was not found in that folder.",L"ReRiff setup",MB_OK|MB_ICONERROR);return 1;}
     if(!ensure_private_python(NULL,game,interactive))return 1;
     const WCHAR *bootstrap=L"import runpy,sys;sys.path.insert(0,sys.argv[1]);sys.argv=sys.argv[2:];runpy.run_path(sys.argv[0],run_name='__main__')";
-    if(interactive)_snwprintf(command,CAP,L"\"%ls\\localserver\\windows-python\\python.exe\" -X utf8 -c \"%ls\" \"%ls\" \"%ls\\installer.py\" --platform windows --game-dir \"%ls\"",game,bootstrap,root,root,game);
+    if(interactive)_snwprintf(command,CAP,L"\"%ls\\localserver\\windows-python\\python.exe\" -X utf8 -c \"%ls\" \"%ls\" \"%ls\\installer.py\" --platform windows --game-dir \"%ls\" %ls",game,bootstrap,root,root,game,cjk?L"--cjk":L"--no-cjk");
     else _snwprintf(command,CAP,L"\"%ls\\localserver\\windows-python\\python.exe\" -X utf8 -c \"%ls\" \"%ls\" \"%ls\\installer.py\" --platform windows %ls",game,bootstrap,root,root,arguments);
     command[CAP-1]=0;
     _snwprintf(log,CAP,L"%ls\\logs",*game?game:root);log[CAP-1]=0;CreateDirectoryW(log,NULL);
