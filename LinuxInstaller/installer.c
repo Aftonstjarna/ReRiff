@@ -155,11 +155,14 @@ static void music_toggled(GtkWidget *widget,gpointer data){
 static void language_folder_changed(GtkWidget *widget,gpointer data){
     (void)widget;Setup *s=data;if(s->child)return;
     char *game=ui.gtk_file_chooser_get_filename((GtkFileChooser *)s->folder);if(!game)return;
-    char *path=ui.g_build_filename(game,"server.ini",NULL);FILE *file=fopen(path,"r");int enabled=0,section=0;
+    char *path=ui.g_build_filename(game,"server.ini",NULL);FILE *file=fopen(path,"r");int saved=-1,legacy=0,section=0;
     if(file){char line[1024];while(fgets(line,sizeof(line),file)){char *p=line;while(*p==' '||*p=='\t')p++;
-        if(*p=='[')section=!strncasecmp(p,"[languages]",11);
-        else if(section&&!strncasecmp(p,"cjk_enabled",11)){char *eq=strchr(p,'=');if(eq){eq++;while(*eq==' '||*eq=='\t')eq++;enabled=!strncasecmp(eq,"true",4)||*eq=='1';}}
-    }fclose(file);}ui.gtk_toggle_button_set_active((GtkToggleButton *)s->cjk_check,enabled);ui.g_free(path);ui.g_free(game);
+        if(*p=='['){section=!strncasecmp(p,"[languages]",11)?1:!strncasecmp(p,"[diagnostics]",13)?2:0;continue;}
+        char *eq=strchr(p,'=');if(!eq)continue;char *end=eq;while(end>p&&(end[-1]==' '||end[-1]=='\t'))end--;
+        char *value=eq+1;while(*value==' '||*value=='\t')value++;int enabled=!strncasecmp(value,"true",4)||*value=='1';
+        if(section==1&&end-p==11&&!strncasecmp(p,"cjk_enabled",11))saved=enabled;
+        if(section==2&&end-p==16&&!strncasecmp(p,"cjk_render_probe",16))legacy=enabled;
+    }fclose(file);}ui.gtk_toggle_button_set_active((GtkToggleButton *)s->cjk_check,saved>=0?saved:legacy);ui.g_free(path);ui.g_free(game);
 }
 static void create_window(Setup *s) {
     s->window=ui.gtk_window_new(GTK_WINDOW_TOPLEVEL);
@@ -194,6 +197,7 @@ static void create_window(Setup *s) {
     connect_signal(s->window,"delete-event",G_CALLBACK(close_window),s);
     connect_signal(s->window,"destroy",G_CALLBACK(window_destroyed),s);
     connect_signal(s->folder,"file-set",G_CALLBACK(language_folder_changed),s);
+    connect_signal(s->folder,"selection-changed",G_CALLBACK(language_folder_changed),s);
     connect_signal(s->music_check,"toggled",G_CALLBACK(music_toggled),s);
     connect_signal(s->button,"clicked",G_CALLBACK(install_clicked),s);
     connect_signal(s->close,"clicked",G_CALLBACK(close_clicked),s);

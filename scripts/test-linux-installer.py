@@ -29,6 +29,7 @@ with tempfile.TemporaryDirectory(prefix='reriff-gui-test-') as temp:
     game = work/'Riff Racer ü with spaces'
     game.mkdir()
     (game/'Game.exe').write_bytes(b'fixture only')
+    (game/'server.ini').write_text('[diagnostics]\ncjk_render_probe=1\n')
     invalid = work/'Wrong game folder'
     invalid.mkdir()
     (work/'installer.py').write_text('''import argparse, pathlib, time, sys

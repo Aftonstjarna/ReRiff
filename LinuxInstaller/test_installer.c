@@ -15,6 +15,8 @@ static gboolean exercise(gpointer unused){
     }else if(stage==1){
         if(!selected||strcmp(selected,game)){ui.g_free(selected);return TRUE;}
         VERIFY(!test.child&&!test.finished); /* Choosing a folder is read-only. */
+        VERIFY(ui.gtk_toggle_button_get_active((GtkToggleButton *)test.cjk_check)); /* Programmatic folder selection restores the prototype choice. */
+        ui.gtk_toggle_button_set_active((GtkToggleButton *)test.cjk_check,FALSE);
         install_clicked(NULL,&test);VERIFY(test.child>0&&test.log_path);
         pid_t child=test.child;install_clicked(NULL,&test);VERIFY(test.child==child);
         VERIFY(close_window(NULL,NULL,&test));stage=2;
