@@ -26,6 +26,21 @@ jobs:
           python-version: '3.13'
       - name: Test Windows local-server ownership and package installation
         run: python -m unittest discover -s LinuxRuntime -p "test_*.py"
+      - name: Test native Windows CJK component lifecycle
+        shell: pwsh
+        run: |
+          dotnet build Patcher/InstallerPatcher.csproj -c Release -o build/installer-patcher
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python scripts/test_language_component.py --host build/installer-patcher/ReRiff-Patcher.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          dotnet build NewsHeaders/NewsHeaders.csproj -c Release -o build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          dotnet build Managed/LanguageTextSmoke.csproj -c Release -o build/language-text-smoke
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & .\build\language-text-smoke\LanguageTextSmoke.exe --disabled
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & .\build\language-text-smoke\LanguageTextSmoke.exe
+          exit $LASTEXITCODE
       - name: Test signed helpers on Microsoft .NET Framework x86
         shell: pwsh
         run: |
@@ -125,6 +140,14 @@ jobs:
         run: |
           python scripts/test_native_client.py --helper build/linux-patcher/Patcher
           python scripts/test-linux-runtime.py --client build/linux-patcher/Patcher --server build/linux-runtime/ReRiff-Server-x86_64.AppImage
+      - name: Build and verify optional CJK font component
+        run: |
+          python -m pip install -r packaging/fonts/build-requirements.txt
+          python scripts/build-cjk-component.py
+          python scripts/test_cjk_atlas.py
+          python scripts/test_cjk_hd_atlas.py
+          python scripts/test_native_archive.py
+          python scripts/test_language_component.py --host build/linux-patcher/Patcher
       - name: Package Windows and Linux installers
         run: >-
           python packaging/build_release.py --local-patching
@@ -233,7 +256,7 @@ jobs:
               gh release view experimental --json assets --jq '.assets[].name' |
                 while IFS= read -r asset; do
                   case "$asset" in
-                    ReRiff-"$version"-*|ReRiff-"$base_version"-linux.run|ReRiff-"$base_version"-windows.zip|ReRiff-Server-x86_64.AppImage|ReRiff-Server-windows.zip) ;;
+                    ReRiff-"$version"-*|ReRiff-"$base_version"-linux.run|ReRiff-"$base_version"-windows.zip|ReRiff-Server-x86_64.AppImage|ReRiff-Server-windows.zip|ReRiff-CJK.zip) ;;
                     ReRiff-*) gh release delete-asset experimental "$asset" --yes ;;
                   esac
                 done

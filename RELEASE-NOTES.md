@@ -1,3 +1,63 @@
+# ReRiff 1.2.4-beta.4 — Optional CJK fonts and Languages controls
+
+## In-game summary
+
+- Add optional Chinese, Japanese and Korean font support in setup.
+- Install or disable CJK fonts from the launcher's Languages page.
+- Keep UTF-8 song titles and artists readable across game screens.
+
+## Full release notes
+
+Experimental client test build for Windows and Linux/Proton. Stable 1.2.3
+remains the default download and update channel.
+
+### Optional CJK component
+
+- Add an optional CJK font checkbox to Windows and Linux setup. Keep the choice
+  when updating an existing enabled installation; unchecked disables support
+  without deleting the installed font files.
+- Add a native Languages tab to the launcher with a CJK install/enable checkbox.
+  First installation downloads the checksum-verified component for the exact
+  client release; re-enabling an installed component works offline.
+- Bundle the font component in the installers as well as publishing it separately
+  as `ReRiff-CJK.zip`. The current pack is about 107 MiB and includes the Noto
+  Open Font License. Players need no system font install or extra Python runtime.
+- Extend the game's native text and glyph rendering for missing CJK characters,
+  retaining native Latin text, selection colours, layout, alignment and lifecycle.
+  Reuse the tested file-picker, leaderboard and pause-screen corrections.
+- Select 32/64/96px glyph textures automatically for the rendered text size,
+  retaining fixed layout metrics and fallback when a larger tier is unavailable
+  or the native visual budget is exhausted.
+- This component adds glyph support, not translated menus. It uses the tested
+  Japanese Noto glyph forms; regional typography selection is not included.
+- Restart the game after enabling or disabling support. Routine use does not
+  enable the filename/metadata diagnostic traces.
+
+### Installation and metadata safety
+
+- Install owned additional native font archive pairs without modifying the
+  original `vfs.dat` or `vfs.zip`. Choose unused slots around other mods and
+  record file hashes for subsequent updates.
+- Adopt only the exact known local prototype font archives. Refuse modified
+  owned files, unowned font conflicts, invalid packages and linked destinations.
+- Stage font files and configuration in the installer's existing rollback
+  transaction. Preserve unrelated server settings, scores and cached tracks.
+- Apply the verified, field-scoped UTF-8 metadata write/read and equality-query
+  patches from original game DLLs. Recognize the tested local prototype hashes
+  for upgrade while requiring a hash-verified original backup.
+- Retain the guarded in-memory Last.fm artist-text correction. Previously stored
+  question-mark metadata is not rewritten and may need a separate repair.
+
+### Validation
+
+- Check component checksums, archive collisions, ownership, settings preservation,
+  offline enable/disable, changed-file refusal and rollback on write failure.
+- Exercise the native launcher Languages page and Linux setup checkbox flow.
+- Verify native text spacing, colour, alignment, quality selection and original
+  archive checksums using the recovered game functions and isolated fixtures.
+- Test fresh installation and the local prototype upgrade before publication.
+- Existing server data and the separate experimental server branch are unchanged.
+
 # ReRiff 1.2.4-beta.3 — Local server startup and Windows Flask package
 
 ## In-game summary

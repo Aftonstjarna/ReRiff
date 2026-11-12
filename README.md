@@ -18,6 +18,7 @@ leaderboards and ghosts.
   antialiasing and adjustable UI scale.
 - **Launcher and updates:** edit settings, opt into betas, or update automatically
   when skipping the launcher.
+- **CJK fonts:** optional Chinese, Japanese and Korean characters throughout the game.
 - **Optional local server:** download and manage a local server from the launcher.
 
 **Launcher — ReRiff 1.2.3**
@@ -96,6 +97,22 @@ Python 3.10 or newer for Linux setup.
 If Windows selects an external server but game features stay offline, include
 `logs/ReRiff-network.log` from the game folder when reporting the failure.
 The startup report collector includes this log automatically.
+
+### CJK font support
+
+Check **Install and enable CJK font support** during setup, or open the launcher's
+**Languages** tab and check **Install and enable CJK fonts**. The component adds
+missing Chinese, Japanese and Korean characters throughout the game; it does not
+translate menus. The current font pack is about 107 MiB.
+
+Setup includes the font pack. The launcher downloads and verifies it if needed;
+re-enabling an installed pack works offline. Restart the game after changing the
+checkbox. Unchecking disables support and keeps the font files for later use.
+
+Fonts and the Noto Open Font License stay in the game folder. Installation uses
+additional owned native archives and retains the original game archives and other
+mods. Updates refuse changed owned files. The tested Japanese glyph forms are
+used across CJK text; regional typography selection is not yet available.
 
 ### Automatic client updates
 
@@ -593,6 +610,8 @@ python3 scripts/build-linux-installer.py --zig /path/to/zig
 RERIFF_RELEASE_CHANNEL=stable python3 scripts/build-windows-launcher.py --zig /path/to/zig
 python3 scripts/build-song-catalog.py --zig /path/to/zig
 python3 scripts/build-windows-server.py
+python3 -m pip install -r packaging/fonts/build-requirements.txt
+python3 scripts/build-cjk-component.py
 # Build-time container engine only; players do not need it.
 bash scripts/build-linux-runtime.sh
 ```
