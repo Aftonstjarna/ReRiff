@@ -63,7 +63,7 @@ static void __thiscall ui_menu_init(void *menu,void *screen,void *lower){
 static void __thiscall ui_menu_tick(void *menu){
     UiMenuHook *hook=ui_menu(menu);if(!hook)return;
     UiCanvas *previous=ui_scope_set(hook->canvas.width?&hook->canvas:NULL);
-    hook->tick(menu);ui_scope_set(previous);
+    hook->tick(menu);ui_scope_set(previous);cjk_direct_refresh();
 }
 static void __thiscall ui_menu_cleanup(void *menu,void *screen,void *lower){
     UiMenuHook *hook=ui_menu(menu);if(!hook)return;

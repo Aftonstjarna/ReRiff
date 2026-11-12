@@ -516,6 +516,7 @@ static BOOL supported_file(const WCHAR *path) {
 
 #include "antialiasing.h"
 #include "display_modes.h"
+static void cjk_direct_refresh(void);
 #include "ui_scale.h"
 #include "ui_scale_slider.h"
 #include "graphics_aa_menu.h"
@@ -619,6 +620,15 @@ static BOOL validate_image_at(BYTE *base,uintptr_t address_base) {
 static BOOL validate_image(BYTE *base) { return validate_image_at(base,(uintptr_t)base); }
 
 #include "flac_sample_rate.h"
+static BOOL cjk_component_enabled(void){
+    WCHAR value[16];GetPrivateProfileStringW(L"languages",L"cjk_enabled",L"",value,16,config_path);
+    if(*value)return !_wcsicmp(value,L"true")||!wcscmp(value,L"1");
+    return GetPrivateProfileIntW(L"diagnostics",L"cjk_render_probe",0,config_path)!=0;
+}
+#include "lastfm_utf8.h"
+#include "cjk_fonts.h"
+#include "cjk_direct_visuals.h"
+#include "unicode_trace.h"
 
 __declspec(dllexport) BOOL __cdecl ReRiffConfigureNativeReel(void **methods,int count) {
     WCHAR path[MAX_PATH];DWORD length=GetModuleFileNameW(NULL,path,MAX_PATH);
@@ -665,6 +675,7 @@ __declspec(dllexport) BOOL __cdecl ReRiffStartEngineMenu(void) {
     HMODULE pinned;
     if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_PIN,
         (const WCHAR *)(uintptr_t)&ReRiffStartEngineMenu,&pinned)) return FALSE;
+    if(!install_lastfm_utf8(base))log_line("Last.fm UTF-8 correction refused: original CIL bytes differ.");
     if(!install_flac_sample_rate(base))log_line("FLAC sample-rate patch guard refused; original decoder retained.");
     void **table=(void **)(base+0x7a5a7c); DWORD protection;
     if (!VirtualProtect(table,27*sizeof(void *),PAGE_READWRITE,&protection)) return FALSE;
@@ -693,6 +704,7 @@ __declspec(dllexport) BOOL __cdecl ReRiffStartEngineMenu(void) {
     if(!install_main_branding(base))log_line("Main-menu branding could not be installed.");
     if(!install_save_prompt(base))log_line("Native save prompt could not be installed.");
     if(!install_ui_scale(base))log_line("Native UI-scale extension could not be installed.");
+    install_unicode_trace(base);
     if(borderless_active)aa_attach();
     InterlockedExchange(&installed,2); log_line("Engine menu hooks installed."); return TRUE;
 }
