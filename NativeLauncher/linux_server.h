@@ -39,8 +39,8 @@ static BOOL linux_server_action(const WCHAR *action){
     ULONGLONG deadline=GetTickCount64()+90000;
     while(GetFileAttributesW(result)==INVALID_FILE_ATTRIBUTES&&GetTickCount64()<deadline)Sleep(100);
     WCHAR value[64];GetPrivateProfileStringW(L"result",L"state",L"",value,64,result);
-    if(!wcscmp(value,L"running"))podman_state=2;else if(!wcscmp(value,L"stopped"))podman_state=1;else if(!wcscmp(value,L"uninstalled"))podman_state=0;
-    GetPrivateProfileStringW(L"result",L"address",L"http://127.0.0.1:5144",podman_address,128,result);
+    if(!wcscmp(value,L"running"))local_server_state=2;else if(!wcscmp(value,L"stopped"))local_server_state=1;else if(!wcscmp(value,L"uninstalled"))local_server_state=0;
+    GetPrivateProfileStringW(L"result",L"address",L"http://127.0.0.1:5144",local_server_address,128,result);
     GetPrivateProfileStringW(L"result",L"message",L"The Linux helper did not report completion. See logs/ReRiff-localserver.log.",message,1024,result);
     GetPrivateProfileStringW(L"result",L"ok",L"false",value,64,result);DeleteFileW(result);
     if(*asset){DeleteFileW(asset);WCHAR *slash=wcsrchr(asset,L'\\');if(slash){*slash=0;RemoveDirectoryW(asset);}}

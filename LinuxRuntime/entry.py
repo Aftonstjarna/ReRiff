@@ -1,4 +1,4 @@
-"""Optional server AppImage entry point; the client does not use Python."""
+"""Optional bundled backend entry point for Linux AppImage and Windows Python."""
 import os
 from pathlib import Path
 import runpy
@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parent
 
 
 def main():
+    sys.path.insert(0, str(ROOT/'python-libs'))
     sys.path.insert(0, str(ROOT))
     args = sys.argv[1:]
     if not args:
@@ -26,10 +27,14 @@ def main():
         import sqlite3
         import zlib
         assert hashlib.sha256(b'ReRiff').hexdigest()
-        assert ssl.create_default_context().get_ca_certs()
+        if os.name != 'nt':
+            assert ssl.create_default_context().get_ca_certs()
         if (ROOT/'server').is_dir():
             import flask
             import waitress
+            if os.name == 'nt':
+                ctypes.CDLL(str(ROOT/'server/reriff-catalog.dll')).reriff_catalog
+                ctypes.CDLL(str(ROOT/'server/reriff-news.dll')).reriff_news
         print('ReRiff bundled Python runtime OK:', sys.version.split()[0])
     else:
         raise SystemExit('Unknown runtime mode: '+mode)

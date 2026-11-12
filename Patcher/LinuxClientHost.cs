@@ -35,8 +35,9 @@ internal static class LinuxClientHost {
     }
     static void AtomicJson(string path,JsonObject value) => Atomic(path,Encoding.UTF8.GetBytes(value.ToJsonString()+"\n"));
     static string Temp(string parent) {Directory.CreateDirectory(parent);string path=Path.Combine(parent,".reriff-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(path);File.SetUnixFileMode(path,UnixFileMode.UserRead|UnixFileMode.UserWrite|UnixFileMode.UserExecute);return path;}
-    static int RunProcess(string file,IEnumerable<string> arguments,int seconds=120,bool terminateOnTimeout=true) {
+    static int RunProcess(string file,IEnumerable<string> arguments,int seconds=120,bool terminateOnTimeout=true,bool appImage=false) {
         var info=new ProcessStartInfo(file){UseShellExecute=false};foreach(string arg in arguments)info.ArgumentList.Add(arg);
+        if(appImage)info.Environment["APPIMAGE_EXTRACT_AND_RUN"]="1";
         using var process=Process.Start(info)??throw new IOException("Could not run "+file);
         if(!process.WaitForExit(seconds*1000)){if(terminateOnTimeout){process.Kill(entireProcessTree:true);process.WaitForExit();}throw new IOException("Helper timed out; inspect logs before retrying.");}return process.ExitCode;
     }
@@ -250,7 +251,9 @@ internal static class LinuxClientHost {
                 Atomic(result,Encoding.Unicode.GetPreamble().Concat(Encoding.Unicode.GetBytes("[result]\nok=true\nstate=uninstalled\naddress=http://127.0.0.1:5144\nmessage=Local server is not installed.\n")).ToArray());return 0;
             }
             var args=new List<string>{"--server-control",action,"--root",root,"--result",result};if(action=="install")args.AddRange(new[]{"--asset",image,"--sha256",options.Get("--sha256")});
-            return RunProcess(image,args,90,terminateOnTimeout:false);
+            int code=RunProcess(image,args,90,terminateOnTimeout:false,appImage:true);
+            if(!File.Exists(result))throw new IOException("Local server helper exited with code "+code+" without reporting completion. See logs/ReRiff-localserver-helper.log.");
+            return code;
         } catch(Exception e){Atomic(result,Encoding.Unicode.GetPreamble().Concat(Encoding.Unicode.GetBytes("[result]\nok=false\nstate=uninstalled\nmessage="+e.Message.Replace('\n',' ')+"\n")).ToArray());return 1;}
     }
     [DllImport("libc",SetLastError=true)]static extern int kill(int pid,int signal);

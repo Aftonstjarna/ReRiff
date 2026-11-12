@@ -194,7 +194,9 @@ static BOOL external_only(void) {
 #include "update_progress.h"
 #include "auto_update.h"
 
+static BOOL local_server_action(const WCHAR *action);
 static BOOL stop_server(void) {
+    if(!is_wine()){WCHAR native[CAP];path(native,L"localserver\\native\\config.json");if(GetFileAttributesW(native)!=INVALID_FILE_ATTRIBUTES)return local_server_action(L"stop");}
     if (is_wine()) {
         typedef char * (__cdecl *unix_fn)(LPCWSTR);
         union {FARPROC address;unix_fn function;} conversion;
@@ -239,18 +241,18 @@ static BOOL stop_server(void) {
     return ok;
 }
 
-#include "podman_server.h"
+#include "local_server.h"
 #include "song_sync.h"
 
 static void finish_local_session(BOOL started){
     if(!started)return;
     WCHAR previous[1024];wcscpy(previous,message);
-    linux_server_action(L"stop");log_message(message);wcscpy(message,previous);
+    local_server_action(L"stop");log_message(message);wcscpy(message,previous);
 }
 
 static BOOL launch_game(void) {
     BOOL started_local=FALSE;
-    if(is_wine()&&!external_only()){
+    if(!external_only()){
         WCHAR config[CAP],enabled[16],primary[2048],secondary[2048];
         path(config,L"localserver\\native\\config.json");
         GetPrivateProfileStringW(L"server",L"networking_enabled",L"true",enabled,16,ini);
@@ -260,9 +262,9 @@ static BOOL launch_game(void) {
         /* Only this installation's explicitly configured loopback backend is
          * auto-started; downloading remains an explicit Install action. */
         if(use_network&&GetFileAttributesW(config)!=INVALID_FILE_ATTRIBUTES){
-            if(linux_server_action(L"status")&&podman_state==1
-               &&(!_wcsicmp(primary,podman_address)||!_wcsicmp(secondary,podman_address))){
-                started_local=linux_server_action(L"start");log_message(message);
+            if(local_server_action(L"status")&&local_server_state==1
+               &&(!_wcsicmp(primary,local_server_address)||!_wcsicmp(secondary,local_server_address))){
+                started_local=local_server_action(L"start");log_message(message);
             }
         }
     }
@@ -293,7 +295,7 @@ static BOOL launch_game(void) {
 static DWORD WINAPI worker(LPVOID parameter) {
     int action=(int)(INT_PTR)parameter;
     BOOL play=action==1;
-    BOOL ok=action==3?check_updates():action==2?podman_action(podman_state==2?L"stop":podman_state==1?L"start":L"install"):action==0?podman_action(L"status"):TRUE;
+    BOOL ok=action==3?check_updates():action==2?local_server_action(local_server_state==2?L"stop":local_server_state==1?L"start":L"install"):action==0?local_server_action(L"status"):TRUE;
     if (ok && play) ok=launch_game();
     if (ok && action<2) wcscpy(message,play?L"Game closed.":L"Ready. Singleplayer runs inside the game; configured servers are checked at game startup.");
     log_message(message);
@@ -305,7 +307,7 @@ static void begin(int action) {
     if (busy) return;
     busy=TRUE;playing=action==1;
     EnableWindow(play_button,FALSE);EnableWindow(save_button,FALSE);EnableWindow(stop_button,FALSE);EnableWindow(update_button,FALSE);EnableWindow(experimental_checkbox,FALSE);
-    SetWindowTextW(status,action==3?L"Checking published GitHub releases...":action==2?(podman_state==2?L"Stopping the local server...":podman_state==1?L"Starting the local server...":L"Downloading and installing the optional local server..."):L"Checking server settings...");
+    SetWindowTextW(status,action==3?L"Checking published GitHub releases...":action==2?(local_server_state==2?L"Stopping the local server...":local_server_state==1?L"Starting the local server...":L"Downloading and installing the optional local server..."):L"Checking server settings...");
     HANDLE thread=CreateThread(NULL,4*1024*1024,worker,(LPVOID)(INT_PTR)action,STACK_SIZE_PARAM_IS_A_RESERVATION,NULL);
     if (thread) CloseHandle(thread);
     else { busy=FALSE; EnableWindow(play_button,TRUE);EnableWindow(save_button,TRUE);EnableWindow(stop_button,TRUE);EnableWindow(update_button,TRUE);EnableWindow(experimental_checkbox,TRUE);SetWindowTextW(status,L"Could not start launcher worker."); }
@@ -425,7 +427,7 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
         auto_update_checkbox=control(L"BUTTON",L"Auto-update when skipping launcher",BS_AUTOCHECKBOX|WS_TABSTOP,195,293,425,28,AUTO_UPDATE_SKIP);
         control(L"STATIC",L"If neither server responds, the game uses singleplayer automatically.",0,22,332,600,24,0);
         status=control(L"STATIC",L"Checking server settings...",0,22,359,600,50,0);
-        podman_hint=control(L"STATIC",L"Local server: http://127.0.0.1:5144 — enter in Secondary server",0,22,417,600,22,0);
+        local_server_hint=control(L"STATIC",L"Local server: http://127.0.0.1:5144 — enter in Secondary server",0,22,417,600,22,0);
         control(L"BUTTON",L"Singleplayer",WS_TABSTOP,22,445,145,34,LOCAL);
         stop_button=control(L"BUTTON",L"Install local server",WS_TABSTOP,180,445,150,34,STOP);
         save_button=control(L"BUTTON",L"Save settings",WS_TABSTOP,345,445,130,34,SAVE);
@@ -433,7 +435,7 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
         update_button=control(L"BUTTON",L"Update from GitHub",WS_TABSTOP,22,489,155,30,UPDATE);
         experimental_checkbox=control(L"BUTTON",L"Use experimental releases (prereleases)",BS_AUTOCHECKBOX|WS_TABSTOP,195,489,420,30,EXPERIMENTAL);
         SendMessageW(experimental_checkbox,BM_SETCHECK,installed_experimental?BST_CHECKED:BST_UNCHECKED,0);
-        channel_title();podman_controls();
+        channel_title();local_server_controls();
         reload_settings_controls();
         SetTimer(hwnd,1,500,NULL);
         begin(FALSE);return 0;
@@ -460,7 +462,7 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
         requested_experimental=installed_experimental;
         SendMessageW(experimental_checkbox,BM_SETCHECK,installed_experimental?BST_CHECKED:BST_UNCHECKED,0);
         busy=FALSE;playing=FALSE;EnableWindow(play_button,TRUE);EnableWindow(save_button,TRUE);EnableWindow(stop_button,TRUE);EnableWindow(update_button,TRUE);EnableWindow(experimental_checkbox,TRUE);SetWindowTextW(status,message);
-        podman_controls();
+        local_server_controls();
         if (lp) ShowWindow(window,SW_RESTORE);return 0;
     }
     if (event==WM_CLOSE) {

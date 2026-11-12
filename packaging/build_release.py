@@ -82,9 +82,9 @@ def build(args):
     copy(ROOT/'VERSION', payload/'localserver/client-version.txt')
     (payload/'localserver/client-release-notes.md').write_text(notes,encoding='utf-8')
     (payload/'localserver/client-channel.ini').write_text('[client]\nchannel='+channel+'\n')
-    # Multiplayer backend dependencies belong in the container image. The
-    # installed client retains only updater and legacy-server cleanup tools.
-    for name in ('steam-launcher.sh', 'stop-server-host.sh', 'server-control.py', 'apply-client-update.py', 'podman-server.py', 'linux-runtime.sh'):
+    # Optional backend code/dependencies are separate release downloads.
+    # Clients retain only their platform's lifecycle helper.
+    for name in ('steam-launcher.sh', 'stop-server-host.sh', 'server-control.py', 'apply-client-update.py', 'linux-runtime.sh'):
         copy(ROOT/'scripts'/name, payload/'localserver'/name)
     output.mkdir(parents=True, exist_ok=True)
     commit = subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
@@ -105,6 +105,9 @@ def build(args):
                 (folder/'payload/localserver'/name).unlink(missing_ok=True)
         if platform == 'windows':
             copy(ROOT/'build/ReRiff-Setup.exe',folder/'ReRiff-Setup.exe')
+            copy(ROOT/'scripts/windows-server-control.py',folder/'payload/localserver/windows-server-control.py')
+            for name in ('local_server.py','host_process.py','windows_package.py'):
+                copy(ROOT/'LinuxRuntime'/name,folder/'payload/localserver'/name)
         manifest = {'singleplayer': True, 'channel':channel,'version':version,'commit':commit,'platform':platform,'patches':patches,
                     'update_only':update_only, 'native_linux':platform == 'linux', 'python_runtime':'download' if platform == 'windows' else 'server-only',
                     'vanilla_originals':json.loads((ROOT/'packaging/original-client.json').read_text()) if args.local_patching else {},
@@ -151,6 +154,7 @@ __RERIFF_PAYLOAD__
             run = output/f'ReRiff-{version}-linux.run'
             run.write_bytes(shell.encode()+archive_bytes.getvalue());run.chmod(0o755)
     copy(ROOT/'build/linux-runtime/ReRiff-Server-x86_64.AppImage', output/'ReRiff-Server-x86_64.AppImage')
+    copy(ROOT/'build/windows-server/ReRiff-Server-windows.zip', output/'ReRiff-Server-windows.zip')
     # Source archive excludes original game files, player data, and caches.
     with (output/f'ReRiff-{version}-source.tar.gz').open('wb') as stream:
         subprocess.run(['git','archive','--format=tar.gz',f'--prefix=ReRiff-{version}/','HEAD'],cwd=ROOT,stdout=stream,check=True)

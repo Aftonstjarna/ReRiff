@@ -21,6 +21,11 @@ jobs:
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '8.0.x'
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Test Windows local-server ownership and package installation
+        run: python -m unittest discover -s LinuxRuntime -p "test_*.py"
       - name: Test signed helpers on Microsoft .NET Framework x86
         shell: pwsh
         run: |
@@ -109,6 +114,11 @@ jobs:
         run: |
           python scripts/build-linux-installer.py --zig "$RUNNER_TEMP/release-tools/zig-x86_64-linux-0.14.1/zig"
           python scripts/test-linux-installer.py --zig "$RUNNER_TEMP/release-tools/zig-x86_64-linux-0.14.1/zig"
+      - name: Build optional Windows Flask server package
+        run: |
+          python scripts/build-song-catalog.py --zig "$RUNNER_TEMP/release-tools/zig-x86_64-linux-0.14.1/zig"
+          python scripts/build-windows-server.py
+          python -m unittest discover -s LinuxRuntime -p 'test_*.py' -v
       - name: Build optional Linux server AppImage
         run: RERIFF_BUILD_ENGINE=docker bash scripts/build-linux-runtime.sh
       - name: Test native client and server without host Python, Podman or FUSE
@@ -129,7 +139,6 @@ jobs:
       - name: Build server libraries and dependencies for News regression tests
         run: |
           python -m pip install -r packaging/requirements.txt
-          python scripts/build-song-catalog.py --zig "$RUNNER_TEMP/release-tools/zig-x86_64-linux-0.14.1/zig"
       - name: Verify stable and numbered-prerelease News comparisons
         env:
           PYTHONNOUSERSITE: '1'
@@ -158,9 +167,12 @@ jobs:
               channel.read(marker)
               assert channel['client']['channel'] == manifest['channel'] == os.environ['RERIFF_RELEASE_CHANNEL']
               assert hashlib.sha256(marker.read_bytes()).hexdigest() == manifest['files'][name]
-              helper = 'payload/localserver/podman-server.py'
+              assert not (root/'payload/localserver/podman-server.py').exists()
               if platform == 'windows':
-                  assert hashlib.sha256((root / helper).read_bytes()).hexdigest() == manifest['files'][helper]
+                  for name in ('windows-server-control.py', 'local_server.py', 'host_process.py', 'windows_package.py'):
+                      helper = 'payload/localserver/'+name
+                      assert hashlib.sha256((root/helper).read_bytes()).hexdigest() == manifest['files'][helper]
+                  assert not (root/'payload/localserver/windows-server').exists()
                   assert not (root/'python').exists()
               assert not (root / 'payload/localserver/podman/config.json').exists()
               if platform == 'linux':
@@ -221,7 +233,7 @@ jobs:
               gh release view experimental --json assets --jq '.assets[].name' |
                 while IFS= read -r asset; do
                   case "$asset" in
-                    ReRiff-"$version"-*|ReRiff-"$base_version"-linux.run|ReRiff-"$base_version"-windows.zip|ReRiff-Server-x86_64.AppImage) ;;
+                    ReRiff-"$version"-*|ReRiff-"$base_version"-linux.run|ReRiff-"$base_version"-windows.zip|ReRiff-Server-x86_64.AppImage|ReRiff-Server-windows.zip) ;;
                     ReRiff-*) gh release delete-asset experimental "$asset" --yes ;;
                   esac
                 done

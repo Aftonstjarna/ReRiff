@@ -1,3 +1,58 @@
+# ReRiff 1.2.4-beta.3 — Local server startup and Windows Flask package
+
+## In-game summary
+
+- Run the Windows local server without Podman or system Python.
+- Install Flask and the backend separately from the launcher.
+- Linux server startup reports failures instead of staying busy.
+
+## Full release notes
+
+Experimental client test build for Windows and Linux/Proton. Stable 1.2.3
+remains the default download and update channel.
+
+### Windows local server
+
+- Replace the launcher's Podman local-server path with the existing private
+  Python runtime and a bundled Flask/Waitress backend. No system Python, pip,
+  Podman, PATH or registry changes are required on the player's machine.
+- Download the optional `ReRiff-Server-windows.zip` package through Install
+  local server. Check the release SHA-256 manifest before installation and
+  run a package self-test before replacing an existing application.
+- Preserve saved data through install, start, stop and restart. Reuse existing
+  launcher-managed Podman data and its configured port in place; stop the old
+  container before starting the replacement server.
+- Use `http://127.0.0.1:5144` in Secondary server with the default configuration.
+  The local backend binds only to loopback; shared remote servers are unchanged.
+- Start an installed, configured localhost backend with Play. Stop it after the
+  game closes only when that launch started it; leave an already running server
+  alone.
+- Stop the Windows server cooperatively after checking its process identity
+  and per-session token. Leave unrelated processes and occupied ports alone.
+- Keep configuration under `localserver/native/`, the optional backend under
+  `localserver/windows-server/`, private Python under `localserver/windows-python/`,
+  and server diagnostics under the game's `logs/` folder.
+
+### Linux server startup
+
+- Retain the separate Python/Flask AppImage; Linux client installation and
+  updates still require no system Python or separate .NET runtime.
+- Request AppImage extraction when launching the helper so it runs without FUSE.
+- Capture helper output in `logs/ReRiff-localserver-helper.log` and report missing
+  completion results instead of leaving the launcher checking server settings.
+
+### Validation
+
+- Exercise Windows package verification, replacement safety, process ownership,
+  native launcher start/stop, loopback requests, persistence and port conflicts
+  with the private Windows Python runtime under Wine.
+- Run Windows process and package unit checks on the Microsoft Windows CI runner.
+- Verify Linux client setup/update safety and the optional AppImage lifecycle.
+- Check installer manifests and release checksums before publishing assets.
+- Retain font/Unicode rendering and metadata probes as local research; they are
+  not enabled or packaged in this beta. This release does not deploy the separate
+  experimental server branch.
+
 # ReRiff 1.2.4-beta.2 — Python-free Linux setup and menu testing
 
 ## In-game summary

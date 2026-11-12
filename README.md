@@ -230,19 +230,20 @@ The launcher edits `server.ini` beside `Game.exe`:
 - **Singleplayer:** selects local play while retaining both saved server addresses.
 - **Use servers:** enables primary → secondary → singleplayer selection.
 - **Install / Start / Stop local server:** downloads and manages an optional
-  server. Windows and stable 1.2.3 Linux builds require Podman. Development Linux
-  builds use a self-contained AppImage.
+  server. Development Windows builds use private Python with bundled Flask;
+  no Podman or system Python is required. Development Linux builds use a
+  self-contained AppImage. Stable 1.2.3 builds require Podman.
   Enter `http://127.0.0.1:5144` in **Secondary server**, enable **Use servers**,
   leave **Primary server only** unchecked, and save. The Primary server is tried
   first. Install leaves the server stopped; Start runs it immediately.
 
-In development Linux builds, an installed server starts with Play when its exact
+In development builds, an installed server starts with Play when its exact
 localhost address is configured and networking is enabled. A server started by that launch stops
 when the game closes; one already running is left running. Stop preserves data.
 The server binds only to localhost. A different service on its port is never
 adopted or stopped.
 
-The development Linux server stores configuration in
+The development local server stores configuration in
 `localserver/native/config.json`, saved data in `localserver/data`, and logs in
 `logs/ReRiff-localserver.log`. When replacing an older launcher-managed Podman
 server, existing `localserver/podman/data` and its configured port are reused
@@ -253,8 +254,12 @@ SHA-256 manifest before installation. The Linux client installs no Python script
 or runtime. When upgrading a previous development install, its client Python
 runtime and obsolete helpers are archived in `bak/versions/` for recovery.
 
-Windows retains its Podman configuration under `localserver/podman/` and
-`logs/ReRiff-podman.log`. Shared Docker/Podman servers remain supported.
+On Windows, **Install local server** downloads the optional
+`ReRiff-Server-windows.zip` package into `localserver/windows-server/`.
+Flask and its dependencies are bundled there; the launcher uses the private
+Python runtime in `localserver/windows-python/`. The backend is not included
+in the client installer. Existing server data is preserved when updating or
+stopping it. Shared Docker/Podman servers remain supported.
 
 Backing out of Servers or Graphics with unsaved changes prompts you to apply
 or discard them. Press Back inside the prompt to keep editing.
@@ -587,6 +592,7 @@ python3 scripts/build-linux-patcher.py
 python3 scripts/build-linux-installer.py --zig /path/to/zig
 RERIFF_RELEASE_CHANNEL=stable python3 scripts/build-windows-launcher.py --zig /path/to/zig
 python3 scripts/build-song-catalog.py --zig /path/to/zig
+python3 scripts/build-windows-server.py
 # Build-time container engine only; players do not need it.
 bash scripts/build-linux-runtime.sh
 ```
@@ -604,7 +610,7 @@ installation/update regressions and `scripts/test-linux-runtime.py` for server
 lifecycle, persistence and port-conflict checks without host Python or Podman.
 SteamOS/Bazzite and NixOS desktop integration still need real-machine testing.
 
-For installer builds, build the client helpers and optional server AppImage, then run:
+For installer builds, build the client helpers and both optional server packages, then run:
 
 ```sh
 python3 packaging/build_release.py --local-patching

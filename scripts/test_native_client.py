@@ -110,6 +110,14 @@ class NativeClientTests(unittest.TestCase):
     def test_no_server_image_status_needs_no_python(self):
         result=self.root/'result.ini';self.call('server-control','status','--root',self.game/'localserver','--result',result)
         self.assertIn('state=uninstalled',result.read_text(encoding='utf-16'))
+    def test_server_runtime_failure_reports_completion_without_fuse(self):
+        local=self.game/'localserver';local.mkdir()
+        image=local/'ReRiff-Server-x86_64.AppImage'
+        image.write_text('#!/bin/sh\n[ "$APPIMAGE_EXTRACT_AND_RUN" = 1 ] || exit 19\nexit 7\n');image.chmod(0o755)
+        result=self.root/'result.ini'
+        self.call('server-control','status','--root',local,'--result',result,success=False)
+        reply=result.read_text(encoding='utf-16')
+        self.assertIn('ok=false',reply);self.assertIn('exited with code 7',reply)
     def archive(self,extra=None):
         self.package({'payload/a.txt':b'updated'})
         data=io.BytesIO()

@@ -1,17 +1,22 @@
 #define wWinMain reriff_launcher_entry
 #include "launcher.c"
 #undef wWinMain
+#ifdef TEST_WINDOWS_SERVER
+#define tested_server_action windows_server_action
+#else
+#define tested_server_action linux_server_action
+#endif
 static DWORD WINAPI exercise(LPVOID unused){
     (void)unused;
-    if(!linux_server_action(L"status")||podman_state!=1)goto fail;
-    if(!linux_server_action(L"start")||podman_state!=2)goto fail;
-    if(!linux_server_action(L"status")||podman_state!=2)goto fail;
-    if(!linux_server_action(L"start")||podman_state!=2)goto fail;
-    if(!linux_server_action(L"stop")||podman_state!=1)goto fail;
-    if(!linux_server_action(L"stop")||podman_state!=1)goto fail;
-    puts("PASS: Wine launcher native AppImage status/start/stop and UTF-16 completion handoff");return 0;
+    if(!tested_server_action(L"status")||local_server_state!=1)goto fail;
+    if(!tested_server_action(L"start")||local_server_state!=2)goto fail;
+    if(!tested_server_action(L"status")||local_server_state!=2)goto fail;
+    if(!tested_server_action(L"start")||local_server_state!=2)goto fail;
+    if(!tested_server_action(L"stop")||local_server_state!=1)goto fail;
+    if(!tested_server_action(L"stop")||local_server_state!=1)goto fail;
+    puts("PASS: launcher platform-local server status/start/stop and UTF-16 completion handoff");return 0;
 fail:
-    wprintf(L"FAIL: %ls state=%d\n",message,podman_state);return 1;
+    wprintf(L"FAIL: %ls state=%d\n",message,local_server_state);return 1;
 }
 int wmain(int count,WCHAR **args){
     if(count!=2)return 2;

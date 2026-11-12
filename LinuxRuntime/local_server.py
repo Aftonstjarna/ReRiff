@@ -1,7 +1,6 @@
 """Per-installation native server lifecycle, invoked by the bundled runtime."""
 import argparse
 from contextlib import contextmanager
-import fcntl
 import hashlib
 import json
 import os
@@ -13,6 +12,8 @@ import tempfile
 import time
 import urllib.error
 import urllib.request
+
+from host_process import file_lock, stamp, windows_identity
 
 
 def atomic(path, data):
@@ -26,13 +27,6 @@ def atomic(path, data):
         Path(name).unlink(missing_ok=True)
 
 
-def stamp(pid):
-    try:
-        fields = Path(f'/proc/{pid}/stat').read_text().rsplit(')', 1)[1].split()
-        return fields[19] if fields[0] != 'Z' else None
-    except (OSError, IndexError):
-        return None
-
 
 class LocalServer:
     def __init__(self, root):
@@ -40,7 +34,9 @@ class LocalServer:
         self.control = self.root/'native'
         self.config_path = self.control/'config.json'
         self.record_path = self.control/'process.json'
-        self.image = self.root/'ReRiff-Server-x86_64.AppImage'
+        self.windows = os.name == 'nt'
+        self.image = self.root/'windows-server/entry.py' if self.windows else self.root/'ReRiff-Server-x86_64.AppImage'
+        self.python = self.root/'windows-python/python.exe'
         self.logs = self.root.parent/'logs'
         self.logs.mkdir(parents=True, exist_ok=True)
         if self.config_path.exists():
@@ -68,8 +64,7 @@ class LocalServer:
     @contextmanager
     def lock(self):
         self.control.mkdir(parents=True, exist_ok=True)
-        with (self.control/'control.lock').open('a') as stream:
-            fcntl.flock(stream, fcntl.LOCK_EX)
+        with file_lock(self.control/'control.lock'):
             yield
 
     def record(self):
@@ -84,6 +79,9 @@ class LocalServer:
         pid = record.get('pid')
         if type(pid) is not int or pid <= 1 or stamp(pid) != record.get('start'):
             return False
+        if self.windows:
+            identity = windows_identity(pid)
+            return bool(identity and identity[0] == record.get('start') and isinstance(record.get('token'), str) and len(record['token']) == 64 and os.path.normcase(os.path.realpath(identity[1])) == os.path.normcase(os.path.realpath(self.python)))
         try:
             if Path(f'/proc/{pid}').stat().st_uid != os.getuid():
                 return False
@@ -119,6 +117,9 @@ class LocalServer:
             raise ValueError('Local server download checksum mismatch.')
         if self.owned(self.record()):
             raise RuntimeError('Stop the local server before replacing its application.')
+        if self.windows:
+            from windows_package import install
+            return install(self, source)
         self.root.mkdir(parents=True, exist_ok=True)
         fd, name = tempfile.mkstemp(prefix='server-', suffix='.AppImage', dir=self.root)
         try:
@@ -146,9 +147,9 @@ class LocalServer:
         for key in ('LD_PRELOAD', 'LD_LIBRARY_PATH', 'PYTHONHOME', 'PYTHONPATH'):
             env.pop(key, None)
         with (self.logs/'ReRiff-localserver.log').open('ab') as log:
-            child = subprocess.Popen([str(self.image), '--serve', '--root', str(self.root)],
-                                     stdin=subprocess.DEVNULL, stdout=log, stderr=log,
-                                     env=env, start_new_session=True)
+            command = ([str(self.python), '-I', str(self.image)] if self.windows else [str(self.image)]) + ['--serve', '--root', str(self.root)]
+            options = {'creationflags': subprocess.CREATE_NO_WINDOW} if self.windows else {'start_new_session': True}
+            child = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=log, stderr=log, env=env, **options)
         deadline = time.monotonic()+30
         while time.monotonic() < deadline:
             record = self.record()
@@ -163,8 +164,15 @@ class LocalServer:
         record = self.record()
         if not self.owned(record):
             return 'No server owned by this installation is running.'
+        if self.windows:
+            if not self.ready(record):
+                raise RuntimeError('The owned server is unresponsive; no process was force-stopped. See logs/ReRiff-localserver.log.')
+            request = urllib.request.Request(self.address+'/reriff-local/stop', data=b'', headers={'X-ReRiff-Local-Token': record['token']}, method='POST')
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            with opener.open(request, timeout=5) as response:
+                response.read()
         # pidfd ties the signal to this exact process, avoiding PID reuse.
-        if hasattr(os, 'pidfd_open') and hasattr(signal, 'pidfd_send_signal'):
+        elif hasattr(os, 'pidfd_open') and hasattr(signal, 'pidfd_send_signal'):
             fd = os.pidfd_open(record['pid'])
             try:
                 if self.owned(record):
@@ -190,6 +198,7 @@ def main():
     parser.add_argument('--result', type=Path, required=True)
     args = parser.parse_args()
     outcome = {'ok': 'false', 'state': 'uninstalled', 'address': 'http://127.0.0.1:5144'}
+    server = None
     try:
         server = LocalServer(args.root)
         outcome['address'] = server.address
@@ -204,6 +213,15 @@ def main():
                 message = 'Local server: '+server.status()
             outcome.update(ok='true', state=server.status(), message=message)
     except Exception as error:
+        if server is not None:
+            try:
+                # Keep Stop available while an owned process is still starting.
+                if server.owned(server.record()):
+                    outcome['state'] = 'running'
+                elif server.image.is_file() and server.config_path.is_file():
+                    outcome['state'] = 'stopped'
+            except (OSError, ValueError):
+                pass
         outcome['message'] = str(error).replace('\n', ' ')
         try:
             logs = args.root.resolve().parent/'logs'

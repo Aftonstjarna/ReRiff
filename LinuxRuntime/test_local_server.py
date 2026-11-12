@@ -3,6 +3,8 @@ import json
 import os
 from pathlib import Path
 import tempfile
+import sys
+sys.path.insert(0, str(Path(__file__).parent))
 import unittest
 from unittest import mock
 
@@ -53,6 +55,7 @@ class LifecycleTest(unittest.TestCase):
 
     def test_failed_verification_preserves_server_and_data(self):
         self.server.root.mkdir(parents=True)
+        self.server.image.parent.mkdir(parents=True, exist_ok=True)
         self.server.image.write_bytes(b'previous application')
         data = self.server.root/'data/classes/Score.json'
         data.parent.mkdir(parents=True)
