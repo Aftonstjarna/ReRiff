@@ -1,5 +1,6 @@
 """Exercise language install ownership, enable/disable and transactional safety."""
 import argparse
+import os
 import configparser
 import hashlib
 import json
@@ -59,7 +60,7 @@ with tempfile.TemporaryDirectory(prefix='reriff languages ü ') as temporary:
     assert removals=={'vfs3.dat':hash_bytes(b'hd dat'),'vfs3.zip':hash_bytes(b'hd zip')},removals
     assert (game/'vfs3.zip').read_bytes()==b'hd zip' # Staging is read-only.
     # A failed state write after retiring vfs3 must restore both old pairs.
-    if not a.wine:
+    if os.name == 'posix' and not a.wine:
         state_folder=game/'localserver/languages';state_folder.chmod(0o555)
         try:call('install','--asset',path(combined),'--sha256',merged_sha,success=False)
         finally:state_folder.chmod(0o755)
