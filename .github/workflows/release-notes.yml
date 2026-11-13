@@ -36,6 +36,10 @@ jobs:
             echo "No published release yet; the release workflow will publish its own notes."
             exit 0
           fi
+          if [ "$tag" != "v$(cat VERSION)" ]; then
+            echo "VERSION differs from Latest; the release workflow publishes the new version's notes."
+            exit 0
+          fi
           python packaging/release_notes.py --version "$tag" --output "$RUNNER_TEMP/RELEASE-NOTES.md"
           gh release edit "$tag" --notes-file "$RUNNER_TEMP/RELEASE-NOTES.md"
           gh release upload "$tag" "$RUNNER_TEMP/RELEASE-NOTES.md" --clobber
