@@ -1,0 +1,19 @@
+name: reriff
+services:
+  server:
+    image: ghcr.io/aftonstjarna/reriff:latest
+    container_name: reriff-server
+    network_mode: host
+    env_file:
+      - server.env
+    volumes:
+      - ./data:/data
+    restart: unless-stopped
+    stop_grace_period: 30s
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true

@@ -46,6 +46,9 @@ def main():
         port=engine('port',name,'5144/tcp').splitlines()[0].rsplit(':',1)[1]
         base='http://127.0.0.1:'+port
         ready()
+        identity=json.loads(request('/')[1])['serverId']
+        assert str(uuid.UUID(identity))==identity
+        assert json.loads(request('/classes/Version')[1])['results'][0]['ServerID']==identity
         assert engine('exec',name,'id','-u')=='10001'
         assert request('/admin')[0]==200
         request('/classes/News','POST',{'ID':17,'Status':'Active','enTitle':'Normal news','en':'Announcement survives'})
@@ -84,6 +87,8 @@ def main():
         port=engine('port',name,'5144/tcp').splitlines()[0].rsplit(':',1)[1]
         base='http://127.0.0.1:'+port
         ready()
+        assert json.loads(request('/')[1])['serverId']==identity
+        assert json.loads(request('/classes/Version')[1])['results'][0]['ServerID']==identity
         assert json.loads(request('/classes/Score/'+oid)[1])['Score']==12345
         shared_scores()
         assert request('/files/container.ghost')[1]==binary
@@ -96,9 +101,16 @@ from pathlib import Path
 spec=importlib.util.spec_from_file_location('container_server','/app/docker/server.py')
 module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
 with tempfile.TemporaryDirectory() as tmp:
- app=module.create_app(Path(tmp),'https://riff.example.test')
- response=app.test_client().post('/files/public.ghost',data=b'ghost',content_type='application/octet-stream')
+ app=module.create_app(Path(tmp),'https://riff.example.test','http://192.0.2.10:5144')
+ client=app.test_client()
+ response=client.post('/files/public.ghost',data=b'ghost',content_type='application/octet-stream')
  assert response.json['url']=='https://riff.example.test/files/public.ghost'
+ record=client.post('/classes/FileData',json={'data':{'__type':'File','name':'public.ghost','url':response.json['url']}}).json['objectId']
+ for host,origin in [('riff.example.test','https://riff.example.test'),('192.0.2.10:5144','http://192.0.2.10:5144')]:
+  data=client.get('/classes/FileData/'+record,headers={'Host':host}).json
+  assert data['data']['url']==origin+'/files/public.ghost'
+  assert client.get('/files/public.ghost',headers={'Host':host}).data==b'ghost'
+ assert client.get('/',headers={'Host':'riff.example.test'}).json['serverId']==client.get('/',headers={'Host':'192.0.2.10:5144'}).json['serverId']
 """
         engine('exec',name,'python','-c',public_test)
         print('PASS: version-aware News and normal announcements, non-root/read-only image, admin page, healthcheck, scores and ghosts across restart, credential redaction, public file URL')

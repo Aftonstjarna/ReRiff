@@ -440,7 +440,7 @@ each client's external URL to that address. The admin API has no hardened access
 control, so use a trusted network.
 
 The persistent `/data` volume contains records, uploaded files, the song catalog,
-and request traces. Keep that volume when updating or recreating the container.
+the server identity, and request traces. Keep that volume when updating or recreating the container.
 A restart alone does not install a newly pulled image; recreate the container
 with its existing settings and data mount. Avoid `docker compose down -v` unless
 you intend to delete saved data.
@@ -460,6 +460,41 @@ Replace `your-server` with the server's reachable IP or hostname. Then run
 `docker compose pull server` and `docker compose up -d --no-build server`.
 `RERIFF_PUBLIC_URL` controls generated download URLs; it does not open the
 firewall, configure TLS, or change the host bind address.
+
+### Public and LAN addresses for one server
+
+Configure both addresses as permanent aliases of the same persistent store:
+
+```ini
+RERIFF_PUBLIC_URL=https://reriff.example.net
+RERIFF_LAN_URL=http://192.0.2.10:5144
+```
+
+Use your real addresses in `.env` for the repository Compose file, or in
+`server.env` for the host deployment below. Both routes use `/data` and its
+persistent `server-id`; they share profiles, scores, ghosts, and uploaded files.
+Responses use the configured address matching the request's Host header.
+Public HTTPS is retained behind an HTTP reverse proxy, which must preserve the
+original Host header. Unconfigured forwarded hosts cannot override file URLs.
+
+Saved Parse File URLs belonging to either alias are adapted in API responses;
+the stored JSON, object IDs, and binary files remain unchanged. LAN uploads and
+downloads do not require public DNS or an internet connection. Configure Public
+as the client's Primary address, LAN as Secondary, and leave Primary-only off.
+Any public proxy must permit the game's API requests.
+
+Do not set `RERIFF_MIGRATE_FROM_ORIGIN` when both addresses must coexist. If it
+was previously configured, remove it. Links already migrated to Public are also
+adapted for LAN responses when both aliases are present. To retire an old address
+permanently, set `RERIFF_MIGRATE_FROM_ORIGIN` to that old HTTP(S) origin and
+`RERIFF_PUBLIC_URL` to the replacement. Startup performs a one-time migration of
+owned file URLs, retaining original records and a completion manifest under
+`/data/migrations/file-origin-*`.
+
+Each store keeps its UUID in `/data/server-id`. Preserve it with the data and
+backups. Root JSON, `/classes/Version`, and the `X-ReRiff-Server-ID` response
+header expose the same identity. Do not copy an ID between independent stores
+to force a match; identity does not merge their data.
 
 ### Host networking and a host data folder
 
@@ -486,6 +521,30 @@ UID/GID 10001; bind-mounted data must be writable by that identity.
 
 To update a `docker run` deployment, pull the new image and recreate the container
 using the same network, environment, and data mount. Keep the host data directory.
+
+For an image-only Compose deployment, copy `docker/compose.host.yaml` to
+`compose.yaml` beside the existing `data` folder, and copy
+`docker/server.env.example` to `server.env`. Set your public and LAN addresses.
+This configuration uses `:latest`, host networking, and `./data:/data`; it needs
+no repository checkout or local image build. Ensure the data folder is writable
+by UID/GID 10001, or add a `user:` override matching its existing owner. Then run:
+
+```sh
+docker compose config --quiet
+docker compose pull
+docker compose up -d
+docker compose logs --tail=100
+```
+
+When replacing an existing `docker run` container, first stop and rename it so
+Compose can use `reriff-server`. Keep the same host data directory:
+
+```sh
+docker update --restart=no reriff-server
+docker stop reriff-server
+docker rename reriff-server reriff-server-before-compose
+docker compose up -d
+```
 
 ### Build locally, migrate data, and verify
 

@@ -61,6 +61,13 @@ LOG_LOCK = threading.Lock()
 def ensure_dirs():
     os.makedirs(CLASSES_DIR, exist_ok=True)
     os.makedirs(FILES_DIR, exist_ok=True)
+    _identity_module.server_id(DATA_DIR)
+    legacy = os.environ.get('RERIFF_MIGRATE_FROM_ORIGIN', '').strip()
+    if legacy:
+        public = os.environ.get('RERIFF_PUBLIC_URL', '').strip()
+        if not public:
+            raise ValueError('RERIFF_MIGRATE_FROM_ORIGIN requires RERIFF_PUBLIC_URL')
+        _identity_module.migrate_file_origins(DATA_DIR, legacy, public)
 
 
 def log_line(text):
@@ -455,9 +462,17 @@ def _log_response(resp):
 # Files API
 # ---------------------------------------------------------------------------
 
+def address_aliases():
+    settings = globals().get('FILE_ORIGINS', {
+        'public': os.environ.get('RERIFF_PUBLIC_URL', ''),
+        'lan': os.environ.get('RERIFF_LAN_URL', ''),
+    })
+    return {key: _identity_module.origin(value) for key, value in settings.items() if value}
+
+
 def host_base():
-    host = request.host or "127.0.0.1:5144"
-    return "http://%s" % host
+    return _identity_module.client_origin(address_aliases(), request.host, request.host_url)
+
 
 
 @app.route("/files/<path:filename>", methods=["POST"])
@@ -522,6 +537,10 @@ def query_class(cls):
     args = request.args
 
     if cls in CANNED_CLASSES:
+        if cls == 'Version':
+            result = json.loads(responses[cls])
+            result['results'][0]['ServerID'] = _identity_module.server_id(DATA_DIR)
+            return jsonify(result)
         return Response(responses[cls], mimetype="application/json")
 
     if cls == "_Installation":
@@ -809,6 +828,8 @@ def logout():
 def index():
     return jsonify({
         "server": "RiffApiLocal",
+        "serverId": _identity_module.server_id(DATA_DIR),
+        "addresses": address_aliases(),
         "note": "Parse-compatible local server for Riff Racer with persistent ghosts.",
         "dataDir": DATA_DIR,
     })
@@ -947,6 +968,25 @@ def admin_log():
         with open(LOG_FILE, "r", encoding="utf-8", errors="replace") as f:
             out = f.readlines()[-lines_n:]
     return jsonify({"lines": [l.rstrip("\n") for l in out]})
+
+
+_identity_spec = importlib.util.spec_from_file_location(
+    'reriff_server_identity', os.path.join(BASE_DIR, 'server_identity.py'))
+_identity_module = importlib.util.module_from_spec(_identity_spec)
+_identity_spec.loader.exec_module(_identity_module)
+
+
+@app.after_request
+def identity_headers(response):
+    if response.is_json and not response.direct_passthrough:
+        body = response.get_json(silent=True)
+        aliases = address_aliases()
+        if aliases and _identity_module.remap_file_urls(body, set(aliases.values()), host_base(), FILES_DIR):
+            response.set_data(app.json.dumps(body) + '\n')
+    response.headers['X-ReRiff-Server-ID'] = _identity_module.server_id(DATA_DIR)
+    if (request.path == '/' or request.path.startswith(('/classes/', '/users/', '/login', '/reriff/'))):
+        response.headers['Cache-Control'] = 'no-store, private'
+    return response
 
 
 _catalog_spec = importlib.util.spec_from_file_location(
