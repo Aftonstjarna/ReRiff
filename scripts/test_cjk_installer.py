@@ -18,7 +18,7 @@ with tempfile.TemporaryDirectory(prefix='full-cjk-test-',dir=ROOT/'build') as te
   shutil.copy2(a.originals/'Game.exe',game/'Game.exe')
   for name in manifest['required_existing']:
    shutil.copy2((a.prototype if prototype else a.originals)/name,game/name)
-   saved=game/'bak/originals'/name;saved.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(a.originals/name,saved)
+   saved=game/'.bak/originals'/name;saved.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(a.originals/name,saved)
   (game/'server.ini').write_text('[server]\nexternal_url = https://example.invalid\n'+('[diagnostics]\ncjk_render_probe = 1\n' if prototype else ''))
   (game/'vfs.dat').write_bytes(b'original index fixture');(game/'vfs.zip').write_bytes(b'original archive fixture')
   if prototype:
@@ -34,9 +34,12 @@ with tempfile.TemporaryDirectory(prefix='full-cjk-test-',dir=ROOT/'build') as te
   state=json.loads((game/'localserver/languages/cjk.json').read_text())
   assert state['version']==manifest['version']
   assert 'cjk_enabled = true' in (game/'server.ini').read_text()
-  if prototype:assert state['archives']=={'base':'vfs2','hd':'vfs3'}
+  assert len(state['archives'])==1 and 'combined' in state['archives']
+  if prototype:
+   assert state['archives']=={'combined':'vfs2'}
+   assert not (game/'vfs3.dat').exists() and not (game/'vfs3.zip').exists()
   subprocess.run(args,check=True,timeout=180)
   assert (game/'vfs.dat').read_bytes()==b'original index fixture'
   assert (game/'vfs.zip').read_bytes()==b'original archive fixture'
-  for name,expected in manifest['vanilla_originals'].items():assert hash_file(game/'bak/originals'/name)==expected
+  for name,expected in manifest['vanilla_originals'].items():assert hash_file(game/'.bak/originals'/name)==expected
   print('PASS: '+('prototype adoption' if prototype else 'clean install')+', read-only preflight, exact DLL output, repeat install and retained originals.',flush=True)

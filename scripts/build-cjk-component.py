@@ -33,19 +33,19 @@ def build(reuse=False):
             print('Baking JP',pixels,flush=True);hd.bake(source,high,'jp',pixels)
         shutil.copy2(high/f'graphics/fonts/reriff/cjk/jp{pixels}/glyphs.rrcf',package/f'fonts/noto-cjk/jp{pixels}.rrcf')
     # Only textures belong in native archives. Metrics/license remain loose files.
-    for label,tree in (('base',resources),('hd',high)):
-        clean=target/(label+'-textures')
-        if clean.exists():shutil.rmtree(clean)
+    clean=target/'combined-textures'
+    if clean.exists():shutil.rmtree(clean)
+    for tree in (resources,high):
         for path in tree.rglob('batchtextures.brres'):
             dest=clean/path.relative_to(tree);dest.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(path,dest)
-        for path in archive.build_volume(clean,target/(label+'-volume'),'vfs1'):
-            shutil.copy2(path,package/('archives/'+label+path.suffix))
+    for path in archive.build_volume(clean,target/'combined-volume','vfs1'):
+        shutil.copy2(path,package/('archives/combined'+path.suffix))
     pinned=json.loads((ROOT/'packaging/fonts/noto-cjk.json').read_text())
     assert hashlib.sha256((ROOT/'packaging/fonts/OFL-Noto-CJK.txt').read_bytes()).hexdigest()==pinned['files'][1]['sha256'], 'Noto license differs from pinned upstream source'
     shutil.copy2(ROOT/'packaging/fonts/OFL-Noto-CJK.txt',package/'fonts/noto-cjk/OFL.txt')
     digest=lambda p:hashlib.sha256(p.read_bytes()).hexdigest()
     legacy=json.loads((ROOT/'packaging/fonts/legacy-archives.json').read_text())
-    meta={'schema':1,'version':(ROOT/'VERSION').read_text().strip(),'files':{p.relative_to(package).as_posix():digest(p) for p in sorted(package.rglob('*')) if p.is_file()},'legacy':legacy}
+    meta={'schema':2,'version':(ROOT/'VERSION').read_text().strip(),'files':{p.relative_to(package).as_posix():digest(p) for p in sorted(package.rglob('*')) if p.is_file()},'legacy':legacy}
     (package/'component.json').write_text(json.dumps(meta,indent=2)+'\n')
     output=target/'ReRiff-CJK.zip'
     with zipfile.ZipFile(output,'w',zipfile.ZIP_DEFLATED,compresslevel=9) as z:

@@ -1,5 +1,6 @@
 /* Windows-only, consented bootstrap of the pinned private Python runtime.
  * Shared by setup and launcher; never installs into PATH or the registry. */
+#include "logging.h"
 #include <wincrypt.h>
 #include <wininet.h>
 #define PYTHON_RUNTIME_URL L"https://www.python.org/ftp/python/3.13.17/python-3.13.17-embed-amd64.zip"
@@ -42,14 +43,16 @@ static BOOL python_download(const WCHAR *destination){
 static BOOL python_ps_literal(const WCHAR *source,WCHAR *out,size_t capacity){
     size_t n=0;for(;*source;source++){if(n+(*source==L'\''?2:1)>=capacity)return FALSE;out[n++]=*source;if(*source==L'\'')out[n++]=L'\'';}out[n]=0;return TRUE;
 }
+static int python_logging_override=-1;
 static void python_runtime_log(const WCHAR *game,const char *text){
+    if(!(python_logging_override>=0?python_logging_override:rr_logging_enabled(game,FALSE)))return;
     WCHAR path[CAP];if(_snwprintf(path,CAP,L"%ls\\logs",game)<0)return;CreateDirectoryW(path,NULL);
     if(_snwprintf(path,CAP,L"%ls\\logs\\ReRiff-python-setup.log",game)<0)return;
     HANDLE file=CreateFileW(path,FILE_APPEND_DATA,FILE_SHARE_READ,NULL,OPEN_ALWAYS,FILE_ATTRIBUTE_NORMAL,NULL);DWORD written;
     if(file!=INVALID_HANDLE_VALUE){WriteFile(file,text,(DWORD)strlen(text),&written,NULL);WriteFile(file,"\r\n",2,&written,NULL);CloseHandle(file);}
 }
 static BOOL ensure_private_python(HWND owner,const WCHAR *game,BOOL prompt){
-    WCHAR local[CAP],runtime[CAP],stage[CAP],archive[CAP],expanded[CAP],script[CAP],system[CAP],command[CAP],a[CAP],b[CAP],old[CAP];
+    WCHAR local[CAP],runtime[CAP],stage[CAP],archive[CAP],expanded[CAP],script[CAP],system[CAP],command[CAP],a[CAP],b[CAP],old[CAP]=L"";
     if(_snwprintf(local,CAP,L"%ls\\localserver",game)<0||_snwprintf(runtime,CAP,L"%ls\\windows-python",local)<0)return FALSE;
     if(private_python_ready(runtime))return TRUE;
     if(!prompt||python_runtime_prompt(owner,L"Install Python for ReRiff?\n\nSetup will download a verified private Python runtime from python.org into this game's localserver\\windows-python folder. It is used for Windows setup, updates and optional server controls.\n\nYour system Python, PATH and registry will stay unchanged.",L"ReRiff — Install private Python",MB_YESNO|MB_DEFBUTTON2|MB_ICONQUESTION)!=IDYES)return FALSE;
@@ -74,10 +77,11 @@ static BOOL ensure_private_python(HWND owner,const WCHAR *game,BOOL prompt){
     if(_snwprintf(a,CAP,L"%ls\\python313._pth",expanded)<0)goto done;output=CreateFileW(a,GENERIC_WRITE,0,NULL,CREATE_ALWAYS,FILE_ATTRIBUTE_NORMAL,NULL);if(output==INVALID_HANDLE_VALUE)goto done;
     static const char pth[]="python313.zip\n.\n..\n../python-libs\nimport site\n";saved=WriteFile(output,pth,sizeof(pth)-1,&written,NULL)&&written==sizeof(pth)-1;CloseHandle(output);if(!saved)goto done;
     old[0]=0;
-    if(GetFileAttributesW(runtime)!=INVALID_FILE_ATTRIBUTES){_snwprintf(a,CAP,L"%ls\\bak",game);CreateDirectoryW(a,NULL);if(_snwprintf(old,CAP,L"%ls\\python-runtime-%llu",a,(unsigned long long)GetTickCount64())<0||!MoveFileW(runtime,old))goto done;}
+    if(GetFileAttributesW(runtime)!=INVALID_FILE_ATTRIBUTES){if(_snwprintf(old,CAP,L"%ls\\previous-runtime",stage)<0||!MoveFileW(runtime,old))goto done;}
     if(!MoveFileW(expanded,runtime)){if(*old)MoveFileW(old,runtime);goto done;}ok=TRUE;
  done:
-    python_remove_stage(stage);
+    if(ok||!*old||GetFileAttributesW(old)==INVALID_FILE_ATTRIBUTES)python_remove_stage(stage);
+    else python_runtime_log(game,"Private runtime rollback could not complete; previous runtime retained in the temporary installation folder.");
     python_runtime_log(game,ok?"Private Python verified and installed.":"Private Python installation failed; download, checksum or extraction did not complete.");
     if(!ok)python_runtime_prompt(owner,L"Python installation did not complete. Check your connection and available disk space, then retry. The existing client and saves were retained.",L"ReRiff Python setup",MB_OK|MB_ICONERROR);
     return ok;

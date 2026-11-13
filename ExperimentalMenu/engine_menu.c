@@ -80,7 +80,9 @@ static DWORD restart_started;
 #define SERVERS_ID 1500
 #define SERVER_ACTION_BASE 1500
 
+#include "../NativeLauncher/logging.h"
 static void log_line(const char *line) {
+    if(!rr_logging_ini(config_path))return;
     HANDLE file=CreateFileW(log_path,FILE_APPEND_DATA,FILE_SHARE_READ,NULL,OPEN_ALWAYS,FILE_ATTRIBUTE_NORMAL,NULL);
     if (file!=INVALID_HANDLE_VALUE) {
         DWORD written; WriteFile(file,line,(DWORD)strlen(line),&written,NULL);
@@ -663,9 +665,10 @@ __declspec(dllexport) BOOL __cdecl ReRiffStartEngineMenu(void) {
     WCHAR *slash=wcsrchr(path,L'\\');
     if (!slash || (size_t)(slash-path)+1+wcslen(L"logs\\ReRiff-engine-menu.log")>=MAX_PATH) return FALSE;
     wcscpy(config_path,path); config_path[slash-path+1]=0;
-    wcscpy(log_path,config_path);wcscat(log_path,L"logs");CreateDirectoryW(log_path,NULL);
+    wcscpy(log_path,config_path);wcscat(log_path,L"logs");
     wcscpy(log_path,config_path); wcscat(log_path,L"logs\\ReRiff-engine-menu.log");
     wcscat(config_path,L"server.ini");
+    if(rr_logging_ini(config_path)){WCHAR logs[MAX_PATH];wcscpy(logs,log_path);WCHAR *end=wcsrchr(logs,L'\\');if(end){*end=0;CreateDirectoryW(logs,NULL);}}
     BYTE *base=(BYTE *)GetModuleHandleW(NULL);
     if(!supported_file(path)){log_line("Refused: unsupported Game.exe file hash or size.");return FALSE;}
     if(!validate_image(base)){

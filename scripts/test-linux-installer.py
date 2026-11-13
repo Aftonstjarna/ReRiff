@@ -29,11 +29,11 @@ with tempfile.TemporaryDirectory(prefix='reriff-gui-test-') as temp:
     game = work/'Riff Racer ü with spaces'
     game.mkdir()
     (game/'Game.exe').write_bytes(b'fixture only')
-    (game/'server.ini').write_text('[diagnostics]\ncjk_render_probe=1\n')
+    (game/'server.ini').write_text('[diagnostics]\ncjk_render_probe=1\nlogging_enabled=false\n',encoding='utf-16')
     invalid = work/'Wrong game folder'
     invalid.mkdir()
     (work/'installer.py').write_text('''import argparse, pathlib, time, sys
-p=argparse.ArgumentParser(); p.add_argument('--bundle'); p.add_argument('--game-dir'); p.add_argument('--music-dir'); p.add_argument('--cjk',action='store_true'); p.add_argument('--no-cjk',action='store_true'); p.add_argument('--no-music-link',action='store_true'); a=p.parse_args()
+p=argparse.ArgumentParser(); p.add_argument('--bundle'); p.add_argument('--game-dir'); p.add_argument('--music-dir'); p.add_argument('--cjk',action='store_true'); p.add_argument('--no-cjk',action='store_true'); p.add_argument('--logging',action='store_true'); p.add_argument('--no-logging',action='store_true'); p.add_argument('--no-music-link',action='store_true'); a=p.parse_args()
 assert a.bundle
 game=pathlib.Path(a.game_dir)
 time.sleep(0.4)
@@ -59,4 +59,4 @@ print('GUI install succeeded: '+str(game), flush=True)
                NO_AT_BRIDGE='1', GDK_BACKEND='x11', GTK_MODULES='')
     env.pop('WAYLAND_DISPLAY', None)
     subprocess.run(['xvfb-run', '-a', str(exe), str(work), str(game), str(invalid)], check=True, env=env, timeout=20)
-    assert len(list((game/'logs').glob('installer-*.log'))) == 2
+    assert len(list((game/'logs').glob('installer-*.log'))) == 1

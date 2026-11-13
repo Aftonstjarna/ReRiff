@@ -177,6 +177,11 @@ static BOOL check_updates(void) {
     failure=L"Could not start installer preflight";
     if(automatic_update)progress_report(PROGRESS_PREPARE,-1);
     _snwprintf(name,CAP,L"%ls\\apply-client-update.py",work);name[CAP-1]=0;
+    if(!is_wine()) {
+        WCHAR policy[CAP],destination[CAP];path(policy,L"localserver\\logging_policy.py");
+        _snwprintf(destination,CAP,L"%ls\\logging_policy.py",work);destination[CAP-1]=0;
+        if(!CopyFileW(policy,destination,TRUE))goto done;
+    }
     if((!is_wine()&&!CopyFileW(source,name,TRUE))||!update_command(command,work,archive,hash_w,TRUE)||!spawn(command,TRUE,&process))goto done;
     CloseHandle(process.hThread);CloseHandle(process.hProcess);
     /* Wine start /unix can finish before the native Unix process. Use the

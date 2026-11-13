@@ -1,7 +1,24 @@
-param([string]$GameDir = $PSScriptRoot)
+param([string]$GameDir)
 
 $ErrorActionPreference = 'Continue'
+if (-not $GameDir) {
+    $GameDir = $PSScriptRoot
+    if ((Split-Path -Leaf $PSScriptRoot) -eq 'logs') {
+        $GameDir = Split-Path -Parent $PSScriptRoot
+    }
+}
 $GameDir = [IO.Path]::GetFullPath($GameDir)
+$settings = Join-Path $GameDir 'server.ini'
+$enabled = $false
+if (Test-Path $settings) {
+    $section = ''
+    foreach ($line in (Get-Content $settings)) {
+        $text = $line.Trim()
+        if ($text.StartsWith('[')) { $section = $text }
+        if ($section -eq '[diagnostics]' -and $text -match '^logging_enabled\s*=\s*(true|1|yes)\s*$') { $enabled = $true }
+    }
+}
+if (-not $enabled) { throw 'Enable diagnostic logging in the launcher before collecting a startup report.' }
 if (-not (Test-Path (Join-Path $GameDir 'Game.exe'))) {
     throw 'Game.exe was not found. Pass -GameDir with your Riff Racer folder.'
 }

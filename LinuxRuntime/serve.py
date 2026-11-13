@@ -45,7 +45,7 @@ def main():
     listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     listener.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE if os.name == 'nt' else socket.SO_REUSEADDR, 1)
     listener.bind(('127.0.0.1', server.config['port']))
-    app = backend.create_app(log_dir=server.logs)
+    app = backend.create_app(log_dir=server.logs, trace_enabled=server.logging)
     app.add_url_rule('/reriff-local/status', 'reriff_local_status', lambda: {'token': token})
     from waitress import create_server
     http = create_server(app, sockets=[listener], threads=8)

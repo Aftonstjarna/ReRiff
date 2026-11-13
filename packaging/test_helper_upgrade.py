@@ -32,7 +32,7 @@ class HelperUpgradeTests(unittest.TestCase):
             'client_upgrades':{n:{digest(self.old[n]):digest(self.upgraded[n])} for n in self.names}}
         (self.bundle/'manifest.json').write_text(json.dumps(self.manifest))
         for n,data in self.old.items():(self.game/n).write_bytes(data)
-        (self.game/'server.ini').write_bytes(b'keep settings')
+        (self.game/'server.ini').write_bytes(b'[server]\n; keep settings\n[diagnostics]\nlogging_enabled = false\n')
         def run(command,**kwargs):
             source,helper,output=map(Path,command[-3:])
             if '--retarget-helpers' in command: data=self.upgraded[source.name]
@@ -55,7 +55,7 @@ class HelperUpgradeTests(unittest.TestCase):
             self.assertEqual((self.game/n).read_bytes(),data)
             self.assertEqual(state['patched'][n],digest(data))
         self.assertFalse((self.backups/'originals').exists())
-        self.assertEqual((self.game/'server.ini').read_bytes(),b'keep settings')
+        self.assertEqual((self.game/'server.ini').read_bytes(),b'[server]\n; keep settings\n[diagnostics]\nlogging_enabled = false\n')
 
     @unittest.skipIf(installer.os.name == 'nt', 'Linux patcher selection')
     def test_bundled_linux_patcher_works_without_mono(self):

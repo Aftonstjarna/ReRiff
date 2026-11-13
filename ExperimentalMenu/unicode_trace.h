@@ -18,7 +18,9 @@ static void unicode_append(char *out,size_t capacity,size_t *used,const char *fo
     va_list args;va_start(args,format);int n=vsnprintf(out+*used,capacity-*used,format,args);va_end(args);
     if(n>0)*used+=(size_t)n<capacity-*used?(size_t)n:capacity-*used-1;
 }
+static __thread int unicode_logging_check;
 static void unicode_write(const char *line){
+    if(unicode_logging_check)return;unicode_logging_check=1;BOOL logging=rr_logging_ini(config_path);unicode_logging_check=0;if(!logging)return;
     if(unicode_log==INVALID_HANDLE_VALUE||!TryEnterCriticalSection(&unicode_lock))return;
     size_t length=strlen(line);uint64_t hash=14695981039346656037ULL;
     for(size_t i=0;i<length;i++)hash=(hash^(BYTE)line[i])*1099511628211ULL;
@@ -226,7 +228,7 @@ static void unicode_imports(BYTE *base){
     }
 }
 static void install_unicode_trace(BYTE *base){
-    BOOL trace=GetPrivateProfileIntW(L"diagnostics",L"unicode_trace",0,config_path)!=0;
+    BOOL trace=rr_logging_ini(config_path)&&GetPrivateProfileIntW(L"diagnostics",L"unicode_trace",0,config_path)!=0;
     if(!trace&&!cjk_component_enabled())return;
     unicode_base=base;
     if(trace){

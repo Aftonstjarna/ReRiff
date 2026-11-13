@@ -34,7 +34,8 @@ class NativeClientTests(unittest.TestCase):
         self.temp=tempfile.TemporaryDirectory(prefix='native client ü ');self.addCleanup(self.temp.cleanup)
         self.root=Path(self.temp.name);self.game=self.root/'game with spaces';self.game.mkdir();self.bundle=self.root/'bundle';self.bundle.mkdir()
         (self.game/'Game.exe').write_bytes(b'unchanged original executable fixture')
-        (self.game/'server.ini').write_bytes(b'keep these settings')
+        self.config=b'[server]\nexternal_url = https://example.invalid\n[diagnostics]\nlogging_enabled = false\n'
+        (self.game/'server.ini').write_bytes(self.config)
         (self.game/'singleplayer').mkdir();(self.game/'singleplayer/scores.json').write_bytes(b'keep scores')
         self.manifest={'version':'test-native','platform':'linux','channel':'experimental','update_only':True,'native_linux':True,
                        'files':{},'patches':{},'required_existing':{},'vanilla_originals':{}}
@@ -50,21 +51,65 @@ class NativeClientTests(unittest.TestCase):
         self.assertEqual(result.returncode==0,success,result.stdout+result.stderr);return result
     def install(self,*values,success=True):return self.call('install','--bundle',self.bundle,'--game-dir',self.game,*values,success=success)
     def retained(self):
-        self.assertEqual((self.game/'server.ini').read_bytes(),b'keep these settings')
+        self.assertEqual((self.game/'server.ini').read_bytes(),self.config)
         self.assertEqual((self.game/'singleplayer/scores.json').read_bytes(),b'keep scores')
         self.assertEqual((self.game/'Game.exe').read_bytes(),b'unchanged original executable fixture')
     def test_install_repeat_restore_and_executable_host(self):
         original=b'original DLL fixture';ready=b'known patched DLL fixture'
         self.manifest['vanilla_originals']={'A.dll':digest(original)};self.manifest['required_existing']={'A.dll':digest(ready)}
-        (self.game/'A.dll').write_bytes(ready);saved=self.game/'bak/originals/A.dll';saved.parent.mkdir(parents=True);saved.write_bytes(original);stamp=saved.stat().st_mtime_ns
+        (self.game/'A.dll').write_bytes(ready);saved=self.game/'.bak/originals/A.dll';saved.parent.mkdir(parents=True);saved.write_bytes(original);stamp=saved.stat().st_mtime_ns
         self.package();self.install('--no-music-link');self.install('--no-music-link')
         self.assertEqual((self.game/'localserver/install-state.json').stat().st_mode & 0o077,0);self.assertTrue(os.access(self.game/'localserver/ReRiff-ClientHost',os.X_OK));self.assertEqual(saved.stat().st_mtime_ns,stamp)
         self.install('--restore');self.assertEqual((self.game/'A.dll').read_bytes(),original);self.retained()
     def test_unknown_dll_and_conflicting_backup_are_retained(self):
         self.manifest['vanilla_originals']={'A.dll':digest(b'original')};self.manifest['required_existing']={'A.dll':digest(b'ready')}
         (self.game/'A.dll').write_bytes(b'unknown');self.package();self.install(success=False);self.assertFalse((self.game/'a.txt').exists())
-        (self.game/'A.dll').write_bytes(b'ready');backup=self.game/'bak/originals/A.dll';backup.parent.mkdir(parents=True);backup.write_bytes(b'wrong backup')
+        (self.game/'A.dll').write_bytes(b'ready');backup=self.game/'.bak/originals/A.dll';backup.parent.mkdir(parents=True);backup.write_bytes(b'wrong backup')
         self.install(success=False);self.assertEqual(backup.read_bytes(),b'wrong backup');self.retained()
+    def test_logging_defaults_override_and_existing_logs_survive_disable(self):
+        self.manifest['channel']='stable'
+        (self.game/'server.ini').write_text('[server]\nexternal_url = https://example.invalid\n')
+        self.package({'payload/localserver/diagnostics/Collect-ReRiffStartup.ps1':b'collector'})
+        self.install('--no-music-link')
+        self.assertFalse((self.game/'logs').exists())
+        self.call('logging-status','--root',self.game,success=False)
+        self.manifest['channel']='experimental';self.package({})
+        self.install('--no-music-link');self.assertFalse((self.game/'logs').exists())
+        self.install('--logging','--no-music-link');self.call('logging-status','--root',self.game)
+        self.assertEqual((self.game/'logs/Collect-ReRiffStartup.ps1').read_bytes(),b'collector')
+        (self.game/'logs/retained.log').write_bytes(b'old diagnostic')
+        self.install('--no-logging','--no-music-link')
+        self.assertEqual((self.game/'logs/retained.log').read_bytes(),b'old diagnostic')
+        self.call('logging-status','--root',self.game,success=False)
+    def test_stable_retains_only_originals_and_config_snapshots(self):
+        self.manifest['channel']='stable'
+        (self.game/'extra.ini').write_bytes(b'old config')
+        (self.game/'ReRiff.ClientConfig.dll').write_bytes(b'old helper')
+        versions=self.game/'.bak/versions';versions.mkdir(parents=True)
+        (versions/(digest(b'old binary')+'-ReRiff-Launcher.exe')).write_bytes(b'old binary')
+        (versions/(digest(b'old ini')+'-server.ini')).write_bytes(b'old ini')
+        self.package({'payload/extra.ini':b'new config','payload/ReRiff.ClientConfig.dll':b'new helper'})
+        self.install('--no-music-link')
+        self.assertFalse(versions.exists())
+        self.assertEqual((self.game/'.bak/configs'/(digest(b'old config')+'-extra.ini')).read_bytes(),b'old config')
+        self.assertEqual((self.game/'.bak/configs'/(digest(b'old ini')+'-server.ini')).read_bytes(),b'old ini')
+        self.retained()
+    def test_legacy_backups_and_shortcut_migrate_without_losing_restore(self):
+        original=b'original';ready=b'ready'
+        self.manifest['vanilla_originals']={'A.dll':digest(original)};self.manifest['required_existing']={'A.dll':digest(ready)}
+        (self.game/'A.dll').write_bytes(ready)
+        saved=self.game/'bak/originals/A.dll';saved.parent.mkdir(parents=True);saved.write_bytes(original)
+        local=self.game/'localserver';local.mkdir();(local/'install-state.json').write_text(json.dumps({'version':'old','backup_dir':str(saved.parent.parent)}))
+        (self.game/'ReRiff GitHub.desktop').write_bytes(b'old shortcut')
+        # Exercise merging when private-runtime setup has already made .bak.
+        (self.game/'.bak').mkdir();(self.game/'.bak/retained').write_bytes(b'keep')
+        self.package();self.install('--dry-run','--no-music-link')
+        self.assertTrue(saved.exists());self.assertTrue((self.game/'ReRiff GitHub.desktop').exists())
+        self.install('--no-music-link')
+        self.assertFalse((self.game/'bak').exists());self.assertFalse((self.game/'ReRiff GitHub.desktop').exists())
+        self.assertEqual((self.game/'.bak/retained').read_bytes(),b'keep')
+        self.assertEqual((self.game/'.bak/originals/A.dll').read_bytes(),original)
+        self.install('--restore');self.assertEqual((self.game/'A.dll').read_bytes(),original);self.retained()
     def test_payload_hash_and_unsafe_paths_fail_before_writes(self):
         self.package();(self.bundle/'payload/a.txt').write_bytes(b'tampered');self.install(success=False);self.assertFalse((self.game/'a.txt').exists())
         self.manifest['files']={'../escape':'0'*64};self.package({});self.install(success=False);self.retained()
@@ -79,7 +124,7 @@ class NativeClientTests(unittest.TestCase):
         local=self.game/'localserver';local.mkdir();(local/'install-state.json').write_text('{"version":"old"}')
         (local/'ReRiff-Runtime-x86_64.AppImage').write_bytes(b'old owned runtime');self.package();self.install('--no-music-link')
         self.assertFalse((local/'ReRiff-Runtime-x86_64.AppImage').exists())
-        self.assertEqual(len(list((self.game/'bak/versions').glob('*-ReRiff-Runtime-x86_64.AppImage'))),1);self.retained()
+        self.assertEqual(len(list((self.game/'.bak/versions').glob('*-ReRiff-Runtime-x86_64.AppImage'))),1);self.retained()
     def test_music_link_and_existing_music_protection(self):
         prefix=self.game/'prefix/pfx/drive_c/users/steamuser';prefix.mkdir(parents=True)
         music=self.root/'music';music.mkdir();(music/'song.flac').write_bytes(b'keep music')
@@ -103,7 +148,7 @@ class NativeClientTests(unittest.TestCase):
             spec=importlib.util.spec_from_file_location('native_upgrade_compat',ROOT/'packaging/installer.py')
             module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
             with patch.dict(os.environ,self.env,clear=True):module.install(self.bundle,self.game,None,'linux',dry_run=True)
-            self.assertFalse((self.game/'a.txt').exists());self.assertFalse((self.game/'bak').exists())
+            self.assertFalse((self.game/'a.txt').exists());self.assertFalse((self.game/'.bak').exists())
             (self.bundle/'payload/a.txt').write_bytes(b'tampered')
             with patch.dict(os.environ,self.env,clear=True),self.assertRaises(ValueError):module.install(self.bundle,self.game,None,'linux',dry_run=True)
         finally:sys.path.pop(0)
@@ -134,6 +179,7 @@ class NativeClientTests(unittest.TestCase):
         self.assertTrue(os.access(work/'ReRiff-ClientHost',os.X_OK));self.assertFalse((self.game/'a.txt').exists())
         self.call('update','--work',work);self.assertTrue((work/'success').exists());self.assertEqual((self.game/'a.txt').read_bytes(),b'updated');self.retained()
     def test_update_checksum_metadata_and_archive_paths(self):
+        self.config=self.config.replace(b'false',b'true');(self.game/'server.ini').write_bytes(self.config)
         archive,checksum=self.archive();work=self.root/'bad-checksum';work.mkdir();self.prepare(archive,'0'*64,work,False);self.assertTrue((work/'failure').exists())
         work=self.root/'bad-metadata';work.mkdir();(work/'latest-release.json').write_text('{"version":"wrong","artifacts":["client-linux.run"]}');self.prepare(archive,checksum,work,False)
         member=tarfile.TarInfo('../escape');archive,checksum=self.archive(member);work=self.root/'bad-path';work.mkdir();self.prepare(archive,checksum,work,False)
@@ -163,7 +209,7 @@ class NativeClientTests(unittest.TestCase):
         self.assertFalse((self.game/'localserver/ReRiff-Runtime-x86_64.AppImage').exists())
         self.assertFalse(list((self.game/'localserver').glob('*.py')))
         self.assertFalse((self.game/'localserver/ReRiff-Server-x86_64.AppImage').exists())
-        self.assertEqual((self.game/'server.ini').read_bytes(),b'keep these settings')
+        self.assertEqual((self.game/'server.ini').read_bytes(),self.config)
         self.call('install','--bundle',args.bundle.resolve(),'--game-dir',self.game,'--restore')
         for name in ('ParseOctane.dll','Parse.NetFx45.dll'):self.assertEqual((self.game/name).read_bytes(),(args.original_dir/name).read_bytes())
 

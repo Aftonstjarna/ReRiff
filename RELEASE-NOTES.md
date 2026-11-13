@@ -1,3 +1,37 @@
+# ReRiff 1.2.4-beta.5 — Diagnostics and tidier installs
+
+## In-game summary
+
+- Toggle diagnostic logging in setup or the launcher.
+- Font support now uses one extra archive pair.
+- Keep original files and just two backups of each config.
+
+## Full release notes
+
+- Add a diagnostic-logging checkbox to Windows/Linux setup and a native
+  Diagnostics tab in the launcher. Logging defaults on for beta/development
+  builds and off for stable builds; an explicit choice is preserved.
+- Disabling logging stops client, launcher and updater diagnostic output.
+  Restart a running local server to apply its logging change. A fresh disabled install creates no `logs` folder;
+  existing logs and their folder are retained.
+- Install the startup-report collector under `logs` when logging is enabled;
+  keep its offline template under `localserver/diagnostics`.
+- Consolidate base and high-resolution CJK textures into one additional native
+  VFS pair. Glyph textures, metrics and paths remain unchanged. Existing owned
+  font volumes migrate with rollback protection; unrelated mods and original
+  game archives are retained. The font download is about 105 MiB.
+- Use `.bak` for backups and migrate the former `bak` folder. Preserve verified
+  original game files and the two most recent snapshots per configuration file.
+  Keep binary/font version history only for experimental/development builds.
+  Stable updates remove verified obsolete history after successfully applying.
+- Remove the redundant example INI and game-root GitHub shortcuts from new
+  installs, retiring existing copies during upgrades. Setup retains its GitHub
+  link.
+- Verify stable/beta logging defaults, native checkbox behavior, no disabled
+  log-folder creation, retained existing logs, config rotation, original-file
+  restoration and single-volume font migration on Windows and Linux helpers.
+  The local in-game test confirmed filenames, leaderboards and pause text.
+
 # ReRiff 1.2.4-beta.4 — Optional CJK fonts and Languages controls
 
 ## In-game summary

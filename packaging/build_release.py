@@ -49,7 +49,7 @@ def build(args):
     stage.mkdir(parents=True)
     common = stage/'common'
     common.mkdir()
-    for name in ('installer.py', 'shared_patch.py'):
+    for name in ('installer.py', 'shared_patch.py', 'vanilla-reference.json', 'logging_policy.py'):
         copy(ROOT/'packaging'/name, common/name)
     copy(ROOT/'LICENSE', common/'LICENSE')
     (common/'RELEASE-NOTES.md').write_text(notes, encoding='utf-8')
@@ -77,10 +77,10 @@ def build(args):
             raise ValueError('Rebuild the CJK component for this VERSION before packaging.')
     copy(font_pack,common/'components/ReRiff-CJK.zip')
     payload = common/'payload'
-    copy(ROOT/'scripts/Collect-ReRiffStartup.ps1', payload/'Collect-ReRiffStartup.ps1')
+    copy(ROOT/'scripts/Collect-ReRiffStartup.ps1', payload/'localserver/diagnostics/Collect-ReRiffStartup.ps1')
+    copy(ROOT/'packaging/logging_policy.py', payload/'localserver/logging_policy.py')
     # Discoverable beside the Windows launcher; retain the old bridge path below.
     copy(ROOT/'scripts/steam-launcher.sh', payload/'ReRiff-Launcher.sh')
-    copy(ROOT/'packaging/server.ini.example', payload/'server.ini.example')
     for name in ('ReRiff.ClientConfig.dll','ReRiff.Notify.dll','ReRiff-Launcher.exe','ReRiff-Updater.exe'):
         copy(ROOT/'build'/name, payload/name)
     copy(ROOT/'build/ReRiff.NewsHeaders.dll', payload/'ReRiff.NewsHeaders.dll')
@@ -106,7 +106,7 @@ def build(args):
             for name in ('LICENSE.TXT', 'THIRD-PARTY-NOTICES.TXT'):
                 copy(ROOT/'build/linux-patcher'/name, folder/'payload/localserver/licenses'/('dotnet-'+name))
             copy(ROOT/'Patcher/dnlib-LICENSE.txt', folder/'payload/localserver/licenses/dnlib-LICENSE.txt')
-            for name in ('apply-client-update.py', 'server-control.py', 'podman-server.py'):
+            for name in ('apply-client-update.py', 'server-control.py', 'podman-server.py', 'logging_policy.py'):
                 (folder/'payload/localserver'/name).unlink(missing_ok=True)
         if platform == 'windows':
             copy(ROOT/'build/ReRiff-Setup.exe',folder/'ReRiff-Setup.exe')

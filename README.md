@@ -41,7 +41,7 @@ Install into an unmodified game or an existing ReRiff installation. Close the
 game and launcher first. Setup checks the game DLLs, applies the required patches
 and preserves settings, scores, ghosts and server data.
 
-Keep the game's `bak` folder: it holds verified originals for restoration.
+Keep the game's `.bak` folder: it holds verified originals for restoration.
 Setup can copy verified originals from a previously recorded backup folder.
 Unsupported DLLs or conflicting backup hashes stop installation for review.
 
@@ -103,21 +103,20 @@ The startup report collector includes this log automatically.
 Check **Install and enable CJK font support** during setup, or open the launcher's
 **Languages** tab and check **Install and enable CJK fonts**. The component adds
 missing Chinese, Japanese and Korean characters throughout the game; it does not
-translate menus. The current font pack is about 107 MiB.
+translate menus. The current font pack is about 105 MiB.
 
 Setup includes the font pack. The launcher downloads and verifies it if needed;
 re-enabling an installed pack works offline. Restart the game after changing the
 checkbox. Unchecking disables support and keeps the font files for later use.
 
 Fonts and the Noto Open Font License stay in the game folder. Installation uses
-additional owned native archives and retains the original game archives and other
+one additional native VFS pair (`.dat` and `.zip`) and retains the original game archives and other
 mods. Updates refuse changed owned files. The tested Japanese glyph forms are
 used across CJK text; regional typography selection is not yet available.
 
 ### Automatic client updates
 
-Development installers add a GitHub shortcut beside the game and a repository
-link in setup.
+Setup includes a link to the GitHub repository.
 
 Click **Update from GitHub** while the game is closed. The launcher downloads
 the latest stable release for your platform, verifies its SHA256 and package
@@ -157,11 +156,6 @@ To test an unattended update, close the game and run
 selected published package, then starts the game. It can replace a local
 development build with the channel's published version. The installed launcher
 must support this flag.
-
-New INI files include `https://riffapi.hobune.stream/` as a commented external
-server example. Updates also install `server.ini.example` alongside the game.
-Copy the address into `external_url` to select it; the example does not change
-your active server.
 
 **Save and restart** saves your changes and
 restarts the game immediately so the new server settings take effect. It waits
@@ -269,7 +263,10 @@ in place; stop the old container first. The optional server application is
 `localserver/ReRiff-ClientHost`. Downloads are checked against the release's
 SHA-256 manifest before installation. The Linux client installs no Python scripts
 or runtime. When upgrading a previous development install, its client Python
-runtime and obsolete helpers are archived in `bak/versions/` for recovery.
+runtime and obsolete helpers are archived in `.bak/versions/` only for
+development builds. Stable installs retain original game files in `.bak/originals/`
+and the two most recent snapshots per configuration file in `.bak/configs/`; replaced ReRiff binaries
+and font packs are not retained after a successful update.
 
 On Windows, **Install local server** downloads the optional
 `ReRiff-Server-windows.zip` package into `localserver/windows-server/`.
@@ -380,9 +377,16 @@ ReRiff-Setup.exe --restore --game-dir "C:\path\to\Riff Racer"
 `--dry-run` validates a manual
 installation without writing files; `--backup-dir` selects an explicit backup
 location. By default, verified originals from the previously recorded backup
-directory are copied into the game's `bak` folder; the previous copies are kept.
+directory are copied into the game's `.bak` folder; the previous copies are kept.
 
 ## Troubleshooting
+
+Enable **Diagnostic logging** in setup or the launcher's **Diagnostics** tab
+before reproducing an issue. Logging defaults on for beta/development builds
+and off for stable builds; an explicit choice is retained across updates.
+The game creates `logs` only when logging is enabled. Disabling it keeps
+existing logs and the folder unchanged. Restart a running local server after
+changing its logging setting. Review logs before sharing them.
 
 **High-rate FLAC produces an overlong track:** a 96 kHz / 24-bit source can
 produce a track much longer than its audio. This also reproduces with the
@@ -396,10 +400,10 @@ For a white-screen crash on Windows, install the complete package with
 missing. If the crash persists, run the included collector from the game folder:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File ".\Collect-ReRiffStartup.ps1"
+powershell -NoProfile -ExecutionPolicy Bypass -File ".\logs\Collect-ReRiffStartup.ps1"
 ```
 
-It prints the path to a report in your temporary folder. Review it before
+It prints the path to a report in the game's `logs` folder. Review it before
 sharing: it includes local paths and recent client logs. It does not change
 game files or Windows settings. The unsigned-helper loader failure (`0x80131044`) is fixed in current builds.
 If a different failure persists, send the generated startup report.

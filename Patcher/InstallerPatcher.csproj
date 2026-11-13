@@ -17,4 +17,5 @@
     <PackageReference Include="dnlib" Version="4.4.0" />
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net45" Version="1.0.3" PrivateAssets="all" />
   </ItemGroup>
+  <ItemGroup><Compile Include="../Shared/Logging.cs" Link="Logging.cs" /></ItemGroup>
 </Project>

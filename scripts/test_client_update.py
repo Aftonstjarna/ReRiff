@@ -29,7 +29,8 @@ class ClientUpdateTest(unittest.TestCase):
         (self.game/'Game.exe').write_bytes(b'game')
         (self.game/'ReRiff.ClientConfig.dll').write_bytes(b'existing helper')
         (self.game/'ReRiff-Launcher.exe').write_bytes(b'old launcher')
-        (self.game/'server.ini').write_bytes(b'external settings\n')
+        self.config=b'[server]\n; external settings\n[diagnostics]\nlogging_enabled = false\n'
+        (self.game/'server.ini').write_bytes(self.config)
         (self.game/'localserver/save.json').write_bytes(b'saved scores')
         (self.game/'localserver/install-state.json').write_text(json.dumps({'version': 'old', 'backup_dir': str(self.root/'backups')}))
         self.work = self.root/'work'
@@ -46,6 +47,7 @@ class ClientUpdateTest(unittest.TestCase):
         self.assertEqual((self.work/'linux-runtime.sh').read_bytes(),b'fixture bridge')
 
     def test_preflight_failure_log_is_in_game_logs(self):
+        (self.game/'server.ini').write_text('[diagnostics]\nlogging_enabled=true\n')
         args=['apply-client-update.py','--work',str(self.work),'--prepare','--archive',str(self.root/'missing.zip'),'--sha256','0'*64,'--game-dir',str(self.game),'--platform','windows']
         with mock.patch.object(sys,'argv',args):
             self.assertEqual(update.main(),1)
@@ -55,7 +57,7 @@ class ClientUpdateTest(unittest.TestCase):
         self.assertIn('FileNotFoundError',(self.game/'logs/update.log').read_text())
 
     def package(self, platform, bad_member=None, launcher=b'new launcher', version='9.0.0-2'):
-        files = {name: (ROOT/'packaging'/name).read_bytes() for name in ['installer.py', 'shared_patch.py']}
+        files = {name: (ROOT/'packaging'/name).read_bytes() for name in ['installer.py', 'shared_patch.py', 'logging_policy.py', 'vanilla-reference.json']}
         files['payload/ReRiff-Launcher.exe'] = launcher
         files['payload/localserver/client-version.txt'] = (version+'\n').encode()
         if platform == 'windows':
@@ -86,10 +88,10 @@ class ClientUpdateTest(unittest.TestCase):
         self.assertEqual((self.game/'ReRiff-Launcher.exe').read_bytes(), b'old launcher')
         update.apply(self.work)
         self.assertEqual((self.game/'ReRiff-Launcher.exe').read_bytes(), b'new launcher')
-        self.assertEqual((self.game/'server.ini').read_bytes(), b'external settings\n')
+        self.assertEqual((self.game/'server.ini').read_bytes(), self.config)
         self.assertEqual((self.game/'localserver/save.json').read_bytes(), b'saved scores')
         self.assertTrue((self.work/'success').is_file())
-        self.assertTrue(list((self.game/'bak/versions').iterdir()))
+        self.assertTrue(list((self.game/'.bak/versions').iterdir()))
 
     def test_windows_package_preflight_and_apply(self):
         archive, digest = self.package('windows')
@@ -132,7 +134,7 @@ class ClientUpdateTest(unittest.TestCase):
                 self.assertTrue((work/'prepared.json').is_file())
                 update.apply(work)
                 self.assertEqual((self.game/'localserver/client-version.txt').read_text(), 'preview-next+candidate\n')
-                self.assertEqual((self.game/'server.ini').read_bytes(), b'external settings\n')
+                self.assertEqual((self.game/'server.ini').read_bytes(), self.config)
 
     def test_metadata_mismatch_stops_before_loading_installer(self):
         archive, digest = self.package('linux')
@@ -166,7 +168,7 @@ class ClientUpdateTest(unittest.TestCase):
         with mock.patch.object(sys, 'argv', [str(self.work/'apply-client-update.py'), '--work', str(self.work)]):
             update.apply(self.work)
         self.assertIn(b'version=9.0.0-2', (self.game/'localserver/update-notification.ini').read_bytes())
-        self.assertEqual((self.game/'server.ini').read_bytes(), b'external settings\n')
+        self.assertEqual((self.game/'server.ini').read_bytes(), self.config)
 
     def test_failed_unattended_install_rolls_back_notice(self):
         archive, digest = self.package('linux')

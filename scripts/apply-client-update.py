@@ -10,6 +10,12 @@ import sys
 import tarfile
 import tempfile
 import zipfile
+import os
+try:
+    from logging_policy import logging_enabled
+except ModuleNotFoundError:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'packaging'))
+    from logging_policy import logging_enabled
 
 
 def safe_name(name):
@@ -161,7 +167,8 @@ def main():
     if game is None:
         try: game=Path(json.loads((args.work/'prepared.json').read_text())['game'])
         except (OSError,ValueError,KeyError): pass
-    log_path=game/'logs/update.log' if game else args.work/'update.log'
+    enabled=game is not None and logging_enabled(game)
+    log_path=game/'logs/update.log' if enabled else Path(os.devnull)
     try:
         log_path.parent.mkdir(parents=True,exist_ok=True)
     except OSError:

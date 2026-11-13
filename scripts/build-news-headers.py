@@ -19,7 +19,7 @@ subprocess.run([args.dotnet, str(csc), '/nologo', '/target:library', '/nostdlib+
                 '/keyfile:'+str(root/'Managed/ReRiff.snk'),
                 '/out:'+str(helper), '/reference:'+str(args.framework_dir/'mscorlib.dll'),
                 '/reference:'+str(args.framework_dir/'System.dll'), '/reference:'+str(args.framework_dir/'System.Core.dll'),
-                '/reference:'+str(args.framework_dir/'System.Web.Extensions.dll'), str(root/'NewsHeaders/Headers.cs'), str(root/'NewsHeaders/ClientNews.cs'), str(root/'NewsHeaders/MetadataTrace.cs'), str(root/'NewsHeaders/MetadataText.cs')], check=True)
+                '/reference:'+str(args.framework_dir/'System.Web.Extensions.dll'), str(root/'NewsHeaders/Headers.cs'), str(root/'NewsHeaders/ClientNews.cs'), str(root/'NewsHeaders/MetadataTrace.cs'), str(root/'NewsHeaders/MetadataText.cs'), str(root/'Shared/Logging.cs')], check=True)
 subprocess.run([args.dotnet, 'build', str(root/'Patcher/Patcher.csproj'), '-c', 'Release',
                 '-o', str(root/'build/patcher')], check=True)
 subprocess.run([args.dotnet, str(root/'build/patcher/Patcher.dll'), '--news-header', str(args.input),

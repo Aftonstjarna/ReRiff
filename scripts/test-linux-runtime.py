@@ -24,6 +24,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix='reriff portable ü ') as temporary:
         game = Path(temporary)/'game with spaces'
         root = game/'localserver';control = root/'native';control.mkdir(parents=True)
+        (game/'server.ini').write_text('[diagnostics]\nlogging_enabled=true\n')
         with socket.socket() as sock:
             sock.bind(('127.0.0.1', 0));port = sock.getsockname()[1]
         (control/'config.json').write_text(json.dumps({'schema': 1, 'port': port}))

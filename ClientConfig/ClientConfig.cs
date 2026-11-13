@@ -49,11 +49,11 @@ namespace ReRiff {
                 || error is InvalidProgramException || error is TypeLoadException
                 || error is MissingMethodException || error is System.Security.SecurityException
                 || error.GetType().FullName.StartsWith("Parse.", StringComparison.Ordinal))) return;
-            if (System.Threading.Interlocked.Increment(ref networkEvents) > 32) return;
             recordingException = true;
             try {
                 string folder = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-                File.AppendAllText(LogPath(folder, "ReRiff-network.log"),
+                if(!Logging.Enabled(folder)||System.Threading.Interlocked.Increment(ref networkEvents)>32)return;
+                Logging.Append(folder,"ReRiff-network.log",
                     DateTime.UtcNow.ToString("o") + Environment.NewLine + error.ToString() + Environment.NewLine);
             } catch (Exception) {
                 // Diagnostics must never change exception propagation or fail startup.
@@ -199,18 +199,18 @@ namespace ReRiff {
                     if(line.StartsWith(identity+"\t",StringComparison.Ordinal)&&line!=entry)alias=true;
                 }
                 if(!known)File.AppendAllText(file,entry+Environment.NewLine);
-                File.AppendAllText(LogPath(folder,"ReRiff-client.log"),DateTime.UtcNow.ToString("o")+
+                Logging.Append(folder,"ReRiff-client.log",DateTime.UtcNow.ToString("o")+
                     " server_id="+identity+" endpoint="+endpoint+" known_alias="+alias.ToString().ToLowerInvariant()+Environment.NewLine);
             } catch(IOException) { } catch(UnauthorizedAccessException) { }
         }
 
         internal static string LogPath(string folder,string name) {
-            string logs=Path.Combine(folder,"logs");Directory.CreateDirectory(logs);
+            string logs=Path.Combine(folder,"logs");if(Logging.Enabled(folder))Directory.CreateDirectory(logs);
             return Path.Combine(logs,name);
         }
         private static void Log(string folder, string endpoint, string reason) {
             try {
-                File.AppendAllText(LogPath(folder, "ReRiff-client.log"),
+                Logging.Append(folder,"ReRiff-client.log",
                     DateTime.UtcNow.ToString("o") + " endpoint=" + endpoint + " reason=" + reason + Environment.NewLine);
             } catch (IOException) { }
               catch (UnauthorizedAccessException) { }

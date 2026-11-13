@@ -44,7 +44,7 @@ internal static class LinuxClientHost {
     sealed class Options {
         public readonly Dictionary<string,string> Values=new();public readonly HashSet<string> Flags=new();
         public Options(string[] args) {
-            var switches=new HashSet<string>{"--dry-run","--restore","--cjk","--no-cjk","--no-music-link","--prepare","--cli","--help"};
+            var switches=new HashSet<string>{"--dry-run","--restore","--cjk","--no-cjk","--logging","--no-logging","--no-music-link","--prepare","--cli","--help"};
             var values=new HashSet<string>{"--bundle","--game-dir","--backup-dir","--music-dir","--root","--result","--asset","--sha256","--work","--archive","--channel","--platform"};
             for(int i=0;i<args.Length;i++) {string key=args[i];if(switches.Contains(key)){if(!Flags.Add(key))throw new ArgumentException("Duplicate option: "+key);}else if(values.Contains(key)&&i+1<args.Length){if(!Values.TryAdd(key,args[++i]))throw new ArgumentException("Duplicate option: "+key);}else throw new ArgumentException("Unknown or incomplete option: "+key);}
         }
@@ -60,6 +60,7 @@ internal static class LinuxClientHost {
             if(args.Length==0)throw new ArgumentException("Use install, update, server-control, stop-servers, print-game-dir or print-music-dir.");
             string command=args[0];int offset=command=="server-control"?2:1;var options=new Options(args.Skip(offset).ToArray());
             switch(command) {
+                case "logging-status":return ReRiff.Logging.Enabled(options.Need("--root"))?0:1;
                 case "print-game-dir":Console.WriteLine(AutoGame());break;
                 case "print-music-dir":Console.WriteLine(MusicDir());break;
                 case "install":
@@ -125,7 +126,9 @@ internal static class LinuxClientHost {
         if(Text(manifest,"platform")!="linux")throw new IOException("Expected a Linux package.");
         foreach(var pair in Map(manifest,"files"))if(HashFile(Under(bundle,pair.Key))!=pair.Value!.GetValue<string>())throw new IOException("Package integrity check failed: "+pair.Key);
         string statePath=Under(game,"localserver/install-state.json");JsonObject state=File.Exists(statePath)?ReadJson(statePath):new();bool previousInstall=state.ContainsKey("version");
-        string backups=Path.GetFullPath(options.Get("--backup-dir",game+"/bak")),previous=Text(state,"backup_dir");bool restore=options.Has("--restore");
+        string backups=Path.GetFullPath(options.Get("--backup-dir",game+"/.bak")),previous=Text(state,"backup_dir");bool restore=options.Has("--restore"),development=Text(manifest,"channel")=="experimental";
+        if(previous==""&&Directory.Exists(game+"/bak"))previous=game+"/bak";
+        if(!Directory.Exists(previous)&&(previous==game+"/bak"||previous.StartsWith(game+"/bak/",StringComparison.Ordinal)))previous=game+"/.bak"+previous.Substring((game+"/bak").Length);
         var originals=new Dictionary<string,byte[]>();var plan=new Dictionary<string,byte[]>();
         if(Map(manifest,"patches").Count!=0)throw new IOException("Legacy binary-delta packages require their original installer.");
         JsonObject required=Map(manifest,"required_existing"),vanilla=Map(manifest,"vanilla_originals"),legacy=Map(manifest,"compatible_existing"),upgrades=Map(manifest,"client_upgrades");
@@ -163,7 +166,6 @@ internal static class LinuxClientHost {
                 // An older stable package can be installed with this helper too.
                 // Keep a native recovery entry point even if that payload predates it.
                 if(!plan.ContainsKey("localserver/ReRiff-ClientHost"))plan["localserver/ReRiff-ClientHost"]=File.ReadAllBytes(Self);
-                plan["ReRiff GitHub.desktop"]=Encoding.UTF8.GetBytes("[Desktop Entry]\nType=Link\nName=ReRiff on GitHub\nURL=https://github.com/Aftonstjarna/ReRiff\nIcon=web-browser\n");
                 if(!File.Exists(game+"/server.ini"))plan["server.ini"]=Encoding.UTF8.GetBytes("[server]\nexternal_url =\nfallback_url =\ntimeout_seconds = 5\nnetworking_enabled = true\nshow_server_popup = true\n\n[launcher]\nskip_launcher = false\nauto_update_on_skip = false\n");
                 bool cjk=options.Has("--cjk")||(!options.Has("--no-cjk")&&LanguageComponent.Enabled(game));
                 if(cjk||options.Has("--no-cjk")) {
@@ -176,12 +178,18 @@ internal static class LinuxClientHost {
                 string musicPath=Path.GetFullPath(options.Get("--music-dir",Text(state,"music_dir",MusicDir())));
                 state=new JsonObject{["version"]=Text(manifest,"version"),["backup_dir"]=backups,["patched"]=patched,["music_link"]=music,["music_dir"]=musicPath};
                 plan["localserver/install-state.json"]=Encoding.UTF8.GetBytes(state.ToJsonString()+"\n");
+                bool logging=options.Has("--logging")||(!options.Has("--no-logging")&&(ReRiff.Logging.Setting(game)??development));
+                plan["server.ini"]=ReRiff.Logging.Config(plan.TryGetValue("server.ini",out var currentIni)?currentIni:File.Exists(game+"/server.ini")?File.ReadAllBytes(game+"/server.ini"):Array.Empty<byte>(),logging);
+                if(logging&&plan.TryGetValue("localserver/diagnostics/Collect-ReRiffStartup.ps1",out var collectorBytes))plan["logs/Collect-ReRiffStartup.ps1"]=collectorBytes;
+                if(!logging)foreach(string name in plan.Keys.Where(n=>n.StartsWith("logs/",StringComparison.Ordinal)).ToArray())plan.Remove(name);
                 if(options.Get("--work")!=""&&File.Exists(Path.Combine(options.Get("--work"),"resume-command.txt")))plan["localserver/update-notification.ini"]=Encoding.UTF8.GetBytes("[update]\nversion="+Text(manifest,"version")+"\n");
             }
+            if(restore&&state.Count!=0) { state["backup_dir"]=backups;plan["localserver/install-state.json"]=Encoding.UTF8.GetBytes(state.ToJsonString()+"\n"); }
             foreach(var pair in plan)Under(game,pair.Key);
             Console.WriteLine("Validated ReRiff "+Text(manifest,"version")+": "+plan.Count+" files; backups: "+backups);
             if(options.Has("--dry-run"))return;
             foreach(var pair in originals){string path=Under(backups,"originals/"+pair.Key);if(File.Exists(path)&&HashFile(path)!=Hash(pair.Value))throw new IOException("Original backup conflict: "+pair.Key);}
+            if(backups==Path.GetFullPath(game+"/.bak"))LanguageComponent.MigrateBackups(game);
             foreach(var pair in originals) {
                 string path=Under(backups,"originals/"+pair.Key);if(File.Exists(path))continue;Directory.CreateDirectory(Path.GetDirectoryName(path)!);
                 try{using var file=new FileStream(path,FileMode.CreateNew,FileAccess.Write,FileShare.None);file.Write(pair.Value);}catch(IOException){if(!File.Exists(path)||HashFile(path)!=Hash(pair.Value))throw;}
@@ -190,17 +198,40 @@ internal static class LinuxClientHost {
             try {
                 foreach(var pair in plan) {
                     string path=Under(game,pair.Key);byte[]? before=File.Exists(path)?File.ReadAllBytes(path):null;
-                    if(before!=null&&before.AsSpan().SequenceEqual(pair.Value))continue;
+                    if(before!=null&&pair.Value!=null&&before.AsSpan().SequenceEqual(pair.Value))continue;
                     var mode=before!=null?File.GetUnixFileMode(path):UnixFileMode.UserRead|UnixFileMode.UserWrite;
-                    if(before!=null&&!originals.ContainsKey(pair.Key)){string backup=Under(backups,"versions/"+Hash(before)+"-"+Path.GetFileName(path));if(!File.Exists(backup))Atomic(backup,before);}
+                    if(before!=null&&!originals.ContainsKey(pair.Key)){LanguageComponent.BackupPrevious(backups,pair.Key,before,development);}
+                    if(pair.Value==null) { changed.Add((path,before,mode));File.Delete(path);continue; }
                     changed.Add((path,before,mode));Atomic(path,pair.Value,path.EndsWith(".sh",StringComparison.Ordinal)||path.EndsWith(".AppImage",StringComparison.Ordinal)||pair.Key=="localserver/ReRiff-ClientHost");
+                }
+                string collector="Collect-ReRiffStartup.ps1",oldCollector=Under(game,collector);
+                if((plan.ContainsKey("logs/"+collector)||plan.ContainsKey("localserver/diagnostics/"+collector))&&File.Exists(oldCollector)&&new FileInfo(oldCollector).LinkTarget==null) {
+                    byte[] before=File.ReadAllBytes(oldCollector);
+                    if(Hash(before)=="637d7452d1ba0865e0a0575618b319fde34b7b54b9b5414c5bfbad37983077ef") {
+                        LanguageComponent.BackupPrevious(backups,collector,before,development);
+                        changed.Add((oldCollector,before,File.GetUnixFileMode(oldCollector)));File.Delete(oldCollector);
+                    }
+                }
+                string example=Under(game,"server.ini.example");
+                if(!restore&&!plan.ContainsKey("server.ini.example")&&File.Exists(example)&&new FileInfo(example).LinkTarget==null) {
+                    byte[] before=File.ReadAllBytes(example);LanguageComponent.BackupPrevious(backups,"server.ini.example",before,development);
+                    changed.Add((example,before,File.GetUnixFileMode(example)));File.Delete(example);
+                }
+                foreach(string name in new[]{"ReRiff GitHub.desktop","ReRiff GitHub.url"}) {
+                    string shortcut=Under(game,name);
+                    if(!restore&&!plan.ContainsKey(name)&&File.Exists(shortcut)&&new FileInfo(shortcut).LinkTarget==null) {
+                        byte[] before=File.ReadAllBytes(shortcut);LanguageComponent.BackupPrevious(backups,name,before,development);
+                        changed.Add((shortcut,before,File.GetUnixFileMode(shortcut)));File.Delete(shortcut);
+                    }
                 }
                 if(!restore&&previousInstall)foreach(string obsolete in new[]{"ReRiff-Runtime-x86_64.AppImage","apply-client-update.py","server-control.py","podman-server.py"}) {
                     string path=Under(game,"localserver/"+obsolete);if(!File.Exists(path)||plan.ContainsKey("localserver/"+obsolete))continue;
-                    byte[] before=File.ReadAllBytes(path);string backup=Under(backups,"versions/"+Hash(before)+"-"+obsolete);if(!File.Exists(backup))Atomic(backup,before);
+                    byte[] before=File.ReadAllBytes(path);LanguageComponent.BackupPrevious(backups,obsolete,before,development);
                     changed.Add((path,before,File.GetUnixFileMode(path)));File.Delete(path);
                 }
             } catch {foreach(var entry in changed.AsEnumerable().Reverse()){if(entry.Before==null){if(File.Exists(entry.Path))File.Delete(entry.Path);}else{Atomic(entry.Path,entry.Before);File.SetUnixFileMode(entry.Path,entry.Mode);}}throw;}
+            LanguageComponent.MigrateConfigHistory(backups);
+            if(!development)LanguageComponent.PruneReleaseHistory(backups);
             if(!restore&&Flag(state,"music_link"))try{LinkMusic(game,Text(state,"music_dir"));}catch(Exception e) when(e is IOException or UnauthorizedAccessException){Console.WriteLine("Music link unchanged: "+e.Message);}
             Console.WriteLine(restore?"Original DLLs restored.":"ReRiff "+Text(manifest,"version")+" installed.");Console.WriteLine("Settings and saved data preserved.");
         } finally {Directory.Delete(scratch,true);}
@@ -220,9 +251,10 @@ internal static class LinuxClientHost {
     static void Update(Options options) {
         string work=options.Need("--work"),game=options.Get("--game-dir");
         if(game==""&&File.Exists(work+"/prepared.json"))game=Text(ReadJson(work+"/prepared.json"),"game");
-        string log=game!=""?Path.Combine(game,"logs/update.log"):work+"/update.log";Directory.CreateDirectory(Path.GetDirectoryName(log)!);
+        bool logging=game!=""&&ReRiff.Logging.Enabled(game);
+        string log=game!=""?Path.Combine(game,"logs/update.log"):work+"/update.log";if(logging)Directory.CreateDirectory(Path.GetDirectoryName(log)!);
         var stdout=Console.Out;var stderr=Console.Error;
-        using var writer=new StreamWriter(log,append:true){AutoFlush=true};Console.SetOut(writer);Console.SetError(writer);
+        using var writer=logging?new StreamWriter(log,append:true){AutoFlush=true}:new StreamWriter(Stream.Null){AutoFlush=true};Console.SetOut(writer);Console.SetError(writer);
         try {
             if(options.Has("--prepare")) {
                 string archive=options.Need("--archive"),expected=options.Get("--sha256");if(HashFile(archive)!=expected.ToLowerInvariant())throw new IOException("Release checksum mismatch.");

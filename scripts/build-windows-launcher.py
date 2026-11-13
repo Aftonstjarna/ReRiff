@@ -30,5 +30,5 @@ subprocess.run([args.zig,'cc','-target','x86-windows-gnu','-shared','-O2','-Wall
                 '-DRERIFF_VERSION="'+version+'"',str(root/'ExperimentalMenu/engine_menu.c'),'-o',str(root/'build/ReRiff.Notify.dll'),
                 '-luser32','-lgdi32','-ladvapi32','-static'],check=True,env=env)
 subprocess.run([args.zig,'cc','-target','x86-windows-gnu','-municode','-Wl,--subsystem,windows',
-                '-O2','-Wall','-Wextra','-Werror',str(root/'NativeLauncher/installer.c'),str(resource),
+                '-O2','-Wall','-Wextra','-Werror','-DRERIFF_VERSION="'+version+'"',str(root/'NativeLauncher/installer.c'),str(resource),
                 '-o',str(root/'build/ReRiff-Setup.exe'),'-lcomdlg32','-lcomctl32','-lshell32','-luser32','-lwininet','-ladvapi32','-static'],check=True,env=env)

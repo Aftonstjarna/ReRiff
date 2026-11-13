@@ -62,8 +62,9 @@ namespace ReRiff {
         }
         private static int newsDiagnostics;
         private static void NewsLog(string message){
+            if(!Logging.Enabled(AppDomain.CurrentDomain.BaseDirectory))return;
             if(Interlocked.Increment(ref newsDiagnostics)>12)return;
-            try{string folder=Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"logs");Directory.CreateDirectory(folder);File.AppendAllText(Path.Combine(folder,"ReRiff-news.log"),DateTime.UtcNow.ToString("o")+" "+message+Environment.NewLine);}catch(IOException){}catch(UnauthorizedAccessException){}
+            try{Logging.Append(AppDomain.CurrentDomain.BaseDirectory,"ReRiff-news.log",DateTime.UtcNow.ToString("o")+" "+message+Environment.NewLine);}catch(IOException){}catch(UnauthorizedAccessException){}
         }
         public static Task<Tuple<HttpStatusCode,string>> WithClientNews(Task<Tuple<HttpStatusCode,string>> source, Uri uri, string method) {
             if(source==null||uri==null||method!="GET"||!uri.AbsolutePath.EndsWith("/classes/News",StringComparison.Ordinal))return source;

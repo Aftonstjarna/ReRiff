@@ -438,3 +438,29 @@ The executable reference remains the depot Game.exe with SHA-256
 `2d1af8a01ec6b1e3477ff6dbe4a44895828e2ac71449344fec9d7d99e87a58e2`.
 This prototype does not modify original Game.exe, vfs.dat or vfs.zip and
 claims no matching-byte reconstruction credit.
+
+## Single-volume packaging validation (2026-11-12)
+
+This is an intentional ReRiff packaging change using the previously verified
+native archive format, not new matching-byte reconstruction. A schema-2 CJK
+component combines the base and HD resource groups in one additional numbered
+VFS pair. Native resource names and the loose font metrics stay unchanged.
+
+The local merged index has 36 nodes, 15 files, a 401-byte name pool, and member
+CRC32 sum `0xD108AF6F`. Its native ZIP/index pair passed the hash-guarded original
+validator harness described above, including rejection after a checksum bit was
+changed. All 15 texture resources and eight metrics/license files compare
+byte-for-byte with the previously published two-volume component. These checks
+establish archive compatibility and retained assets, not a complete visual
+in-game retest or additional recovered source credit.
+
+`build/combined-fonts-test/resource-comparison.json` records per-resource hashes;
+`native-archive.log` records the original-function checks. Both platform helpers
+passed ownership/collision checks, two-to-one migration, retained obsolete-file
+backups, repeat installation, offline enable/disable and changed-file refusal.
+Linux fault injection after archive retirement also restored both old pairs and
+the previous state. `scripts/test_cjk_consolidation.py` checks actual font-pack
+migration through both the native Linux installer transaction and the Python
+installer's staged plan. The original game archive pair and unrelated numbered
+mod pairs remain unchanged. The former font pair is retired only after its
+ownership/hashes have been verified; all removals participate in rollback.

@@ -1,5 +1,6 @@
 """Per-installation native server lifecycle, invoked by the bundled runtime."""
 import argparse
+import configparser
 from contextlib import contextmanager
 import hashlib
 import json
@@ -14,6 +15,17 @@ import urllib.error
 import urllib.request
 
 from host_process import file_lock, stamp, windows_identity
+
+
+def logging_enabled(root):
+    root=Path(root);ini=configparser.ConfigParser(interpolation=None)
+    try:
+        raw=(root.parent/'server.ini').read_bytes()
+        ini.read_string(raw.decode('utf-16' if raw.startswith((b'\xff\xfe',b'\xfe\xff')) else 'utf-8-sig'))
+        if ini.has_option('diagnostics','logging_enabled'):return ini.getboolean('diagnostics','logging_enabled')
+        ini.read(root/'client-channel.ini',encoding='utf-8-sig')
+        return ini.get('client','channel',fallback='stable')=='experimental'
+    except (OSError,ValueError,configparser.Error):return False
 
 
 def atomic(path, data):
@@ -38,7 +50,8 @@ class LocalServer:
         self.image = self.root/'windows-server/entry.py' if self.windows else self.root/'ReRiff-Server-x86_64.AppImage'
         self.python = self.root/'windows-python/python.exe'
         self.logs = self.root.parent/'logs'
-        self.logs.mkdir(parents=True, exist_ok=True)
+        self.logging = logging_enabled(self.root)
+        if self.logging:self.logs.mkdir(parents=True, exist_ok=True)
         if self.config_path.exists():
             self.config = json.loads(self.config_path.read_text())
         else:
@@ -146,7 +159,7 @@ class LocalServer:
         # Leave the game's Proton/Steam paths out of the native server loader.
         for key in ('LD_PRELOAD', 'LD_LIBRARY_PATH', 'PYTHONHOME', 'PYTHONPATH'):
             env.pop(key, None)
-        with (self.logs/'ReRiff-localserver.log').open('ab') as log:
+        with ((self.logs/'ReRiff-localserver.log').open('ab') if self.logging else open(os.devnull,'ab')) as log:
             command = ([str(self.python), '-I', str(self.image)] if self.windows else [str(self.image)]) + ['--serve', '--root', str(self.root)]
             options = {'creationflags': subprocess.CREATE_NO_WINDOW} if self.windows else {'start_new_session': True}
             child = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=log, stderr=log, env=env, **options)
@@ -224,6 +237,7 @@ def main():
                 pass
         outcome['message'] = str(error).replace('\n', ' ')
         try:
+            if not logging_enabled(args.root.resolve()):raise OSError('Logging disabled')
             logs = args.root.resolve().parent/'logs'
             logs.mkdir(parents=True, exist_ok=True)
             with (logs/'ReRiff-localserver.log').open('a', encoding='utf-8') as log:

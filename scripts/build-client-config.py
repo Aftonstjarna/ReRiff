@@ -20,8 +20,8 @@ csc = Path(location.strip('[]'))/version/'Roslyn/bincore/csc.dll'
 subprocess.run([a.dotnet,str(csc),'/nologo','/target:library','/nostdlib+','/optimize+',
                 '/keyfile:'+str(root/'Managed/ReRiff.snk'),
                 '/out:'+str(build/'ReRiff.ClientConfig.dll'),
-                '/reference:'+str(a.framework_dir/'mscorlib.dll'),'/reference:'+str(a.framework_dir/'System.dll'),
-                str(root/'ClientConfig/ClientConfig.cs')],check=True)
+                '/reference:'+str(a.framework_dir/'mscorlib.dll'),'/reference:'+str(a.framework_dir/'System.dll'),'/reference:'+str(a.framework_dir/'System.Core.dll'),'/reference:'+str(a.framework_dir/'System.Web.Extensions.dll'),
+                str(root/'ClientConfig/ClientConfig.cs'), str(root/'ClientConfig/NativeReelBridge.cs'), str(root/'ClientConfig/Singleplayer.cs'), str(root/'Shared/Logging.cs')],check=True)
 subprocess.run([a.dotnet,'build',str(root/'Patcher/Patcher.csproj'),'-c','Release','-o',str(build/'patcher')],check=True)
 for name in ('ParseOctane.dll','Parse.NetFx45.dll'):
     command = [a.dotnet,str(build/'patcher/Patcher.dll')]

@@ -16,6 +16,30 @@ ROOT=Path(__file__).resolve().parent.parent
 
 
 class DeltaTests(unittest.TestCase):
+    def test_only_two_snapshots_per_config_with_independent_history(self):
+        with tempfile.TemporaryDirectory() as temp:
+            backups=Path(temp)
+            for i in range(5):
+                installer.backup_previous(backups,'server.ini',str(i).encode(),False)
+                installer.backup_previous(backups,'graphics.cfg',b'g'+str(i).encode(),True)
+            self.assertEqual({p.read_bytes() for p in (backups/'configs').glob('*-server.ini')},{b'3',b'4'})
+            self.assertEqual({p.read_bytes() for p in (backups/'configs').glob('*-graphics.cfg')},{b'g3',b'g4'})
+            self.assertFalse((backups/'versions').exists())
+            versions=backups/'versions';versions.mkdir()
+            raw=b'older ini';old=versions/(digest(raw)+'-server.ini');old.write_bytes(raw)
+            os.utime(old,ns=(1,1));installer.migrate_config_history(backups)
+            self.assertFalse(versions.exists())
+            self.assertEqual({p.read_bytes() for p in (backups/'configs').glob('*-server.ini')},{b'3',b'4'})
+    def test_legacy_backup_merge_preserves_conflicting_files(self):
+        with tempfile.TemporaryDirectory() as temp:
+            game=Path(temp);old=game/'bak';new=game/'.bak'
+            old.mkdir();new.mkdir()
+            (old/'same').write_bytes(b'same');(new/'same').write_bytes(b'same')
+            (old/'conflict').write_bytes(b'old');(new/'conflict').write_bytes(b'new')
+            installer.migrate_backups(game)
+            self.assertFalse(old.exists())
+            self.assertEqual((new/'conflict').read_bytes(),b'new')
+            self.assertEqual([p.read_bytes() for p in new.glob('conflict.legacy-*')],[b'old'])
     def test_roundtrip_and_wrong_original(self):
         source=random.Random(42).randbytes(4096)
         target=source[:512]+b'new data'+source[1024:]+source[:1024]
@@ -70,12 +94,10 @@ class InstallerTests(unittest.TestCase):
         return installer.install(self.bundle,self.game,self.backups,'linux',**kwargs)
 
     def test_install_repeat_restore_and_preservation(self):
-        ini=b'[server]\nexternal_url=\nfallback_url=\n';(self.game/'server.ini').write_bytes(ini)
+        ini=b'[server]\nexternal_url=\nfallback_url=\n[diagnostics]\nlogging_enabled = true\n';(self.game/'server.ini').write_bytes(ini)
         data=self.game/'localserver/server/data/keep.json';data.parent.mkdir(parents=True);data.write_text('{"keep":true}')
         self.install();self.install()
-        shortcut=(self.game/'ReRiff GitHub.desktop').read_text()
-        self.assertIn('Type=Link\n',shortcut)
-        self.assertIn('URL=https://github.com/Aftonstjarna/ReRiff\n',shortcut)
+        self.assertFalse((self.game/'ReRiff GitHub.desktop').exists())
         self.assertEqual((self.game/'server.ini').read_bytes(),ini)
         self.assertEqual(data.read_text(),'{"keep":true}')
         self.assertFalse(list(self.game.glob('*.reriff*')))
@@ -112,8 +134,8 @@ class InstallerTests(unittest.TestCase):
         state.write_text(json.dumps({'backup_dir': str(self.root/'old-project-backups')}))
         plan = installer.install(self.bundle, self.game, None, 'linux', dry_run=True)
         next_state = json.loads(plan['localserver/install-state.json'])
-        self.assertEqual(Path(next_state['backup_dir']), self.game/'bak')
-        self.assertFalse((self.game/'bak').exists())
+        self.assertEqual(Path(next_state['backup_dir']), self.game/'.bak')
+        self.assertFalse((self.game/'.bak').exists())
 
     def test_empty_python_executable_uses_native_fallback(self):
         with patch.object(installer.sys, 'executable', ''), patch.object(installer.shutil, 'which', return_value='/usr/bin/python3'):
@@ -183,6 +205,37 @@ class VanillaInstallerTests(unittest.TestCase):
     def install(self,**kwargs):
         return installer.install(self.bundle,self.game,self.backups,'windows',**kwargs)
 
+    def test_legacy_backups_migrate_and_restore_without_shortcuts(self):
+        old=self.game/'bak/originals';old.mkdir(parents=True)
+        for name,data in self.originals.items():
+            (old/name).write_bytes(data);(self.game/name).write_bytes(self.patched[name])
+        local=self.game/'localserver';local.mkdir()
+        (local/'install-state.json').write_text(json.dumps({'backup_dir':str(old.parent),'patched':{n:digest(b) for n,b in self.patched.items()}}))
+        (self.game/'ReRiff GitHub.desktop').write_bytes(b'legacy shortcut')
+        installer.install(self.bundle,self.game,None,'windows',dry_run=True)
+        self.assertTrue(old.is_dir());self.assertFalse((self.game/'.bak').exists())
+        installer.install(self.bundle,self.game,None,'windows')
+        self.assertFalse((self.game/'bak').exists());self.assertFalse((self.game/'ReRiff GitHub.desktop').exists())
+        self.assertEqual(json.loads((local/'install-state.json').read_text())['backup_dir'],str(self.game/'.bak'))
+        installer.install(self.bundle,self.game,None,'windows',restore=True)
+        for name,data in self.originals.items():self.assertEqual((self.game/name).read_bytes(),data)
+
+    def test_stable_keeps_configs_and_originals_without_version_archives(self):
+        manifest=json.loads((self.bundle/'manifest.json').read_text());manifest['channel']='stable'
+        name='payload/extra.ini';data=b'new setting'
+        (self.bundle/name).write_bytes(data);manifest['files'][name]=digest(data)
+        (self.bundle/'manifest.json').write_text(json.dumps(manifest))
+        (self.game/'extra.ini').write_bytes(b'old setting')
+        (self.game/'ReRiff.ClientConfig.dll').write_bytes(b'old helper')
+        versions=self.backups/'versions';versions.mkdir(parents=True)
+        (versions/(digest(b'old binary')+'-ReRiff-Launcher.exe')).write_bytes(b'old binary')
+        (versions/(digest(b'old config')+'-server.ini')).write_bytes(b'old config')
+        self.install()
+        self.assertFalse(versions.exists())
+        self.assertEqual((self.backups/'configs'/(digest(b'old setting')+'-extra.ini')).read_bytes(),b'old setting')
+        self.assertEqual((self.backups/'configs'/(digest(b'old config')+'-server.ini')).read_bytes(),b'old config')
+        self.assertEqual((self.backups/'originals/ParseOctane.dll').read_bytes(),self.originals['ParseOctane.dll'])
+
     def test_singleplayer_package_keeps_updater_runtime_without_server_startup(self):
         path = self.bundle/'manifest.json'
         manifest = json.loads(path.read_text()); manifest['singleplayer'] = True
@@ -196,6 +249,7 @@ class VanillaInstallerTests(unittest.TestCase):
         self.assertIn(b'auto_update_on_skip = false', plan['server.ini'])
 
     def test_legacy_logs_are_relocated_without_overwriting_current_log(self):
+        (self.game/'server.ini').write_text('[diagnostics]\nlogging_enabled = true\n')
         (self.game/'ReRiff-client.log').write_bytes(b'older diagnostics')
         (self.game/'logs').mkdir()
         (self.game/'logs/ReRiff-client.log').write_bytes(b'current diagnostics')
@@ -209,12 +263,12 @@ class VanillaInstallerTests(unittest.TestCase):
     def test_fresh_repeat_restore_and_keep_matching_backup(self):
         saved=self.backups/'originals/ParseOctane.dll';saved.parent.mkdir(parents=True)
         saved.write_bytes(self.originals[saved.name]);stamp=saved.stat().st_mtime_ns
-        (self.game/'server.ini').write_bytes(b'existing settings')
+        (self.game/'server.ini').write_bytes(b'[server]\n; existing settings\n[diagnostics]\nlogging_enabled = false\n')
         self.install();self.install()
         self.assertEqual(self.runner.call_count,3)
         self.assertEqual(saved.stat().st_mtime_ns,stamp)
         for name,data in self.patched.items():self.assertEqual((self.game/name).read_bytes(),data)
-        self.assertEqual((self.game/'server.ini').read_bytes(),b'existing settings')
+        self.assertEqual((self.game/'server.ini').read_bytes(),b'[server]\n; existing settings\n[diagnostics]\nlogging_enabled = false\n')
         self.install(restore=True)
         for name,data in self.originals.items():self.assertEqual((self.game/name).read_bytes(),data)
 

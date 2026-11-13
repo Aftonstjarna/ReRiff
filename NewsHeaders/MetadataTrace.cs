@@ -39,6 +39,7 @@ namespace ReRiff {
             return output.ToString();
         }
         private static void MetadataWrite(string line){
+            if(!Logging.Enabled(AppDomain.CurrentDomain.BaseDirectory))return;
             lock(metadataLock){
                 if(metadataRecords>=4096||metadataSeen.Contains(line))return;
                 string folder=Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"logs");Directory.CreateDirectory(folder);

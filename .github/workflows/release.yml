@@ -48,6 +48,13 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & .\build\signing-smoke\SigningSmoke.exe
           exit $LASTEXITCODE
+      - name: Test shared logging defaults and directory policy
+        shell: pwsh
+        run: |
+          dotnet build Managed/LoggingSmoke.csproj -c Release -o build/logging-smoke
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & .\build\logging-smoke\LoggingSmoke.exe
+          exit $LASTEXITCODE
       - name: Test singleplayer routing on Microsoft .NET Framework
         shell: pwsh
         run: |
