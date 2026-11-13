@@ -43,3 +43,40 @@
   betas as prereleases with `--latest=false`; experimental updates require opt-in.
 - Do not delete or draft releases automatically. Superseded betas may be removed
   when requested; preserve Git tags for the tested commits.
+
+# Upstream server restoration after stable releases
+
+- After publishing a stable release, identify changes in that release that restore
+  original server functionality. Isolate those changes on the existing
+  `Server-Restoration` branch of `Aftonstjarna/ReRiff` for contribution to
+  `rumbadebu/riffapi-local-extended`.
+- Base the contribution on current upstream code and retain the existing focused
+  restoration work. Do not merge the full ReRiff main history into this branch.
+  Exclude launcher, installer, client/game patches and unrelated ReRiff features;
+  include server dependencies, tests and documentation needed by the restoration.
+- Run focused restoration regressions and upstream compatibility checks before
+  submitting. Explain protocol/client prerequisites and any new dependencies.
+- Split changes that restore different functions or fix unrelated problems into
+  separate draft upstream PRs. Group only tightly related changes, their required
+  dependencies, documentation and tests. Each PR should explain one concrete
+  restoration and its validation.
+- Keep `Server-Restoration` as the restoration integration branch. Each separate
+  PR needs its own focused branch, such as `Server-Restoration-<topic>`, based on
+  upstream so its diff excludes unrelated restoration work. Do not rename or
+  delete an existing PR's source branch to create these separate contributions.
+- Update an open PR only for changes to that same restoration, retaining its
+  existing review state. For a different restoration, or after its previous PR
+  has closed or merged, create a separate draft PR. Do not mark a new draft ready
+  or merge it without user instruction.
+- This standing instruction authorizes pushing the isolated branch and creating
+  or updating its upstream PR as part of a stable release; do not ask again.
+  Beta-only work waits until it reaches stable. If a release contains no original
+  server restoration changes, skip the upstream contribution.
+
+# ReRiff research submissions
+
+- Keep new reverse-engineering notes in ReRiff and submit them with
+  `bash scripts/submit-decomp-research.sh reports/NOTE.md`. See `reports/AGENTS.md`.
+- Do not write research notes directly into the live decomp checkout. The
+  coordinator tracks snapshots, provenance and review status outside that tree;
+  direct untracked files stop recovery. Submission grants no matching-byte credit.

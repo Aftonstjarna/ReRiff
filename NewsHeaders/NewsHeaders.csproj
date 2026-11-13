@@ -10,7 +10,10 @@
   <ItemGroup>
     <Compile Include="Headers.cs" />
     <Compile Include="ClientNews.cs" />
+    <Compile Include="MetadataTrace.cs" />
+    <Compile Include="MetadataText.cs" />
     <Reference Include="System.Web.Extensions" />
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net40" Version="1.0.3" PrivateAssets="all" />
   </ItemGroup>
+  <ItemGroup><Compile Include="../Shared/Logging.cs" Link="Logging.cs" /></ItemGroup>
 </Project>

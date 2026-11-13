@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "repository": "https://github.com/notofonts/noto-cjk",
+  "commit": "f8d157532fbfaeda587e826d4cd5b21a49186f7c",
+  "license": "OFL-1.1",
+  "files": [
+    {
+      "path": "Sans/OTC/NotoSansCJK-Regular.ttc",
+      "sha256": "b76b0433203017ca80401b2ee0dd69350349871c4b19d504c34dbdd80541690a",
+      "size": 19484784
+    },
+    {
+      "path": "Sans/LICENSE",
+      "sha256": "6a73f9541c2de74158c0e7cf6b0a58ef774f5a780bf191f2d7ec9cc53efe2bf2",
+      "size": 4301
+    }
+  ],
+  "regions": {
+    "jp": "Noto Sans CJK JP",
+    "kr": "Noto Sans CJK KR",
+    "sc": "Noto Sans CJK SC",
+    "tc": "Noto Sans CJK TC",
+    "hk": "Noto Sans CJK HK"
+  }
+}

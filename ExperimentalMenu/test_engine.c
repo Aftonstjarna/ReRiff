@@ -4,7 +4,7 @@ static BYTE menu[512],group[512],audio[512],screen[700],sample[1024],title[1024]
 static void *vtable[27],*item_methods[49];
 static void **item_vtable=item_methods+1;
 static int delegated,initialized,cleaned,ticked,base_ticked,focused,created,added;
-static int restart_calls,removed,sprites_created,colours;
+static int restart_calls,removed,sprites_created,colours,thumb_colours;
 static void *colour_watch;static float watched_colour[4];
 static void *fake_ui=screen;
 static BOOL restart_ok;
@@ -30,9 +30,9 @@ static void __thiscall mock_enable(void *self,BYTE enabled){
 static void __thiscall mock_visible(void *self,BYTE visible){
     *((BYTE *)self+372)=(*((BYTE *)self+372)&~1)|!!visible;
 }
-static void __thiscall mock_colour(void *self,const float *value){if(self==colour_watch&&value)memcpy(watched_colour,value,sizeof(watched_colour));colours++;}
+static void __thiscall mock_colour(void *self,const float *value){for(int i=0;i<3;i++)if(self&&self==toggles[i][1])thumb_colours++;if(self&&self==aa_knob)thumb_colours++;if(self==colour_watch&&value)memcpy(watched_colour,value,sizeof(watched_colour));colours++;}
 static void __thiscall mock_menu_colour(void *self,int id,const float *value){(void)self;(void)id;(void)value;}
-static void __thiscall mock_scale(void *self,const float *value){((float *)self)[14]=value[0];((float *)self)[15]=value[1];}
+static void __thiscall mock_scale(void *self,const float *value){((float *)self)[43]=value[0];((float *)self)[44]=value[1];}
 static void __thiscall mock_def(void *self,unsigned id){((unsigned *)self)[100]=id;}
 static void __thiscall mock_origin(void *self,unsigned id){((unsigned *)self)[101]=id;}
 static void __thiscall mock_position(void *self,const float *pos){((float *)self)[8]=pos[0];((float *)self)[9]=pos[1];}
@@ -229,6 +229,16 @@ int main(int argc,char **argv){
     *(DWORD *)(screen+40)=1;group[372]=1;init_entry(menu,NULL,NULL);CHECK(initialized==1&&visible_rows==4&&root_count==5&&added==28);
     CHECK(root_rows[0].id==SERVERS_ID&&(*((BYTE *)server_rows[0]+372)&1));
     CHECK(root_rows[1].id==0&&((float *)root_rows[1].text)[9]-((float *)server_rows[0])[9]==row_gap);
+    /* Added separators retain the same vertical sprite scale as vanilla,
+     * independent of transparent atlas padding and manual UI size. */
+    BYTE separator[404]={0};*(void ***)separator=item_vtable;
+    ((float *)separator)[12]=256;((float *)separator)[13]=16;
+    const float separator_scales[]={0.3515625f,0.703125f,1.0546875f,1.40625f};
+    for(unsigned i=0;i<sizeof(separator_scales)/sizeof(separator_scales[0]);i++){
+        set_line_size(separator,1024,separator_scales[i]);
+        CHECK(((float *)separator)[43]==4&&((float *)separator)[44]==separator_scales[i]);
+    }
+    CHECK(((float *)root_rows[0].line)[44]==((float *)menu)[15]);
     tick_entry(menu);CHECK(native_reel&&bars==1&&focused==SERVERS_ID&&logical_selection==0);
     /* Reproduce gaMenu.enter's original recursive input-mask reset AFTER
      * initScreens. Exercise the real original native method, not a mask mock. */
@@ -270,6 +280,14 @@ int main(int argc,char **argv){
         CHECK(next>=page_first&&next<page_first+visible_rows);
     }
     CHECK(focused==1501&&native_directions==6*SERVER_ACTION_COUNT&&page_first==0);
+    CHECK(thumb_colours==0);
+    const float toggle_focus[4]={0,1,1,0.8f},toggle_normal[4]={1,1,1,0.9f};
+    for(int i=0;i<3;i++){
+        colour_watch=toggles[i][0];hook_colour(menu,SERVER_ACTION_BASE+toggle_actions[i],toggle_focus);CHECK(!memcmp(watched_colour,toggle_focus,16));
+        hook_colour(menu,SERVER_ACTION_BASE+toggle_actions[i],toggle_normal);CHECK(!memcmp(watched_colour,toggle_normal,16));
+    }
+    colour_watch=NULL;CHECK(thumb_colours==0);
+
     int polls_before=direction_polls;native_before=base_ticked;held_input=128;
     tick_entry(menu);held_input=0;CHECK(direction_polls==polls_before&&base_ticked==native_before+1);
     CHECK(!wcscmp(label(5),L"SINGLEPLAYER")&&pending.enabled&&((unsigned *)toggles[2][1])[100]==75);
@@ -311,6 +329,14 @@ int main(int argc,char **argv){
     cleanup_entry(menu,NULL,NULL);CHECK(cleaned==1&&!page_owner&&!native_reel&&destroyed==constructed&&removed==24);
     CHECK(!server_native_navigation);
     for(int i=0;i<SERVER_ACTION_COUNT;i++)CHECK(*(void ***)saved_server_rows[i]==item_vtable);
+    /* Native race-pause Settings has no Graphics row: add no Servers or reel. */
+    int pause_created=created,pause_added=added,pause_ticks=ticked;
+    restarting=FALSE;exiting=FALSE;((void **)menu)[68]=NULL;
+    init_entry(menu,NULL,NULL);CHECK(initialized==2&&!page_owner&&!server_rows[0]&&!native_reel);
+    CHECK(created==pause_created&&added==pause_added);
+    tick_entry(menu);CHECK(ticked==pause_ticks+1);
+    cleanup_entry(menu,NULL,NULL);CHECK(cleaned==2&&!page_owner);
+    ((void **)menu)[68]=sample;
     main_init_original=mock_init;main_cleanup_original=mock_cleanup;main_tick_original=mock_tick;native_resolution=mock_resolution;queue_update_notice=mock_notice;
     BYTE centered_menu[512]={0},centered_row[404]={0},centered_text[404]={0},centered_icon[404]={0};
     void *centered_children[2]={centered_text,centered_icon};
@@ -330,6 +356,13 @@ int main(int argc,char **argv){
     CHECK(((float *)centered_icon)[8]==-16&&((int *)centered_icon)[2]==0);
     center_main_rows(centered_menu);CHECK(((float *)centered_row)[8]==842&&((float *)centered_row)[12]==330);
     detach_main_hits();CHECK(*(void ***)centered_row==item_vtable);
+    ((float *)centered_row)[43]=2;
+    center_main_rows(centered_menu);CHECK(((float *)centered_row)[8]==724);
+    ((float *)centered_row)[10]=724;icon_point[0]=600;
+    CHECK(((MainHitFn)(*(void ***)centered_row)[25])(centered_row,icon_point)==7);
+    CHECK(((float *)centered_row)[10]==724&&((float *)centered_row)[12]==330);
+    CHECK(((float *)centered_icon)[8]==-16&&((float *)centered_text)[8]==0);
+    detach_main_hits();((float *)centered_row)[43]=1;
     wcscpy(update_notice_path,config_path);wcscat(update_notice_path,L".update.ini");
     CHECK(WritePrivateProfileStringW(L"update",L"version",MENU_WIDE(RERIFF_VERSION),update_notice_path));
     notice_accept=FALSE;deliver_update_notice();CHECK(notices==1&&GetFileAttributesW(update_notice_path)!=INVALID_FILE_ATTRIBUTES);
@@ -339,10 +372,10 @@ int main(int argc,char **argv){
     CHECK(notices==2&&!wcscmp(notice_text,L"ReRiff has updated to " MENU_WIDE(RERIFF_VERSION))&&GetFileAttributesW(update_notice_path)==INVALID_FILE_ATTRIBUTES);
     deliver_update_notice();CHECK(notices==2);
     ((float *)menu)[73]=48;((float *)watermark)[13]=64;branded_main_tick(menu);
-    CHECK(((float *)watermark)[14]==0.5f&&((float *)watermark)[15]==0.5f);
+    CHECK(((float *)watermark)[43]==0.5f&&((float *)watermark)[44]==0.5f);
     CHECK(((float *)watermark)[8]==1908&&((float *)watermark)[9]==1036);
     ((float *)menu)[73]=24;branded_main_tick(menu);
-    CHECK(((float *)watermark)[15]==0.25f&&((float *)watermark)[9]==1052);
+    CHECK(((float *)watermark)[44]==0.25f&&((float *)watermark)[9]==1052);
     branded_main_cleanup(menu,NULL,NULL);CHECK(!watermark&&!watermark_owner&&removed==25);
     branded_main_tick(menu);CHECK(watermark&&notices==2);branded_main_cleanup(menu,NULL,NULL);CHECK(!watermark&&removed==26);
     CHECK(validate_graphics_aa_menu((BYTE *)image,nt->OptionalHeader.ImageBase));
@@ -368,11 +401,15 @@ int main(int argc,char **argv){
     ((int *)graphics_test_items[2])[39]=((int *)graphics_test_items[3])[39]=4;
     ((int *)graphics_test_items[2])[40]=((int *)graphics_test_items[3])[40]=4;
     graphics_init_original=mock_init;graphics_cleanup_original=mock_cleanup;graphics_tick_original=mock_tick;menu_item=mock_graphics_menu_item;graphics_input_original=mock_graphics_input;graphics_button_sprite=mock_button_sprite;graphics_colour_original=mock_menu_colour;
-    attach_antialiasing=mock_aa_attach;aa_requested=aa_fault=0;aa_graphics_init(gm,NULL,NULL);
+    attach_antialiasing=mock_aa_attach;aa_requested=aa_fault=0;
+    focused=((int *)gm)[11]=-1;aa_graphics_init(gm,NULL,NULL);
+    CHECK(focused==1&&((int *)gm)[11]==1);
+    CHECK(((int *)graphics_test_items[2])[40]==BORDERLESS_CONTROL_ID);
     CHECK((*((BYTE *)graphics_test_items[6]+372)&2)!=0);
     CHECK(aa_label&&aa_bar&&aa_knob&&!aa_pending&&((int *)aa_label)[2]==AA_CONTROL_ID);
     CHECK(resolution_hover&&((int *)resolution_hover)[2]==RESOLUTION_FOCUS_ID);
-    CHECK(((float *)resolution_hover)[8]==960&&((float *)resolution_hover)[9]==420);
+    CHECK(((float *)resolution_hover)[8]==960&&((float *)resolution_hover)[9]==125);
+    CHECK(graphics_visible==4&&!graphics_reel);
     CHECK(((float *)resolution_hover)[12]==520&&((float *)resolution_hover)[13]==56);
     /* Exercise multiple complete native row loops in both directions, including
      * both resolution arrows and escape from the mouse-focused Apply button. */
@@ -388,10 +425,25 @@ int main(int argc,char **argv){
     CHECK(graphics_cycle(nav_items,8,3,40,from_apply_down,5));
     CHECK(graphics_cycle(nav_items,8,3,39,from_apply_up,5));
     CHECK(((int *)borderless_bar)[2]==DISPLAY_LEFT_ID&&((int *)borderless_knob)[2]==DISPLAY_RIGHT_ID);
+    ((int *)gm)[11]=BORDERLESS_CONTROL_ID;aa_graphics_input_state(gm);
+    CHECK(*(DWORD *)((BYTE *)borderless_label+64)==0);
+    CHECK(*(DWORD *)((BYTE *)borderless_bar+64)==256&&*(DWORD *)((BYTE *)borderless_knob+64)==512);
+    BYTE overlay_fixture[64]={0};void *overlay_value=overlay_fixture;
+    overlay_manager=&overlay_value;((void **)overlay_fixture)[11]=gm;
+    aa_graphics_input_state(gm);graphics_layout(gm);
+    CHECK(!*(DWORD *)((BYTE *)borderless_label+76)&&!*(DWORD *)((BYTE *)aa_label+76));
+    CHECK(!*(DWORD *)((BYTE *)graphics_test_items[4]+76));
+    ((void **)overlay_fixture)[11]=NULL;aa_graphics_input_state(gm);graphics_layout(gm);
+    CHECK(*(DWORD *)((BYTE *)borderless_label+76));overlay_manager=NULL;
     CHECK(((unsigned *)borderless_bar)[100]==59&&((unsigned *)borderless_knob)[100]==60);
-    CHECK(((float *)aa_label)[9]==580&&((float *)borderless_label)[9]==500);
+    CHECK(((float *)aa_label)[9]==285&&((float *)borderless_label)[9]==205);
     CHECK(!graphics_test_items[0][372]&&!graphics_test_items[4][372]);
     display_installed=graphics_bridge_ready=TRUE;borderless_pending=FALSE;*((BYTE *)gm+305)=FALSE;
+    aa_graphics_input(gm,BORDERLESS_CONTROL_ID);CHECK(!borderless_pending&&!*((BYTE *)gm+305));
+    CHECK(((int *)borderless_bar)[15]==100&&((int *)borderless_knob)[15]==100);
+    CHECK(((int *)borderless_bar)[41]==-1&&((int *)borderless_bar)[42]==-1);
+    CHECK(((int *)borderless_knob)[41]==-1&&((int *)borderless_knob)[42]==-1);
+    CHECK(((int *)borderless_label)[41]==-1&&((int *)borderless_label)[42]==-1);
     aa_graphics_input(gm,DISPLAY_RIGHT_ID);CHECK(borderless_pending&&!*((BYTE *)gm+305));
     aa_graphics_input(gm,DISPLAY_RIGHT_ID);CHECK(!borderless_pending&&*((BYTE *)gm+305));
     aa_graphics_input(gm,DISPLAY_RIGHT_ID);CHECK(!borderless_pending&&!*((BYTE *)gm+305));
@@ -409,8 +461,19 @@ int main(int argc,char **argv){
     CHECK(!memcmp(watched_colour,apply_focus_colour,sizeof(watched_colour)));
     CHECK(*(DWORD *)(graphics_test_items[6]+76)==*(DWORD *)(screen+40));
     ((int *)gm)[11]=RESOLUTION_FOCUS_ID;aa_graphics_tick(gm);CHECK(watched_colour[0]==1&&watched_colour[1]==1);
+    /* Moving from Resolution to Apply must clear the prior row's colour and
+     * Left/Right shortcuts, while Apply keeps its own native highlight. */
+    colour_watch=resolution_text;aa_graphics_tick(gm);
+    CHECK(!memcmp(watched_colour,apply_focus_colour,sizeof(watched_colour)));
+    ((int *)gm)[11]=3;aa_graphics_tick(gm);
+    CHECK(watched_colour[0]==1&&watched_colour[1]==1&&watched_colour[2]==1);
+    CHECK(!*(DWORD *)(graphics_test_items[2]+64)&&!*(DWORD *)(graphics_test_items[3]+64));
+    colour_watch=graphics_test_items[6];aa_graphics_tick(gm);
+    CHECK(!memcmp(watched_colour,apply_focus_colour,sizeof(watched_colour)));
     aa_graphics_input(gm,AA_CONTROL_ID);CHECK(aa_pending&&!aa_requested&&((unsigned *)aa_knob)[100]==74);
     CHECK(((float *)aa_label)[12]==820&&((float *)aa_label)[13]==80);
+    CHECK(thumb_colours==0);
+    aa_graphics_colour(gm,AA_CONTROL_ID,toggle_focus);aa_graphics_colour(gm,AA_CONTROL_ID,toggle_normal);CHECK(thumb_colours==0);
     float native_thumb_x=((float *)aa_knob)[8];
     graphics_layout(gm);CHECK(((float *)aa_knob)[8]==native_thumb_x);
     const float thumb_scales[]={0.25f,0.5f,1.0f,1.5f,2.0f};
@@ -452,12 +515,22 @@ int main(int argc,char **argv){
     testing_graphics_reel=TRUE;
     ((float *)graphics_test_items[0])[9]=580;((float *)graphics_test_items[1])[9]=580;
     ((float *)graphics_test_items[2])[9]=((float *)graphics_test_items[3])[9]=500;((float *)graphics_test_items[4])[9]=580;
-    UiCanvas short_canvas={1920,720};ui_scope_tls=TlsAlloc();CHECK(ui_scope_tls!=TLS_OUT_OF_INDEXES);ui_scope_set(&short_canvas);
-    aa_graphics_init(gm,NULL,NULL);CHECK(graphics_reel&&graphics_visible==3&&graphics_first==0);
-    CHECK((*((BYTE *)aa_label+372)&1)&&!(*((BYTE *)ui_slider_label+372)&1));
-    graphics_scroll_to(gm,1,FALSE);CHECK(graphics_first==1&&(*((BYTE *)ui_slider_label+372)&1));
+    UiCanvas short_canvas={1920,300};ui_scope_tls=TlsAlloc();CHECK(ui_scope_tls!=TLS_OUT_OF_INDEXES);ui_scope_set(&short_canvas);
+    aa_graphics_init(gm,NULL,NULL);CHECK(graphics_reel&&graphics_visible==2&&graphics_first==0);
+    CHECK(!(*((BYTE *)aa_label+372)&1)&&!(*((BYTE *)ui_slider_label+372)&1));
+    graphics_scroll_to(gm,2,FALSE);CHECK(graphics_first==2&&(*((BYTE *)ui_slider_label+372)&1));
     CHECK(!(*((BYTE *)graphics_test_items[2]+372)&1));
     graphics_scroll_to(gm,0,FALSE);CHECK((*((BYTE *)graphics_test_items[2]+372)&1)&&!(*((BYTE *)ui_slider_label+372)&1));
+    /* A native confirmation suspends input, but must preserve the reel's
+     * viewport. Input-mask reconciliation must not reveal offscreen rows. */
+    overlay_value=overlay_fixture;overlay_manager=&overlay_value;((void **)overlay_fixture)[11]=gm;
+    int overlay_first=graphics_first,overlay_reel_ticks=ticks;
+    aa_graphics_tick(gm);
+    CHECK(!(*((BYTE *)ui_slider_label+372)&1));
+    CHECK(!(*((BYTE *)ui_slider_rail+372)&1)&&!(*((BYTE *)ui_slider_knob+372)&1));
+    CHECK(!*(DWORD *)((BYTE *)aa_label+76)&&!*(DWORD *)((BYTE *)graphics_test_items[6]+76));
+    CHECK(graphics_first==overlay_first&&ticks==overlay_reel_ticks);
+    ((void **)overlay_fixture)[11]=NULL;overlay_manager=NULL;
     aa_graphics_cleanup(gm,NULL,NULL);CHECK(!graphics_reel&&constructed==destroyed);
     ui_scope_set(NULL);TlsFree(ui_scope_tls);ui_scope_tls=TLS_OUT_OF_INDEXES;
     FreeLibrary(image);DeleteFileW(config_path);DeleteFileW(log_path);

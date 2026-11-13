@@ -27,6 +27,14 @@ def owned(pid,root):
 
 def stop(root):
     root=root.resolve()
+    native=root/'native/config.json'
+    if native.is_file():
+        import subprocess
+        import tempfile
+        with tempfile.TemporaryDirectory(prefix="reriff-stop-") as work:
+            subprocess.run([str(root/"ReRiff-Runtime-x86_64.AppImage"),
+                "--server-control", "stop", "--root", str(root),
+                "--result", str(Path(work)/"result.ini")], check=True, timeout=30)
     candidates=[]
     for entry in Path('/proc').iterdir():
         if entry.name.isdigit() and owned(int(entry.name),root):

@@ -4,16 +4,21 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <commdlg.h>
+#include <commctrl.h>
 #include <shellapi.h>
 #include <wchar.h>
 #include <stdio.h>
 
+#ifndef RERIFF_VERSION
+#define RERIFF_VERSION "development"
+#endif
 #define CAP 32768
+#include "python_runtime.h"
 int WINAPI wWinMain(HINSTANCE instance,HINSTANCE previous,LPWSTR arguments,int show) {
     (void)instance;(void)previous;(void)show;
     WCHAR root[CAP],command[CAP],game[CAP]=L"",log[CAP];
     GetModuleFileNameW(NULL,root,CAP);WCHAR *slash=wcsrchr(root,L'\\');if(!slash)return 1;*slash=0;
-    BOOL interactive=!*arguments;
+    BOOL interactive=!*arguments,cjk=FALSE,latin=FALSE,logging=FALSE;
     if(interactive){
         OPENFILENAMEW dialog;ZeroMemory(&dialog,sizeof(dialog));dialog.lStructSize=sizeof(dialog);
         dialog.lpstrFilter=L"Riff Racer (Game.exe)\0Game.exe\0";dialog.lpstrFile=game;dialog.nMaxFile=CAP;
@@ -21,32 +26,58 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE previous,LPWSTR arguments,int s
         dialog.Flags=OFN_FILEMUSTEXIST|OFN_PATHMUSTEXIST|OFN_NOCHANGEDIR;
         if(!GetOpenFileNameW(&dialog))return 0;
         WCHAR *end=wcsrchr(game,L'\\');if(!end)return 1;*end=0;
-        _snwprintf(command,CAP,L"\"%ls\\python\\python.exe\" \"%ls\\installer.py\" --platform windows --game-dir \"%ls\"",root,root,game);
-    }else{
-        _snwprintf(command,CAP,L"\"%ls\\python\\python.exe\" \"%ls\\installer.py\" --platform windows %ls",root,root,arguments);
+        WCHAR config[CAP];_snwprintf(config,CAP,L"%ls\\server.ini",game);
+        WCHAR value[16];GetPrivateProfileStringW(L"languages",L"cjk_enabled",GetPrivateProfileIntW(L"diagnostics",L"cjk_render_probe",0,config)?L"true":L"false",value,16,config);
+        TASKDIALOGCONFIG choice={0};choice.cbSize=sizeof(choice);choice.dwCommonButtons=TDCBF_OK_BUTTON|TDCBF_CANCEL_BUTTON;
+        choice.dwFlags=TDF_ALLOW_DIALOG_CANCELLATION;
+        if(!_wcsicmp(value,L"true")||!wcscmp(value,L"1"))choice.dwFlags|=TDF_VERIFICATION_FLAG_CHECKED;
+        choice.pszWindowTitle=L"ReRiff setup";choice.pszMainInstruction=L"Optional language support";
+        choice.pszContent=L"Add missing Chinese, Japanese and Korean characters throughout the game. Fonts stay in the game folder; menus are not translated. The font pack uses about 105 MiB. Your existing settings and saves are retained.";
+        choice.pszVerificationText=L"Install and enable CJK font support";
+        int selected=IDCANCEL;if(FAILED(TaskDialogIndirect(&choice,&selected,NULL,&cjk))||selected!=IDOK)return 0;
+        GetPrivateProfileStringW(L"languages",L"latin_enabled",L"false",value,16,config);
+        choice.pszMainInstruction=L"Optional Latin/European support";
+        choice.pszContent=L"Add missing European letters, including Polish. This is a separate small download. Both language packs share one extra font archive pair; menus are not translated.";
+        choice.pszVerificationText=L"Install and enable Latin/European fonts";
+        choice.dwFlags=TDF_ALLOW_DIALOG_CANCELLATION|((!_wcsicmp(value,L"true")||!wcscmp(value,L"1"))?TDF_VERIFICATION_FLAG_CHECKED:0);
+        if(FAILED(TaskDialogIndirect(&choice,&selected,NULL,&latin))||selected!=IDOK)return 0;
+        logging=rr_logging_enabled(game,strstr(RERIFF_VERSION,"-")!=NULL||!strcmp(RERIFF_VERSION,"development"));
+        choice.pszMainInstruction=L"Diagnostic logging";choice.pszContent=L"Save installer, launcher and client logs for troubleshooting. Logging defaults on for beta/development builds and off for stable releases. Existing logs are kept when disabled.";
+        choice.pszVerificationText=L"Enable diagnostic logging";choice.dwFlags=TDF_ALLOW_DIALOG_CANCELLATION|(logging?TDF_VERIFICATION_FLAG_CHECKED:0);
+        if(FAILED(TaskDialogIndirect(&choice,&selected,NULL,&logging))||selected!=IDOK)return 0;
     }
-    command[CAP-1]=0;
+
     if(!interactive){
         int count=0;WCHAR **args=CommandLineToArgvW(GetCommandLineW(),&count);
         if(args){for(int i=1;i+1<count;i++)if(!wcscmp(args[i],L"--game-dir")){wcsncpy(game,args[i+1],CAP-1);game[CAP-1]=0;break;}LocalFree(args);}
     }
-    _snwprintf(log,CAP,L"%ls\\logs",*game?game:root);log[CAP-1]=0;CreateDirectoryW(log,NULL);
+    if(!*game){if(interactive)MessageBoxW(NULL,L"Choose a game folder before installing Python.",L"ReRiff setup",MB_OK|MB_ICONERROR);return 1;}
+    _snwprintf(command,CAP,L"%ls\\Game.exe",game);command[CAP-1]=0;
+    if(GetFileAttributesW(command)==INVALID_FILE_ATTRIBUTES){if(interactive)MessageBoxW(NULL,L"Game.exe was not found in that folder.",L"ReRiff setup",MB_OK|MB_ICONERROR);return 1;}
+    if(!interactive){logging=rr_logging_enabled(game,strstr(RERIFF_VERSION,"-")!=NULL);if(wcsstr(arguments,L"--no-logging"))logging=FALSE;else if(wcsstr(arguments,L"--logging"))logging=TRUE;}
+    python_logging_override=logging;
+    if(!ensure_private_python(NULL,game,interactive))return 1;
+    const WCHAR *bootstrap=L"import runpy,sys;sys.path.insert(0,sys.argv[1]);sys.argv=sys.argv[2:];runpy.run_path(sys.argv[0],run_name='__main__')";
+    if(interactive)_snwprintf(command,CAP,L"\"%ls\\localserver\\windows-python\\python.exe\" -X utf8 -c \"%ls\" \"%ls\" \"%ls\\installer.py\" --platform windows --game-dir \"%ls\" %ls %ls %ls",game,bootstrap,root,root,game,logging?L"--logging":L"--no-logging",cjk?L"--cjk":L"--no-cjk",latin?L"--latin":L"--no-latin");
+    else _snwprintf(command,CAP,L"\"%ls\\localserver\\windows-python\\python.exe\" -X utf8 -c \"%ls\" \"%ls\" \"%ls\\installer.py\" --platform windows %ls",game,bootstrap,root,root,arguments);
+    command[CAP-1]=0;
+    _snwprintf(log,CAP,L"%ls\\logs",*game?game:root);log[CAP-1]=0;if(logging)CreateDirectoryW(log,NULL);
     _snwprintf(log,CAP,L"%ls\\logs\\installer.log",*game?game:root);log[CAP-1]=0;
     SECURITY_ATTRIBUTES security={sizeof(security),NULL,TRUE};
-    HANDLE output=CreateFileW(log,GENERIC_WRITE,FILE_SHARE_READ,&security,CREATE_ALWAYS,FILE_ATTRIBUTE_NORMAL,NULL);
+    HANDLE output=CreateFileW(logging?log:L"NUL",GENERIC_WRITE,FILE_SHARE_READ,&security,CREATE_ALWAYS,FILE_ATTRIBUTE_NORMAL,NULL);
     STARTUPINFOW start;PROCESS_INFORMATION process;ZeroMemory(&start,sizeof(start));ZeroMemory(&process,sizeof(process));start.cb=sizeof(start);
     start.dwFlags=STARTF_USESHOWWINDOW|STARTF_USESTDHANDLES;start.wShowWindow=SW_HIDE;
     start.hStdOutput=output;start.hStdError=output;start.hStdInput=GetStdHandle(STD_INPUT_HANDLE);
     if(output==INVALID_HANDLE_VALUE || !CreateProcessW(NULL,command,NULL,NULL,TRUE,CREATE_NO_WINDOW,NULL,root,&start,&process)){
         if(output!=INVALID_HANDLE_VALUE)CloseHandle(output);
-        if(interactive)MessageBoxW(NULL,L"Extract the complete Windows ZIP before running setup. Portable Python and installer.py must be beside the installer.",L"ReRiff setup failed",MB_OK|MB_ICONERROR);
+        if(interactive)MessageBoxW(NULL,L"Extract the complete Windows ZIP before running setup. installer.py must be beside the installer, and the private Python installation must be complete.",L"ReRiff setup failed",MB_OK|MB_ICONERROR);
         return 1;
     }
     CloseHandle(output);CloseHandle(process.hThread);WaitForSingleObject(process.hProcess,INFINITE);
     DWORD code=1;GetExitCodeProcess(process.hProcess,&code);CloseHandle(process.hProcess);
     if(interactive){
-        if(code){_snwprintf(command,CAP,L"Installation failed. See %ls for details. Existing saves are retained.",log);MessageBoxW(NULL,command,L"ReRiff setup",MB_OK|MB_ICONERROR);}
-        else if(MessageBoxW(NULL,L"ReRiff installed. Use ReRiff-Launcher.exe beside Game.exe. Your settings and saved server data were preserved.\n\nA ReRiff GitHub shortcut is saved beside the game. Open the GitHub repository now?",L"ReRiff setup",MB_YESNO|MB_DEFBUTTON2|MB_ICONINFORMATION)==IDYES)
+        if(code){if(logging)_snwprintf(command,CAP,L"Installation failed. See %ls for details. Existing saves are retained.",log);else wcscpy(command,L"Installation failed. Enable diagnostic logging in setup and retry for details. Existing saves are retained.");MessageBoxW(NULL,command,L"ReRiff setup",MB_OK|MB_ICONERROR);}
+        else if(MessageBoxW(NULL,L"ReRiff installed. Use ReRiff-Launcher.exe beside Game.exe. Your settings and saved server data were preserved.\n\nOpen the GitHub repository now?",L"ReRiff setup",MB_YESNO|MB_DEFBUTTON2|MB_ICONINFORMATION)==IDYES)
             ShellExecuteW(NULL,L"open",L"https://github.com/Aftonstjarna/ReRiff",NULL,NULL,SW_SHOWNORMAL);
     }
     return (int)code;

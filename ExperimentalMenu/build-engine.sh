@@ -29,3 +29,35 @@ mkdir -p build/experimental-engine-menu
 "$zig_tool" cc -target x86-windows-gnu -O2 -Wall -Wextra -Werror \
   ExperimentalMenu/test_antialiasing.c -o build/experimental-engine-menu/test-antialiasing.exe \
   -luser32 -lgdi32 -ladvapi32 -static
+
+"$zig_tool" cc -target x86-windows-gnu -municode -O2 -Wall -Wextra -Werror \
+  ExperimentalMenu/test_flac_sample_rate.c -o build/experimental-engine-menu/test-flac.exe \
+  -Wl,--image-base,0x10000000 -static
+
+"$zig_tool" cc -target x86-windows-gnu -O2 -Wall -Wextra -Werror \
+  ExperimentalMenu/test_unicode_trace.c -o build/experimental-engine-menu/test-unicode-trace.exe \
+  -Wl,--image-base,0x10000000 -luser32 -lgdi32 -ladvapi32 -static
+
+"$zig_tool" cc -target x86-windows-gnu -O2 -Wall -Wextra -Werror \
+  ExperimentalMenu/test_native_archive.c -o build/experimental-engine-menu/test-native-archive.exe \
+  -Wl,--image-base,0x10000000 -luser32 -lgdi32 -ladvapi32 -static
+
+"$zig_tool" cc -target x86-windows-gnu -O2 -Wall -Wextra -Werror \
+  ExperimentalMenu/test_cjk_direct.c -o build/experimental-engine-menu/test-cjk-direct.exe \
+  -Wl,--image-base,0x10000000 -luser32 -lgdi32 -ladvapi32 -static
+
+"$zig_tool" cc -target x86-windows-gnu -O2 -Wall -Wextra -Werror \
+  ExperimentalMenu/test_cjk_hd_metrics.c -o build/experimental-engine-menu/test-cjk-hd-metrics.exe \
+  -Wl,--image-base,0x10000000 -luser32 -lgdi32 -ladvapi32 -static
+
+"$zig_tool" cc -target x86-windows-gnu -O2 -Wall -Wextra -Werror \
+  ExperimentalMenu/test_latin_fonts.c -o build/experimental-engine-menu/test-latin-fonts.exe \
+  -Wl,--image-base,0x10000000 -luser32 -lgdi32 -ladvapi32 -static
+
+"$zig_tool" cc -target x86-windows-gnu -O2 -Wall -Wextra -Werror \
+  ExperimentalMenu/test_main_scale.c -o build/experimental-engine-menu/test-main-scale.exe \
+  -Wl,--image-base,0x10000000 -luser32 -lgdi32 -ladvapi32 -static
+
+"$zig_tool" cc -target x86-windows-gnu -O2 -Wall -Wextra -Werror \
+  ExperimentalMenu/test_font_components.c -o build/experimental-engine-menu/test-font-components.exe \
+  -Wl,--image-base,0x10000000 -luser32 -lgdi32 -ladvapi32 -static

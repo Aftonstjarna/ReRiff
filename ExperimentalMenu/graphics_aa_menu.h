@@ -55,8 +55,10 @@ static void aa_connect_navigation(void *menu){
     ((int *)borderless_label)[38]=1;((int *)borderless_label)[39]=((int *)left)[2];
     ((int *)borderless_label)[40]=AA_CONTROL_ID;((int *)borderless_label)[41]=((int *)borderless_label)[42]=-1;
     void *mode_arrows[2]={borderless_bar,borderless_knob};
-    for(int i=0;i<2;i++){((int *)mode_arrows[i])[38]=1;((int *)mode_arrows[i])[39]=((int *)left)[2];((int *)mode_arrows[i])[40]=AA_CONTROL_ID;((int *)mode_arrows[i])[41]=DISPLAY_LEFT_ID;((int *)mode_arrows[i])[42]=DISPLAY_RIGHT_ID;}
-    ((int *)borderless_label)[41]=DISPLAY_LEFT_ID;((int *)borderless_label)[42]=DISPLAY_RIGHT_ID;
+    for(int i=0;i<2;i++){((int *)mode_arrows[i])[38]=1;((int *)mode_arrows[i])[39]=((int *)left)[2];((int *)mode_arrows[i])[40]=AA_CONTROL_ID;((int *)mode_arrows[i])[41]=((int *)items[2+i])[41];((int *)mode_arrows[i])[42]=((int *)items[2+i])[42];}
+    /* Native resolution arrows activate through their shortcut masks. Left/Right
+     * focus links would compete with that activation and must stay native. */
+    ((int *)borderless_label)[41]=((int *)borderless_label)[42]=-1;
     ((int *)aa_label)[38]=1;((int *)aa_label)[39]=BORDERLESS_CONTROL_ID;
     ((int *)aa_label)[40]=UI_SCALE_CONTROL_ID;
     if(ui_slider_label){((int *)ui_slider_label)[38]=1;((int *)ui_slider_label)[39]=AA_CONTROL_ID;((int *)ui_slider_label)[40]=((int *)apply)[2];((int *)ui_slider_label)[41]=((int *)ui_slider_label)[42]=-1;}
@@ -81,7 +83,11 @@ static void aa_sync_art(void *menu){
     aa_position_knob(menu);
     if(borderless_label){
         raw_text(borderless_label,borderless_pending?L"FULLSCREEN: BORDERLESS":*((BYTE *)menu+305)?L"FULLSCREEN: EXCLUSIVE":L"FULLSCREEN: OFF (WINDOWED)");
-        ((float *)borderless_label)[12]=aa_hit_width;((float *)borderless_label)[13]=aa_hit_height;
+        /* Keep the centre focus rectangle between the arrow hitboxes, as with
+         * the resolution selector. It must not intercept either arrow. */
+        float inner=aa_hit_width;
+        if(resolution_hover)inner=((float *)resolution_hover)[12];
+        ((float *)borderless_label)[12]=inner;((float *)borderless_label)[13]=aa_hit_height;
     }
 }
 static void aa_graphics_input_state(void *menu){
@@ -105,8 +111,10 @@ static void aa_graphics_input_state(void *menu){
     if(borderless){*(DWORD *)((BYTE *)borderless_bar+64)=256;*(DWORD *)((BYTE *)borderless_knob+64)=512;}
     else{*(DWORD *)((BYTE *)borderless_bar+64)=0;*(DWORD *)((BYTE *)borderless_knob+64)=0;}
     *(DWORD *)((BYTE *)aa_label+64)=focused?768:0;
-    if(borderless_label)*(DWORD *)((BYTE *)borderless_label+64)=borderless?768:0;
-    if(focused||borderless||scaling)for(int i=62;i<=65;i++)if(((void **)menu)[i])*(DWORD *)((BYTE *)((void **)menu)[i]+64)=0;
+    /* Native resolution arrows alone own Left/Right; the label has no
+     * activation shortcut, so one press advances exactly one mode. */
+    if(borderless_label)*(DWORD *)((BYTE *)borderless_label+64)=0;
+    if(focused||borderless||scaling||((int *)menu)[11]==3)for(int i=62;i<=65;i++)if(((void **)menu)[i])*(DWORD *)((BYTE *)((void **)menu)[i]+64)=0;
     if(resolution){
         *(DWORD *)((BYTE *)((void **)menu)[62]+64)=0;
         *(DWORD *)((BYTE *)((void **)menu)[64]+64)=256;
@@ -124,7 +132,7 @@ static void make_graphics_toggle(void *menu,int id,const WCHAR *caption,float x,
     void *parts[2]={*bar,*knob};
     for(int i=0;i<2;i++)if(parts[i]){
         void *item=parts[i];menu_item(item,FALSE);enable_input(item,FALSE);((int *)item)[15]=100;
-        scale_item(item,((float *)menu)[14],((float *)menu)[15]);colour_item(item,normal);
+        scale_item(item,((float *)menu)[14],((float *)menu)[15]);if(!i)colour_item(item,normal);
         if(!i){((int *)item)[18]=0;((int *)item)[38]=((int *)item)[39]=((int *)item)[40]=1;}
         ((int *)item)[1]++;add_screen(((void **)menu)[46],item);
     }
@@ -137,7 +145,10 @@ static void __thiscall aa_graphics_init(void *menu,void *screen,void *lower){
     void *full=((void **)menu)[62],*left=((void **)menu)[64],*label=((void **)menu)[73];
     if(!readable(full,404)||!readable(left,404)||!readable(((void **)menu)[65],404)||!readable(label,484)||!readable(((void **)menu)[66],404))return;
     float original_gap=((float *)full)[9]-((float *)left)[9];if(original_gap<=0)return;
-    float gap=original_gap,resolution_y=((float *)left)[9]-original_gap;
+    float gap=original_gap;
+    /* Vanilla centres two rows in the screen. The extended list starts below
+     * the native header band so that unused space above cannot hide rows. */
+    float resolution_y=170*((float *)menu)[15]+gap*0.5f;
     float border_y=resolution_y+gap,y=resolution_y+gap*2,x=((float *)label)[8],right=((float *)full)[8];
     for(int i=62;i<=65;i++)if(((void **)menu)[i]){void *item=((void **)menu)[i];move_item(item,((float *)item)[8],i<=63?resolution_y+gap:resolution_y);}
     move_item(label,x,resolution_y+gap);
@@ -159,7 +170,7 @@ static void __thiscall aa_graphics_init(void *menu,void *screen,void *lower){
         void *source=((void **)menu)[64+i];float pos[2]={((float *)source)[8],border_y};
         void *arrow=graphics_button_sprite(*ui_instance,i?60:59,i?DISPLAY_RIGHT_ID:DISPLAY_LEFT_ID,0,pos,i?5:3);
         if(i)borderless_knob=arrow;else borderless_bar=arrow;
-        if(arrow){scale_item(arrow,((float *)menu)[14],((float *)menu)[15]);((int *)arrow)[1]++;add_screen(((void **)menu)[46],arrow);}
+        if(arrow){((int *)arrow)[15]=100;scale_item(arrow,((float *)menu)[14],((float *)menu)[15]);((int *)arrow)[1]++;add_screen(((void **)menu)[46],arrow);}
     }
     if(!aa_label||!borderless_label)return;
     ui_slider_create(menu,x,resolution_y+gap*3,right,gap);
@@ -176,6 +187,11 @@ static void __thiscall aa_graphics_init(void *menu,void *screen,void *lower){
     graphics_saved_resolution=((int *)menu)[75];graphics_saved_full=*((BYTE *)menu+305)!=0;
     graphics_saved_borderless=borderless_pending;graphics_saved_aa=aa_pending;graphics_saved_scale=ui_slider_pending;graphics_exit_after_apply=FALSE;
     aa_sync_art(menu);graphics_scroll_init(menu,gap);
+    /* Native screen navigation otherwise spends the first direction press
+     * acquiring focus. Start on the visible resolution row using the same
+     * screen focus and menu bookkeeping used when revealing scrolled rows. */
+    int initial_id=((int *)left)[2];
+    focus_row(menu,initial_id);((InputFn)(*(void ***)menu)[25])(menu,initial_id);
 }
 static void __thiscall aa_graphics_cleanup(void *menu,void *screen,void *lower){
     if(aa_menu_owner==menu){
@@ -199,14 +215,15 @@ static void __thiscall aa_graphics_input_scoped(void *menu,int selection){
             if(!save_prompt_begin(menu,graphics_save_prompt_result))log_line("Cannot show native save prompt; Graphics left open.");
             return;
         }
-        if(selection==RESOLUTION_FOCUS_ID||selection==UI_SCALE_CONTROL_ID)return;
-        if(selection==BORDERLESS_CONTROL_ID||selection==DISPLAY_LEFT_ID||selection==DISPLAY_RIGHT_ID){
+        if(selection==RESOLUTION_FOCUS_ID||selection==UI_SCALE_CONTROL_ID||selection==BORDERLESS_CONTROL_ID)return;
+        if(selection==DISPLAY_LEFT_ID||selection==DISPLAY_RIGHT_ID){
             int mode=borderless_pending?1:*((BYTE *)menu+305)?2:0;
             mode=(mode+(selection==DISPLAY_LEFT_ID?2:1))%3;
             if(mode==1&&(!display_installed||!graphics_bridge_ready)){log_line("Borderless requires the matching client helper.");return;}
             BOOL exclusive=mode==2;
             if(exclusive!=(*((BYTE *)menu+305)!=0))graphics_input_original(menu,4);
-            borderless_pending=mode==1;aa_sync_art(menu);return;
+            borderless_pending=mode==1;aa_sync_art(menu);
+            char trace[128];snprintf(trace,sizeof(trace),"Fullscreen selector: id=%d mode=%d exclusive=%u.",selection,mode,*((BYTE *)menu+305));log_line(trace);return;
         }
         if(selection==4)return; /* Hidden vanilla switch is driven by selector only. */
         if(selection==AA_CONTROL_ID){aa_pending=!aa_pending;InterlockedExchange(&aa_fault,0);aa_sync_art(menu);return;}
@@ -232,15 +249,29 @@ static void __thiscall aa_graphics_input(void *menu,int selection){
 static void __thiscall aa_graphics_colour(void *menu,int id,const float *colour){
     graphics_colour_original(menu,id,colour);
     if(menu==aa_menu_owner&&id==UI_SCALE_CONTROL_ID){if(ui_slider_label)colour_item(ui_slider_label,colour);if(ui_slider_rail)colour_item(ui_slider_rail,colour);if(ui_slider_knob)colour_item(ui_slider_knob,colour);if(ui_slider_min)colour_item(ui_slider_min,colour);if(ui_slider_max)colour_item(ui_slider_max,colour);}
-    if(menu==aa_menu_owner&&id==AA_CONTROL_ID){if(aa_label)colour_item(aa_label,colour);if(aa_bar)colour_item(aa_bar,colour);if(aa_knob)colour_item(aa_knob,colour);}
-    if(menu==aa_menu_owner&&(id==BORDERLESS_CONTROL_ID||id==DISPLAY_LEFT_ID||id==DISPLAY_RIGHT_ID)){if(borderless_label)colour_item(borderless_label,colour);if(borderless_bar)colour_item(borderless_bar,colour);if(borderless_knob)colour_item(borderless_knob,colour);}
+    if(menu==aa_menu_owner&&id==AA_CONTROL_ID){if(aa_label)colour_item(aa_label,colour);if(aa_bar)colour_item(aa_bar,colour);}
+    if(menu==aa_menu_owner&&(id==BORDERLESS_CONTROL_ID||id==DISPLAY_LEFT_ID||id==DISPLAY_RIGHT_ID)){
+        static const float normal[4]={1,1,1,0.9f};
+        if(borderless_label)colour_item(borderless_label,colour);
+        if(borderless_bar)colour_item(borderless_bar,normal);
+        if(borderless_knob)colour_item(borderless_knob,normal);
+    }
 }
 static void __thiscall aa_graphics_tick(void *menu){
     save_prompt_tick(menu);
+    if(menu_overlay_active()){
+        ui_slider_dragging=FALSE;InterlockedExchange(&graphics_scroll_active,0);
+        aa_graphics_input_state(menu);graphics_tick_original(menu);
+        /* Input reconciliation exposes added rows. Preserve the existing reel
+         * viewport while the native overlay owns input, without ticking it. */
+        graphics_layout(menu);return;
+    }
     if(menu==aa_menu_owner)ui_slider_tick(menu);
     aa_graphics_input_state(menu);graphics_scroll_tick(menu);graphics_tick_original(menu);aa_graphics_input_state(menu);graphics_layout(menu);
     if(menu==aa_menu_owner){
         static const float normal[4]={1,1,1,0.9f};
+        colour_item(borderless_bar,normal);
+        colour_item(borderless_knob,normal);
         colour_item(((void **)menu)[66],((int *)menu)[11]==3?graphics_focus_colour:normal);
         static int last_focus=-999;int focus=((int *)menu)[11];
         if(last_focus!=focus){void *button=((void **)menu)[66];char trace[180];snprintf(trace,sizeof(trace),"Graphics focus=%d Apply id=%d flags=%u mask=%lu up=%d down=%d.",focus,((int *)button)[2],*((BYTE *)button+372),(unsigned long)*(DWORD *)((BYTE *)button+76),((int *)button)[39],((int *)button)[40]);log_line(trace);last_focus=focus;}
@@ -255,7 +286,9 @@ static void __thiscall aa_graphics_tick(void *menu){
         if(begin&&end&&end>=begin&&end-begin<256&&readable(begin,(size_t)(end-begin)*sizeof(void *)))
             for(void **it=begin;it!=end;it++)if(readable(*it,484))colour_item(*it,graphics_focus_colour);
     }
-    if(aa_menu_owner==menu&&(((int *)menu)[11]==AA_CONTROL_ID||((int *)menu)[11]==BORDERLESS_CONTROL_ID||((int *)menu)[11]==DISPLAY_LEFT_ID||((int *)menu)[11]==DISPLAY_RIGHT_ID||((int *)menu)[11]==UI_SCALE_CONTROL_ID)){
+    /* Vanilla's two-row highlight state retains Resolution when Apply gains
+     * focus. Extend the existing non-resolution reset to the Apply row too. */
+    if(aa_menu_owner==menu&&(((int *)menu)[11]==3||((int *)menu)[11]==AA_CONTROL_ID||((int *)menu)[11]==BORDERLESS_CONTROL_ID||((int *)menu)[11]==DISPLAY_LEFT_ID||((int *)menu)[11]==DISPLAY_RIGHT_ID||((int *)menu)[11]==UI_SCALE_CONTROL_ID)){
         static const float normal[4]={1,1,1,0.9f};
         colour_item(((void **)menu)[73],normal);
         void **begin=((void ***)menu)[70],**end=((void ***)menu)[71];

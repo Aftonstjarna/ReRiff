@@ -80,7 +80,9 @@ static DWORD restart_started;
 #define SERVERS_ID 1500
 #define SERVER_ACTION_BASE 1500
 
+#include "../NativeLauncher/logging.h"
 static void log_line(const char *line) {
+    if(!rr_logging_ini(config_path))return;
     HANDLE file=CreateFileW(log_path,FILE_APPEND_DATA,FILE_SHARE_READ,NULL,OPEN_ALWAYS,FILE_ATTRIBUTE_NORMAL,NULL);
     if (file!=INVALID_HANDLE_VALUE) {
         DWORD written; WriteFile(file,line,(DWORD)strlen(line),&written,NULL);
@@ -216,6 +218,8 @@ static void update_toggles(void *menu) {
     }
 }
 static BOOL graphics_scroll_wheel(int delta);
+static BOOL main_scroll_wheel(int delta);
+static BOOL menu_overlay_active(void);
 #include "settings_scroll.h"
 #include "save_prompt.h"
 static void server_save_prompt_result(void *menu,int choice);
@@ -223,11 +227,12 @@ static void server_save_prompt_result(void *menu,int choice);
 static void __thiscall hook_colour(void *menu,int id,const float *colour) {
     original_colour(menu,id,colour);
     if(!server_page||page_owner!=menu)return;
-    for(int i=0;i<3;i++)if(id==SERVER_ACTION_BASE+toggle_actions[i])
-        for(int part=0;part<2;part++){
-            void *item=toggles[i][part];
-            if(item)((void (__thiscall *)(void *,const float *))(*(void ***)item)[4])(item,colour);
-        }
+    /* Native Graphics leaves the standalone thumb artwork uncoloured.
+     * setColour replaces mesh vertex colours, including its grey shading. */
+    for(int i=0;i<3;i++)if(id==SERVER_ACTION_BASE+toggle_actions[i]){
+        void *bar=toggles[i][0];
+        if(bar)((void (__thiscall *)(void *,const float *))(*(void ***)bar)[4])(bar,colour);
+    }
 }
 
 static void render(void *menu);
@@ -325,7 +330,7 @@ static BOOL make_toggles(void *menu,void *screen,float x,float width,float heigh
             ((void (__thiscall *)(void *,const float *))(*(void ***)item)[9])(item,(const float *)menu+14);
             ((int *)item)[15]=100;
             static const float normal[4]={1,1,1,0.9f};
-            ((void (__thiscall *)(void *,const float *))(*(void ***)item)[4])(item,normal);
+            if(!part)((void (__thiscall *)(void *,const float *))(*(void ***)item)[4])(item,normal);
             menu_item(item,FALSE);enable_input(item,FALSE);show_item(item,FALSE);
             ((int *)item)[1]++;add_screen(screen,item);
         }
@@ -338,6 +343,9 @@ static BOOL make_toggles(void *menu,void *screen,float x,float width,float heigh
 static void __thiscall hook_init(void *menu,void *screen,void *lower) {
     original_init(menu,screen,lower);
     page_owner=menu;server_page=FALSE;input_trace_count=0;ZeroMemory(server_rows,sizeof(server_rows));ZeroMemory(toggles,sizeof(toggles));
+    /* Original gaOptionsMenu.initScreens omits Graphics (row 0) outside
+     * the front end. Keep those race-pause settings entirely native. */
+    if(!((void **)menu)[68]){page_owner=NULL;return;}
     void *group=((void **)menu)[67],*ui=((void **)menu)[46],*sample=NULL;
     for(int id=0;id<5&&!sample;id++)sample=((void **)menu)[68+id];
     if(!readable(group,404)||!readable(ui,16)||!readable(sample,484)){
@@ -515,6 +523,7 @@ static BOOL supported_file(const WCHAR *path) {
 
 #include "antialiasing.h"
 #include "display_modes.h"
+static void cjk_direct_refresh(void);
 #include "ui_scale.h"
 #include "ui_scale_slider.h"
 #include "graphics_aa_menu.h"
@@ -617,6 +626,19 @@ static BOOL validate_image_at(BYTE *base,uintptr_t address_base) {
 
 static BOOL validate_image(BYTE *base) { return validate_image_at(base,(uintptr_t)base); }
 
+#include "flac_sample_rate.h"
+static BOOL latin_pack_enabled(void){WCHAR value[16];GetPrivateProfileStringW(L"languages",L"latin_enabled",L"0",value,16,config_path);return !wcscmp(value,L"1")||!_wcsicmp(value,L"true");}
+static BOOL cjk_pack_enabled(void){
+    WCHAR value[16];GetPrivateProfileStringW(L"languages",L"cjk_enabled",L"",value,16,config_path);
+    if(*value)return !_wcsicmp(value,L"true")||!wcscmp(value,L"1");
+    return GetPrivateProfileIntW(L"diagnostics",L"cjk_render_probe",0,config_path)!=0;
+}
+static BOOL cjk_component_enabled(void){return cjk_pack_enabled()||latin_pack_enabled();}
+#include "lastfm_utf8.h"
+#include "cjk_fonts.h"
+#include "cjk_direct_visuals.h"
+#include "unicode_trace.h"
+
 __declspec(dllexport) BOOL __cdecl ReRiffConfigureNativeReel(void **methods,int count) {
     WCHAR path[MAX_PATH];DWORD length=GetModuleFileNameW(NULL,path,MAX_PATH);
     if(!length||length>=MAX_PATH||!supported_file(path)||count!=7||!readable(methods,7*sizeof(void *)))return FALSE;
@@ -650,9 +672,10 @@ __declspec(dllexport) BOOL __cdecl ReRiffStartEngineMenu(void) {
     WCHAR *slash=wcsrchr(path,L'\\');
     if (!slash || (size_t)(slash-path)+1+wcslen(L"logs\\ReRiff-engine-menu.log")>=MAX_PATH) return FALSE;
     wcscpy(config_path,path); config_path[slash-path+1]=0;
-    wcscpy(log_path,config_path);wcscat(log_path,L"logs");CreateDirectoryW(log_path,NULL);
+    wcscpy(log_path,config_path);wcscat(log_path,L"logs");
     wcscpy(log_path,config_path); wcscat(log_path,L"logs\\ReRiff-engine-menu.log");
     wcscat(config_path,L"server.ini");
+    if(rr_logging_ini(config_path)){WCHAR logs[MAX_PATH];wcscpy(logs,log_path);WCHAR *end=wcsrchr(logs,L'\\');if(end){*end=0;CreateDirectoryW(logs,NULL);}}
     BYTE *base=(BYTE *)GetModuleHandleW(NULL);
     if(!supported_file(path)){log_line("Refused: unsupported Game.exe file hash or size.");return FALSE;}
     if(!validate_image(base)){
@@ -662,6 +685,8 @@ __declspec(dllexport) BOOL __cdecl ReRiffStartEngineMenu(void) {
     HMODULE pinned;
     if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_PIN,
         (const WCHAR *)(uintptr_t)&ReRiffStartEngineMenu,&pinned)) return FALSE;
+    if(!install_lastfm_utf8(base))log_line("Last.fm UTF-8 correction refused: original CIL bytes differ.");
+    if(!install_flac_sample_rate(base))log_line("FLAC sample-rate patch guard refused; original decoder retained.");
     void **table=(void **)(base+0x7a5a7c); DWORD protection;
     if (!VirtualProtect(table,27*sizeof(void *),PAGE_READWRITE,&protection)) return FALSE;
     original_init=(ScreenFn)table[15]; original_cleanup=(ScreenFn)table[16]; original_input=(InputFn)table[24];
@@ -689,6 +714,7 @@ __declspec(dllexport) BOOL __cdecl ReRiffStartEngineMenu(void) {
     if(!install_main_branding(base))log_line("Main-menu branding could not be installed.");
     if(!install_save_prompt(base))log_line("Native save prompt could not be installed.");
     if(!install_ui_scale(base))log_line("Native UI-scale extension could not be installed.");
+    install_unicode_trace(base);
     if(borderless_active)aa_attach();
     InterlockedExchange(&installed,2); log_line("Engine menu hooks installed."); return TRUE;
 }

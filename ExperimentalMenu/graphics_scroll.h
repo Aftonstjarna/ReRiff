@@ -55,11 +55,25 @@ static void graphics_scroll_cleanup(void){
     if(graphics_reel){void *old=graphics_reel;graphics_reel=NULL;((int *)old)[1]--;((void *(__thiscall *)(void *,unsigned))(*(void ***)old)[0])(old,1);}
     graphics_part_count=0;
 }
+static float graphics_scroll_bottom(void *menu,float bottom){
+    void *apply=((void **)menu)[66];
+    if(readable(apply,180)){
+        float y=((float *)apply)[9],height=((float *)apply)[13]*((float *)apply)[44];
+        int anchor=((int *)apply)[14]/3;
+        /* Original Apply is a bottom-right anchored native sprite (origin 8).
+         * Reserve its actual scaled bounds, including room for the reel cap. */
+        if(y>0&&height>0&&anchor>=0&&anchor<=2){
+            float limit=y-height*anchor*0.5f-24*((float *)menu)[15];
+            if(limit<bottom)bottom=limit;
+        }
+    }
+    return bottom;
+}
 static void graphics_scroll_init(void *menu,float gap){
     graphics_first=0;graphics_gap=gap;graphics_part_count=0;graphics_visible=4;
     float size[2];UiCanvas *canvas=ui_scope();
     if(canvas){size[0]=canvas->width;size[1]=canvas->height;}else if(!ui_actual_resolution(size)){size[0]=1920;size[1]=1080;}
-    float top=((float *)((void **)menu)[64])[9],bottom=size[1]-100*((float *)menu)[15];
+    float top=((float *)((void **)menu)[64])[9],bottom=graphics_scroll_bottom(menu,size[1]-100*((float *)menu)[15]);
     graphics_visible=clamp_index((int)((bottom-top)/gap+0.5f),1,4);
     graphics_scroll_part(((void **)menu)[64],0,TRUE,FALSE);graphics_scroll_part(((void **)menu)[65],0,TRUE,FALSE);graphics_scroll_part(resolution_hover,0,TRUE,FALSE);
     void *extras[9]={borderless_label,borderless_bar,borderless_knob,aa_label,aa_bar,aa_knob,ui_slider_label,ui_slider_rail,ui_slider_knob};
@@ -79,7 +93,9 @@ static void graphics_scroll_init(void *menu,float gap){
     if(graphics_reel){
         ((int *)graphics_reel)[1]++;
         for(int i=0;i<4;i++){void *spacer=create_text(L"",0,i*gap,3,1,0,-1,FALSE,-1,FALSE,TRUE);if(spacer){menu_item(spacer,FALSE);enable_input(spacer,FALSE);show_item(spacer,FALSE);((int *)spacer)[1]++;reel_add(graphics_reel,spacer,NULL);}}
-        reel_limit(graphics_reel,graphics_visible);reel_bar(graphics_reel,size[0]*0.92f,top-gap*0.45f,top+(graphics_visible-0.55f)*gap,1,NULL);
+        float bar_bottom=top+(graphics_visible-0.55f)*gap;
+        if(bar_bottom>bottom)bar_bottom=bottom;
+        reel_limit(graphics_reel,graphics_visible);reel_bar(graphics_reel,size[0]*0.92f,top-gap*0.45f,bar_bottom,1,NULL);
     }
     InterlockedExchange(&graphics_scroll_active,1);attach_scroll_window();graphics_layout(menu);
 }

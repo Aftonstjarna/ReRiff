@@ -6,6 +6,7 @@ static UiResolutionFn ui_resolution_original;
 static void **ui_graphics_instance,**ui_game_ui;
 static GraphicsBridgeFn ui_font_setup;
 static int ui_scale_value,ui_font_value=-1;
+static BOOL ui_scale_refresh_pending;
 static DWORD ui_scope_tls=TLS_OUT_OF_INDEXES;
 typedef struct UiCanvas {float width,height;} UiCanvas;
 static UiCanvas *ui_scope(void){return ui_scope_tls==TLS_OUT_OF_INDEXES?NULL:TlsGetValue(ui_scope_tls);}
@@ -36,7 +37,11 @@ static void ui_layout_reference(float factor){
      * resolution. Change its design reference, never its layout coordinates. */
     ui_resolution_ratio[0]=ui_resolution_ratio[1]=1;
     DWORD old,ignored;if(VirtualProtect(ui_menu_reference,8,PAGE_READWRITE,&old)){
-        ui_menu_reference[0]=2048/factor;ui_menu_reference[1]=1536/factor;
+        float actual[2];
+        if(ui_scale_value&&ui_actual_resolution(actual)){
+            float scale=(1080.f/1536.f)*factor;
+            ui_menu_reference[0]=actual[0]/scale;ui_menu_reference[1]=actual[1]/scale;
+        }else{ui_menu_reference[0]=2048;ui_menu_reference[1]=1536;}
         VirtualProtect(ui_menu_reference,8,old,&ignored);
     }
 }
@@ -45,7 +50,9 @@ static void ui_setup_fonts(float factor){
     /* Original gaUI.setupFontScale owns atlas selection and font metrics.
      * Only that call sees the size factor. Backgrounds and layout always see
      * native resolution, and the original input functions need no remapping. */
-    ui_resolution_ratio[0]=ui_resolution_ratio[1]=factor;
+    float actual[2];
+    float font_factor=ui_scale_value&&ui_actual_resolution(actual)?factor*1080/actual[1]:factor;
+    ui_resolution_ratio[0]=ui_resolution_ratio[1]=font_factor;
     ui_font_setup(*ui_game_ui);
     ui_resolution_ratio[0]=ui_resolution_ratio[1]=1;ui_font_value=ui_scale_value;
 }
@@ -60,10 +67,18 @@ static void __thiscall ui_menu_init(void *menu,void *screen,void *lower){
     hook->init(menu,screen,lower);ui_scope_set(previous);
     if(hook->canvas.width){char trace[160];snprintf(trace,sizeof(trace),"UI scale: value=%d native font/menu factor=%.2f canvas=%.0fx%.0f.",ui_scale_value,factor,actual[0],actual[1]);log_line(trace);}
 }
+static void ui_refresh_scale(void){
+    if(!ui_scale_refresh_pending)return;ui_scale_refresh_pending=FALSE;
+    float factor=ui_design_factor(ui_scale_value);ui_layout_reference(factor);
+    /* Use the same original menu/viewport notification as display changes,
+     * without resetting the renderer or changing the physical resolution. */
+    if(graphics_bridge_ready)graphics_notify_resize();
+    ui_layout_reference(factor);ui_setup_fonts(factor);
+}
 static void __thiscall ui_menu_tick(void *menu){
     UiMenuHook *hook=ui_menu(menu);if(!hook)return;
     UiCanvas *previous=ui_scope_set(hook->canvas.width?&hook->canvas:NULL);
-    hook->tick(menu);ui_scope_set(previous);
+    hook->tick(menu);ui_scope_set(previous);ui_refresh_scale();cjk_direct_refresh();
 }
 static void __thiscall ui_menu_cleanup(void *menu,void *screen,void *lower){
     UiMenuHook *hook=ui_menu(menu);if(!hook)return;

@@ -1,9 +1,14 @@
 #include "engine_menu.c"
+#include <math.h>
 #define CHECK(c) do{if(!(c)){fprintf(stderr,"FAIL %d: %s\n",__LINE__,#c);return 1;}}while(0)
 static HWND host;
 static WNDPROC fixture_original_proc;
 static unsigned key_messages,mouse_messages,close_messages,position_messages;
+static WPARAM activation;
+static int last_width,last_height;
 static LRESULT CALLBACK fixture_window_proc(HWND window,UINT message,WPARAM wp,LPARAM lp){
+    if(message==WM_WINDOWPOSCHANGING){WINDOWPOS *pos=(WINDOWPOS *)lp;if(!(pos->flags&SWP_NOSIZE)){last_width=pos->cx;last_height=pos->cy;}}
+    if(message==WM_ACTIVATE)activation=wp;
     if(message==WM_KEYDOWN)key_messages++;
     if(message==WM_LBUTTONDOWN)mouse_messages++;
     if(message==WM_WINDOWPOSCHANGED)position_messages++;
@@ -65,7 +70,9 @@ static void prepare(DisplayMode *choices,UINT count,int selected,BYTE full){
     ((int *)graphics_menu)[75]=selected;graphics_menu[305]=full;
 }
 int main(void){
-    host=CreateWindowW(L"STATIC",L"Display mode fixture",WS_OVERLAPPEDWINDOW,60,80,640,480,NULL,NULL,GetModuleHandleW(NULL),NULL);CHECK(host);
+    WNDCLASSW fixture_class={0};fixture_class.lpfnWndProc=DefWindowProcW;fixture_class.hInstance=GetModuleHandleW(NULL);fixture_class.lpszClassName=L"ReRiffDisplayFixture";
+    CHECK(RegisterClassW(&fixture_class));
+    host=CreateWindowW(fixture_class.lpszClassName,L"Display mode fixture",WS_OVERLAPPEDWINDOW,60,80,640,480,NULL,NULL,GetModuleHandleW(NULL),NULL);CHECK(host);
     fixture_original_proc=(WNDPROC)SetWindowLongPtrW(host,GWLP_WNDPROC,(LONG_PTR)fixture_window_proc);CHECK(fixture_original_proc);
     ShowWindow(host,SW_SHOW);WindowState original=capture_window(host);CHECK(original.valid);
     display_pc=mock_pc;display_window=mock_window;display_clock=mock_clock;display_limits=mock_limits;
@@ -90,7 +97,8 @@ int main(void){
     pointer_value[0]=23;pointer_value[1]=42;pointer_backend[0x246]=1;
     display_pointer_position(pointer_device,mapped);CHECK(mapped[0]==23&&mapped[1]==42);
     pointer_backend[0x246]=0;borderless_active=FALSE;
-    display_pointer_position(pointer_device,mapped);CHECK(mapped[0]==23&&mapped[1]==42);
+    display_pointer_position(pointer_device,mapped);CHECK(fabsf(mapped[0]-23.f*3840/client.right)<0.01f&&fabsf(mapped[1]-42.f*2160/client.bottom)<0.01f);
+    pointer_backend[0x247]=1;display_pointer_position(pointer_device,mapped);CHECK(mapped[0]==23&&mapped[1]==42);pointer_backend[0x247]=0;
     current_mode=native_modes[0];
     /* The original renderer/window owner waits for the menu worker. Styling
      * must return without requiring that owner to pump a synchronous message. */
@@ -105,6 +113,8 @@ int main(void){
     CHECK(position_messages==positions&&!display_style_pending);
     SendMessageW(host,WM_KEYDOWN,VK_RETURN,0);SendMessageW(host,WM_LBUTTONDOWN,MK_LBUTTON,0);SendMessageW(host,WM_CLOSE,0,0);
     CHECK(key_messages==1&&mouse_messages==1&&close_messages==1&&IsWindow(host));
+    SetCapture(host);SendMessageW(host,WM_ACTIVATE,MAKEWPARAM(WA_INACTIVE,TRUE),0);
+    CHECK(activation==WA_INACTIVE&&GetCapture()!=host);
     ShowWindow(host,SW_MINIMIZE);CHECK(IsIconic(host));WindowState minimized=capture_window(host);
     display_style();CHECK(IsIconic(host));WindowState still_minimized=capture_window(host);CHECK(EqualRect(&minimized.rect,&still_minimized.rect));
     ShowWindow(host,SW_RESTORE);display_style();
@@ -119,7 +129,17 @@ int main(void){
     CHECK(display_alt_enter(WM_SYSKEYUP,VK_RETURN,alt)&&!display_alt_enter_held);
     CHECK(display_alt_enter(WM_SYSKEYDOWN,VK_RETURN,alt)&&!borderless_active);
     CHECK(GetWindowLongPtrW(host,GWL_STYLE)==original.style);
-    CHECK(display_alt_enter(WM_SYSKEYUP,VK_RETURN,alt));borderless_preferred=FALSE;
+    CHECK(display_alt_enter(WM_SYSKEYUP,VK_RETURN,alt));
+    drain_window_messages();
+    for(int attempt=0;attempt<10;attempt++){Sleep(20);drain_window_messages();}
+    RECT restored_client;CHECK(GetClientRect(host,&restored_client));
+    printf("Restored client=%ldx%ld mode=%ux%u style=%08lx request=%dx%d\n",restored_client.right,restored_client.bottom,current_mode.width,current_mode.height,(unsigned long)GetWindowLongPtrW(host,GWL_STYLE),last_width,last_height);
+    /* The headless Wine desktop can constrain the resulting HWND. Verify the
+     * requested native frame size; pointer tests above cover client/render mismatch. */
+    RECT requested_frame={0,0,1280,720};
+    CHECK(AdjustWindowRectEx(&requested_frame,(DWORD)original.style,FALSE,(DWORD)original.extended));
+    CHECK(last_width==requested_frame.right-requested_frame.left&&last_height==requested_frame.bottom-requested_frame.top);
+    CHECK(restored_client.right>0&&restored_client.bottom>0);borderless_preferred=FALSE;
     CHECK(!display_alt_enter(WM_SYSKEYDOWN,VK_RETURN,alt)); /* Original exclusive shortcut. */
     CHECK(GetTempPathW(MAX_PATH,config_path));wcscat(config_path,L"reriff-display-test.ini");DeleteFileW(config_path);
     wcscpy(log_path,config_path);wcscat(log_path,L".log");
@@ -136,6 +156,7 @@ int main(void){
     borderless_active=TRUE;CHECK(extended_mode_set(mock_pc(),&native_zero,TRUE,FALSE));
     CHECK(received.render_width==1536&&received.render_height==864);
     borderless_active=FALSE;display_style();current_mode=native_modes[0];
+    original=capture_window(host);CHECK(original.valid);
     resets=rescales=resizes=overlays=0;
     DisplayMode choices[2]={native_modes[0],{3840,2160,3840,2160,60,0}};
     prepare(choices,2,1,FALSE);CHECK(apply_display(graphics_menu,TRUE));

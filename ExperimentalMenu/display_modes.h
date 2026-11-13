@@ -53,12 +53,12 @@ static PointerPositionFn pointer_position_original;
 static void ui_scale_map_pointer(float *position);
 static void display_map_pointer(void *pointer,float *result){
     if(!result||result[0]<0||result[1]<0||!readable(pointer,0x248)||*((BYTE *)pointer+0x246))return;
-    if(borderless_active&&display_installed){
+    if(display_installed&&!*((BYTE *)pointer+0x247)){
         RECT client;void *pc=display_pc();DisplayMode mode;BYTE full,sync;
         if(pc&&GetClientRect(display_window(),&client)&&client.right>0&&client.bottom>0){
             mode_current_original(pc,&mode,&full,&sync);
             UINT width=mode.render_width?mode.render_width:mode.width,height=mode.render_height?mode.render_height:mode.height;
-            if(width&&height){result[0]*=(float)width/client.right;result[1]*=(float)height/client.bottom;}
+            if(width&&height&&!full){result[0]*=(float)width/client.right;result[1]*=(float)height/client.bottom;}
         }
     }
     ui_scale_map_pointer(result);
@@ -95,6 +95,13 @@ static BOOL display_alt_enter(UINT message,WPARAM key,LPARAM flags){
 }
 static LRESULT CALLBACK display_window_proc(HWND window,UINT message,WPARAM wp,LPARAM lp){
     if(display_alt_enter(message,wp,lp))return 0;
+    /* Original WM_ACTIVATE tests the entire WPARAM. Normalize its minimized
+     * high word so native deactivation clears keyboard/mouse state. */
+    if(message==WM_ACTIVATE){
+        wp=LOWORD(wp);
+        if(wp==WA_INACTIVE){ReleaseCapture();ClipCursor(NULL);}
+    }
+    if(message==WM_ACTIVATEAPP&&!wp){ReleaseCapture();ClipCursor(NULL);}
     if(message==display_message){
         DisplayWindowWork *work=(DisplayWindowWork *)lp;
         if(work){restore_window_now(&work->state);HeapFree(GetProcessHeap(),0,work);}
@@ -162,7 +169,20 @@ static BOOL display_style_needed(HWND window){
 static void display_style_now(void){
     if(!display_installed)return;
     HWND window=display_window();RECT monitor,current;
-    if(!borderless_active){if(normal_window.valid){restore_window(&normal_window);normal_window.valid=FALSE;}return;}
+    if(!borderless_active){if(normal_window.valid){
+        /* The original reset has already selected the new client size. Restore
+         * the saved frame/position, never the previous mode's old dimensions. */
+        WindowState restored=normal_window;DisplayMode mode;BYTE full,sync;void *pc=display_pc();
+        if(pc){mode_current_original(pc,&mode,&full,&sync);
+            RECT frame={0,0,(LONG)mode.width,(LONG)mode.height};
+            if(!full&&mode.width&&mode.height&&AdjustWindowRectEx(&frame,(DWORD)restored.style,FALSE,(DWORD)restored.extended)){
+                restored.rect.right=restored.rect.left+frame.right-frame.left;
+                restored.rect.bottom=restored.rect.top+frame.bottom-frame.top;
+                restore_window(&restored);
+            } /* Exclusive mode retains the native reset's window placement. */
+        }
+        normal_window.valid=FALSE;
+    }return;}
     if(IsIconic(window)||!monitor_rect(window,&monitor))return;
     if(!normal_window.valid)normal_window=capture_window(window);
     LONG_PTR style=GetWindowLongPtrW(window,GWL_STYLE),extended=GetWindowLongPtrW(window,GWL_EXSTYLE);

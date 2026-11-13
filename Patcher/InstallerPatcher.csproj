@@ -2,6 +2,7 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net45</TargetFramework>
+    <PlatformTarget>x86</PlatformTarget>
     <LangVersion>latest</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>ReRiff-Patcher</AssemblyName>
@@ -9,7 +10,12 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Program.cs" />
+    <Compile Include="LanguageComponent.cs" />
+    <Reference Include="System.IO.Compression" />
+    <Reference Include="System.IO.Compression.FileSystem" />
+    <Reference Include="System.Runtime.Serialization" />
     <PackageReference Include="dnlib" Version="4.4.0" />
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net45" Version="1.0.3" PrivateAssets="all" />
   </ItemGroup>
+  <ItemGroup><Compile Include="../Shared/Logging.cs" Link="Logging.cs" /></ItemGroup>
 </Project>

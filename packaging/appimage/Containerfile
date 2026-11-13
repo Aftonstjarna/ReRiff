@@ -1,0 +1,10 @@
+FROM docker.io/library/archlinux@sha256:42217d5f09e11d3fe7ad3b309b7fde891d458464dab5d674e629073765610427
+RUN pacman -Syu --noconfirm --needed python python-pip python-setuptools python-wheel \
+    gcc tk gdbm patchelf binutils file wget tar gzip desktop-file-utils ca-certificates \
+    && pacman -Scc --noconfirm
+# The deployer verifies the hashes of its own versioned runtime/tool downloads.
+RUN wget -q https://raw.githubusercontent.com/pkgforge-dev/Anylinux-AppImages/4526cd9babb60ae033046a754f55f644e884e5af/useful-tools/quick-sharun.sh -O /opt/quick-sharun \
+    && echo 'b05d9ebe4a150521cbc3f3ed9351523155956a090b5d03eb7990362eaaf6a362  /opt/quick-sharun' | sha256sum -c - \
+    && chmod +x /opt/quick-sharun
+WORKDIR /build
+ENTRYPOINT ["bash", "/src/packaging/appimage/build-inside.sh"]

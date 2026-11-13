@@ -6,9 +6,9 @@
 static DWORD WINAPI test_update(LPVOID unused) {
     (void)unused;
     BOOL result=check_updates();WCHAR marker[CAP];
-    WCHAR *details=wcsstr(message,L"Details: ");
-    if(result||update_handoff||!details){wprintf(L"%ls\n",message);return 1;}
-    details+=9;_snwprintf(marker,CAP,L"%ls\\prepared.json",details);marker[CAP-1]=0;
+    WCHAR *details=update_work;
+    if(result||update_handoff||!*details){wprintf(L"%ls\n",message);return 1;}
+    _snwprintf(marker,CAP,L"%ls\\prepared.json",details);marker[CAP-1]=0;
     if(GetFileAttributesW(marker)==INVALID_FILE_ATTRIBUTES){wprintf(L"%ls\n",message);return 2;}
     puts("PASS: official GitHub release download, SHA256 verification, installer preflight; stopped before installation");return 0;
 }

@@ -10,6 +10,12 @@ import sys
 import tarfile
 import tempfile
 import zipfile
+import os
+try:
+    from logging_policy import logging_enabled
+except ModuleNotFoundError:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'packaging'))
+    from logging_policy import logging_enabled
 
 
 def safe_name(name):
@@ -69,12 +75,26 @@ def prepare(archive, expected, work, game, platform, channel=None):
         raise ValueError('Expected an update-only package for this platform')
     if channel is not None and manifest.get("channel", "stable") != channel:
         raise ValueError("Release channel mismatch")
+    metadata_path = work/'latest-release.json'
+    if metadata_path.is_file():
+        # New launchers use release metadata rather than interpreting the tag.
+        # Bind that identity to the verified archive before loading installer code.
+        metadata = json.loads(metadata_path.read_text())
+        if manifest.get('version') != metadata.get('version'):
+            raise ValueError('Release package version mismatch')
+        if archive.name not in metadata.get('artifacts', []):
+            raise ValueError('Release package is not listed in metadata')
     installer = load_installer(root)
     installer.install(root, game, None, platform, dry_run=True)
     if platform == 'windows':
         # Apply from a private runtime so a future Python upgrade can replace
         # the installation's executable and DLLs without locking itself.
         shutil.copytree(game/'localserver/windows-python', work/'runtime')
+    elif (game/'localserver/ReRiff-Runtime-x86_64.AppImage').is_file():
+        # Apply from a private copy so replacing the installed runtime is safe.
+        for name in ('ReRiff-Runtime-x86_64.AppImage', 'linux-runtime.sh'):
+            shutil.copy2(game/'localserver'/name, work/name)
+        (work/'ReRiff-Runtime-x86_64.AppImage').chmod(0o755)
     (work/'prepared.json').write_text(json.dumps({'bundle': str(root), 'game': str(game), 'platform': platform}))
 
 
@@ -116,6 +136,13 @@ def apply(work):
     if plan['platform'] == 'linux':
         # start.exe /unix does not reliably wait for the Unix child. Confirm
         # owned-backend shutdown on the host before replacing server code.
+        native = game/'localserver/native/config.json'
+        if native.is_file():
+            import subprocess
+            result = work/'server-stop.ini'
+            subprocess.run([str(work/'ReRiff-Runtime-x86_64.AppImage'),
+                '--server-control', 'stop', '--root', str(game/'localserver'),
+                '--result', str(result)], check=True, timeout=30)
         controller = game/'localserver/server-control.py'
         if controller.is_file():
             spec = importlib.util.spec_from_file_location('reriff_update_stop', controller)
@@ -140,7 +167,8 @@ def main():
     if game is None:
         try: game=Path(json.loads((args.work/'prepared.json').read_text())['game'])
         except (OSError,ValueError,KeyError): pass
-    log_path=game/'logs/update.log' if game else args.work/'update.log'
+    enabled=game is not None and logging_enabled(game)
+    log_path=game/'logs/update.log' if enabled else Path(os.devnull)
     try:
         log_path.parent.mkdir(parents=True,exist_ok=True)
     except OSError:
@@ -154,7 +182,7 @@ def main():
     except Exception as error:
         with log_path.open('a', encoding='utf-8') as log:
             log.write(type(error).__name__+': '+str(error)+'\n')
-        (args.work/'failure').write_text(type(error).__name__+'\n')
+        (args.work/'failure').write_text(type(error).__name__+': '+str(error)+'\n', encoding='utf-8')
         return 1
     return 0
 

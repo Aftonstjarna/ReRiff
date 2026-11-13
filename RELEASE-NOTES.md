@@ -1,726 +1,382 @@
-# ReRiff 1.2.3 — Singleplayer, display controls and client updates
+# ReRiff 1.3.0 — Language fonts, portable clients and UI improvements
 
 ## In-game summary
 
-- Play offline with local scores and ghosts; no server needed.
-- Choose borderless fullscreen, higher render sizes and UI scale.
-- Windows menu, AA and update fixes; optional Podman server.
+- Add optional CJK and Latin/European fonts across the game.
+- Run the Linux client without a separate Python installation.
+- Improve UI scaling, display controls and update diagnostics.
 
 ## Full release notes
 
-Combines the tested changes from experimental 1.2.3-1 through 1.2.3-8.
-
-- Play singleplayer without running a local server. Scores and ghosts stay on
-  this PC; existing local-server data can be imported without changing its source.
-- Try the Primary server, then Secondary, then singleplayer. Retain saved
-  addresses when selecting singleplayer; Primary-only skips Secondary.
-- Install an optional Podman server from the launcher, then start or stop it there.
-  The server image is downloaded on request, with persistent configuration/data
-  under localserver/podman. Use http://127.0.0.1:5144 as Secondary. Podman itself
-  is installed separately; the client installer no longer bundles the backend.
-- Choose windowed, borderless or exclusive fullscreen through the native Graphics
-  selector. Render above monitor resolution and scale down in borderless mode.
-  Keep or revert display changes with the original confirmation and 10-second
-  timeout; Alt+Enter switches windowed/current fullscreen mode.
-- Adjust UI Scale with the native volume-style slider: 0 is original Auto,
-  25 Small, 50 the 1080p reference, 75 Large and 100 Very Large. Retain native
-  spacing, scrolling, mouse/controller navigation and a selectable Apply button.
-- Fix Windows native-menu loading and Direct3D AA/reset compatibility. Keep
-  toggle artwork aligned after layout and slider focus during Left/Right input.
-- Simplify Servers to graphical mode switches and clear save actions. Prompt to
-  apply/discard changes when backing out of Graphics or Servers. Offer Return
-  without saving, Save and return, Save and restart, and Save and exit in order.
-- Treat numbered GitHub prereleases as experimental updates. Keep Skip launcher
-  and unattended updating off on fresh installs, preserving existing preferences.
-- Show the installed client version's concise patch notes in native News, with
-  the original Visit URL action opening the full GitHub release notes. Preserve
-  custom server announcements and send the complete client revision to servers.
-- Keep launcher/client/menu/News/update diagnostics under the game's logs folder,
-  including the game process exit code. Preserve verified vanilla DLL backups.
-
-Windows live testing confirmed native menus, Borderless Apply/Keep, higher render
-resolution, AA resource recreation, clean exit, toggle alignment and slider focus.
-D3D9/9Ex and installer/updater regression checks also pass. Friends-list restoration
-and a native Linux game executable are not included; Linux uses Proton.
-
-# ReRiff 1.2.3-8 — Experimental graphics control alignment and focus
-
-- Keep the AA toggle thumb aligned after scrolling/layout. Reapply the original
-  fullscreen-toggle positioning rule from the bar's current position rather than
-  restoring a stale pre-toggle thumb position.
-- Handle UI Scale Left/Right through the original Audio-style pressed/repeat
-  polling only. Remove duplicate button-activation shortcuts so adjustment keeps
-  focus on the slider; retain Up/Down row navigation and mouse dragging.
-- Add regression coverage for repeated AA toggles and scrolling at five scales,
-  plus slider direction adjustment and focus/input ownership checks.
-
-The 1.2.3-7 Windows retest confirmed Borderless Apply/Keep, a change to 1920x1200
-rendering on a 1280x800 display, AA reset/resource recreation and exit code zero.
-These graphical/input corrections pass local native regression checks; their
-appearance and focus behaviour still need an in-game retest.
-
-# ReRiff 1.2.3-7 — Experimental Direct3D reset compatibility
-
-- Preserve Direct3D's complete original device method table when attaching the AA
-  hook. Extend only Present/Reset (and PresentEx/ResetEx on 9Ex), rather than
-  substituting a fixed-size copy of public interface entries.
-- Forward calls from other devices sharing that table without AA rendering,
-  resource cleanup or borderless background suppression.
-- Add real-device regressions for native table identity, AA output, graphics-state
-  preservation, reset/recreation and unrelated-device isolation on D3D9 and D3D9Ex.
-- Log the game's hexadecimal process exit code in `logs/ReRiff-launcher.log`,
-  including failures such as `0xC0000005`.
-
-The Windows report confirms an access violation at address `0x00000001` during
-borderless Apply. A fixed-size replacement device table is a compatibility risk
-near this failure; these changes remove it. D3D9/9Ex rendering and reset checks
-pass through Wine, but the affected Windows borderless path still needs retesting.
-The report does not establish the exact native call stack or prove this was the
-only cause. Menu injection and client News delivery are confirmed in the latest logs.
-
-# ReRiff 1.2.3-6 — Experimental live-image guard correction
-
-- Stop interpreting the live Windows PE header as unchanged file metadata when
-  validating native UI prologues. Use the preferred base, image bounds and
-  relocation records from the same hash-verified original executable instead.
-- Retain exact live opcode and relocated-operand comparisons. Add regression
-  coverage for adjusted header metadata with discarded relocation pages, including
-  rejection of an altered operand under those conditions.
-- Log live PE header details and bytes at the first guarded function if native
-  menu validation still fails on the affected Windows installation.
-
-The 1.2.3-5 Windows logs confirm client notes are being delivered to native News
-results, but menu injection still fails at the first native prologue guard.
-This correction passes the modeled loader-state tests; in-game Windows success
-still needs confirmation. No server update is required for client News delivery.
-
-# ReRiff 1.2.3-5 — Experimental Windows guard and client News fixes
-
-- Preserve relocation records from the same hash-verified original executable
-  instead of requiring its discardable `.reloc` section to remain mapped. Add
-  a regression test with that section inaccessible and detailed menu-guard errors.
-- Install the current client revision's patch notes and merge them into the
-  original Parse News result. Retain native News rendering and custom server posts;
-  replace built-in placeholder/status posts with the current client's notes.
-- Preserve the complete experimental revision in the client version header.
-  Verify upgrades from the current transport and older signed client variants.
-- Add `logs/ReRiff-news.log` for client-note delivery diagnostics.
-
-This remains an experimental debugging build. Native and original-SDK regressions
-pass locally; the Windows menu fix still needs confirmation on the affected PC.
-The release popup depends on native menu startup and a successful unattended update.
-Existing display/manual-scale experiments retain their testing limitations.
-
-# ReRiff 1.2.3-4 — Experimental Windows menu loading and optional server
-
-- Fix native-menu startup guards for the original Windows executable when Windows
-  loads it at a different address. Validate exact relocated operands against the
-  original PE relocation table, while retaining the executable hash check.
-- Replace the launcher’s legacy Stop local server action with Install, Start and
-  Stop for an optional per-game Podman server. Download the official server image
-  only when Install is selected; client installers do not bundle the backend.
-- Keep server configuration and persistent data in `localserver/podman/`, expose
-  it only at `http://127.0.0.1:5144`, and show that address for the Secondary server
-  field. The configured Primary server remains first in the connection order.
-- Keep Podman diagnostics in the game’s `logs/` folder. Manage only the container
-  belonging to this game folder; retain data when stopping the server.
-
-This is an experimental debugging build. Install Podman separately and start its
-local runtime before installing the optional server. Automated tests cover rebased
-menu guards and server ownership/lifecycle; Windows gameplay still needs live
-validation. The reported missing release popup and News patch notes are not fixed
-in this revision. Existing display and manual UI scaling experiments remain under test.
-
-# ReRiff 1.2.3-3 — Experimental Servers action order
-
-- Order the final Servers actions as RETURN WITHOUT SAVING, SAVE AND RETURN,
-  SAVE AND RESTART, then SAVE AND EXIT.
-- Rename BACK WITHOUT SAVING to RETURN WITHOUT SAVING, retaining native
-  scrolling and wraparound navigation.
-
-This is a debugging build. The missing native menus reported on Windows remain
-under investigation; menu startup details are in `logs/ReRiff-engine-menu.log`.
-
-# ReRiff 1.2.3-2 — Experimental launcher, save prompts and diagnostics
-
-- Treat numbered GitHub prereleases as experimental launcher updates. Select
-  the newest supported prerelease by its full version, skip drafts and stable
-  releases, and use that release's own assets and checksums.
-- Add Apply to native Graphics navigation and highlighting, retaining the
-  original Apply sprite and save handler.
-- Prompt to apply or discard unsaved Servers and Graphics changes when backing
-  out. Reuse the original game's yes/no overlay and its input lifecycle;
-  pressing Back on the prompt keeps editing.
-- Write launcher, client, network, menu, updater and setup diagnostics under
-  `logs/` in the game folder. Preserve legacy root logs when updating; startup
-  collection reports use the same folder. Add explicit native-menu startup errors.
-- Keep Skip launcher and automatic updates off on fresh installs. Preserve
-  existing preferences when updating.
-
-This remains experimental. Apply hover/controller navigation and save prompts
-need in-game validation on Windows and Proton. Missing native menus on one
-Windows install are under investigation; collect `logs/ReRiff-engine-menu.log`
-and `logs/ReRiff-client.log` for diagnosis. Borderless focus, restart and manual
-UI scaling retain the testing limitations documented for 1.2.3-1.
-
-# ReRiff 1.2.3-1 — Experimental singleplayer and native menu updates
-
-- Replace the client-managed Python server with in-process singleplayer storage.
-  Reuse the original Parse SDK; retain scores and ghosts across sessions and
-  import existing local-server data without modifying the source database.
-- Try the primary server, then the secondary server, then singleplayer.
-  Primary-only skips the secondary; the Singleplayer toggle retains saved URLs.
-  Client installers no longer bundle the Python backend or its web dependencies.
-- Simplify Settings → Servers by removing duplicate plaintext mode buttons while
-  retaining native graphical toggles, scrolling and wraparound navigation.
-  Add SAVE AND EXIT, which saves settings before requesting a normal game close.
-- Replace separate fullscreen switches with a resolution-style selector using
-  original arrow sprites and input: OFF (WINDOWED), BORDERLESS and EXCLUSIVE.
-  Restore the selected resolution value after scrolling away and back.
-- Improve native menu hover, icon alignment and graphics navigation. Add a
-  volume-style UI SCALE slider: 0 uses the game's built-in Auto scaling; 25 is
-  Small, 50 is the 1080p reference, 75 is Large and 100 is Very Large.
-- Continue borderless fullscreen and higher render-resolution experiments with
-  the original Keep/Revert confirmation and 10-second timeout. Add Alt+Enter
-  switching between windowed and the selected fullscreen mode.
-
-This is a prerelease. Auto scaling has been confirmed in-game. Manual UI scaling,
-borderless focus/input, confirmation/revert and restart after borderless still
-need live testing; previous builds showed freezes or lingering audio. The server
-menu and display fixtures, original-SDK singleplayer tests, and installer/updater
-checks pass, but they do not establish complete Windows gameplay compatibility.
-Stable 1.2.2 is unchanged.
-
-# ReRiff 1.2.2-13 — Unreleased display experiments
-
-Held on the experimental branch; **not published or included in stable 1.2.2**.
-
-- Prototype native resolution-text hover, GPU-bounded render presets, borderless
-  fullscreen, and the original Keep/Revert overlay with a 10-second deadline.
-- Delegate Apply to the original Graphics handler and move window styling onto
-  the original HWND message thread. Normalize native zero render dimensions.
-- Start the deadline at native screen entry and log renderer reset stages,
-  confirmation state and button activation for diagnosis.
-- Keep Graphics and Servers action labels uppercase, while the main Settings
-  entry remains titled Servers.
-
-Known live failures: keyboard/mouse input can stop after borderless applies;
-controller confirmation has sometimes worked. Confirmation/reversion can freeze.
-Save and restart after borderless may leave lingering audio or an invisible game
-window. Process/window ownership and complete input restoration remain unresolved.
-Fixture checks do not establish that these paths work in the actual game.
-
-# ReRiff 1.2.2 — Native Settings, Linux setup and automatic updates
-
-Combines the working changes from experimental 1.2.2-1 through 1.2.2-12.
-
-- Move Servers into the original Settings screen as its first entry, retaining
-  Graphics, Audio, Controls, Credits and the original Friends main-menu entry.
-  Keep vanilla spacing and separator lines, reuse the track picker's scrollbar,
-  and fix mouse/controller selection, held navigation and input-mask handling.
-- Reuse native fullscreen-style switches for Skip launcher, External only and
-  Force Offline. Force Offline is Off by default, meaning networking is enabled.
-  The Servers list wraps in both directions and scrolls the focused row into view.
-- Add a native Linux setup window with Steam/Flatpak folder detection, progress,
-  details and retry. Offer an optional Music-folder link into the Proton prefix,
-  with an editable source path, retained preference and existing-file protection.
-  Terminal installation and unattended updating remain available.
-- Link the launcher's Skip launcher checkbox to the existing in-game setting.
-  Add opt-in automatic updates when skipping, with progress, safe cancellation,
-  verified packages, rollback, original-argument forwarding and automatic game resume.
-  Include --test-auto-update for a same-version update test without another release.
-- Give Windows launcher/updater/setup explicit current-user manifests. They no
-  longer request elevation solely because of installer-name detection; the game
-  folder must be writable by the current account.
-- Show the ReRiff version at the bottom right of the main menu at half the menu
-  font size. Show a one-time, non-interactive notification after an unattended
-  update, alongside the independent server-address notification.
-- Add optional post-process antialiasing in Graphics using the native switch art
-  and directional navigation. Fix D3D9 backend attachment, Apply persistence,
-  switch hit area and complete keyboard/controller wraparound. AA is Off by
-  default; unsupported devices fall back to Off.
-- Match added Graphics/Servers action labels to the original all-caps style while
-  keeping the main Settings entry titled Servers.
-- Correct numeric prerelease ordering in server News and include a commented
-  public-server address example without selecting it or overwriting saved settings.
-
-Unlocked render resolutions, borderless fullscreen and the modified display
-confirmation/timed-revert path are **not included**. They remain in experimental
-for further testing of input loss, confirmation/revert freezes and restart/window
-visibility issues. Stable retains the original resolution and fullscreen behavior.
-Friends-list online restoration is not included. Linux runs the Windows game
-through Proton. AA has been checked live on Proton; physical Windows graphics
-and full-race performance remain additional validation targets.
-
-# ReRiff 1.2.2-12 — Native Servers menu wraparound
-
-- Wrap Up from the first Servers entry to the last, and Down from the last
-  entry to the first. Scroll the selected entry into view, including on wrap.
-- Reuse the original control direction handler and its native held-key repeat.
-  Extend its ID links with a scrolling adapter that reveals the target before
-  native focus moves. Disable custom direction polling on the Servers page.
-- Retain mouse, scrollbar, toggles, save/restart and original Settings behavior.
-  Restore the original control method tables before cleanup.
-- Verify three complete loops in both directions, visibility/input of every
-  native link target, absence of competing polling, and cleanup restoration.
-
-# ReRiff 1.2.2-11 — Restore native Graphics row wraparound
-
-- Extend the game's original directional focus links into a complete settings
-  loop: Resolution → Fullscreen → Antialiasing → Resolution, with the reverse
-  order for Up. Update both resolution-arrow controls so the top wraps to AA.
-- Keep Apply's native activation and give it Up/Down routes back to AA and
-  Resolution when focused with the mouse, preventing a navigation dead end.
-- Retain the original input handler and held-key repeat. Restore all four
-  modified controls' navigation fields on cleanup.
-- Test three complete cycles in both directions from both resolution arrows,
-  Apply escape links and restoration of the original navigation fields.
-
-# ReRiff 1.2.2-10 — Attach antialiasing to the render-thread backend
-
-- Fix AA still becoming unavailable in revision 9. The public graphics wrapper
-  and its PC interface forward to a separate renderer; use that backend's
-  original global address and its D3D9 device pointers directly.
-- Verify both original references to the backend global and the constructor's
-  device offsets. Log the specific attachment stage if lookup fails.
-- Confirm attachment and successful AA image-resource creation in the actual
-  Steam/Proton game, alongside the edge-smoothing and Present/Reset tests.
-  Player testing confirms AA stays enabled after Apply and reopening Graphics.
-- Retain the half-size main-menu watermark from revision 9.
-- Connect AA to the original keyboard/controller focus links between Fullscreen
-  and Apply. Keep native key repeat, mouse input, activation and resolution
-  controls; restore the original links during cleanup.
-
-AA remains experimental and Off by default on new installations. Enable it in
-Settings → Graphics → Antialiasing and select Apply. Physical Windows drivers
-and full-race visual/performance testing remain to be checked.
-
-# ReRiff 1.2.2-9 — Antialiasing device lookup and watermark size
-
-- Fix Antialiasing becoming unavailable on Apply: locate the D3D9 device through
-  the original embedded PC renderer, retaining the supported-layout checks.
-- Size the main-menu watermark to half the original menu entries' font height,
-  using the menu's chosen font size rather than an unrelated design scale.
-- Verify the original renderer adjustment/constructor bytes, device attachment,
-  hooked Present/Reset, edge smoothing and graphics-state restoration. Check
-  watermark sizing at two menu font heights.
-
-Antialiasing remains experimental and Off by default. Enable it under
-Settings → Graphics → Antialiasing and select Apply. Live gameplay and driver
-testing are still needed.
-
-# ReRiff 1.2.2-8 — Version watermark, update notice and native antialiasing
-
-- Show the running ReRiff version in the bottom-right corner of the main menu,
-  including numbered experimental revisions. Use native game text with no input
-  handling, and follow the current screen size.
-- After a successful unattended installation, show "ReRiff has updated to …"
-  once on the next main menu. Keep server and update notifications independent,
-  non-interactive and automatically dismissed. Failed/manual updates do not
-  create notices. Support upgrades started by older unattended updaters too.
-  Test this with --test-auto-update after installing this build.
-- Add Antialiasing to the original Graphics menu with the native fullscreen
-  switch artwork. Apply saves the setting; Back discards pending changes.
-- Implement optional post-process edge smoothing on the original D3D9 device,
-  disabled by default. Preserve graphics state and display modes; handle device
-  reset and fall back to Off when shader/device support is unavailable.
-- Retain existing Graphics controls, server controls, navigation and updates.
-
-Experimental: native menu and renderer fixtures verify ownership, placement,
-notice consumption, actual smoothed pixels, state restoration and device reset.
-Live gameplay and physical Windows/Proton driver testing are still required.
-
-# ReRiff 1.2.2-7 — Steam unattended-test forwarding fix
-
-- Recognize --test-auto-update and --no-auto-update in the Linux Steam bridge.
-  Keep Steam's Proton invocation and forward the original Game.exe path and
-  arguments explicitly, preserving spaces and Unicode.
-- Accept the test flag before or after Steam's forwarded game command without
-  passing it into the original game. The test flag implies skipping the launcher
-  for that invocation, including on Windows.
-- Add regression checks for the real bridge and native launcher parsing, and
-  document the Linux Steam launch-options example.
-- Retain the progress window, safe Cancel behavior and same-version test mode
-  from revision 6. Existing settings and saved data are preserved.
-
-# ReRiff 1.2.2-6 — Launcher skipping and automatic updates
-
-- Add adjacent Skip launcher and Auto-update when skipping launcher checkboxes
-  to the launcher window. Skip launcher shares the existing in-game preference;
-  saving in-game refreshes the launcher control.
-- Offer opt-in automatic updates before skipped launches, on the installed
-  release channel. Compare exact numbered revisions, preserve game arguments,
-  resume gameplay after installation, and suppress repeat checks during that
-  resume. Failed checks start the installed version and log the failure.
-- Show a small native progress window for unattended checks/downloads,
-  verification and installation. Cancel starts the installed game before
-  handoff; cancellation is disabled during file replacement/rollback.
-- Add --test-auto-update for a one-shot, same-version unattended reinstall
-  through the normal verified update path, without publishing a test release.
-  The resumed game launch skips the second check; older builds are not installed.
-- Give the launcher, updater and setup explicit asInvoker manifests so Windows
-  uses the current account's permissions instead of installer-name detection.
-  The game folder must still be writable by that account.
-- Add https://riffapi.hobune.stream/ as a commented example in newly generated
-  INI files and a bundled server.ini.example without selecting it or overwriting
-  existing configurations.
-- Include revision 5's centered native scrollbar and Force Offline toggle,
-  with Off meaning networking is enabled.
-
-# ReRiff 1.2.2-5 — Centered scrollbar and Force Offline
-
-- Center the native scrollbar vertically on the screen, retaining its height
-  and right-side position on both Settings lists.
-- Rename Networking to Force Offline and invert its displayed state: Off means
-  networking is enabled, On disables networking. The default is Off.
-- Preserve existing saved networking preferences and server addresses, including
-  save/reload and selection of local or external servers.
-- Retain revision 4's navigation and vanilla Settings activation fixes, reported
-  working in live testing.
-
-# ReRiff 1.2.2-4 — Restore vanilla Settings activation
-
-- Use base menu input dispatch for the scrolling Settings list. Keep the
-  original audio-slider update code on the Audio page, and clear stale Audio
-  drag flags before dispatching original Settings actions.
-- Reconcile input masks after the game's recursive screen reset: visible rows
-  use the active screen mask; hidden rows, arrows and dividers cannot capture
-  input. Preserve ongoing press/release state when a mask is unchanged.
-- Add regression coverage for hover/click and controller confirmation on
-  Graphics, Audio, Controls and Credits, including scrolling to Credits and
-  stale slider flags. Exercise the original native screen mask routine.
-- Record up to 64 vanilla Settings activations per visit in
-  ReRiff-engine-menu.log for follow-up diagnosis.
-- Keep Servers first and retain the native file-picker scrollbar.
-
-Experimental: automated checks pass; the reported live-game hover and activation
-failure still needs confirmation with this revision.
-
-# ReRiff 1.2.2-3 — Native scrollbar and Settings navigation
-
-- Move Servers to the first row of Settings, preserving all original entries.
-- Reuse the original local-track file picker’s gaMenuReel scrollbar, including
-  its artwork, arrows, dragging and range limits. Remove the custom scrollbar
-  and extra arrow controls from revision 2.
-- Give up/down navigation one selection owner with held-button repeat and
-  bounded movement. Apply focus after input dispatch to prevent competing
-  highlights, skipped entries and stuck navigation.
-- Retain vanilla spacing, separator lines, fullscreen-style switches, wheel,
-  Page Up/Down, Home/End, save/reload and Save and restart.
-- Guard the original executable and bridge methods; update the managed helper
-  and native menu together using the complete installer or updater.
-
-Experimental: automated navigation and bridge checks pass; scrollbar behavior
-and controller feel still require a live game trial. Friends restoration is
-not included in this revision.
-
-# ReRiff 1.2.2-2 — Vanilla spacing and scrolling Settings
-
-- Give Settings and Servers the original row spacing, text anchor and divider
-  lines. Add the vanilla arrow beside Servers, after the existing settings.
-- Add a proportional scrollbar with wheel, track-click and thumb-drag support,
-  plus Page Up/Down, Home/End and controller edge scrolling.
-- Keep every entry reachable without squeezing all rows onto one screen. Hidden
-  rows and switches cannot accept input. Focus follows the viewport and returns
-  correctly from the original Audio/Graphics settings.
-- Preserve server selections, fullscreen-style switches, save/reload and restart,
-  plus the Linux installer and optional music-folder link from revision 1.
-
-Experimental: the native input and layout harness passes; the revised spacing,
-scrollbar and controller feel still need a live game trial.
-
-# ReRiff 1.2.2-1 — Native Settings integration and Linux GUI setup
-
-- Add Servers to the original Settings screen using the game's own text,
-  navigation, focus, and rendering. Existing settings entries and actions are
-  retained, and Friends keeps its original main-menu entry.
-- Reuse the original fullscreen toggle graphics for Skip launcher, External only,
-  and Networking, including the original on/off sprites and focus tint.
-- Keep server selection, networking and skip-launcher preferences, save/reload,
-  and Save and restart in the Settings submenu. Back returns to Settings.
-- Add a native Linux setup window with Steam-folder detection, a folder picker,
-  explicit Install action, progress, details, retry, and persistent installer
-  logs. It uses the existing transactional installer and verified backups.
-- Offer an optional Linux Music link with an editable source folder. Respect
-  XDG Music settings, preserve existing music files, and retain opt-out on updates.
-- Recognize numbered prerelease versions in server News comparisons, with
-  numeric revision ordering and stable releases sorting after their prereleases.
-- Preserve terminal and automatic-updater behavior for explicit installer
-  arguments, and detect common Flatpak Steam libraries.
-
-Experimental: live game rendering and controller testing of the relocated menu
-are still required. Friends-list online functionality is a subsequent task.
-The Linux setup window requires GTK 3; command-line setup remains available.
-
-# ReRiff 1.2.1 — Stable in-game server management
-
-Combines the tested client changes through experimental 1.2.1-4 and the
-experimental Docker server updates into the stable main branch.
-
-- Add a native, controller-friendly Servers menu inside the game, replacing
-  Friends while retaining News. Select local or external servers, toggle
-  external-only operation or networking, and save without losing stored URLs.
-- Add Save and restart: save settings, close the game normally, wait for the old
-  process to exit, and relaunch with the new configuration and original launch
-  arguments. It supports launcher-started and directly started games and returns
-  straight to gameplay without another launcher window.
-- Save the skip-launcher preference, support explicit skip/show flags, preserve
-  Steam-forwarded Windows game arguments, and refresh launcher controls after
-  settings are changed in the game.
-- Fix Windows helper loading failure 0x80131044 with strong-name signed managed
-  helpers and matching client references. Validate on Microsoft .NET Framework
-  x86 and verify known vanilla and upgraded DLL outputs before installation.
-- Bundle the Linux patcher's runtime so installation and DLL-hook updates need
-  neither Mono nor a separately installed .NET runtime on the Linux host.
-- Preserve verified vanilla backups, reject conflicting backup hashes, and
-  retain rollback, release checksum verification, and stable/experimental channel
-  checks. Current client backups use the game's bak folder.
-- Include the Windows startup collector and bounded network exception logging
-  in ReRiff-network.log for diagnosing remaining connection problems.
-- Promote the Docker server's native version-aware News responses, persistent
-  data configuration, and server checks to main and the stable :latest image.
-  The game compatibility Version endpoint remains unchanged.
-- Update the main README with player instructions and screenshots first, then
-  server administration, build instructions, and reconstruction status.
-
-Prerelease users: uncheck Use experimental builds while the game is closed to
-install stable 1.2.1. Manual installs must use the complete platform package.
-Existing settings and saved data are retained. Docker updates require pulling
-and recreating the container with its existing environment and data mount.
-
-The Windows game still needs its original runtime dependencies and uses Proton
-on Linux. A reported Windows connection issue after a successful server probe
-still needs network-log diagnosis; this release does not claim to resolve it.
-
-# ReRiff 1.2.1-4 — In-game Save and restart
-
-- Replace the third button from the bottom of the native Servers menu with
-  Save and restart.
-- Save settings first, close the game normally, and wait for the old process to
-  exit before relaunching with the saved server configuration and original game
-  arguments. The restart goes straight back into the game.
-- Support restarting both launcher-started and directly started games. A save
-  or handoff failure leaves the game running; a canceled close restores menu
-  interaction instead of forcing termination.
-# ReRiff 1.2.1-3 — Linux update patcher runtime
-
-- Include the Linux DLL patcher's runtime in the installer so fresh installs and
-  updates no longer require Mono or a host .NET installation.
-- Keep the signed-helper loading fix from revision -2, including verified DLL
-  repair and preservation of existing vanilla backups.
-- Record bounded network and assembly-loading exception details in
-  ReRiff-network.log, and include that log in the startup report collector.
-
-The Linux update failure was confirmed in update.log. The separately reported
-Windows external-server connection failure remains under investigation; the
-Windows selects the external address successfully; its subsequent game-request
-failure still needs the new network log to identify the cause.
-# ReRiff 1.2.1-2 — Windows assembly loading fix
-
-- Fix the assembly-loading failure identified in the supplied Windows crash
-  dump: ReRiff.ClientConfig was unsigned while the Parse transport required a
-  strongly named dependency (HRESULT 0x80131044).
-- Strong-name sign both ReRiff managed helpers and update their injected
-  references. Verify fresh and upgraded DLL outputs against known SHA256 hashes.
-- Repair supported older patched clients even when original backups are absent;
-  preserve existing verified vanilla backups and game settings.
-- Test helper loading on Microsoft .NET Framework x86 before publishing.
-- Use numbered prerelease revisions and preserve compatibility with older
-  experimental-channel updaters.
-
-Install the complete package with ReRiff-Setup.exe or the experimental updater.
-Both the patched Parse DLLs and matching helpers must be updated together.
-The identified loader error is addressed; the affected Windows client still
-needs to confirm that the game reaches its menu.
-# ReRiff 1.2.0 — Experimental in-game server management
-
-This is an experimental prerelease. Stable releases remain on their existing channel.
-
-- Replace Friends with a native Servers screen; preserve normal News.
-- Save server settings separately from Play; support both --skip and --skip-launcher.
-- Disable networking without clearing the saved server addresses.
-- Restore the server notification popup alongside the engine menu.
-- Add an experimental-build checkbox and show Experimental beside the installed version.
-- Report the client version to News and ask the player to exit and update when the server software is newer.
-- Support verified vanilla and existing ReRiff installs through local source-built DLL patching. Keep backups in the game's bak folder.
-
-The original Game.exe is unchanged. Recovery and Linux-port sources are checkpointed on the branch; the release does not enable Linux driving.
-
-# ReRiff 0.1.10 — Launcher release channels
-
-- Add a checkbox to switch between experimental builds and the stable release.
-- Uncheck it to restore stable, including when stable has the same or an older version.
-- Show Experimental beside the version in the title bar for installed experimental builds.
-- Verify release checksums and channel metadata before installing. Failed switches retain the installed channel and files.
-- Keep this release focused on the launcher; the experimental in-game menu is not included.
-
-# ReRiff 0.1.9 — Vanilla installation support
-
-- Install onto supported unmodified game files by patching the user's DLLs locally.
-  Packages include the source-built patcher, not game DLLs or binary deltas.
-- Verify both original and patched DLL hashes before changing the installation.
-- Keep matching vanilla backups unchanged and continue installation. Reject
-  conflicting backup hashes without overwriting them, and roll back game files
-  if installation fails.
-- Support restoring verified original backups with the current installer.
-- Fresh Windows installs use the game's .NET Framework runtime for patching;
-  fresh Linux installs require Mono. Existing patched installs need neither
-  patching step and retain their settings and saved data.
-
-# ReRiff 0.1.8 — Repository name alignment
-
-- Use Aftonstjarna/ReRiff as the primary combined server-and-launcher repository
-  after the fork rename. The previous repository is now Aftonstjarna/ReRiff-test.
-- Point the launcher directly at the current release source and enable publishing
-  workflows under the new canonical name.
-- Use ghcr.io/aftonstjarna/reriff:latest in Docker instructions and by default in
-  Compose. Existing deployments should retain their environment and data mount.
-
-Settings, saved records, ghosts and recorded backup locations are preserved.
-
-# ReRiff 0.1.7 — Unified server and launcher repository
-
-- Make Aftonstjarna/riffapi-local-extended the primary combined ReRiff project,
-  retaining upstream history, the server, launcher, client tools and installers.
-- Move future client release checks to this repository and publish its combined
-  server image at ghcr.io/aftonstjarna/riffapi-local-extended.
-- Retain the standalone server entry point through the same maintained backend,
-  with configurable storage, and carry forward the upstream API test suites.
-- Provide this migration build through the previous ReRiff release repository so
-  existing launchers can upgrade without manually changing their update source.
-
-Existing server.ini settings, records, ghosts, and recorded backups are preserved.
-When changing Docker images, retain the existing data volume or bind mount.
-
-# ReRiff 0.1.6 — Updater verification release
-
-This release provides a new version to test **Update from GitHub** from v0.1.5.
-It retains v0.1.5's updater and server-stop fixes without additional behavior
-changes. It is published as a normal release so the stable-release updater can
-find it.
-
-To verify: click **Update from GitHub**, allow the launcher to reopen, and confirm
-the title reads `ReRiff Launcher v0.1.6`. Settings and saved data should remain.
-An already stopped local server must not block the update; a running owned local
-backend is stopped before installation. Docker servers are left untouched.
-
-# ReRiff 0.1.5 — Proton update shutdown fix
-
-- Confirm local-server stop results through an atomic completion marker instead
-  of Wine start.exe's exit code. Stopping an already stopped server succeeds.
-- Let the Linux update tool verify owned-server shutdown directly, fixing updates
-  blocked at "Could not stop this installation's local server" in external-only
-  mode. Docker and unrelated processes remain untouched.
-
-Launchers affected by the old stop failure need this update installed manually
-once. Subsequent updates use the corrected handoff.
-
-# ReRiff 0.1.4 — Launcher version display
-
-- Show the running launcher's compiled version in its window title, for example
-  `ReRiff Launcher v0.1.4`.
-
-Use **Update from GitHub** in launcher 0.1.3 or install this update manually.
-
-# ReRiff 0.1.3 — Automatic client updates
-
-- **Update from GitHub** now downloads and installs the latest stable client
-  release, then reopens the launcher, on Windows and Linux/Proton.
-- Verify the official release SHA256 and package integrity before closing the
-  launcher. Apply through the existing installer with backups and rollback;
-  preserve server.ini and saved server data.
-- Use a separate temporary native updater to wait for the launcher to exit.
-  Windows applies from a private Python runtime; Proton uses native Linux Python.
-- Stop only this installation's local Python server before replacement. Docker
-  servers are not updated or stopped by the client update button.
-- Keep the launcher open on download, checksum or preflight failures, with log
-  details. Updates remain disabled during a launcher-managed game session.
-
-Install 0.1.3 once using the release installer to enable this feature. Older
-launchers still open the release page; they cannot gain automatic updating
-without that initial launcher update. An existing supported ReRiff installation
-is required. This release includes only ReRiff components, not game DLL patches.
-
-# ReRiff 0.1.2 — Shared song identity
-
-- Automatically register cached song IDs with audio-file SHA256 identities when
-  the launcher starts and after the game closes. Identical files on different
-  clients share leaderboards without hand-written per-song mappings.
-- Persist the server's song catalog in its existing data volume. Existing scores,
-  cached IDs, object IDs and ghost uploads remain intact.
-- Resolve shared scores, friend queries, ranking counts, ghost lists, FileData
-  lookups and ghost downloads across verified equivalent IDs. Count each player's
-  best score once per song/mode/version, without deleting duplicate history.
-- Keep different source files separate even if their title and artist match.
-  Reject conflicting registrations instead of moving existing history.
-- Include native C++ identity libraries for Linux and Windows local servers and
-  build the library into the Docker image.
-
-Update the server image and the launcher on **both clients**, then launch the
-game once through each updated launcher. Source audio files must still be
-accessible. New imports made during a session register when the game closes.
-Only hashes, song IDs, title and artist are sent; audio and local paths are not.
-Older launchers still connect, but cannot register missing cached song identities.
-
-These remain update-only installers requiring an existing supported ReRiff
-installation. No original game binaries or binary patches are distributed.
-
-# ReRiff 0.1.1 — Updated launcher
-
-- Add **Stop local server**, restricted to the Python backend belonging to this
-  installation. Docker containers and unrelated services are left untouched.
-- Add **External server only**, disabling local autostart and fallback in both
-  GUI and `--skip-launcher` modes. An unavailable external server disables game
-  networking rather than silently using localhost.
-- Add **Check for updates**, checking published GitHub releases and opening the
-  release page when a newer version is available.
-- Include user-agnostic Linux installation instructions in release downloads.
-- Publish update-only Windows/Linux packages through GitHub Actions. These
-  update ReRiff components and verify the existing patched DLL hashes, without
-  including or changing game-derived DLL patches. An existing supported ReRiff
-  installation is required; these packages are not fresh-install packages.
-
-Close the game and launcher before installing. Existing settings and saved server
-data are preserved. Set Steam's launcher bridge as described in README-LINUX.md.
-The game's original Proton/.NET requirements and the backend limitations below
-still apply.
-
-# ReRiff 0.1.0 — Initial release
-
-## Included
-
-- Offline Linux/Proton self-extracting installer and native Windows setup package.
-- Windows package includes portable Python 3.13.17 and pinned server libraries.
-- Verified binary-delta patching of the supported 2017 game DLLs; game binaries
-  and assets are not redistributed.
-- Native Windows launcher, INI editor, automatic local backend startup, and
-  `--skip-launcher` mode. Proton uses the native Linux Python backend.
-- Client-side external/fallback server selection; blank addresses disable Parse
-  networking. Missing or invalid settings fail closed.
-- Six-second, non-activating, click-through server notification overlay.
-- Structured, credential-redacted request/response traces and gap flags.
-- Project-folder original/version backups, repeat installation, hash validation,
-  transactional rollback on install failure, and original-DLL restore mode.
-
-## Requirements and known limitations
-
-- Linux requires Python 3.10+ and a working Steam/Proton installation. Windows
-  package requires x64 Windows. The launcher's native code adds no .NET dependency;
-  the original game's CLR and DirectX requirements remain.
-- The supported Game.exe/DLL build is the 2017 release identified by installer
-  hashes. Other versions or unknown modifications are rejected.
-- Startup notifications are Win32 overlays, not renderer hooks. Exclusive
-  fullscreen visibility depends on Proton/compositor behavior; borderless mode
-  is recommended. Actual controller hardware and all Proton variants are not
-  exhaustively tested.
-- Backend selection is fixed for a game session. Local and remote databases are
-  not synchronized, and the admin UI manages local storage only.
-- The bundled backend inherits a generic-profile update problem and malformed
-  news JSON observed during live investigation. Scores, ghost upload/download,
-  and track storage have worked in captured sessions; full feature parity is
-  not claimed. The backend is intended for localhost use.
-- The patched Parse platform assembly retains its assembly identity but cannot
-  be re-signed with the original publisher's private key. Strict strong-name
-  verification can reject it.
-- Windows execution is tested under disposable Wine prefixes; a physical Windows
-  installation and full Steam/Proton gameplay remain live validation targets.
+Stable release for Windows and Linux/Proton, including the tested 1.2.4 beta
+series and the subsequent missing-font and Auto-scale regression checks.
+
+### Language fonts and song metadata
+
+- Add optional Chinese, Japanese and Korean fonts, plus a separately selectable
+  Latin/European pack with missing letters such as Polish ł, ą and ę.
+- Install or enable either pack during setup or from the launcher's Languages
+  page. Both packs share one additional VFS pair. Disabling a pack keeps its
+  files available for offline re-enabling; original game archives are preserved.
+- Retain Unicode filenames, song titles and artists across the picker,
+  leaderboards and pause screen, including mixed-script spacing, selection
+  colours and higher-resolution glyphs.
+
+### Graphics, menus and track analysis
+
+- Refresh manual UI scale independently of resolution. Keep 50 at the fixed
+  1080p reference and 0 (Auto) on the game's built-in sizing path.
+- Scale main-menu rows and icon hit areas together; use native scrolling for
+  overflow. Give Graphics the available space below the header and keep its
+  scrollbar clear of Apply. Preserve separator and toggle artwork and keep the
+  scale slider rail visible when rendering above the window resolution.
+- Improve native fullscreen-selector input, initial row focus, Apply highlighting
+  and windowed pointer handling. Retain native menu navigation and key repeat.
+- Remove Servers from settings opened during a race. Music-picker navigation
+  retains its original boundaries; the withdrawn wraparound probe is excluded.
+- Resample higher-rate FLAC PCM to 44.1 kHz before track analysis using the
+  original resampler, correcting the extended-track timing problem. The source
+  file and playback rate are unchanged. No speculative audio-distortion patch
+  is included.
+
+### Installation, local server and updates
+
+- Make the Linux installer and client self-contained without a user-installed
+  Python runtime. The optional Flask server runs in its downloadable AppImage.
+- Run the optional Windows local server with a private Python runtime in the game
+  folder, without Podman. Keep server downloads separate from the client install.
+- Add Diagnostics → View update details in the launcher, including retained
+  temporary failure messages and bounded log excerpts after reopening it.
+  Clarify download limits, missing files, write failures and preflight errors.
+- Add logging controls to setup and the launcher. Fresh stable installs default
+  logging off; existing explicit preferences are retained. Disabling logging
+  keeps an existing logs folder and does not create a new one.
+- Use ~/Music for the Linux music link by default, retaining saved custom paths.
+- Keep verified originals and the last two backups per configuration. Use .bak,
+  reserve binary/font version history for development builds, and keep helper
+  scripts and optional server files out of the game root.
+- Keep experimental updates opt-in and stable as the default update channel.
+
+### Existing server integration
+
+- Retain main's persistent server identity and permanent Public/LAN aliases,
+  including request-matched file URLs and offline LAN access to the same store.
+- Combine that routing with optional local-server logging without replacing
+  stored profiles, scores, ghosts or uploaded files.
+
+### Validation and known limitation
+
+- Validate native UI input and lifecycle, Auto/manual sizing, missing font-pack
+  combinations, independent font installation, shared archive ownership,
+  installer rollback, update diagnostics and Python-free Linux operation.
+- A beta.6 startup black-screen report stopped reproducing after installing the
+  Latin pack and remained resolved when it was disabled. An isolated CJK-only
+  launch at scale 55 also succeeded. Its original cause is unconfirmed; this
+  release does not claim a fix for that report. Auto remains available at 0.
+
+# ReRiff 1.2.4-beta.6 — UI scaling, Latin fonts and update diagnostics
+
+## In-game summary
+
+- Keep manual UI sizing consistent and scroll crowded menus.
+- Add optional Polish and extended Latin font support.
+- Read update errors from the launcher's Diagnostics page.
+
+## Full release notes
+
+Experimental client test build for Windows and Linux/Proton. Stable 1.2.3
+remains the default download and update channel.
+
+### Menus and graphics
+
+- Refresh manual UI sizing without requiring a resolution change. Keep 50 at
+  the fixed 1080p reference size and retain the game's built-in sizing for Auto.
+- Scale the main menu's original rows and icon hit areas together. Use the
+  native scrolling reel when the list exceeds the available screen space.
+- Start Graphics below the header to use the available height, retain native
+  row spacing, and reserve room above the scaled Apply button for its scrollbar.
+- Preserve separator artwork height and keep the UI Scale rail visible when
+  rendering above the window resolution. Align the rail and thumb vertically.
+- Preserve native toggle-thumb shading when scrolling or changing focus.
+- Remove Servers from settings opened during a race.
+- Leave music-picker navigation at its original boundaries. The experimental
+  wraparound prototype was withdrawn after a crash during testing.
+
+### Optional language fonts
+
+- Add separate Latin/European font checkboxes to setup and the launcher's
+  Languages page, including Polish letters such as ł, ą and ę.
+- Publish the Noto Sans component separately as `ReRiff-Latin.zip`, about
+  350 KiB. CJK remains independently selectable. Both packs share one extra
+  VFS pair, preserve original game archives, and can be re-enabled offline.
+- Retain UTF-8 metadata when either language component is enabled and preserve
+  existing CJK glyph priority, selection colours and high-resolution metrics.
+
+### Setup and updates
+
+- Add Diagnostics → View update details in the launcher. Show retained
+  temporary failure messages and bounded log excerpts in a scrollable window,
+  including after reopening the launcher, without enabling diagnostic logging.
+- Report download size limits, missing downloads, disk write failures and
+  preflight errors more clearly. Preserve existing destination files on failure.
+- Default the Linux music link to `~/Music` rather than the whole home folder;
+  keep saved custom paths and the option to skip linking.
+
+### Validation
+
+- Add native regressions for scale-only refreshes, main-menu overflow and input
+  ownership, scaled icon hit bounds, scrollbar clearance, separator sizing,
+  slider pixel alignment, toggle shading and pause-menu isolation.
+- Check independent font installation in either order, combined archive
+  ownership, disable/re-enable behavior and refusal to overwrite modified packs.
+- Check readable UTF-8/UTF-16 update details, download failures, installer
+  controls, retained settings and Python-free Linux installation.
+- The latest layout and rail changes still need visual testing on more systems.
+
+# ReRiff 1.2.4-beta.5 — Diagnostics and tidier installs
+
+## In-game summary
+
+- Toggle diagnostic logging in setup or the launcher.
+- Font support now uses one extra archive pair.
+- Keep original files and just two backups of each config.
+
+## Full release notes
+
+- Add a diagnostic-logging checkbox to Windows/Linux setup and a native
+  Diagnostics tab in the launcher. Logging defaults on for beta/development
+  builds and off for stable builds; an explicit choice is preserved.
+- Disabling logging stops client, launcher and updater diagnostic output.
+  Restart a running local server to apply its logging change. A fresh disabled install creates no `logs` folder;
+  existing logs and their folder are retained.
+- Install the startup-report collector under `logs` when logging is enabled;
+  keep its offline template under `localserver/diagnostics`.
+- Consolidate base and high-resolution CJK textures into one additional native
+  VFS pair. Glyph textures, metrics and paths remain unchanged. Existing owned
+  font volumes migrate with rollback protection; unrelated mods and original
+  game archives are retained. The font download is about 105 MiB.
+- Use `.bak` for backups and migrate the former `bak` folder. Preserve verified
+  original game files and the two most recent snapshots per configuration file.
+  Keep binary/font version history only for experimental/development builds.
+  Stable updates remove verified obsolete history after successfully applying.
+- Remove the redundant example INI and game-root GitHub shortcuts from new
+  installs, retiring existing copies during upgrades. Setup retains its GitHub
+  link.
+- Verify stable/beta logging defaults, native checkbox behavior, no disabled
+  log-folder creation, retained existing logs, config rotation, original-file
+  restoration and single-volume font migration on Windows and Linux helpers.
+  The local in-game test confirmed filenames, leaderboards and pause text.
+
+# ReRiff 1.2.4-beta.4 — Optional CJK fonts and Languages controls
+
+## In-game summary
+
+- Add optional Chinese, Japanese and Korean font support in setup.
+- Install or disable CJK fonts from the launcher's Languages page.
+- Keep UTF-8 song titles and artists readable across game screens.
+
+## Full release notes
+
+Experimental client test build for Windows and Linux/Proton. Stable 1.2.3
+remains the default download and update channel.
+
+### Optional CJK component
+
+- Add an optional CJK font checkbox to Windows and Linux setup. Keep the choice
+  when updating an existing enabled installation; unchecked disables support
+  without deleting the installed font files.
+- Add a native Languages tab to the launcher with a CJK install/enable checkbox.
+  First installation downloads the checksum-verified component for the exact
+  client release; re-enabling an installed component works offline.
+- Bundle the font component in the installers as well as publishing it separately
+  as `ReRiff-CJK.zip`. The current pack is about 107 MiB and includes the Noto
+  Open Font License. Players need no system font install or extra Python runtime.
+- Extend the game's native text and glyph rendering for missing CJK characters,
+  retaining native Latin text, selection colours, layout, alignment and lifecycle.
+  Reuse the tested file-picker, leaderboard and pause-screen corrections.
+- Select 32/64/96px glyph textures automatically for the rendered text size,
+  retaining fixed layout metrics and fallback when a larger tier is unavailable
+  or the native visual budget is exhausted.
+- This component adds glyph support, not translated menus. It uses the tested
+  Japanese Noto glyph forms; regional typography selection is not included.
+- Restart the game after enabling or disabling support. Routine use does not
+  enable the filename/metadata diagnostic traces.
+
+### Installation and metadata safety
+
+- Install owned additional native font archive pairs without modifying the
+  original `vfs.dat` or `vfs.zip`. Choose unused slots around other mods and
+  record file hashes for subsequent updates.
+- Adopt only the exact known local prototype font archives. Refuse modified
+  owned files, unowned font conflicts, invalid packages and linked destinations.
+- Stage font files and configuration in the installer's existing rollback
+  transaction. Preserve unrelated server settings, scores and cached tracks.
+- Apply the verified, field-scoped UTF-8 metadata write/read and equality-query
+  patches from original game DLLs. Recognize the tested local prototype hashes
+  for upgrade while requiring a hash-verified original backup.
+- Retain the guarded in-memory Last.fm artist-text correction. Previously stored
+  question-mark metadata is not rewritten and may need a separate repair.
+
+### Validation
+
+- Check component checksums, archive collisions, ownership, settings preservation,
+  offline enable/disable, changed-file refusal and rollback on write failure.
+- Exercise the native launcher Languages page and Linux setup checkbox flow.
+- Verify native text spacing, colour, alignment, quality selection and original
+  archive checksums using the recovered game functions and isolated fixtures.
+- Test fresh installation and the local prototype upgrade before publication.
+- Existing server data and the separate experimental server branch are unchanged.
+
+# ReRiff 1.2.4-beta.3 — Local server startup and Windows Flask package
+
+## In-game summary
+
+- Run the Windows local server without Podman or system Python.
+- Install Flask and the backend separately from the launcher.
+- Linux server startup reports failures instead of staying busy.
+
+## Full release notes
+
+Experimental client test build for Windows and Linux/Proton. Stable 1.2.3
+remains the default download and update channel.
+
+### Windows local server
+
+- Replace the launcher's Podman local-server path with the existing private
+  Python runtime and a bundled Flask/Waitress backend. No system Python, pip,
+  Podman, PATH or registry changes are required on the player's machine.
+- Download the optional `ReRiff-Server-windows.zip` package through Install
+  local server. Check the release SHA-256 manifest before installation and
+  run a package self-test before replacing an existing application.
+- Preserve saved data through install, start, stop and restart. Reuse existing
+  launcher-managed Podman data and its configured port in place; stop the old
+  container before starting the replacement server.
+- Use `http://127.0.0.1:5144` in Secondary server with the default configuration.
+  The local backend binds only to loopback; shared remote servers are unchanged.
+- Start an installed, configured localhost backend with Play. Stop it after the
+  game closes only when that launch started it; leave an already running server
+  alone.
+- Stop the Windows server cooperatively after checking its process identity
+  and per-session token. Leave unrelated processes and occupied ports alone.
+- Keep configuration under `localserver/native/`, the optional backend under
+  `localserver/windows-server/`, private Python under `localserver/windows-python/`,
+  and server diagnostics under the game's `logs/` folder.
+
+### Linux server startup
+
+- Retain the separate Python/Flask AppImage; Linux client installation and
+  updates still require no system Python or separate .NET runtime.
+- Request AppImage extraction when launching the helper so it runs without FUSE.
+- Capture helper output in `logs/ReRiff-localserver-helper.log` and report missing
+  completion results instead of leaving the launcher checking server settings.
+
+### Validation
+
+- Exercise Windows package verification, replacement safety, process ownership,
+  native launcher start/stop, loopback requests, persistence and port conflicts
+  with the private Windows Python runtime under Wine.
+- Run Windows process and package unit checks on the Microsoft Windows CI runner.
+- Verify Linux client setup/update safety and the optional AppImage lifecycle.
+- Check installer manifests and release checksums before publishing assets.
+- Retain font/Unicode rendering and metadata probes as local research; they are
+  not enabled or packaged in this beta. This release does not deploy the separate
+  experimental server branch.
+
+# ReRiff 1.2.4-beta.2 — Python-free Linux setup and menu testing
+
+## In-game summary
+
+- Install and update on Linux without a Python runtime.
+- Download and manage an optional Linux server from the launcher.
+- Settings confirmations preserve scrolled graphics-menu rows.
+
+## Full release notes
+
+Experimental client test build for Windows and Linux/Proton. Stable 1.2.3
+remains the default download and update channel.
+
+### Linux setup and optional local server
+
+- Use the existing self-contained patcher executable for Linux installation
+  and updates. The client needs neither Python nor a system .NET installation.
+- Keep Flask and Python inside the optional server AppImage. Archive the previous
+  client Python runtime and obsolete helpers during upgrades.
+- Offer a separate, checksum-verified local-server AppImage through the launcher.
+  Linux users can install, start and stop it without Podman. Windows retains
+  its existing Podman integration.
+- Start an installed Linux server with Play when its localhost address is
+  configured. Stop servers started by that launch after the game closes;
+  leave previously running servers alone.
+- Use `http://127.0.0.1:5144` in Secondary server for the default local server.
+  Primary is tried first. Preserve local data and reuse existing launcher-managed
+  Podman data and its configured port when migrating.
+- Write local-server diagnostics under the game's `logs/` folder. Verify process
+  ownership before stopping a server; keep unrelated listeners and processes
+  untouched.
+- Use a private native helper for Linux update preparation and application,
+  retaining checksum, backup and rollback checks. The server download stays
+  separate from the client installer.
+
+### Launcher updates
+
+- Windows setup and Python-dependent launcher actions ask before downloading
+  a verified private Python runtime into the game folder. No system Python,
+  PATH or registry changes are made; installers no longer bundle Python.
+- Use standard edit borders for server and timeout fields under Wine, avoiding
+  the extra themed focus outline while retaining text editing and Tab navigation.
+- Select experimental releases by GitHub publication time. Stable updates use
+  GitHub Latest; release metadata supplies the package version and installer.
+- Handle escaped release tags, pagination and channel changes while retaining
+  checksum and package checks. Skip matching versions unless changing channels
+  or requesting a test reinstall.
+
+### Menus and documentation
+
+- Keep fullscreen-selector arrows white while highlighting the selected text.
+- Focus Resolution when Graphics opens so Down moves straight to Fullscreen.
+- Clear Resolution's highlight and arrow shortcuts when Apply is selected.
+- Preserve the graphics-menu scroll viewport while native confirmation dialogs
+  own input. Hidden slider rows stay hidden and underlying controls stay inactive.
+- Audit native selector, slider, Apply and save-prompt integration against local
+  decomp findings; add a regression for confirmation-time row visibility.
+- Simplify the README and clarify installation, update channels and Linux setup.
+- Record controller-input and remapping research. This build adds no controller
+  remapping or acceleration changes.
+
+### Validation and testing
+
+- Local checks cover installer safety, update preparation, native menu navigation,
+  UI scale, save prompts, display handling and optional-server lifecycle.
+- Tests exercise Linux setup, updates and local-server controls without Python
+  on the client PATH. The server AppImage runs without host Python or FUSE.
+- Test the complete client on Windows and Linux/Proton. SteamOS/Bazzite and NixOS
+  desktop integration still need real-machine testing. Graphics and confirmation
+  behavior still need an in-game retest.
+- This release does not publish or deploy the separate experimental server branch.
+
+# ReRiff 1.2.4-beta.1 — Display and input testing
+
+## In-game summary
+
+- Test corrected windowed clicks and fullscreen mode selection.
+- Save prompts keep input focus while settings stay inactive.
+- High-rate FLAC analysis uses the original 44.1 kHz resampler.
+
+## Full release notes
+
+Experimental test build. Display transitions, Alt-Tab, confirmation controls
+and windowed pointer alignment need in-game testing on Linux and Windows.
+Server ID/migration support is published separately in the experimental Docker
+image; updating the client does not update an existing Docker server.
+
+- Restore the selected windowed client dimensions when leaving borderless.
+- Map absolute windowed pointer coordinates to the actual render dimensions;
+  retain native relative and normalized input paths.
+- Remove overlapping fullscreen-label directional activation shortcuts.
+- Keep added settings controls and scrolling inactive beneath native overlays.
+- Normalize native activation messages and release capture on deactivation.
+- Publish persistent server IDs and remember alternate server addresses.
+- Add an explicit, backed-up one-time LAN-to-public file-link migration.
+- Highlight each fullscreen arrow individually and keep its hitbox separate.
+- Resample non-44.1 kHz FLAC analysis PCM with the original Ogg resampler.
+  Source audio/playback remain unchanged; regenerate affected cached tracks.

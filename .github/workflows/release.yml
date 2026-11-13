@@ -21,12 +21,41 @@ jobs:
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '8.0.x'
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Test Windows local-server ownership and package installation
+        run: python -m unittest discover -s LinuxRuntime -p "test_*.py"
+      - name: Test native Windows CJK component lifecycle
+        shell: pwsh
+        run: |
+          dotnet build Patcher/InstallerPatcher.csproj -c Release -o build/installer-patcher
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python scripts/test_language_component.py --host build/installer-patcher/ReRiff-Patcher.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          dotnet build NewsHeaders/NewsHeaders.csproj -c Release -o build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          dotnet build Managed/LanguageTextSmoke.csproj -c Release -o build/language-text-smoke
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & .\build\language-text-smoke\LanguageTextSmoke.exe --disabled
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & .\build\language-text-smoke\LanguageTextSmoke.exe
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          & .\build\language-text-smoke\LanguageTextSmoke.exe latin
+          exit $LASTEXITCODE
       - name: Test signed helpers on Microsoft .NET Framework x86
         shell: pwsh
         run: |
           dotnet build Managed/SigningSmoke.csproj -c Release -o build/signing-smoke
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & .\build\signing-smoke\SigningSmoke.exe
+          exit $LASTEXITCODE
+      - name: Test shared logging defaults and directory policy
+        shell: pwsh
+        run: |
+          dotnet build Managed/LoggingSmoke.csproj -c Release -o build/logging-smoke
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & .\build\logging-smoke\LoggingSmoke.exe
           exit $LASTEXITCODE
       - name: Test singleplayer routing on Microsoft .NET Framework
         shell: pwsh
@@ -38,7 +67,7 @@ jobs:
   release:
     if: github.repository == 'Aftonstjarna/ReRiff'
     needs: windows-loader
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
       RERIFF_RELEASE_CHANNEL: ${{ github.ref_name == 'codex/experimental-client' && 'experimental' || 'stable' }}
@@ -78,6 +107,8 @@ jobs:
           fi
       - name: Fetch verified compiler and Windows Python
         run: python packaging/fetch_release_tools.py --directory "$RUNNER_TEMP/release-tools"
+      - name: Verify Windows private Python bootstrap pins
+        run: python scripts/verify-python-runtime.py --archive "$RUNNER_TEMP/release-tools/python.zip"
       - name: Build client helper
         run: dotnet build ClientConfig/ClientConfig.csproj -c Release -o build
       - name: Build client version header adapter
@@ -90,12 +121,45 @@ jobs:
         run: |
           python scripts/build-windows-launcher.py --zig "$RUNNER_TEMP/release-tools/zig-x86_64-linux-0.14.1/zig"
           python scripts/verify-windows-manifests.py
+      - name: Install Linux setup build dependencies
+        timeout-minutes: 5
+        run: |
+          # Bypass the hosted runner's failing Azure mirror redirector while
+          # retaining Ubuntu's signed package indexes and normal validation.
+          sources="$RUNNER_TEMP/reriff-ubuntu.list"
+          printf '%s\n' \
+            'deb [signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] https://archive.ubuntu.com/ubuntu noble main universe' \
+            'deb [signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] https://archive.ubuntu.com/ubuntu noble-updates main universe' \
+            'deb [signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] https://security.ubuntu.com/ubuntu noble-security main universe' > "$sources"
+          apt_options=(-o "Dir::Etc::sourcelist=$sources" -o 'Dir::Etc::sourceparts=-' -o APT::Update::Error-Mode=any -o Acquire::Retries=1 -o Acquire::https::Timeout=20)
+          sudo apt-get "${apt_options[@]}" update
+          sudo apt-get "${apt_options[@]}" install -y libgtk-3-dev xvfb
       - name: Build and test native Linux setup
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev xvfb
           python scripts/build-linux-installer.py --zig "$RUNNER_TEMP/release-tools/zig-x86_64-linux-0.14.1/zig"
           python scripts/test-linux-installer.py --zig "$RUNNER_TEMP/release-tools/zig-x86_64-linux-0.14.1/zig"
+      - name: Build optional Windows Flask server package
+        run: |
+          python scripts/build-song-catalog.py --zig "$RUNNER_TEMP/release-tools/zig-x86_64-linux-0.14.1/zig"
+          python scripts/build-windows-server.py
+          python -m unittest discover -s LinuxRuntime -p 'test_*.py' -v
+      - name: Build optional Linux server AppImage
+        run: RERIFF_BUILD_ENGINE=docker bash scripts/build-linux-runtime.sh
+      - name: Test native client and server without host Python, Podman or FUSE
+        run: |
+          python scripts/test_native_client.py --helper build/linux-patcher/Patcher
+          python scripts/test-linux-runtime.py --client build/linux-patcher/Patcher --server build/linux-runtime/ReRiff-Server-x86_64.AppImage
+      - name: Build and verify optional CJK font component
+        run: |
+          python -m pip install -r packaging/fonts/build-requirements.txt
+          python scripts/build-cjk-component.py
+          python scripts/build-latin-component.py
+          python scripts/test_latin_component.py
+          python scripts/test_cjk_atlas.py
+          python scripts/test_cjk_hd_atlas.py
+          python scripts/test_native_archive.py
+          python scripts/test_language_component.py --host build/linux-patcher/Patcher
+          python scripts/test_font_packs.py --host build/linux-patcher/Patcher --cjk build/cjk-component/ReRiff-CJK.zip --latin build/latin-component/ReRiff-Latin.zip
       - name: Package Windows and Linux installers
         run: >-
           python packaging/build_release.py --local-patching
@@ -110,16 +174,20 @@ jobs:
       - name: Build server libraries and dependencies for News regression tests
         run: |
           python -m pip install -r packaging/requirements.txt
-          python scripts/build-song-catalog.py --zig "$RUNNER_TEMP/release-tools/zig-x86_64-linux-0.14.1/zig"
       - name: Verify stable and numbered-prerelease News comparisons
         env:
           PYTHONNOUSERSITE: '1'
-        run: python scripts/test_news_versions.py
+        run: |
+          python scripts/test_news_versions.py
+          python scripts/test_server_identity.py
       - name: Verify automatic update extraction, rollback and Steam forwarding
         run: |
+          cc -std=c99 -Wall -Wextra -Werror -Wno-misleading-indentation NativeLauncher/test_release_channel.c -o build/test-release-channel
+          build/test-release-channel
           python scripts/test_client_update.py
           python scripts/test_steam_bridge.py
           python scripts/test_podman_server.py
+          python -m unittest discover -s LinuxRuntime -p "test_*.py"
       - name: Validate Linux self-extractor
         run: sh "dist/v$(cat VERSION)/ReRiff-$(cat VERSION)-linux.run" --help
       - name: Verify published archive checksums and installed channel
@@ -136,9 +204,20 @@ jobs:
               channel.read(marker)
               assert channel['client']['channel'] == manifest['channel'] == os.environ['RERIFF_RELEASE_CHANNEL']
               assert hashlib.sha256(marker.read_bytes()).hexdigest() == manifest['files'][name]
-              helper = 'payload/localserver/podman-server.py'
-              assert hashlib.sha256((root / helper).read_bytes()).hexdigest() == manifest['files'][helper]
+              assert not (root/'payload/localserver/podman-server.py').exists()
+              if platform == 'windows':
+                  for name in ('windows-server-control.py', 'local_server.py', 'host_process.py', 'windows_package.py'):
+                      helper = 'payload/localserver/'+name
+                      assert hashlib.sha256((root/helper).read_bytes()).hexdigest() == manifest['files'][helper]
+                  assert not (root/'payload/localserver/windows-server').exists()
+                  assert not (root/'python').exists()
               assert not (root / 'payload/localserver/podman/config.json').exists()
+              if platform == 'linux':
+                  runtime = root/'payload/localserver/ReRiff-ClientHost'
+                  assert runtime.is_file()
+                  assert not (root/'payload/localserver/ReRiff-Runtime-x86_64.AppImage').exists()
+                  assert not list((root/'payload/localserver').glob('*.py'))
+                  assert not (root/'payload/localserver/ReRiff-Server-x86_64.AppImage').exists()
               notes = 'payload/localserver/client-release-notes.md'
               assert hashlib.sha256((root / notes).read_bytes()).hexdigest() == manifest['files'][notes]
               assert (root / notes).read_text().startswith('# ReRiff ' + manifest['version'] + ' ')
@@ -182,7 +261,7 @@ jobs:
               # aliases of the exact same packages so they can upgrade too.
               cp "$alias_dir/ReRiff-$version-linux.run" "$alias_dir/ReRiff-$base_version-linux.run"
               cp "$alias_dir/ReRiff-$version-windows.zip" "$alias_dir/ReRiff-$base_version-windows.zip"
-              (cd "$alias_dir" && sha256sum ReRiff-*.run ReRiff-*.zip ReRiff-*.tar.gz > SHA256SUMS)
+              (cd "$alias_dir" && sha256sum ReRiff-*.run ReRiff-*.zip ReRiff-*.tar.gz ReRiff-*.AppImage > SHA256SUMS)
             fi
             if gh release view experimental >/dev/null 2>&1; then
               gh release upload experimental "$alias_dir/"* --clobber
@@ -191,7 +270,7 @@ jobs:
               gh release view experimental --json assets --jq '.assets[].name' |
                 while IFS= read -r asset; do
                   case "$asset" in
-                    ReRiff-"$version"-*|ReRiff-"$base_version"-linux.run|ReRiff-"$base_version"-windows.zip) ;;
+                    ReRiff-"$version"-*|ReRiff-"$base_version"-linux.run|ReRiff-"$base_version"-windows.zip|ReRiff-Server-x86_64.AppImage|ReRiff-Server-windows.zip|ReRiff-CJK.zip|ReRiff-Latin.zip) ;;
                     ReRiff-*) gh release delete-asset experimental "$asset" --yes ;;
                   esac
                 done

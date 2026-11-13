@@ -49,11 +49,11 @@ namespace ReRiff {
                 || error is InvalidProgramException || error is TypeLoadException
                 || error is MissingMethodException || error is System.Security.SecurityException
                 || error.GetType().FullName.StartsWith("Parse.", StringComparison.Ordinal))) return;
-            if (System.Threading.Interlocked.Increment(ref networkEvents) > 32) return;
             recordingException = true;
             try {
                 string folder = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-                File.AppendAllText(LogPath(folder, "ReRiff-network.log"),
+                if(!Logging.Enabled(folder)||System.Threading.Interlocked.Increment(ref networkEvents)>32)return;
+                Logging.Append(folder,"ReRiff-network.log",
                     DateTime.UtcNow.ToString("o") + Environment.NewLine + error.ToString() + Environment.NewLine);
             } catch (Exception) {
                 // Diagnostics must never change exception propagation or fail startup.
@@ -119,9 +119,9 @@ namespace ReRiff {
                 fallback = externalOnly ? "" : Validate(fallback);
                 string endpoint;
                 string reason;
-                if (external.Length > 0 && Available(external, timeout)) {
+                if (external.Length > 0 && Available(external, timeout, folder)) {
                     endpoint = external; reason = "external_available";
-                } else if (fallback.Length > 0 && Available(fallback, timeout)) {
+                } else if (fallback.Length > 0 && Available(fallback, timeout, folder)) {
                     endpoint = fallback; reason = "secondary_available";
                 } else {
                     return Local(folder, "servers_unavailable");
@@ -164,7 +164,7 @@ namespace ReRiff {
             return text.TrimEnd('/');
         }
 
-        private static bool Available(string endpoint, int timeout) {
+        private static bool Available(string endpoint, int timeout, string folder) {
             try {
                 var request = (HttpWebRequest)WebRequest.Create(endpoint + "/classes/Version");
                 request.Timeout = timeout;
@@ -176,20 +176,41 @@ namespace ReRiff {
                     using (var reader = new StreamReader(response.GetResponseStream())) {
                         char[] buffer = new char[16384];
                         string text = new string(buffer, 0, reader.ReadBlock(buffer, 0, buffer.Length));
-                        return text.Contains("\"results\"") && text.TrimStart().StartsWith("{");
+                        bool valid=text.Contains("\"results\"") && text.TrimStart().StartsWith("{");
+                        if(valid)RememberServerIdentity(folder,endpoint,response.Headers["X-ReRiff-Server-ID"]);
+                        return valid;
                     }
                 }
             } catch (WebException) { return false; }
               catch (IOException) { return false; }
         }
 
+        private static void RememberServerIdentity(string folder,string endpoint,string identity) {
+            Guid value;
+            if(!Guid.TryParseExact(identity,"D",out value))return; // Legacy servers remain supported.
+            identity=value.ToString("D");
+            try {
+                string directory=Path.Combine(folder,"localserver");Directory.CreateDirectory(directory);
+                string file=Path.Combine(directory,"server-identities.txt");
+                string entry=identity+"\t"+endpoint;
+                bool known=false,alias=false;
+                if(File.Exists(file))foreach(string line in File.ReadAllLines(file)) {
+                    if(line==entry)known=true;
+                    if(line.StartsWith(identity+"\t",StringComparison.Ordinal)&&line!=entry)alias=true;
+                }
+                if(!known)File.AppendAllText(file,entry+Environment.NewLine);
+                Logging.Append(folder,"ReRiff-client.log",DateTime.UtcNow.ToString("o")+
+                    " server_id="+identity+" endpoint="+endpoint+" known_alias="+alias.ToString().ToLowerInvariant()+Environment.NewLine);
+            } catch(IOException) { } catch(UnauthorizedAccessException) { }
+        }
+
         internal static string LogPath(string folder,string name) {
-            string logs=Path.Combine(folder,"logs");Directory.CreateDirectory(logs);
+            string logs=Path.Combine(folder,"logs");if(Logging.Enabled(folder))Directory.CreateDirectory(logs);
             return Path.Combine(logs,name);
         }
         private static void Log(string folder, string endpoint, string reason) {
             try {
-                File.AppendAllText(LogPath(folder, "ReRiff-client.log"),
+                Logging.Append(folder,"ReRiff-client.log",
                     DateTime.UtcNow.ToString("o") + " endpoint=" + endpoint + " reason=" + reason + Environment.NewLine);
             } catch (IOException) { }
               catch (UnauthorizedAccessException) { }

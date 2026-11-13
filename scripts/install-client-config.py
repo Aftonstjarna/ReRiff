@@ -4,6 +4,7 @@ import argparse
 import hashlib
 from pathlib import Path
 import os
+import sys
 
 HASHES = {
     'ParseOctane.dll': 'd661606db8658adb54d5be18b3e3a3a6f07c8e738f2d78556ece42355f8e62e4',
@@ -28,10 +29,14 @@ def main():
     args = parser.parse_args()
     game = args.game_dir.expanduser().resolve()
     build = Path(__file__).resolve().parent.parent/'build'
-    backups = (args.backup_dir or game/'bak/originals').expanduser().resolve()
+    backups = (args.backup_dir or game/'.bak/originals').expanduser().resolve()
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'packaging'))
+    from installer import migrate_backups
     previous_backups = Path(__file__).resolve().parent.parent/'backups/client'
     if not (game/'Game.exe').is_file():
         parser.error('Game.exe not found')
+    if args.backup_dir is None:
+        migrate_backups(game)
     if args.restore:
         originals = {}
         for name, digest in HASHES.items():

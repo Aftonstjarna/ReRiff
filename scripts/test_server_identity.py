@@ -3,6 +3,7 @@ import concurrent.futures
 import importlib.util
 import json
 import os
+import shutil
 from pathlib import Path
 import tempfile
 import unittest
@@ -74,6 +75,29 @@ class ServerIdentityTests(unittest.TestCase):
             identity.migrate_file_origins(self.data, 'http://192.0.2.10:5144', 'https://reriff.example.net')
         self.assertEqual(self.file.read_bytes(), self.original)
 
+    def test_container_aliases_coexist_with_optional_local_logging(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            shutil.copytree(SERVER, root / 'server')
+            shutil.copy2(ROOT / 'scripts/trace-server.py', root / 'trace-server.py')
+            spec = importlib.util.spec_from_file_location('container_alias_logging', ROOT / 'docker/server.py')
+            wrapper = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(wrapper)
+            wrapper.ROOT = root
+            for enabled in (False, True):
+                logs = root / ('logs-enabled' if enabled else 'logs-disabled')
+                app = wrapper.create_app(root / 'data', 'https://reriff.example.net',
+                                         'http://192.0.2.10:5144', log_dir=logs,
+                                         trace_enabled=enabled)
+                client = app.test_client()
+                first = client.get('/', headers={'Host': 'reriff.example.net'})
+                second = client.get('/', headers={'Host': '192.0.2.10:5144'})
+                self.assertEqual(first.json['serverId'], second.json['serverId'])
+                upload = client.post('/files/logging-test.bin', data=b'preserve payload',
+                                     content_type='application/octet-stream')
+                self.assertEqual(upload.json['url'], 'https://reriff.example.net/files/logging-test.bin')
+                self.assertEqual(logs.exists(), enabled)
+
     def test_hostnames_expose_same_identity_and_api_is_not_cacheable(self):
         module_spec = importlib.util.spec_from_file_location('identity_backend', SERVER / 'riffapi-local.py')
         backend = importlib.util.module_from_spec(module_spec)
@@ -86,7 +110,7 @@ class ServerIdentityTests(unittest.TestCase):
             backend.ensure_dirs()
         client = backend.app.test_client()
         values = []
-        for host in ('192.168.0.211:5144', 'reriff.example.net'):
+        for host in ('192.0.2.10:5144', 'reriff.example.net'):
             response = client.get('/classes/Version', headers={'Host': host})
             values.append(response.json['results'][0]['ServerID'])
             self.assertEqual(response.json['results'][0]['Ver'], 100)
