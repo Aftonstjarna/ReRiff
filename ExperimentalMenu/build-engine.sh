@@ -57,3 +57,7 @@ mkdir -p build/experimental-engine-menu
 "$zig_tool" cc -target x86-windows-gnu -O2 -Wall -Wextra -Werror \
   ExperimentalMenu/test_main_scale.c -o build/experimental-engine-menu/test-main-scale.exe \
   -Wl,--image-base,0x10000000 -luser32 -lgdi32 -ladvapi32 -static
+
+"$zig_tool" cc -target x86-windows-gnu -O2 -Wall -Wextra -Werror \
+  ExperimentalMenu/test_font_components.c -o build/experimental-engine-menu/test-font-components.exe \
+  -Wl,--image-base,0x10000000 -luser32 -lgdi32 -ladvapi32 -static

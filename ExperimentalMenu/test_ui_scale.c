@@ -37,6 +37,18 @@ int main(void){
     CHECK(resize_calls==1&&rescale_calls==1&&!ui_scale_refresh_pending&&observed_factor==1.125f);
     CHECK(actual_width==2560&&actual_height==1440&&ratios[0]==1&&ratios[1]==1);
     ui_refresh_scale();CHECK(resize_calls==1&&rescale_calls==1);
+    /* Returning to Auto must undo the manual reference and font override,
+     * including after startup changes the render resolution. */
+    ui_scale_value=0;ui_scale_refresh_pending=TRUE;ui_refresh_scale();
+    CHECK(resize_calls==2&&rescale_calls==2&&observed_factor==1);
+    CHECK(reference[0]==2048&&reference[1]==1536&&ratios[0]==1&&ratios[1]==1);
+    const float auto_heights[]={720,864,1080,1440,2160};
+    for(unsigned i=0;i<sizeof(auto_heights)/sizeof(auto_heights[0]);i++){
+        actual_height=auto_heights[i];actual_width=actual_height*16/9;
+        ui_layout_reference(1);ui_setup_fonts(1);
+        CHECK(observed_factor==1&&reference[0]==2048&&reference[1]==1536);
+        CHECK(ratios[0]==1&&ratios[1]==1);
+    }
     ui_scale_value=0;
     CHECK(ui_slider_rail_pixel_scale(2160,1080)==2);
     CHECK(ui_slider_rail_pixel_scale(2160,2160)==1);

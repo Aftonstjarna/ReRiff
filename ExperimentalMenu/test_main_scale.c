@@ -43,7 +43,12 @@ int main(void){
         if(main_scale_reel){main_scale_tick(menu);CHECK(main_scroll_wheel(1));main_scale_tick(menu);main_scale_reveal(menu);CHECK(((int *)menu)[11]-701>=main_scale_first);}
         main_scale_cleanup();for(int i=0;i<11;i++)CHECK(*(void ***)items[i]==main_hit_table+1);detach_main_hits();for(int i=0;i<11;i++)CHECK(*(void ***)items[i]==methods);
     }
-    ui_scale_value=0;main_scale_size(menu);CHECK(!main_scale_owner&&!main_scale_count);
+    ui_scale_value=0;
+    for(unsigned h=0;h<4;h++){
+        height=heights[h];float saved_y=((float *)items[0])[9],saved_sx=((float *)items[0])[43];
+        main_scale_size(menu);CHECK(!main_scale_owner&&!main_scale_count&&!main_scale_reel);
+        CHECK(((float *)items[0])[9]==saved_y&&((float *)items[0])[43]==saved_sx);
+    }
     /* Native Apply stays outside the reel, including its bottom cap, at every
      * tested resolution and manual size. It must reserve list space too. */
     ((void **)menu)[66]=items[0];
