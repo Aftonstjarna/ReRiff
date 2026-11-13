@@ -1,4 +1,4 @@
-"""Bundled backend, bound to loopback and owned by one game installation."""
+"""Bundled LAN backend, owned by one game installation."""
 import argparse
 import importlib.util
 import json
@@ -13,7 +13,28 @@ import threading
 import time
 from host_process import file_lock
 
-from local_server import LocalServer, atomic, stamp
+from local_server import LocalServer, atomic, stamp, lan_addresses
+
+
+def restrict_local_controls(app):
+    from flask import request, abort
+
+    @app.before_request
+    def require_local_control():
+        if (request.path.startswith('/reriff-local/') or
+                request.path == '/admin' or request.path.startswith('/admin/')):
+            if request.remote_addr != '127.0.0.1':
+                abort(403)
+
+
+def create_lan_app(factory, server):
+    # Reuse the backend's Host-matched aliases and owned-file URL remapping.
+    origins = {'public': server.address}
+    origins.update({f'lan{index}': address for index, address in enumerate(lan_addresses(server.config['port']))})
+    app = factory(log_dir=server.logs, trace_enabled=server.logging,
+                  file_origins=origins)
+    restrict_local_controls(app)
+    return app
 
 
 def main():
@@ -31,7 +52,8 @@ def main():
     if not (package/'server/riffapi-local.py').is_file():
         raise RuntimeError('This runtime does not include the optional backend.')
     os.environ['RERIFF_DATA_DIR'] = str(server.data)
-    # A local-only server never advertises household or external addresses.
+    # Advertise direct local interfaces only; do not inherit public-server or
+    # migration settings from the desktop environment.
     os.environ['RERIFF_PUBLIC_URL'] = server.address
     os.environ.pop('RERIFF_LAN_URL', None)
     os.environ.pop('RERIFF_MIGRATE_FROM_ORIGIN', None)
@@ -44,8 +66,8 @@ def main():
     # must fail startup without touching the backend's files.
     listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     listener.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE if os.name == 'nt' else socket.SO_REUSEADDR, 1)
-    listener.bind(('127.0.0.1', server.config['port']))
-    app = backend.create_app(log_dir=server.logs, trace_enabled=server.logging)
+    listener.bind(('0.0.0.0', server.config['port']))
+    app = create_lan_app(backend.create_app, server)
     app.add_url_rule('/reriff-local/status', 'reriff_local_status', lambda: {'token': token})
     from waitress import create_server
     http = create_server(app, sockets=[listener], threads=8)

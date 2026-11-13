@@ -8,7 +8,8 @@ import signal
 ROOT = Path(__file__).resolve().parent.parent
 
 
-def create_app(data_dir=None, public_url=None, lan_url=None, log_dir=None, trace_enabled=True):
+def create_app(data_dir=None, public_url=None, lan_url=None, log_dir=None, trace_enabled=True,
+               file_origins=None):
     spec = importlib.util.spec_from_file_location('riffserver', ROOT/'server/riffapi-local.py')
     backend = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(backend)
@@ -24,7 +25,8 @@ def create_app(data_dir=None, public_url=None, lan_url=None, log_dir=None, trace
     lan = (lan_url if lan_url is not None else os.environ.get('RERIFF_LAN_URL', '')).strip().rstrip('/')
     backend.FILE_ORIGINS = {
         key: backend._identity_module.origin(value)
-        for key, value in {'public': public, 'lan': lan}.items() if value
+        for key, value in (file_origins if file_origins is not None else
+                           {'public': public, 'lan': lan}).items() if value
     }
     backend.ensure_dirs()
     spec = importlib.util.spec_from_file_location('reriff_trace', ROOT/'trace-server.py')

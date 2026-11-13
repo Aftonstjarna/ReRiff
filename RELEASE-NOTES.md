@@ -1,3 +1,43 @@
+# ReRiff 1.3.1 — LAN quick deploy
+
+## In-game summary
+
+- Share a launcher-installed server with other PCs on your LAN.
+- Update an existing local server without losing scores or ghosts.
+- Find refreshed setup instructions and screenshots in the README.
+
+## Full release notes
+
+### Launcher-managed LAN server
+
+- Install and start the optional server from the launcher in two clicks.
+  Python, Flask and server dependencies are supplied automatically: a private
+  runtime on Windows and a self-contained server AppImage on Linux/Proton.
+- Accept game connections on IPv4 LAN interfaces as well as localhost. Start
+  reports detected LAN addresses; other PCs use the host's LAN address and
+  port 5144. Allow that port through the host's private-network firewall.
+- Share profiles, scores, tracks and ghosts between LAN and localhost clients.
+  Reuse the backend's address matching to return reachable ghost-file links
+  without rewriting stored records.
+- Keep launcher ownership/status/stop endpoints and the admin page accessible
+  only from localhost. LAN requests cannot read the launcher's control token.
+- Offer **Update local server** for an installed, stopped server from an older
+  client release. Stop it, update it, then start it to enable LAN access.
+  Package downloads are verified; server data and configuration are preserved.
+  Updating the client alone does not replace the optional server application.
+- Keep existing automatic local-server start/stop behavior and unrelated-port
+  protection. The dedicated server's Public/LAN configuration is unchanged.
+
+### Documentation and validation
+
+- Refresh README feature highlights, launcher/language screenshots, Japanese
+  metadata examples, News previews and platform dependency instructions.
+- Keep Podman references in the dedicated Docker server instructions.
+- Check LAN/localhost data identity and file links, non-loopback listening,
+  host-only control boundaries, graceful shutdown and the existing server
+  identity regressions. Release checks cover Windows/Linux packaging and
+  installation as well as the native launcher controls.
+
 # ReRiff 1.3.0 — Language fonts, portable clients and UI improvements
 
 ## In-game summary

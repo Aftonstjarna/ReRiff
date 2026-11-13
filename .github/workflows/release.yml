@@ -173,13 +173,14 @@ jobs:
           python -m unittest discover -s packaging -p test_linux_music.py -v
       - name: Build server libraries and dependencies for News regression tests
         run: |
-          python -m pip install -r packaging/requirements.txt
+          python -m pip install -r docker/requirements.txt
       - name: Verify stable and numbered-prerelease News comparisons
         env:
           PYTHONNOUSERSITE: '1'
         run: |
           python scripts/test_news_versions.py
           python scripts/test_server_identity.py
+          python scripts/test_local_server_lan.py
       - name: Verify automatic update extraction, rollback and Steam forwarding
         run: |
           cc -std=c99 -Wall -Wextra -Werror -Wno-misleading-indentation NativeLauncher/test_release_channel.c -o build/test-release-channel

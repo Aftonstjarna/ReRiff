@@ -3,7 +3,7 @@
 Play Riff Racer on Windows or Linux/Proton with singleplayer, shared
 leaderboards and ghosts.
 
-[Download stable 1.3.0](https://github.com/Aftonstjarna/ReRiff/releases/latest)
+[Download stable 1.3.1](https://github.com/Aftonstjarna/ReRiff/releases/latest)
 · [Install and update](#install-or-update)
 · [Steam launch options](#launch-through-steam)
 · [Server settings](#server-settings)
@@ -11,27 +11,21 @@ leaderboards and ghosts.
 · [Troubleshooting](#troubleshooting)
 · [Server administration](#server-administration-and-technical-details)
 
-- **Singleplayer:** generate tracks and keep scores and ghosts without a server.
-- **Shared servers:** use Primary and Secondary addresses for leaderboards and ghosts.
-- **In-game settings:** manage server preferences and save, restart or exit.
-- **Graphics:** borderless/exclusive fullscreen, higher render resolutions,
-  antialiasing and adjustable UI scale.
-- **Launcher and updates:** edit settings, opt into betas, or update automatically
-  when skipping the launcher.
-- **Language fonts:** optional CJK and Latin/European character support.
-- **Optional local server:** download and manage a local server from the launcher.
+- **Play solo or together:** generate tracks offline, or share leaderboards and
+  ghosts through a server with Primary/Secondary fallback.
+- **Two-click server setup:** click **Install local server**, then **Start local
+  server**. Python, Flask and server dependencies are provided automatically.
+  Share the same server with other PCs on your LAN.
+- **More characters:** optional Chinese, Japanese, Korean and Latin/European
+  fonts for filenames, song metadata, leaderboards and pause screens.
+- **Graphics controls:** windowed, borderless and exclusive modes, higher render
+  resolutions, antialiasing and UI scale with scrolling menus.
+- **Updates and diagnostics:** stable updates by default, opt-in betas and
+  readable installation errors in the launcher.
 
-**Launcher — ReRiff 1.2.3**
+**Launcher — Servers**
 
-![ReRiff 1.2.3 launcher with server addresses, singleplayer, optional local server and update preferences](docs/images/reriff-launcher.png)
-
-**Settings → Servers**
-
-![In-game server preferences with launcher skipping, Primary-only and Singleplayer switches](docs/images/reriff-in-game-menu.png)
-
-**Settings → Graphics**
-
-![Graphics settings with resolution, fullscreen mode, antialiasing and UI scale](docs/images/reriff-graphics.png)
+![Launcher server settings, singleplayer, local-server installation and updates](docs/images/reriff-launcher.png)
 
 Linux play requires Proton and the game's Windows .NET Framework setup.
 
@@ -47,11 +41,11 @@ Unsupported DLLs or conflicting backup hashes stop installation for review.
 
 **Windows:** download and extract `ReRiff-<version>-windows.zip`, run
 `ReRiff-Setup.exe`, and select the game's `Game.exe`. Keep the ZIP contents
-together until setup finishes. The package supports x64 Windows. Development
-setup asks before downloading
-a verified private Python runtime into `localserver/windows-python/` for setup,
-updates and optional server controls. Stable 1.2.3 bundles this runtime. The
-private installation leaves system Python, PATH and the registry unchanged.
+together until setup finishes. The package supports x64 Windows. Setup asks
+before downloading a verified private Python runtime into
+`localserver/windows-python/` for setup, updates and optional server controls.
+You do not need to install Python manually. The private runtime leaves system
+Python, PATH and the registry unchanged.
 DLL patching uses the game's .NET Framework runtime.
 
 **Linux/Proton (x86_64):** run the installer to open its setup window:
@@ -88,11 +82,11 @@ keep their terminal behavior for scripts and automatic updates. Do not use `sudo
 Setup keeps your Steam Proton selection and launch options. Update helpers live
 in `localserver/` beside `Game.exe`.
 
-**Development Linux builds:** setup and updates use the existing self-contained
-patcher and client helper. They require neither Python nor a separate .NET
-installation. Flask and Python are confined to the optional server AppImage,
-which is downloaded only when you install a local server. Stable 1.2.3 requires
-Python 3.10 or newer for Linux setup.
+**Linux dependencies:** setup and updates use a self-contained patcher and
+client helper. No host Python or separate .NET installation is needed for these
+tools. The optional server AppImage includes Flask, Python and its libraries;
+it is downloaded only when you choose **Install local server**. The game still
+requires its Windows .NET Framework setup inside Proton.
 
 If Windows selects an external server but game features stay offline, include
 `logs/ReRiff-network.log` from the game folder when reporting the failure.
@@ -103,6 +97,8 @@ details** for scrollable temporary error details and saved update-log entries.
 Viewing details does not enable diagnostic logging.
 
 ### Optional language fonts
+
+![Launcher Languages tab with separate CJK and Latin/European font options](docs/images/reriff-languages.png)
 
 Check **Install and enable CJK font support** during setup, or open the launcher's
 **Languages** tab and check **Install and enable CJK fonts**. The component adds
@@ -122,6 +118,8 @@ one additional native VFS pair (`.dat` and `.zip`) and retains the original game
 mods. Updates refuse changed owned files. The tested Japanese glyph forms are
 used across CJK text; regional typography selection is not yet available.
 
+![Japanese song title alongside Latin artist text on a shared leaderboard](docs/images/reriff-cjk-leaderboard.png)
+
 ### Automatic client updates
 
 Setup includes a link to the GitHub repository.
@@ -136,7 +134,7 @@ to test betas, or uncheck it to return to stable. New betas use `X.X.X-beta.N`,
 starting with `1.2.4-beta.1`; older `X.X.X-N` names remain supported.
 
 **Stable 1.2.3 launchers require a manual update to recognize beta names.**
-Development launchers select the most recently published GitHub prerelease;
+Experimental updates select the most recently published GitHub prerelease;
 stable updates use GitHub Latest. The updater verifies the selected release's
 package and skips an already installed version unless you switch channels or
 request a test reinstall.
@@ -148,6 +146,8 @@ settings and saved data are preserved.
 Client updates do not update the Docker server.
 
 ### In-game Servers menu and launcher skipping
+
+![In-game server preferences with launcher skipping, Primary-only and Singleplayer switches](docs/images/reriff-in-game-menu.png)
 
 Open **Settings → Servers** to change **Skip launcher**, **Primary server only**
 and **Singleplayer**. Save your changes with **Save settings** or **Save and
@@ -237,54 +237,67 @@ Installed Files → Browse**, then edit **Properties → General → Launch Opti
 The launcher waits for the game to exit so Steam keeps the session active.
 
 Open **News** for the installed client's patch notes and server announcements.
-Choose **Visit URL** for that release's full notes on GitHub. Development builds
-show up to three concise summary points. Client notes ship with the installer;
-delivery diagnostics are recorded in `logs/ReRiff-news.log`.
+Choose **Visit URL** for that release's full notes on GitHub. News
+shows up to three concise summary points. Client notes ship with the installer;
+delivery diagnostics are recorded in `logs/ReRiff-news.log` when logging is enabled.
+
+![In-game News with a short release summary and a link to the full notes](docs/images/reriff-news.png)
+
+The supplied Languages and in-game screenshots show the beta.6 preview of
+features included in the stable releases.
 
 ## Server settings
 
 The launcher edits `server.ini` beside `Game.exe`:
 
-- **Primary server:** preferred shared Docker/Podman server address, including its port.
-- **Secondary server:** optional fallback address, including the launcher-managed
-  local server at `http://127.0.0.1:5144`.
+- **Primary server:** preferred shared server address, including its port.
+  The public ReRiff service is `https://official-na-east.reriff.online`.
+- **Secondary server:** optional fallback, such as another shared server or
+  the launcher-managed server at `http://127.0.0.1:5144` on this PC.
 - **Primary server only:** skips the secondary server; singleplayer remains available.
 - **Singleplayer:** selects local play while retaining both saved server addresses.
 - **Use servers:** enables primary → secondary → singleplayer selection.
-- **Install / Start / Stop local server:** downloads and manages an optional
-  server. Development Windows builds use private Python with bundled Flask;
-  no Podman or system Python is required. Development Linux builds use a
-  self-contained AppImage. Stable 1.2.3 builds require Podman.
-  Enter `http://127.0.0.1:5144` in **Secondary server**, enable **Use servers**,
-  leave **Primary server only** unchecked, and save. The Primary server is tried
-  first. Install leaves the server stopped; Start runs it immediately.
 
-In development builds, an installed server starts with Play when its exact
-localhost address is configured and networking is enabled. A server started by that launch stops
-when the game closes; one already running is left running. Stop preserves data.
-The server binds only to localhost. A different service on its port is never
-adopted or stopped.
+### Quick deploy a local or LAN server
 
-The development local server stores configuration in
-`localserver/native/config.json`, saved data in `localserver/data`, and logs in
-`logs/ReRiff-localserver.log`. When replacing an older launcher-managed Podman
-server, existing `localserver/podman/data` and its configured port are reused
-in place; stop the old container first. The optional server application is
-`localserver/ReRiff-Server-x86_64.AppImage`; the self-contained client helper is
-`localserver/ReRiff-ClientHost`. Downloads are checked against the release's
-SHA-256 manifest before installation. The Linux client installs no Python scripts
-or runtime. When upgrading a previous development install, its client Python
-runtime and obsolete helpers are archived in `.bak/versions/` only for
-development builds. Stable installs retain original game files in `.bak/originals/`
-and the two most recent snapshots per configuration file in `.bak/configs/`; replaced ReRiff binaries
-and font packs are not retained after a successful update.
+1. Click **Install local server** in the launcher. It downloads and verifies the
+   optional server and its dependencies.
+2. Click **Start local server**. The button becomes **Stop local server**.
 
-On Windows, **Install local server** downloads the optional
-`ReRiff-Server-windows.zip` package into `localserver/windows-server/`.
-Flask and its dependencies are bundled there; the launcher uses the private
-Python runtime in `localserver/windows-python/`. The backend is not included
-in the client installer. Existing server data is preserved when updating or
-stopping it. Shared Docker/Podman servers remain supported.
+No separate Python installation or container engine is needed. Windows uses a
+private Python runtime and bundled Flask dependencies; Linux/Proton uses a
+self-contained server AppImage. The server is downloaded on demand rather than
+included in the client installer.
+
+On the host PC, enter `http://127.0.0.1:5144` in **Secondary server**, enable
+**Use servers**, leave **Primary server only** unchecked, and save. Primary is
+tried first. To use only your local server, leave Primary empty.
+
+**LAN access:** other PCs can use `http://<host-LAN-IP>:5144` in
+Primary or Secondary. Start reports the detected LAN address in the launcher.
+Allow inbound TCP port **5144** on the host's private-network firewall. All
+clients use the same saved data. The host's launcher controls and admin page
+remain localhost-only.
+
+**Upgrading an existing local server:** stop it, click **Update local server**,
+then **Start local server**. This downloads the server matching your client
+release and preserves its configuration, scores and ghosts. Client updates
+alone do not replace the optional server application.
+
+An installed server starts with **Play** when its exact localhost address is
+configured and networking is enabled. A server started by that launch stops
+when the game closes; one already running is left running. Start it manually
+to keep it available to other players. Stop preserves data. An unrelated
+service on its port is never adopted or stopped.
+
+Configuration lives in `localserver/native/config.json`, saved data in
+`localserver/data`, and optional logs in `logs/ReRiff-localserver.log`.
+Back up the data folder to preserve server progress. The admin page is
+`http://127.0.0.1:5144/admin` on the host PC.
+
+Stable installs retain original game files in `.bak/originals/` and the two
+most recent backups per configuration file in `.bak/configs/`. Replaced ReRiff
+binaries and font packs are not retained after a successful update.
 
 Backing out of Servers or Graphics with unsaved changes prompts you to apply
 or discard them. Press Back inside the prompt to keep editing.
@@ -326,9 +339,11 @@ Singleplayer keeps scores, profiles, track metadata and ghost files in the game'
 into singleplayer without moving or modifying the old data. Stop the old backend
 before this first import to get a consistent snapshot. Existing server addresses
 are preserved; choose Singleplayer to replace a previously configured localhost
-backend. Shared servers continue to run in Docker or Podman.
+backend. See the [dedicated server instructions](#docker-server) for shared hosting.
 
 ## Graphics settings
+
+![Graphics settings with resolution, fullscreen mode, antialiasing and UI scale](docs/images/reriff-graphics.png)
 
 Choose **Off (Windowed)**, **Borderless** or **Exclusive** fullscreen. Borderless
 can render above the monitor resolution and scale down to fit the display.
@@ -432,8 +447,9 @@ If a different failure persists, send the generated startup report.
 - **Same song has separate leaderboards:** update the server and both launchers,
   ensure the exact source files are accessible, and relaunch each client. Metadata
   alone cannot recover unknown cached identities.
-- **Server will not start:** check `localserver/server-console.log` and
-  `logs/ReRiff-launcher.log`; another service may already occupy port 5144.
+- **Server will not start:** enable logging in **Diagnostics**, retry, and check
+  `logs/ReRiff-localserver.log` and `logs/ReRiff-launcher.log`; another service
+  may already occupy port 5144.
 - **Update fails:** inspect the temporary `update.log` reported by the launcher.
   Download or preflight failure keeps the old launcher open; installation errors
   retain or roll back files. Keep the game's original runtime dependencies.
@@ -633,13 +649,13 @@ python3 -m pip install Flask
 python3 riffapi-local.py
 ```
 
-It runs the same server implementation used by the Docker/Podman image,
+It runs the same server implementation used by the Docker image,
 with tracing enabled, binds to localhost, and uses `data/` beside this root script.
 `RERIFF_DATA_DIR` (or the legacy `RIFFAPI_DATA_DIR`) can select another data folder.
 Source-based song registration also needs the built native catalog library; set
-`RERIFF_CATALOG_LIBRARY` to its path in `build/server-sync/`. Docker/Podman images include that library automatically. Set `RERIFF_NEWS_LIBRARY` to
+`RERIFF_CATALOG_LIBRARY` to its path in `build/server-sync/`. Docker images include that library automatically. Set `RERIFF_NEWS_LIBRARY` to
 `build/server-sync/libreriff-news.so` for version-aware News in a source-based
-server. The Docker/Podman image already includes both libraries; singleplayer needs neither.
+server. The Docker image already includes both libraries; singleplayer needs neither.
 
 ## Build and release
 
@@ -677,7 +693,7 @@ AnyLinux sharun deployer. It includes Flask, Python, shared libraries, CA
 certificates and dependency licenses. The Linux client helper uses the existing
 self-contained .NET patcher runtime. Run `scripts/test_native_client.py` for
 installation/update regressions and `scripts/test-linux-runtime.py` for server
-lifecycle, persistence and port-conflict checks without host Python or Podman.
+lifecycle, persistence and port-conflict checks without host Python or a container engine.
 SteamOS/Bazzite and NixOS desktop integration still need real-machine testing.
 
 For installer builds, build the client helpers and both optional server packages, then run:

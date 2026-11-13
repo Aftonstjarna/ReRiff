@@ -2,8 +2,13 @@
 static int local_server_state;
 static WCHAR local_server_address[128]=L"http://127.0.0.1:5144";
 static HWND local_server_hint;
+static BOOL local_server_package_current(void){
+    WCHAR marker[CAP],version[128];path(marker,L"localserver\\native\\package-version.ini");
+    GetPrivateProfileStringW(L"server",L"version",L"",version,128,marker);
+    return !wcscmp(version,RERIFF_WIDE_LITERAL(RERIFF_VERSION));
+}
 static void local_server_controls(void){
-    if(stop_button)SetWindowTextW(stop_button,local_server_state==2?L"Stop local server":local_server_state==1?L"Start local server":L"Install local server");
+    if(stop_button)SetWindowTextW(stop_button,local_server_state==2?L"Stop local server":local_server_state==1?(local_server_package_current()?L"Start local server":L"Update local server"):L"Install local server");
     if(local_server_hint){WCHAR text[256];_snwprintf(text,256,L"Local server: %ls — enter in Secondary server",local_server_address);SetWindowTextW(local_server_hint,text);}
 }
 #include "linux_server.h"
@@ -48,5 +53,12 @@ static BOOL windows_server_action(const WCHAR *action){
     if(*work)python_remove_stage(work);return !wcscmp(value,L"true");
 }
 static BOOL local_server_action(const WCHAR *action){
-    return is_wine()?linux_server_action(action):windows_server_action(action);
+    BOOL ok=is_wine()?linux_server_action(action):windows_server_action(action);
+    if(ok&&!wcscmp(action,L"install")){
+        WCHAR marker[CAP];path(marker,L"localserver\\native\\package-version.ini");
+        if(!WritePrivateProfileStringW(L"server",L"version",RERIFF_WIDE_LITERAL(RERIFF_VERSION),marker)){
+            wcscpy(message,L"Server installed, but its version marker could not be saved. Check write access to localserver/native.");return FALSE;
+        }
+    }
+    return ok;
 }

@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import secrets
 import signal
+import socket
 import subprocess
 import tempfile
 import time
@@ -15,6 +16,25 @@ import urllib.error
 import urllib.request
 
 from host_process import file_lock, stamp, windows_identity
+
+
+def lan_addresses(port):
+    """Discover direct IPv4 addresses without contacting an Internet service."""
+    addresses = set()
+    try:
+        addresses.update(item[4][0] for item in socket.getaddrinfo(
+            socket.gethostname(), None, socket.AF_INET, socket.SOCK_STREAM))
+    except OSError:
+        pass
+    try:
+        # UDP connect selects the local route without sending any packets.
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as route:
+            route.connect(('192.0.2.1', 9))
+            addresses.add(route.getsockname()[0])
+    except OSError:
+        pass
+    return ['http://'+address+':'+str(port) for address in sorted(addresses)
+            if not address.startswith('127.') and address != '0.0.0.0']
 
 
 def logging_enabled(root):
@@ -167,7 +187,9 @@ class LocalServer:
         while time.monotonic() < deadline:
             record = self.record()
             if record and record.get('token') == token and self.ready(record):
-                return 'Local server running at '+self.address
+                addresses = lan_addresses(self.config['port'])
+                return ('Local server running at '+self.address+
+                        ('. LAN: '+', '.join(addresses) if addresses else '. LAN: use this PC\'s IPv4 address and port '+str(self.config['port'])))
             if child.poll() is not None:
                 raise RuntimeError('Local server exited during startup. See logs/ReRiff-localserver.log.')
             time.sleep(.1)

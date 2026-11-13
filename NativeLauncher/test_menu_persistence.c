@@ -13,6 +13,13 @@ int main(void) {
     HWND host=CreateWindowW(cls.lpszClassName,L"Persistence test",WS_OVERLAPPEDWINDOW,0,0,650,550,NULL,NULL,cls.hInstance,NULL);
     if(!host)return 2;
     WCHAR caption[256];
+    WCHAR marker[CAP],native_dir[CAP],local_dir[CAP];
+    path(local_dir,L"localserver");CreateDirectoryW(local_dir,NULL);
+    path(native_dir,L"localserver\\native");CreateDirectoryW(native_dir,NULL);
+    path(marker,L"localserver\\native\\package-version.ini");
+    local_server_state=1;DeleteFileW(marker);local_server_controls();
+    GetWindowTextW(stop_button,caption,256);if(wcscmp(caption,L"Update local server"))return 25;
+    WritePrivateProfileStringW(L"server",L"version",RERIFF_WIDE_LITERAL(RERIFF_VERSION),marker);
     const WCHAR *labels[]={L"Install local server",L"Start local server",L"Stop local server"};
     for(int state=0;state<3;state++){
         local_server_state=state;local_server_controls();GetWindowTextW(stop_button,caption,256);
