@@ -218,6 +218,7 @@ static void update_toggles(void *menu) {
     }
 }
 static BOOL graphics_scroll_wheel(int delta);
+static BOOL main_scroll_wheel(int delta);
 static BOOL menu_overlay_active(void);
 #include "settings_scroll.h"
 #include "save_prompt.h"
@@ -226,11 +227,12 @@ static void server_save_prompt_result(void *menu,int choice);
 static void __thiscall hook_colour(void *menu,int id,const float *colour) {
     original_colour(menu,id,colour);
     if(!server_page||page_owner!=menu)return;
-    for(int i=0;i<3;i++)if(id==SERVER_ACTION_BASE+toggle_actions[i])
-        for(int part=0;part<2;part++){
-            void *item=toggles[i][part];
-            if(item)((void (__thiscall *)(void *,const float *))(*(void ***)item)[4])(item,colour);
-        }
+    /* Native Graphics leaves the standalone thumb artwork uncoloured.
+     * setColour replaces mesh vertex colours, including its grey shading. */
+    for(int i=0;i<3;i++)if(id==SERVER_ACTION_BASE+toggle_actions[i]){
+        void *bar=toggles[i][0];
+        if(bar)((void (__thiscall *)(void *,const float *))(*(void ***)bar)[4])(bar,colour);
+    }
 }
 
 static void render(void *menu);
@@ -328,7 +330,7 @@ static BOOL make_toggles(void *menu,void *screen,float x,float width,float heigh
             ((void (__thiscall *)(void *,const float *))(*(void ***)item)[9])(item,(const float *)menu+14);
             ((int *)item)[15]=100;
             static const float normal[4]={1,1,1,0.9f};
-            ((void (__thiscall *)(void *,const float *))(*(void ***)item)[4])(item,normal);
+            if(!part)((void (__thiscall *)(void *,const float *))(*(void ***)item)[4])(item,normal);
             menu_item(item,FALSE);enable_input(item,FALSE);show_item(item,FALSE);
             ((int *)item)[1]++;add_screen(screen,item);
         }
@@ -341,6 +343,9 @@ static BOOL make_toggles(void *menu,void *screen,float x,float width,float heigh
 static void __thiscall hook_init(void *menu,void *screen,void *lower) {
     original_init(menu,screen,lower);
     page_owner=menu;server_page=FALSE;input_trace_count=0;ZeroMemory(server_rows,sizeof(server_rows));ZeroMemory(toggles,sizeof(toggles));
+    /* Original gaOptionsMenu.initScreens omits Graphics (row 0) outside
+     * the front end. Keep those race-pause settings entirely native. */
+    if(!((void **)menu)[68]){page_owner=NULL;return;}
     void *group=((void **)menu)[67],*ui=((void **)menu)[46],*sample=NULL;
     for(int id=0;id<5&&!sample;id++)sample=((void **)menu)[68+id];
     if(!readable(group,404)||!readable(ui,16)||!readable(sample,484)){
@@ -622,11 +627,13 @@ static BOOL validate_image_at(BYTE *base,uintptr_t address_base) {
 static BOOL validate_image(BYTE *base) { return validate_image_at(base,(uintptr_t)base); }
 
 #include "flac_sample_rate.h"
-static BOOL cjk_component_enabled(void){
+static BOOL latin_pack_enabled(void){WCHAR value[16];GetPrivateProfileStringW(L"languages",L"latin_enabled",L"0",value,16,config_path);return !wcscmp(value,L"1")||!_wcsicmp(value,L"true");}
+static BOOL cjk_pack_enabled(void){
     WCHAR value[16];GetPrivateProfileStringW(L"languages",L"cjk_enabled",L"",value,16,config_path);
     if(*value)return !_wcsicmp(value,L"true")||!wcscmp(value,L"1");
     return GetPrivateProfileIntW(L"diagnostics",L"cjk_render_probe",0,config_path)!=0;
 }
+static BOOL cjk_component_enabled(void){return cjk_pack_enabled()||latin_pack_enabled();}
 #include "lastfm_utf8.h"
 #include "cjk_fonts.h"
 #include "cjk_direct_visuals.h"

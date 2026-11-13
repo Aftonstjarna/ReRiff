@@ -47,7 +47,7 @@ static int load_gtk(void) {
     return 1;
 }
 typedef struct Setup {
-    GtkWidget *window,*folder,*button,*close,*status,*progress,*details,*log_label,*music_check,*music_path,*cjk_check,*logging_check;
+    GtkWidget *window,*folder,*button,*close,*status,*progress,*details,*log_label,*music_check,*music_path,*cjk_check,*latin_check,*logging_check;
     char *bundle,*log_path;
     pid_t child;
     int finished,exit_code,temporary_log;
@@ -77,7 +77,7 @@ static gboolean child_tick(gpointer data) {
     s->child=0;s->finished=1;
     ui.gtk_progress_bar_set_fraction((GtkProgressBar *)s->progress,s->exit_code?0.0:1.0);
     ui.gtk_widget_set_sensitive(s->folder,TRUE);
-    ui.gtk_widget_set_sensitive(s->cjk_check,TRUE);ui.gtk_widget_set_sensitive(s->logging_check,TRUE);
+    ui.gtk_widget_set_sensitive(s->cjk_check,TRUE);ui.gtk_widget_set_sensitive(s->latin_check,TRUE);ui.gtk_widget_set_sensitive(s->logging_check,TRUE);
     ui.gtk_widget_set_sensitive(s->music_check,TRUE);
     ui.gtk_widget_set_sensitive(s->music_path,ui.gtk_toggle_button_get_active((GtkToggleButton *)s->music_check));
     ui.gtk_widget_set_sensitive(s->button,s->exit_code!=0);
@@ -117,7 +117,7 @@ static void install_clicked(GtkWidget *widget,gpointer data) {
     }
 
     char *runtime=ui.g_build_filename(s->bundle,"payload","localserver","ReRiff-ClientHost",NULL);
-    char *argv[]={runtime,"--client-host","install","--bundle",s->bundle,"--game-dir",game,logging?"--logging":"--no-logging",ui.gtk_toggle_button_get_active((GtkToggleButton *)s->cjk_check)?"--cjk":"--no-cjk",
+    char *argv[]={runtime,"--client-host","install","--bundle",s->bundle,"--game-dir",game,logging?"--logging":"--no-logging",ui.gtk_toggle_button_get_active((GtkToggleButton *)s->cjk_check)?"--cjk":"--no-cjk",ui.gtk_toggle_button_get_active((GtkToggleButton *)s->latin_check)?"--latin":"--no-latin",
         link_music?"--music-dir":"--no-music-link",link_music?(char *)music:NULL,NULL};
     posix_spawn_file_actions_t actions;int error=posix_spawn_file_actions_init(&actions);
     if(!error){
@@ -132,7 +132,7 @@ static void install_clicked(GtkWidget *widget,gpointer data) {
     ui.gtk_label_set_text((GtkLabel *)s->log_label,logging?s->log_path:"Setup details are temporary while logging is disabled.");
     if(error){s->child=0;set_status(s,"Could not start the bundled Linux runtime. No game files were changed.");return;}
     s->finished=0;s->exit_code=0;
-    ui.gtk_widget_set_sensitive(s->cjk_check,FALSE);ui.gtk_widget_set_sensitive(s->logging_check,FALSE);
+    ui.gtk_widget_set_sensitive(s->cjk_check,FALSE);ui.gtk_widget_set_sensitive(s->latin_check,FALSE);ui.gtk_widget_set_sensitive(s->logging_check,FALSE);
     ui.gtk_widget_set_sensitive(s->music_check,FALSE);ui.gtk_widget_set_sensitive(s->music_path,FALSE);
     ui.gtk_widget_set_sensitive(s->folder,FALSE);ui.gtk_widget_set_sensitive(s->button,FALSE);ui.gtk_widget_set_sensitive(s->close,FALSE);
     set_status(s,"Installing ReRiff… Please keep setup open until it finishes.");
@@ -166,15 +166,16 @@ static void language_folder_changed(GtkWidget *widget,gpointer data){
         if(contents){unsigned skip=length>=3&&!memcmp(contents,"\xef\xbb\xbf",3)?3:0;file=fmemopen(contents+skip,length-skip,"r");}
     }
     if(error)ui.g_error_free(error);
-    int saved=-1,legacy=0,section=0,log_saved=-1;
+    int saved=-1,latin_saved=0,legacy=0,section=0,log_saved=-1;
     if(file){char line[1024];while(fgets(line,sizeof(line),file)){char *p=line;while(*p==' '||*p=='\t')p++;
         if(*p=='['){section=!strncasecmp(p,"[languages]",11)?1:!strncasecmp(p,"[diagnostics]",13)?2:0;continue;}
         char *eq=strchr(p,'=');if(!eq)continue;char *end=eq;while(end>p&&(end[-1]==' '||end[-1]=='\t'))end--;
         char *value=eq+1;while(*value==' '||*value=='\t')value++;int enabled=!strncasecmp(value,"true",4)||*value=='1';
         if(section==1&&end-p==11&&!strncasecmp(p,"cjk_enabled",11))saved=enabled;
+        if(section==1&&end-p==13&&!strncasecmp(p,"latin_enabled",13))latin_saved=enabled;
         if(section==2&&end-p==15&&!strncasecmp(p,"logging_enabled",15))log_saved=enabled;
         if(section==2&&end-p==16&&!strncasecmp(p,"cjk_render_probe",16))legacy=enabled;
-    }fclose(file);}ui.gtk_toggle_button_set_active((GtkToggleButton *)s->cjk_check,saved>=0?saved:legacy);ui.gtk_toggle_button_set_active((GtkToggleButton *)s->logging_check,log_saved>=0?log_saved:(strchr(RERIFF_VERSION,'-')!=NULL||!strcmp(RERIFF_VERSION,"development")));ui.g_free(contents);ui.g_free(path);ui.g_free(game);
+    }fclose(file);}ui.gtk_toggle_button_set_active((GtkToggleButton *)s->latin_check,latin_saved);ui.gtk_toggle_button_set_active((GtkToggleButton *)s->cjk_check,saved>=0?saved:legacy);ui.gtk_toggle_button_set_active((GtkToggleButton *)s->logging_check,log_saved>=0?log_saved:(strchr(RERIFF_VERSION,'-')!=NULL||!strcmp(RERIFF_VERSION,"development")));ui.g_free(contents);ui.g_free(path);ui.g_free(game);
 }
 static void create_window(Setup *s) {
     s->window=ui.gtk_window_new(GTK_WINDOW_TOPLEVEL);
@@ -189,6 +190,8 @@ static void create_window(Setup *s) {
     ui.gtk_box_pack_start((GtkBox *)box,s->folder,FALSE,FALSE,0);
     s->cjk_check=ui.gtk_check_button_new_with_label("Install and enable CJK fonts (Chinese, Japanese, Korean; about 105 MiB)");
     ui.gtk_box_pack_start((GtkBox *)box,s->cjk_check,FALSE,FALSE,0);
+    s->latin_check=ui.gtk_check_button_new_with_label("Install and enable Latin/European fonts (including Polish)");
+    ui.gtk_box_pack_start((GtkBox *)box,s->latin_check,FALSE,FALSE,0);
     s->logging_check=ui.gtk_check_button_new_with_label("Enable diagnostic logging (defaults on for beta/development builds)");
     ui.gtk_toggle_button_set_active((GtkToggleButton *)s->logging_check,strchr(RERIFF_VERSION,'-')!=NULL||!strcmp(RERIFF_VERSION,"development"));
     ui.gtk_box_pack_start((GtkBox *)box,s->logging_check,FALSE,FALSE,0);

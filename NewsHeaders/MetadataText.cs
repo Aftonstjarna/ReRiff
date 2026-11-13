@@ -11,7 +11,7 @@ namespace ReRiff {
         static MetadataText(){} // Read opt-in configuration at first use.
         private static bool ReadEnabled(){
             try{
-                bool diagnostics=false,languages=false,result=false;bool? installed=null;
+                bool diagnostics=false,languages=false,result=false;bool? installed=null;bool latin=false;
                 foreach(string raw in File.ReadAllLines(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"server.ini"))){
                     string line=raw.Trim();
                     if(line.StartsWith("[",StringComparison.Ordinal)){diagnostics=string.Equals(line,"[diagnostics]",StringComparison.OrdinalIgnoreCase);languages=string.Equals(line,"[languages]",StringComparison.OrdinalIgnoreCase);}
@@ -19,11 +19,14 @@ namespace ReRiff {
                     if(languages&&equals>0&&string.Equals(line.Substring(0,equals).Trim(),"cjk_enabled",StringComparison.OrdinalIgnoreCase)){
                         string value=line.Substring(equals+1).Trim();installed=value=="1"||string.Equals(value,"true",StringComparison.OrdinalIgnoreCase);
                     }
+                    if(languages&&equals>0&&string.Equals(line.Substring(0,equals).Trim(),"latin_enabled",StringComparison.OrdinalIgnoreCase)){
+                        string value=line.Substring(equals+1).Trim();latin=value=="1"||string.Equals(value,"true",StringComparison.OrdinalIgnoreCase);
+                    }
                     if(diagnostics&&equals>0&&string.Equals(line.Substring(0,equals).Trim(),"metadata_utf8_probe",StringComparison.OrdinalIgnoreCase)){
                         string value=line.Substring(equals+1).Trim();result=value=="1"||string.Equals(value,"true",StringComparison.OrdinalIgnoreCase);
                     }
                 }
-                return installed??result;
+                return latin||(installed??result);
             }catch(IOException){return false;}catch(UnauthorizedAccessException){return false;}
         }
         private static string Field(IntPtr key){

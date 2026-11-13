@@ -25,7 +25,7 @@
 #include "logging.h"
 #define WM_COMPLETE (WM_APP + 1)
 #define WM_GAME_RUNNING (WM_APP + 2)
-enum { EXTERNAL=101, FALLBACK, TIMEOUT, POPUP, SAVE, PLAY, LOCAL, EXTERNAL_ONLY, STOP, UPDATE, EXPERIMENTAL, NETWORKING, SKIP_LAUNCHER, AUTO_UPDATE_SKIP, CJK_INSTALL, LOGGING };
+enum { EXTERNAL=101, FALLBACK, TIMEOUT, POPUP, SAVE, PLAY, LOCAL, EXTERNAL_ONLY, STOP, UPDATE, EXPERIMENTAL, NETWORKING, SKIP_LAUNCHER, AUTO_UPDATE_SKIP, CJK_INSTALL, LOGGING, LATIN_INSTALL, UPDATE_DETAILS };
 static WCHAR folder[CAP], ini[CAP], message[1024];
 static WCHAR game_arguments[CAP];
 static BOOL force_show_launcher, suppress_auto_update, automatic_update, force_auto_reinstall;
@@ -33,14 +33,14 @@ static DWORD restart_parent_pid;
 #include "restart_protocol.h"
 static HWND window, status, external, fallback, timeout_edit, popup, play_button, save_button;
 static HWND only_checkbox, stop_button, update_button;
-static BOOL busy = FALSE, playing = FALSE;
+static BOOL busy = FALSE, playing = FALSE, checking_update = FALSE;
 static HWND experimental_checkbox;
 static HWND networking_checkbox, skip_checkbox, auto_update_checkbox;
 static ULONGLONG settings_signature;
 static BOOL settings_observed=FALSE;
 static BOOL installed_experimental=FALSE, requested_experimental=FALSE;
 static HFONT font;
-static HWND launcher_tabs,language_checkbox,language_description,logging_checkbox;
+static HWND launcher_tabs,latin_checkbox,language_checkbox,language_description,logging_checkbox;
 static HWND diagnostic_controls[8];static unsigned diagnostic_count;static BOOL creating_diagnostics;
 static HWND server_page_controls[40],language_page_controls[8];
 static unsigned server_page_count,language_page_count;
@@ -201,6 +201,7 @@ static BOOL external_only(void) {
 }
 
 #include "update_progress.h"
+#include "update_details.h"
 #include "auto_update.h"
 
 static BOOL local_server_action(const WCHAR *action);
@@ -305,7 +306,7 @@ static BOOL launch_game(void) {
 static DWORD WINAPI worker(LPVOID parameter) {
     int action=(int)(INT_PTR)parameter;
     BOOL play=action==1;
-    BOOL ok=action==4?language_action(L"install"):action==5?language_action(L"disable"):action==3?check_updates():action==2?local_server_action(local_server_state==2?L"stop":local_server_state==1?L"start":L"install"):action==0?local_server_action(L"status"):TRUE;
+    BOOL ok=action==6?language_action(L"install --pack latin"):action==7?language_action(L"disable --pack latin"):action==4?language_action(L"install"):action==5?language_action(L"disable"):action==3?check_updates():action==2?local_server_action(local_server_state==2?L"stop":local_server_state==1?L"start":L"install"):action==0?local_server_action(L"status"):TRUE;
     if (ok && play) ok=launch_game();
     if (ok && action<2) wcscpy(message,play?L"Game closed.":L"Ready. Singleplayer runs inside the game; configured servers are checked at game startup.");
     log_message(message);
@@ -315,10 +316,10 @@ static DWORD WINAPI worker(LPVOID parameter) {
 
 static void begin(int action) {
     if (busy) return;
-    busy=TRUE;playing=action==1;changing_language=action==4||action==5;
-    EnableWindow(language_checkbox,FALSE);EnableWindow(logging_checkbox,FALSE);
+    busy=TRUE;playing=action==1;checking_update=action==3;changing_language=action>=4&&action<=7;
+    EnableWindow(language_checkbox,FALSE);EnableWindow(latin_checkbox,FALSE);EnableWindow(logging_checkbox,FALSE);
     EnableWindow(play_button,FALSE);EnableWindow(save_button,FALSE);EnableWindow(stop_button,FALSE);EnableWindow(update_button,FALSE);EnableWindow(experimental_checkbox,FALSE);
-    SetWindowTextW(status,action==4?L"Installing and enabling CJK fonts...":action==5?L"Disabling CJK fonts...":action==3?L"Checking published GitHub releases...":action==2?(local_server_state==2?L"Stopping the local server...":local_server_state==1?L"Starting the local server...":L"Downloading and installing the optional local server..."):L"Checking server settings...");
+    SetWindowTextW(status,action==6?L"Installing and enabling Latin/European fonts...":action==7?L"Disabling Latin/European fonts...":action==4?L"Installing and enabling CJK fonts...":action==5?L"Disabling CJK fonts...":action==3?L"Checking published GitHub releases...":action==2?(local_server_state==2?L"Stopping the local server...":local_server_state==1?L"Starting the local server...":L"Downloading and installing the optional local server..."):L"Checking server settings...");
     HANDLE thread=CreateThread(NULL,4*1024*1024,worker,(LPVOID)(INT_PTR)action,STACK_SIZE_PARAM_IS_A_RESERVATION,NULL);
     if (thread) CloseHandle(thread);
     else { busy=FALSE; EnableWindow(play_button,TRUE);EnableWindow(save_button,TRUE);EnableWindow(stop_button,TRUE);EnableWindow(update_button,TRUE);EnableWindow(experimental_checkbox,TRUE);SetWindowTextW(status,L"Could not start launcher worker."); }
@@ -428,6 +429,8 @@ static void language_controls(void){
     WCHAR value[16];WritePrivateProfileStringW(NULL,NULL,NULL,ini);
     GetPrivateProfileStringW(L"languages",L"cjk_enabled",GetPrivateProfileIntW(L"diagnostics",L"cjk_render_probe",0,ini)?L"true":L"false",value,16,ini);
     SendMessageW(language_checkbox,BM_SETCHECK,(!_wcsicmp(value,L"true")||!wcscmp(value,L"1"))?BST_CHECKED:BST_UNCHECKED,0);
+    GetPrivateProfileStringW(L"languages",L"latin_enabled",L"false",value,16,ini);
+    SendMessageW(latin_checkbox,BM_SETCHECK,(!_wcsicmp(value,L"true")||!wcscmp(value,L"1"))?BST_CHECKED:BST_UNCHECKED,0);
 }
 static void select_launcher_page(void){
     int page=(int)SendMessageW(launcher_tabs,TCM_GETCURSEL,0,0);BOOL languages=page==1;
@@ -472,11 +475,13 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
         SendMessageW(experimental_checkbox,BM_SETCHECK,installed_experimental?BST_CHECKED:BST_UNCHECKED,0);
         creating_languages=TRUE;
         language_checkbox=control(L"BUTTON",L"Install and enable CJK fonts (Chinese, Japanese, Korean)",BS_AUTOCHECKBOX|WS_TABSTOP,22,26,590,32,CJK_INSTALL);
-        language_description=control(L"STATIC",L"Adds missing characters throughout the game, including file names, song metadata, leaderboards and pause screens.\n\nFonts stay in the game folder. High-resolution text is selected automatically. Restart the game after changing this option.\n\nFirst installation downloads about 105 MiB. Unchecking disables support and retains the installed fonts. This does not translate the menus.",0,22,76,585,220,0);
+        latin_checkbox=control(L"BUTTON",L"Install and enable Latin/European fonts (including Polish)",BS_AUTOCHECKBOX|WS_TABSTOP,22,68,590,32,LATIN_INSTALL);
+        language_description=control(L"STATIC",L"Adds missing characters throughout the game, including file names, song metadata, leaderboards and pause screens.\n\nFonts stay in the game folder. High-resolution text is selected automatically. Restart the game after changing this option.\n\nCJK downloads about 105 MiB; Latin/European is a separate small download. Both share one extra font archive pair. Unchecking disables support and retains the installed fonts. This does not translate the menus.",0,22,118,585,220,0);
         creating_languages=FALSE;
         creating_diagnostics=TRUE;
         logging_checkbox=control(L"BUTTON",L"Enable diagnostic logging",BS_AUTOCHECKBOX|WS_TABSTOP,22,26,590,32,LOGGING);
         control(L"STATIC",L"Save launcher and client logs in the game's logs folder. Logging defaults on for beta/development builds and off for stable builds.\n\nExisting logs are kept when logging is disabled. Restart a running local server to apply its logging change.\n\nLogs may contain local file paths and server addresses; review them before sharing.",0,22,76,585,200,0);
+        control(L"BUTTON",L"View update details",WS_TABSTOP,22,300,200,32,UPDATE_DETAILS);
         creating_diagnostics=FALSE;
         SendMessageW(logging_checkbox,BM_SETCHECK,rr_logging_enabled(folder,installed_experimental)?BST_CHECKED:BST_UNCHECKED,0);
         language_controls();select_launcher_page();
@@ -488,6 +493,7 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
     if(event==WM_NOTIFY&&((NMHDR *)lp)->hwndFrom==launcher_tabs&&((NMHDR *)lp)->code==TCN_SELCHANGE){select_launcher_page();return 0;}
     if (event==WM_COMMAND) {
         switch (LOWORD(wp)) {
+            case UPDATE_DETAILS:show_update_details();break;
             case LOGGING: {
                 BOOL enabled=SendMessageW(logging_checkbox,BM_GETCHECK,0,0)==BST_CHECKED;
                 if(WritePrivateProfileStringW(L"diagnostics",L"logging_enabled",enabled?L"true":L"false",ini)) {
@@ -496,6 +502,7 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
                 }
                 break;
             }
+            case LATIN_INSTALL:begin(SendMessageW(latin_checkbox,BM_GETCHECK,0,0)==BST_CHECKED?6:7);break;
             case CJK_INSTALL:begin(SendMessageW(language_checkbox,BM_GETCHECK,0,0)==BST_CHECKED?4:5);break;
             case LOCAL:SendMessageW(networking_checkbox,BM_SETCHECK,BST_UNCHECKED,0);update_networking_controls();break;
             case NETWORKING:case EXTERNAL_ONLY:update_networking_controls();break;
@@ -518,7 +525,8 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
         requested_experimental=installed_experimental;
         SendMessageW(experimental_checkbox,BM_SETCHECK,installed_experimental?BST_CHECKED:BST_UNCHECKED,0);
         busy=FALSE;playing=FALSE;EnableWindow(play_button,TRUE);EnableWindow(save_button,TRUE);EnableWindow(stop_button,TRUE);EnableWindow(update_button,TRUE);EnableWindow(experimental_checkbox,TRUE);SetWindowTextW(status,message);
-        local_server_controls();language_controls();EnableWindow(language_checkbox,TRUE);EnableWindow(logging_checkbox,TRUE);
+        local_server_controls();language_controls();EnableWindow(language_checkbox,TRUE);EnableWindow(latin_checkbox,TRUE);EnableWindow(logging_checkbox,TRUE);
+        if(!wp&&checking_update&&*update_failure)show_update_details();checking_update=FALSE;
         if (lp) ShowWindow(window,SW_RESTORE);return 0;
     }
     if (event==WM_CLOSE) {

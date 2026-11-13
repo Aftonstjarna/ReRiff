@@ -76,6 +76,10 @@ def build(args):
         if json.loads(fonts.read('component.json')).get('version')!=version:
             raise ValueError('Rebuild the CJK component for this VERSION before packaging.')
     copy(font_pack,common/'components/ReRiff-CJK.zip')
+    latin_pack=ROOT/'build/latin-component/ReRiff-Latin.zip'
+    with zipfile.ZipFile(latin_pack) as fonts:
+        if json.loads(fonts.read('component.json')).get('version')!=version: raise ValueError('Rebuild the Latin component for this VERSION.')
+    copy(latin_pack,common/'components/ReRiff-Latin.zip')
     payload = common/'payload'
     copy(ROOT/'scripts/Collect-ReRiffStartup.ps1', payload/'localserver/diagnostics/Collect-ReRiffStartup.ps1')
     copy(ROOT/'packaging/logging_policy.py', payload/'localserver/logging_policy.py')
@@ -116,7 +120,7 @@ def build(args):
             for name in ('local_server.py','host_process.py','windows_package.py'):
                 copy(ROOT/'LinuxRuntime'/name,folder/'payload/localserver'/name)
         manifest = {'singleplayer': True, 'channel':channel,'version':version,'commit':commit,'platform':platform,'patches':patches,
-                    'update_only':update_only, 'native_linux':platform == 'linux', 'language_component':{'file':'components/ReRiff-CJK.zip','sha256':digest(font_pack.read_bytes())}, 'python_runtime':'download' if platform == 'windows' else 'server-only',
+                    'update_only':update_only, 'native_linux':platform == 'linux', 'latin_component':{'file':'components/ReRiff-Latin.zip','sha256':digest(latin_pack.read_bytes())}, 'language_component':{'file':'components/ReRiff-CJK.zip','sha256':digest(font_pack.read_bytes())}, 'python_runtime':'download' if platform == 'windows' else 'server-only',
                     'vanilla_originals':json.loads((ROOT/'packaging/original-client.json').read_text()) if args.local_patching else {},
                     'compatible_existing':json.loads((ROOT/'packaging/compatible-client.json').read_text()) if args.local_patching else {},
                     'client_patch_revision':2,'rebuild_existing':json.loads((ROOT/'packaging/client-rebuilds.json').read_text()),
@@ -163,6 +167,7 @@ __RERIFF_PAYLOAD__
             run.write_bytes(shell.encode()+archive_bytes.getvalue());run.chmod(0o755)
     copy(ROOT/'build/linux-runtime/ReRiff-Server-x86_64.AppImage', output/'ReRiff-Server-x86_64.AppImage')
     copy(font_pack,output/'ReRiff-CJK.zip')
+    copy(latin_pack,output/'ReRiff-Latin.zip')
     copy(ROOT/'build/windows-server/ReRiff-Server-windows.zip', output/'ReRiff-Server-windows.zip')
     # Source archive excludes original game files, player data, and caches.
     with (output/f'ReRiff-{version}-source.tar.gz').open('wb') as stream:

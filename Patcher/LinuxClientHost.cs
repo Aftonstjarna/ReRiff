@@ -41,10 +41,19 @@ internal static class LinuxClientHost {
         using var process=Process.Start(info)??throw new IOException("Could not run "+file);
         if(!process.WaitForExit(seconds*1000)){if(terminateOnTimeout){process.Kill(entireProcessTree:true);process.WaitForExit();}throw new IOException("Helper timed out; inspect logs before retrying.");}return process.ExitCode;
     }
+    static void UpdatePreflight(string file,IEnumerable<string> arguments) {
+        var info=new ProcessStartInfo(file){UseShellExecute=false,RedirectStandardOutput=true,RedirectStandardError=true};
+        foreach(string arg in arguments)info.ArgumentList.Add(arg);
+        using var process=Process.Start(info)??throw new IOException("Could not start installer preflight.");
+        var output=process.StandardOutput.ReadToEndAsync();var errors=process.StandardError.ReadToEndAsync();
+        if(!process.WaitForExit(120000)){process.Kill(entireProcessTree:true);process.WaitForExit();throw new IOException("Installer preflight timed out after two minutes.");}
+        string details=output.GetAwaiter().GetResult()+errors.GetAwaiter().GetResult();Console.Write(details);
+        if(process.ExitCode!=0){if(details.Length>4096)details=details[^4096..];throw new IOException("Installer preflight failed (exit "+process.ExitCode+"): "+details.Trim());}
+    }
     sealed class Options {
         public readonly Dictionary<string,string> Values=new();public readonly HashSet<string> Flags=new();
         public Options(string[] args) {
-            var switches=new HashSet<string>{"--dry-run","--restore","--cjk","--no-cjk","--logging","--no-logging","--no-music-link","--prepare","--cli","--help"};
+            var switches=new HashSet<string>{"--dry-run","--restore","--cjk","--no-cjk","--latin","--no-latin","--logging","--no-logging","--no-music-link","--prepare","--cli","--help"};
             var values=new HashSet<string>{"--bundle","--game-dir","--backup-dir","--music-dir","--root","--result","--asset","--sha256","--work","--archive","--channel","--platform"};
             for(int i=0;i<args.Length;i++) {string key=args[i];if(switches.Contains(key)){if(!Flags.Add(key))throw new ArgumentException("Duplicate option: "+key);}else if(values.Contains(key)&&i+1<args.Length){if(!Values.TryAdd(key,args[++i]))throw new ArgumentException("Duplicate option: "+key);}else throw new ArgumentException("Unknown or incomplete option: "+key);}
         }
@@ -64,7 +73,7 @@ internal static class LinuxClientHost {
                 case "print-game-dir":Console.WriteLine(AutoGame());break;
                 case "print-music-dir":Console.WriteLine(MusicDir());break;
                 case "install":
-                    if(options.Has("--help")){Console.WriteLine("ReRiff Linux setup: --game-dir PATH [--dry-run] [--restore] [--backup-dir PATH] [--music-dir PATH | --no-music-link] [--cjk | --no-cjk]. No Python or system .NET required.");break;}
+                    if(options.Has("--help")){Console.WriteLine("ReRiff Linux setup: --game-dir PATH [--dry-run] [--restore] [--backup-dir PATH] [--music-dir PATH | --no-music-link] [--cjk | --no-cjk] [--latin | --no-latin]. No Python or system .NET required.");break;}
                     Install(options.Need("--bundle"),options.Get("--game-dir",AutoGame()),options);break;
                 case "update":Update(options);break;
                 case "server-control":if(args.Length<2)throw new ArgumentException("Server action required.");return Server(args[1],options);
@@ -82,15 +91,7 @@ internal static class LinuxClientHost {
         foreach(string root in libraries.ToArray()) {string vdf=root+"/steamapps/libraryfolders.vdf";if(File.Exists(vdf))foreach(Match m in Regex.Matches(File.ReadAllText(vdf),"\"path\"\\s*\"([^\"]+)\""))libraries.Add(m.Groups[1].Value.Replace("\\\\","\\"));}
         return libraries.Select(p=>p+"/steamapps/common/Riff Racer").FirstOrDefault(p=>File.Exists(p+"/Game.exe"))??"";
     }
-    static string MusicDir() {
-        string home=Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),config=Environment.GetEnvironmentVariable("XDG_CONFIG_HOME")??home+"/.config";
-        string file=config+"/user-dirs.dirs";
-        if(File.Exists(file))foreach(string line in File.ReadLines(file)) {
-            var match=Regex.Match(line,"^\\s*XDG_MUSIC_DIR\\s*=\\s*\"([^\"]*)\"\\s*(?:#.*)?$");
-            if(match.Success) {string value=match.Groups[1].Value.Replace("${HOME}",home).Replace("$HOME",home);if(Path.IsPathRooted(value)&&!value.Contains('$')&&!value.Contains('`'))return Path.GetFullPath(value)==home?home+"/Music":value;}
-        }
-        return home+"/Music";
-    }
+    static string MusicDir() => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),"Music");
     [DllImport("libc",SetLastError=true)]static extern IntPtr realpath(string path,IntPtr resolved);
     [DllImport("libc")]static extern void free(IntPtr pointer);
     static string RealPath(string path) {
@@ -168,10 +169,10 @@ internal static class LinuxClientHost {
                 if(!plan.ContainsKey("localserver/ReRiff-ClientHost"))plan["localserver/ReRiff-ClientHost"]=File.ReadAllBytes(Self);
                 if(!File.Exists(game+"/server.ini"))plan["server.ini"]=Encoding.UTF8.GetBytes("[server]\nexternal_url =\nfallback_url =\ntimeout_seconds = 5\nnetworking_enabled = true\nshow_server_popup = true\n\n[launcher]\nskip_launcher = false\nauto_update_on_skip = false\n");
                 bool cjk=options.Has("--cjk")||(!options.Has("--no-cjk")&&LanguageComponent.Enabled(game));
-                if(cjk||options.Has("--no-cjk")) {
-                    var component=Map(manifest,"language_component");
-                    string asset=cjk?Under(bundle,Text(component,"file")):"";
-                    foreach(var item in LanguageComponent.Plan(game,asset,Text(component,"sha256"),cjk))plan[item.Key]=item.Value;
+                bool latin=options.Has("--latin")||(!options.Has("--no-latin")&&LanguageComponent.Enabled(game,"latin"));
+                if(cjk||latin||options.Has("--no-cjk")||options.Has("--no-latin")) {
+                    var component=Map(manifest,"language_component");var european=Map(manifest,"latin_component");
+                    foreach(var item in LanguageComponent.Selections(game,cjk?Under(bundle,Text(component,"file")):"",Text(component,"sha256"),cjk,latin?Under(bundle,Text(european,"file")):"",Text(european,"sha256"),latin))plan[item.Key]=item.Value;
                 }
                 var patched=new JsonObject();foreach(var pair in required)patched[pair.Key]=Hash(plan.TryGetValue(pair.Key,out var data)?data:File.ReadAllBytes(Under(game,pair.Key)));
                 bool music=!options.Has("--no-music-link")&&(options.Get("--music-dir")!=""||Flag(state,"music_link",true));
@@ -268,7 +269,7 @@ internal static class LinuxClientHost {
                 if(File.Exists(next)) {
                     string expectedHost=Text(Map(manifest,"files"),"payload/localserver/ReRiff-ClientHost");if(expectedHost==""||HashFile(next)!=expectedHost)throw new IOException("Native helper checksum mismatch.");
                     File.SetUnixFileMode(next,File.GetUnixFileMode(next)|UnixFileMode.UserExecute);
-                    if(RunProcess(next,new[]{"--client-host","install","--bundle",bundle,"--game-dir",game,"--dry-run"})!=0)throw new IOException("Installer preflight failed.");
+                    UpdatePreflight(next,new[]{"--client-host","install","--bundle",bundle,"--game-dir",game,"--dry-run"});
                 }else {next=Self;Install(bundle,game,new Options(new[]{"--dry-run"}));}
                 Atomic(work+"/ReRiff-ClientHost",File.ReadAllBytes(next),true);
                 string bridge=Path.Combine(game,"localserver/linux-runtime.sh");Atomic(work+"/linux-runtime.sh",File.ReadAllBytes(bridge),true);
@@ -277,7 +278,7 @@ internal static class LinuxClientHost {
                 var plan=ReadJson(work+"/prepared.json");game=Text(plan,"game");StopServers(game+"/localserver");
                 Install(Text(plan,"bundle"),game,new Options(new[]{"--work",work}));Atomic(work+"/success",Encoding.UTF8.GetBytes("success\n"));
             }
-        } catch(Exception error) {writer.WriteLine(error.ToString());Atomic(work+"/failure",Encoding.UTF8.GetBytes("Native client update failed; see logs/update.log.\n"));throw;}
+        } catch(Exception error) {writer.WriteLine(error.ToString());Atomic(work+"/failure",Encoding.UTF8.GetBytes(error.GetType().Name+": "+error.Message+"\n"));throw;}
         finally {Console.SetOut(stdout);Console.SetError(stderr);}
     }
     static int Server(string action,Options options) {

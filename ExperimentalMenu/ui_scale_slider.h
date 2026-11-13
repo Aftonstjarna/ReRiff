@@ -5,12 +5,27 @@ static void *ui_slider_label,*ui_slider_rail,*ui_slider_knob,*ui_slider_min,*ui_
 static int ui_slider_pending;
 static BOOL ui_slider_dragging;
 static float ui_slider_left,ui_slider_width,ui_slider_y;
+static float ui_slider_rail_pixel_scale(float render_height,float client_height){
+    float ratio=client_height>0?render_height/client_height:1;
+    if(ratio<1)ratio=1;if(ratio>32)ratio=32;
+    int pixels=(int)ratio;return (float)(pixels+(ratio>pixels));
+}
+static float ui_slider_rail_minimum(void){
+    RECT client;float size[2];
+    if(display_installed&&ui_actual_resolution(size)&&GetClientRect(display_window(),&client)&&client.bottom>0)
+        return ui_slider_rail_pixel_scale(size[1],(float)client.bottom);
+    return 1;
+}
 static void ui_slider_art(void){
     if(!ui_slider_label)return;
     WCHAR text[96];if(ui_slider_pending)_snwprintf(text,96,L"UI SCALE: %d",ui_slider_pending);
     else wcscpy(text,L"UI SCALE: 0 (AUTO)");
     float width=((float *)ui_slider_label)[12],height=((float *)ui_slider_label)[13];
     raw_text(ui_slider_label,text);((float *)ui_slider_label)[12]=width;((float *)ui_slider_label)[13]=height;
+    if(ui_slider_rail){
+        ui_slider_y=(float)(int)(ui_slider_y+0.5f);
+        move_item(ui_slider_rail,((float *)ui_slider_rail)[8],ui_slider_y);
+    }
     move_item(ui_slider_knob,ui_slider_left+ui_slider_width*ui_scale_step(ui_slider_pending)/16,ui_slider_y);
 }
 static void ui_slider_create(void *menu,float x,float y,float right,float gap){
@@ -29,7 +44,11 @@ static void ui_slider_create(void *menu,float x,float y,float right,float gap){
     for(int i=0;i<5;i++)if(items[i]){
         void *item=items[i];((int *)item)[15]=100;menu_item(item,i==0);enable_input(item,i==0);colour_item(item,normal);
         if(!i){((int *)item)[2]=UI_SCALE_CONTROL_ID;((float *)item)[12]=right-x;((float *)item)[13]=gap;}
-        else if(i==1){float width=((float *)item)[12];if(width>0)scale_item(item,(right-x)/width,((float *)menu)[15]);}
+        else if(i==1){
+            float width=((float *)item)[12],thickness=ui_slider_rail_minimum();
+            if(thickness<sy)thickness=sy;
+            if(width>0)scale_item(item,(right-x)/width,thickness);
+        }
         else if(i==2)scale_item(item,((float *)menu)[14],((float *)menu)[15]);
         ((int *)item)[1]++;add_screen(((void **)menu)[46],item);
     }
@@ -62,6 +81,6 @@ static void ui_slider_tick(void *menu){
 static void ui_slider_save(void){
     if(!ui_font_setup)return;
     WCHAR value[16];_snwprintf(value,16,L"%d",ui_slider_pending);
-    if(WritePrivateProfileStringW(L"graphics",L"ui_scale",value,config_path)){ui_scale_value=ui_slider_pending;ui_font_value=-1;}
+    if(WritePrivateProfileStringW(L"graphics",L"ui_scale",value,config_path)){if(ui_scale_value!=ui_slider_pending)ui_scale_refresh_pending=TRUE;ui_scale_value=ui_slider_pending;ui_font_value=-1;}
     else log_line("Could not save UI scale preference.");
 }

@@ -18,7 +18,7 @@ leaderboards and ghosts.
   antialiasing and adjustable UI scale.
 - **Launcher and updates:** edit settings, opt into betas, or update automatically
   when skipping the launcher.
-- **CJK fonts:** optional Chinese, Japanese and Korean characters throughout the game.
+- **Language fonts:** optional CJK and Latin/European character support.
 - **Optional local server:** download and manage a local server from the launcher.
 
 **Launcher — ReRiff 1.2.3**
@@ -62,7 +62,7 @@ sh ReRiff-<version>-linux.run
 
 Choose the folder containing `Game.exe`, click **Install**, and wait for the
 result. **Link Linux music folder** is checked by default. Its editable field
-uses your XDG Music location (usually `~/Music`). Setup links that folder into
+defaults to `~/Music`; you can choose a different folder. Setup links that folder into
 this game's Proton prefix at `drive_c/users/steamuser/Music`, so the game can
 browse your music. Uncheck it to skip linking; this preference is retained for
 automatic updates. Existing non-empty Music folders inside the prefix are
@@ -98,12 +98,20 @@ If Windows selects an external server but game features stay offline, include
 `logs/ReRiff-network.log` from the game folder when reporting the failure.
 The startup report collector includes this log automatically.
 
-### CJK font support
+Failed updates show a reason in the launcher. Open **Diagnostics → View update
+details** for scrollable temporary error details and saved update-log entries.
+Viewing details does not enable diagnostic logging.
+
+### Optional language fonts
 
 Check **Install and enable CJK font support** during setup, or open the launcher's
 **Languages** tab and check **Install and enable CJK fonts**. The component adds
 missing Chinese, Japanese and Korean characters throughout the game; it does not
-translate menus. The current font pack is about 105 MiB.
+translate menus. The CJK pack is about 105 MiB.
+
+A separate **Latin/European fonts** checkbox adds missing letters such as Polish
+`ł`, `ą` and `ę`. Its Noto Sans download is about 350 KiB. You can select either
+pack or both; both share the same single additional VFS pair.
 
 Setup includes the font pack. The launcher downloads and verifies it if needed;
 re-enabling an installed pack works offline. Restart the game after changing the
@@ -616,6 +624,7 @@ python3 scripts/build-song-catalog.py --zig /path/to/zig
 python3 scripts/build-windows-server.py
 python3 -m pip install -r packaging/fonts/build-requirements.txt
 python3 scripts/build-cjk-component.py
+python3 scripts/build-latin-component.py
 # Build-time container engine only; players do not need it.
 bash scripts/build-linux-runtime.sh
 ```

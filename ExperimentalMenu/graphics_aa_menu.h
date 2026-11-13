@@ -132,7 +132,7 @@ static void make_graphics_toggle(void *menu,int id,const WCHAR *caption,float x,
     void *parts[2]={*bar,*knob};
     for(int i=0;i<2;i++)if(parts[i]){
         void *item=parts[i];menu_item(item,FALSE);enable_input(item,FALSE);((int *)item)[15]=100;
-        scale_item(item,((float *)menu)[14],((float *)menu)[15]);colour_item(item,normal);
+        scale_item(item,((float *)menu)[14],((float *)menu)[15]);if(!i)colour_item(item,normal);
         if(!i){((int *)item)[18]=0;((int *)item)[38]=((int *)item)[39]=((int *)item)[40]=1;}
         ((int *)item)[1]++;add_screen(((void **)menu)[46],item);
     }
@@ -145,7 +145,10 @@ static void __thiscall aa_graphics_init(void *menu,void *screen,void *lower){
     void *full=((void **)menu)[62],*left=((void **)menu)[64],*label=((void **)menu)[73];
     if(!readable(full,404)||!readable(left,404)||!readable(((void **)menu)[65],404)||!readable(label,484)||!readable(((void **)menu)[66],404))return;
     float original_gap=((float *)full)[9]-((float *)left)[9];if(original_gap<=0)return;
-    float gap=original_gap,resolution_y=((float *)left)[9]-original_gap;
+    float gap=original_gap;
+    /* Vanilla centres two rows in the screen. The extended list starts below
+     * the native header band so that unused space above cannot hide rows. */
+    float resolution_y=170*((float *)menu)[15]+gap*0.5f;
     float border_y=resolution_y+gap,y=resolution_y+gap*2,x=((float *)label)[8],right=((float *)full)[8];
     for(int i=62;i<=65;i++)if(((void **)menu)[i]){void *item=((void **)menu)[i];move_item(item,((float *)item)[8],i<=63?resolution_y+gap:resolution_y);}
     move_item(label,x,resolution_y+gap);
@@ -246,7 +249,7 @@ static void __thiscall aa_graphics_input(void *menu,int selection){
 static void __thiscall aa_graphics_colour(void *menu,int id,const float *colour){
     graphics_colour_original(menu,id,colour);
     if(menu==aa_menu_owner&&id==UI_SCALE_CONTROL_ID){if(ui_slider_label)colour_item(ui_slider_label,colour);if(ui_slider_rail)colour_item(ui_slider_rail,colour);if(ui_slider_knob)colour_item(ui_slider_knob,colour);if(ui_slider_min)colour_item(ui_slider_min,colour);if(ui_slider_max)colour_item(ui_slider_max,colour);}
-    if(menu==aa_menu_owner&&id==AA_CONTROL_ID){if(aa_label)colour_item(aa_label,colour);if(aa_bar)colour_item(aa_bar,colour);if(aa_knob)colour_item(aa_knob,colour);}
+    if(menu==aa_menu_owner&&id==AA_CONTROL_ID){if(aa_label)colour_item(aa_label,colour);if(aa_bar)colour_item(aa_bar,colour);}
     if(menu==aa_menu_owner&&(id==BORDERLESS_CONTROL_ID||id==DISPLAY_LEFT_ID||id==DISPLAY_RIGHT_ID)){
         static const float normal[4]={1,1,1,0.9f};
         if(borderless_label)colour_item(borderless_label,colour);

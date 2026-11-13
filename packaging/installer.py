@@ -42,24 +42,8 @@ def auto_game():
 
 
 def default_music_dir():
-    """Read the XDG setting as data; never source or evaluate the config."""
-    home = Path.home()
-    config = Path(os.environ.get('XDG_CONFIG_HOME', home/'.config'))/'user-dirs.dirs'
-    if config.is_file():
-        for line in config.read_text(errors='replace').splitlines():
-            match = re.match(r'^\s*XDG_MUSIC_DIR\s*=\s*(.*?)\s*$', line)
-            if match:
-                try:
-                    values = shlex.split(match[1], comments=True)
-                    if len(values) == 1:
-                        value = values[0].replace('${HOME}', str(home)).replace('$HOME', str(home))
-                        if Path(value).is_absolute():
-                            # XDG uses HOME itself to disable a special folder.
-                            # Default to Music rather than exposing all of HOME.
-                            return home/'Music' if Path(value) == home else Path(value)
-                except ValueError:
-                    pass
-    return home/'Music'
+    """Keep the default link scoped to music, regardless of desktop settings."""
+    return Path.home()/'Music'
 
 
 def link_music_folder(game, music):
@@ -323,7 +307,7 @@ def unattended_update_context(bundle, game, platform):
         return False
 
 
-def install(bundle, game, backups, platform, dry_run=False, restore=False, music_dir=None, music_link=None, cjk=None, logging=None):
+def install(bundle, game, backups, platform, dry_run=False, restore=False, music_dir=None, music_link=None, cjk=None, logging=None, latin=None):
     if not (game/'Game.exe').is_file():
         raise ValueError(f'Game.exe was not found in {game}')
     manifest = json.loads((bundle/'manifest.json').read_text())
@@ -339,6 +323,7 @@ def install(bundle, game, backups, platform, dry_run=False, restore=False, music
         command=[str(helper),'--client-host','install','--bundle',str(bundle),'--game-dir',str(game)]
         if backups is not None: command += ['--backup-dir',str(backups)]
         if cjk is not None: command.append("--cjk" if cjk else "--no-cjk")
+        if latin is not None: command.append("--latin" if latin else "--no-latin")
         if logging is not None: command.append('--logging' if logging else '--no-logging')
         if dry_run: command.append('--dry-run')
         if restore: command.append('--restore')
@@ -431,13 +416,26 @@ def install(bundle, game, backups, platform, dry_run=False, restore=False, music
                 language_enabled = settings.getboolean('languages', 'cjk_enabled', fallback=settings.getboolean('diagnostics', 'cjk_render_probe', fallback=False))
             except (configparser.Error, ValueError):
                 language_enabled = False
-        if language_enabled or cjk is False:
+        latin_enabled = latin
+        if latin_enabled is None:
+            settings = configparser.ConfigParser(interpolation=None, strict=False)
+            try:
+                settings.read(game/'server.ini', encoding='utf-8-sig')
+                latin_enabled = settings.getboolean('languages', 'latin_enabled', fallback=False)
+            except (configparser.Error, ValueError):
+                latin_enabled = False
+        if language_enabled or cjk is False or latin_enabled or latin is False:
             component = manifest.get('language_component', {})
             with tempfile.TemporaryDirectory(prefix='reriff-font-plan-') as scratch:
                 command = [str(bundle/'patcher/ReRiff-Patcher.exe'), '--language-component', 'stage',
                            '--game-dir', str(game), '--stage', scratch, '--enable', 'true' if language_enabled else 'false']
                 if language_enabled:
                     command += ['--asset',str(bundle/component['file']),'--sha256',component['sha256']]
+                if latin_enabled or latin is False:
+                    command += ['--latin-enable', 'true' if latin_enabled else 'false']
+                    if latin_enabled:
+                        european = manifest['latin_component']
+                        command += ['--latin-asset',str(bundle/european['file']),'--latin-sha256',european['sha256']]
                 result = subprocess.run(command, capture_output=True, text=True, timeout=180)
                 if result.returncode:
                     raise ValueError('CJK component preflight failed: '+result.stdout+result.stderr)
@@ -576,6 +574,8 @@ def main():
     parser.add_argument('--game-dir', type=Path)
     parser.add_argument('--backup-dir', type=Path)
     parser.add_argument('--platform', choices=('linux', 'windows'), default='windows' if os.name == 'nt' else 'linux')
+    parser.add_argument('--latin', dest='latin', action='store_true', default=None, help='Install Latin/European fonts including Polish')
+    parser.add_argument('--no-latin', dest='latin', action='store_false', help='Disable Latin/European fonts')
     parser.add_argument('--cjk', dest='cjk', action='store_true', default=None, help='Install and enable CJK fonts')
     parser.add_argument('--no-cjk', dest='cjk', action='store_false', help='Disable CJK fonts and retain installed assets')
     parser.add_argument('--logging', dest='logging', action='store_true', default=None, help='Enable client diagnostic logs')
@@ -599,7 +599,7 @@ def main():
     try:
         install(Path(__file__).resolve().parent, game.expanduser().resolve(),
                 args.backup_dir.expanduser().resolve() if args.backup_dir else None,
-                args.platform, args.dry_run, args.restore, args.music_dir, args.music_link, args.cjk, args.logging)
+                args.platform, args.dry_run, args.restore, args.music_dir, args.music_link, args.cjk, args.logging, args.latin)
     except (OSError, ValueError, KeyError) as error:
         parser.exit(1, 'Installation failed: '+str(error)+'\n')
 

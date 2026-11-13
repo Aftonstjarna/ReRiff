@@ -51,7 +51,7 @@ class ClientUpdateTest(unittest.TestCase):
         args=['apply-client-update.py','--work',str(self.work),'--prepare','--archive',str(self.root/'missing.zip'),'--sha256','0'*64,'--game-dir',str(self.game),'--platform','windows']
         with mock.patch.object(sys,'argv',args):
             self.assertEqual(update.main(),1)
-        self.assertTrue((self.work/'failure').is_file())
+        self.assertIn('missing.zip',(self.work/'failure').read_text())
         self.assertTrue((self.game/'logs/update.log').is_file())
         self.assertFalse((self.work/'update.log').exists())
         self.assertIn('FileNotFoundError',(self.game/'logs/update.log').read_text())

@@ -18,7 +18,7 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE previous,LPWSTR arguments,int s
     (void)instance;(void)previous;(void)show;
     WCHAR root[CAP],command[CAP],game[CAP]=L"",log[CAP];
     GetModuleFileNameW(NULL,root,CAP);WCHAR *slash=wcsrchr(root,L'\\');if(!slash)return 1;*slash=0;
-    BOOL interactive=!*arguments,cjk=FALSE,logging=FALSE;
+    BOOL interactive=!*arguments,cjk=FALSE,latin=FALSE,logging=FALSE;
     if(interactive){
         OPENFILENAMEW dialog;ZeroMemory(&dialog,sizeof(dialog));dialog.lStructSize=sizeof(dialog);
         dialog.lpstrFilter=L"Riff Racer (Game.exe)\0Game.exe\0";dialog.lpstrFile=game;dialog.nMaxFile=CAP;
@@ -35,6 +35,12 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE previous,LPWSTR arguments,int s
         choice.pszContent=L"Add missing Chinese, Japanese and Korean characters throughout the game. Fonts stay in the game folder; menus are not translated. The font pack uses about 105 MiB. Your existing settings and saves are retained.";
         choice.pszVerificationText=L"Install and enable CJK font support";
         int selected=IDCANCEL;if(FAILED(TaskDialogIndirect(&choice,&selected,NULL,&cjk))||selected!=IDOK)return 0;
+        GetPrivateProfileStringW(L"languages",L"latin_enabled",L"false",value,16,config);
+        choice.pszMainInstruction=L"Optional Latin/European support";
+        choice.pszContent=L"Add missing European letters, including Polish. This is a separate small download. Both language packs share one extra font archive pair; menus are not translated.";
+        choice.pszVerificationText=L"Install and enable Latin/European fonts";
+        choice.dwFlags=TDF_ALLOW_DIALOG_CANCELLATION|((!_wcsicmp(value,L"true")||!wcscmp(value,L"1"))?TDF_VERIFICATION_FLAG_CHECKED:0);
+        if(FAILED(TaskDialogIndirect(&choice,&selected,NULL,&latin))||selected!=IDOK)return 0;
         logging=rr_logging_enabled(game,strstr(RERIFF_VERSION,"-")!=NULL||!strcmp(RERIFF_VERSION,"development"));
         choice.pszMainInstruction=L"Diagnostic logging";choice.pszContent=L"Save installer, launcher and client logs for troubleshooting. Logging defaults on for beta/development builds and off for stable releases. Existing logs are kept when disabled.";
         choice.pszVerificationText=L"Enable diagnostic logging";choice.dwFlags=TDF_ALLOW_DIALOG_CANCELLATION|(logging?TDF_VERIFICATION_FLAG_CHECKED:0);
@@ -52,7 +58,7 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE previous,LPWSTR arguments,int s
     python_logging_override=logging;
     if(!ensure_private_python(NULL,game,interactive))return 1;
     const WCHAR *bootstrap=L"import runpy,sys;sys.path.insert(0,sys.argv[1]);sys.argv=sys.argv[2:];runpy.run_path(sys.argv[0],run_name='__main__')";
-    if(interactive)_snwprintf(command,CAP,L"\"%ls\\localserver\\windows-python\\python.exe\" -X utf8 -c \"%ls\" \"%ls\" \"%ls\\installer.py\" --platform windows --game-dir \"%ls\" %ls %ls",game,bootstrap,root,root,game,logging?L"--logging":L"--no-logging",cjk?L"--cjk":L"--no-cjk");
+    if(interactive)_snwprintf(command,CAP,L"\"%ls\\localserver\\windows-python\\python.exe\" -X utf8 -c \"%ls\" \"%ls\" \"%ls\\installer.py\" --platform windows --game-dir \"%ls\" %ls %ls %ls",game,bootstrap,root,root,game,logging?L"--logging":L"--no-logging",cjk?L"--cjk":L"--no-cjk",latin?L"--latin":L"--no-latin");
     else _snwprintf(command,CAP,L"\"%ls\\localserver\\windows-python\\python.exe\" -X utf8 -c \"%ls\" \"%ls\" \"%ls\\installer.py\" --platform windows %ls",game,bootstrap,root,root,arguments);
     command[CAP-1]=0;
     _snwprintf(log,CAP,L"%ls\\logs",*game?game:root);log[CAP-1]=0;if(logging)CreateDirectoryW(log,NULL);

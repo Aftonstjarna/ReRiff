@@ -15,8 +15,8 @@ static gboolean exercise(gpointer unused){
     }else if(stage==1){
         if(!selected||strcmp(selected,game)){ui.g_free(selected);return TRUE;}
         VERIFY(!test.child&&!test.finished); /* Choosing a folder is read-only. */
-        VERIFY(ui.gtk_toggle_button_get_active((GtkToggleButton *)test.cjk_check));VERIFY(!ui.gtk_toggle_button_get_active((GtkToggleButton *)test.logging_check)); /* Programmatic folder selection restores the prototype choice. */
-        ui.gtk_toggle_button_set_active((GtkToggleButton *)test.cjk_check,FALSE);
+        VERIFY(ui.gtk_toggle_button_get_active((GtkToggleButton *)test.cjk_check));VERIFY(ui.gtk_toggle_button_get_active((GtkToggleButton *)test.latin_check));VERIFY(!ui.gtk_toggle_button_get_active((GtkToggleButton *)test.logging_check)); /* Programmatic folder selection restores the prototype choice. */
+        ui.gtk_toggle_button_set_active((GtkToggleButton *)test.cjk_check,FALSE);ui.gtk_toggle_button_set_active((GtkToggleButton *)test.latin_check,FALSE);
         install_clicked(NULL,&test);VERIFY(test.child>0&&test.log_path);
         pid_t child=test.child;install_clicked(NULL,&test);VERIFY(test.child==child);
         VERIFY(close_window(NULL,NULL,&test));stage=2;
@@ -24,7 +24,7 @@ static gboolean exercise(gpointer unused){
         VERIFY(test.exit_code==7&&!test.child); /* First fixture run fails. */
         VERIFY(access(test.log_path,R_OK)==0&&test.temporary_log);char logs[PATH_MAX];snprintf(logs,sizeof(logs),"%s/logs",game);VERIFY(access(logs,F_OK)!=0);
         ui.gtk_toggle_button_set_active((GtkToggleButton *)test.logging_check,TRUE);
-        ui.gtk_toggle_button_set_active((GtkToggleButton *)test.cjk_check,TRUE);
+        ui.gtk_toggle_button_set_active((GtkToggleButton *)test.cjk_check,TRUE);ui.gtk_toggle_button_set_active((GtkToggleButton *)test.latin_check,TRUE);
         ui.gtk_toggle_button_set_active((GtkToggleButton *)test.music_check,TRUE);
         ui.gtk_entry_set_text((GtkEntry *)test.music_path,game);
         install_clicked(NULL,&test);VERIFY(test.child>0);stage=3;

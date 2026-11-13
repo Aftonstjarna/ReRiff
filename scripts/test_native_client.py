@@ -173,6 +173,22 @@ class NativeClientTests(unittest.TestCase):
         path=self.root/'client-linux.run';path.write_bytes(b'#!/bin/sh\n__RERIFF_PAYLOAD__\n'+data.getvalue());return path,digest(path.read_bytes())
     def prepare(self,archive,checksum,work,success=True,*extra):
         return self.call('update','--prepare','--archive',archive,'--sha256',checksum,'--game-dir',self.game,'--work',work,'--channel','experimental',*extra,success=success)
+    def test_update_failure_details_survive_disabled_logging(self):
+        archive,checksum=self.archive();work=self.root/'checksum-details';work.mkdir()
+        self.prepare(archive,'0'*64,work,False)
+        self.assertIn('Release checksum mismatch',(work/'failure').read_text())
+        self.assertFalse((self.game/'logs').exists())
+        self.package({'payload/localserver/ReRiff-ClientHost':b'#!/bin/sh\nprintf "No space left on device during fixture install" >&2\nexit 7\n'})
+        archive,checksum=self.archive();work=self.root/'child-details';work.mkdir()
+        self.prepare(archive,checksum,work,False)
+        self.assertIn('No space left on device',(work/'failure').read_text())
+        self.assertFalse((self.game/'logs').exists());self.retained()
+    def test_default_music_path_is_home_music_even_when_xdg_points_home(self):
+        home=self.root/'home';home.mkdir();config=home/'.config';config.mkdir()
+        (config/'user-dirs.dirs').write_text('XDG_MUSIC_DIR="$HOME/"\n')
+        self.env.update(HOME=str(home),XDG_CONFIG_HOME=str(config))
+        result=self.call('print-music-dir')
+        self.assertEqual(Path(result.stdout.strip()),home/'Music')
     def test_update_prepare_apply_and_private_native_host(self):
         archive,checksum=self.archive();local=self.game/'localserver';local.mkdir();shutil.copy2(ROOT/'scripts/linux-runtime.sh',local/'linux-runtime.sh')
         work=self.root/'update';work.mkdir();self.prepare(archive,checksum,work)

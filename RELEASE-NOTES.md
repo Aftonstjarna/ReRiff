@@ -1,3 +1,62 @@
+# ReRiff 1.2.4-beta.6 — UI scaling, Latin fonts and update diagnostics
+
+## In-game summary
+
+- Keep manual UI sizing consistent and scroll crowded menus.
+- Add optional Polish and extended Latin font support.
+- Read update errors from the launcher's Diagnostics page.
+
+## Full release notes
+
+Experimental client test build for Windows and Linux/Proton. Stable 1.2.3
+remains the default download and update channel.
+
+### Menus and graphics
+
+- Refresh manual UI sizing without requiring a resolution change. Keep 50 at
+  the fixed 1080p reference size and retain the game's built-in sizing for Auto.
+- Scale the main menu's original rows and icon hit areas together. Use the
+  native scrolling reel when the list exceeds the available screen space.
+- Start Graphics below the header to use the available height, retain native
+  row spacing, and reserve room above the scaled Apply button for its scrollbar.
+- Preserve separator artwork height and keep the UI Scale rail visible when
+  rendering above the window resolution. Align the rail and thumb vertically.
+- Preserve native toggle-thumb shading when scrolling or changing focus.
+- Remove Servers from settings opened during a race.
+- Leave music-picker navigation at its original boundaries. The experimental
+  wraparound prototype was withdrawn after a crash during testing.
+
+### Optional language fonts
+
+- Add separate Latin/European font checkboxes to setup and the launcher's
+  Languages page, including Polish letters such as ł, ą and ę.
+- Publish the Noto Sans component separately as `ReRiff-Latin.zip`, about
+  350 KiB. CJK remains independently selectable. Both packs share one extra
+  VFS pair, preserve original game archives, and can be re-enabled offline.
+- Retain UTF-8 metadata when either language component is enabled and preserve
+  existing CJK glyph priority, selection colours and high-resolution metrics.
+
+### Setup and updates
+
+- Add Diagnostics → View update details in the launcher. Show retained
+  temporary failure messages and bounded log excerpts in a scrollable window,
+  including after reopening the launcher, without enabling diagnostic logging.
+- Report download size limits, missing downloads, disk write failures and
+  preflight errors more clearly. Preserve existing destination files on failure.
+- Default the Linux music link to `~/Music` rather than the whole home folder;
+  keep saved custom paths and the option to skip linking.
+
+### Validation
+
+- Add native regressions for scale-only refreshes, main-menu overflow and input
+  ownership, scaled icon hit bounds, scrollbar clearance, separator sizing,
+  slider pixel alignment, toggle shading and pause-menu isolation.
+- Check independent font installation in either order, combined archive
+  ownership, disable/re-enable behavior and refusal to overwrite modified packs.
+- Check readable UTF-8/UTF-16 update details, download failures, installer
+  controls, retained settings and Python-free Linux installation.
+- The latest layout and rail changes still need visual testing on more systems.
+
 # ReRiff 1.2.4-beta.5 — Diagnostics and tidier installs
 
 ## In-game summary

@@ -8,31 +8,38 @@ static BOOL stop_server(void);
 static int automatic_progress_stage=PROGRESS_CHECK;
 
 static BOOL update_download(HINTERNET session,const WCHAR *url,const WCHAR *destination,DWORD maximum) {
-    if(automatic_update&&progress_cancelled())return FALSE;
+    update_problem[0]=0;if(automatic_update&&progress_cancelled())return FALSE;
     HINTERNET req=InternetOpenUrlW(session,url,L"Accept: application/vnd.github+json\r\n",(DWORD)-1,
         INTERNET_FLAG_RELOAD|INTERNET_FLAG_NO_CACHE_WRITE|INTERNET_FLAG_NO_UI|INTERNET_FLAG_NO_COOKIES,0);
-    DWORD code=0,size=sizeof(code),read=0,written=0,total=0;BOOL ok=FALSE;
+    DWORD error=req?0:GetLastError(),code=0,size=sizeof(code),read=0,written=0,total=0;BOOL ok=FALSE,created=FALSE;
     if(req&&HttpQueryInfoW(req,HTTP_QUERY_STATUS_CODE|HTTP_QUERY_FLAG_NUMBER,&code,&size,NULL)&&code==200){
         DWORD expected_bytes=0,expected_size=sizeof(expected_bytes);
         HttpQueryInfoW(req,HTTP_QUERY_CONTENT_LENGTH|HTTP_QUERY_FLAG_NUMBER,&expected_bytes,&expected_size,NULL);
-        HANDLE file=CreateFileW(destination,GENERIC_WRITE,0,NULL,CREATE_NEW,FILE_ATTRIBUTE_NORMAL,NULL);
-        if(file!=INVALID_HANDLE_VALUE){
-            char block[65536];ok=TRUE;
-            for(;;){
-                if(automatic_update&&progress_cancelled()){ok=FALSE;break;}
-                if(!InternetReadFile(req,block,sizeof(block),&read)){ok=FALSE;break;}
-                if(!read)break;
-                if(read>maximum-total||!WriteFile(file,block,read,&written,NULL)||written!=read){ok=FALSE;break;}
-                total+=read;
-                if(automatic_update)progress_report(automatic_progress_stage,expected_bytes?(int)((ULONGLONG)total*100/expected_bytes):-1);
+        if(expected_bytes>maximum){_snwprintf(update_problem,512,L"The download is %.1f MiB; this launcher allows %.1f MiB. Install the newer release manually.",expected_bytes/(1024.0*1024.0),maximum/(1024.0*1024.0));}
+        else {
+            HANDLE file=CreateFileW(destination,GENERIC_WRITE,0,NULL,CREATE_NEW,FILE_ATTRIBUTE_NORMAL,NULL);
+            if(file==INVALID_HANDLE_VALUE)error=GetLastError();
+            else {
+                char block[65536];ok=created=TRUE;
+                for(;;){
+                    if(automatic_update&&progress_cancelled()){ok=FALSE;break;}
+                    if(!InternetReadFile(req,block,sizeof(block),&read)){error=GetLastError();ok=FALSE;break;}
+                    if(!read)break;
+                    if(read>maximum-total){_snwprintf(update_problem,512,L"The download exceeded this launcher's %.1f MiB limit. Install the newer release manually.",maximum/(1024.0*1024.0));ok=FALSE;break;}
+                    if(!WriteFile(file,block,read,&written,NULL)||written!=read){error=GetLastError();_snwprintf(update_problem,512,L"Could not save the download (system error %lu). Check disk space and folder permissions.",(unsigned long)error);ok=FALSE;break;}
+                    total+=read;
+                    if(automatic_update)progress_report(automatic_progress_stage,expected_bytes?(int)((ULONGLONG)total*100/expected_bytes):-1);
+                }
+                CloseHandle(file);
             }
-            CloseHandle(file);
         }
-    }
+    }else if(req&&code==0)error=GetLastError();
     if(req)InternetCloseHandle(req);
     if(!ok){
-        WCHAR detail[160];_snwprintf(detail,160,L"Update download failed: HTTP %lu, system error %lu",(unsigned long)code,(unsigned long)GetLastError());
-        log_message(detail);DeleteFileW(destination);
+        if(!*update_problem){if(code==404)wcscpy(update_problem,L"The release download was not found on GitHub (HTTP 404).");
+            else if(code&&code!=200)_snwprintf(update_problem,512,L"GitHub refused the download (HTTP %lu).",(unsigned long)code);
+            else _snwprintf(update_problem,512,L"The download could not complete (HTTP %lu, system error %lu). Check the connection and available disk space.",(unsigned long)code,(unsigned long)error);}
+        update_problem[511]=0;log_message(update_problem);if(created)DeleteFileW(destination);
     }
     return ok;
 }
@@ -102,13 +109,14 @@ static BOOL save_auto_resume(const WCHAR *work) {
 }
 
 static BOOL check_updates(void) {
-    if(!is_wine()&&!ensure_private_python(window,folder,TRUE)){wcscpy(message,L"Python setup was canceled or failed; the installed client was retained.");return FALSE;}
+    update_problem[0]=update_failure[0]=update_work[0]=0;
+    if(!is_wine()&&!ensure_private_python(window,folder,TRUE)){wcscpy(message,L"Python setup was canceled or failed; the installed client was retained.");wcscpy(update_failure,message);return FALSE;}
     WCHAR temporary[CAP],work[CAP],api[CAP],sums[CAP],archive[CAP],url[CAP],filename[256],hash_w[65],command[CAP],name[CAP],source[CAP];
     BOOL ok=FALSE;PROCESS_INFORMATION process;char expected[65]="",*body=NULL;GithubRelease selected={0};ReleasePackage package;
     const WCHAR *failure=L"Could not read the GitHub release list";
     work[0]=0;
     HINTERNET session=InternetOpenW(L"ReRiffLauncher/" RERIFF_VERSION,INTERNET_OPEN_TYPE_PRECONFIG,NULL,NULL,0);
-    if(!session){wcscpy(message,L"Could not connect to GitHub.");return FALSE;}
+    if(!session){wcscpy(message,L"Could not connect to GitHub.");wcscpy(update_failure,message);return FALSE;}
     body=HeapAlloc(GetProcessHeap(),0,UPDATE_JSON_LIMIT);if(!body)goto done;
     DWORD limit=15000;InternetSetOptionW(session,INTERNET_OPTION_CONNECT_TIMEOUT,&limit,sizeof(limit));
     InternetSetOptionW(session,INTERNET_OPTION_RECEIVE_TIMEOUT,&limit,sizeof(limit));
@@ -187,14 +195,14 @@ static BOOL check_updates(void) {
     /* Wine start /unix can finish before the native Unix process. Use the
      * tool's completion markers, not the start.exe exit code, on both OSes. */
     ULONGLONG deadline=GetTickCount64()+120000;
-    failure=L"Installer preflight failed; see logs\\update.log in the game folder";
+    failure=L"Installer preflight failed";
     for(;;){
         if(automatic_update&&progress_cancelled())goto done;
         _snwprintf(name,CAP,L"%ls\\failure",work);name[CAP-1]=0;
         if(GetFileAttributesW(name)!=INVALID_FILE_ATTRIBUTES)goto done;
         _snwprintf(name,CAP,L"%ls\\prepared.json",work);name[CAP-1]=0;
         if(GetFileAttributesW(name)!=INVALID_FILE_ATTRIBUTES)break;
-        if(GetTickCount64()>deadline)goto done;Sleep(100);
+        if(GetTickCount64()>deadline){failure=L"Installer preflight timed out after two minutes";goto done;}Sleep(100);
     }
     if(automatic_update&&progress_cancelled())goto done;
     /* The Linux apply tool confirms owned-server shutdown directly. Wine's
@@ -214,11 +222,13 @@ static BOOL check_updates(void) {
     if(automatic_update){if(!progress_commit())goto done;progress_report(PROGRESS_INSTALL,-1);}
     if(!spawn(command,TRUE,&process))goto done;
     CloseHandle(process.hThread);CloseHandle(process.hProcess);
-    update_handoff=TRUE;wcscpy(message,automatic_update?L"Installing the verified update. The game will start automatically.":L"Installing the verified update. The launcher will reopen automatically.");ok=TRUE;
+    update_remember(work);update_handoff=TRUE;wcscpy(message,automatic_update?L"Installing the verified update. The game will start automatically.":L"Installing the verified update. The launcher will reopen automatically.");ok=TRUE;
 done:
     if(body)HeapFree(GetProcessHeap(),0,body);
     InternetCloseHandle(session);
     if(automatic_update&&progress_cancelled()){wcscpy(message,L"Update canceled; starting the installed game.");return FALSE;}
-    if(!ok){_snwprintf(message,1024,L"%ls. Installed files were retained. Details: %ls",failure,work);message[1023]=0;}
+    if(!ok){update_remember(work);wcsncpy(update_work,work,CAP-1);update_work[CAP-1]=0;
+        _snwprintf(update_failure,2048,L"%ls. %ls%lsInstalled files were retained.",failure,*update_problem?update_problem:L"",*update_problem?L"\r\n":L"");update_failure[2047]=0;
+        wcscpy(message,L"Update failed; installed files were retained. Open Diagnostics → View update details.");}
     return ok;
 }

@@ -52,9 +52,21 @@ int main(int argc,char **argv){
     CHECK(argc==2);WCHAR original[MAX_PATH],temp[MAX_PATH];
     CHECK(MultiByteToWideChar(CP_UTF8,0,argv[1],-1,original,MAX_PATH));CHECK(supported_file(original));
     CHECK(GetTempPathW(MAX_PATH,temp));CHECK(GetTempFileNameW(temp,L"rru",0,config_path));
-    wcscpy(log_path,temp);wcscat(log_path,L"ReRiff-engine-menu.log");
+    CHECK(DeleteFileW(config_path));CHECK(CreateDirectoryW(config_path,NULL));wcscpy(temp,config_path);wcscat(temp,L"\\");
+    wcscat(config_path,L"\\server.ini");wcscpy(log_path,temp);wcscat(log_path,L"ReRiff-engine-menu.log");
     BYTE *base=(BYTE *)LoadLibraryExW(original,NULL,DONT_RESOLVE_DLL_REFERENCES);CHECK(base);
     CHECK(relocate_trace_mapping(base));
+    /* Original elUIItem.setColour replaces existing mesh vertex colours. */
+    BYTE mesh_item[404]={0},mesh_visual[380]={0},mesh_vertices[4*36]={0},mesh_entry[20]={0};
+    *(BYTE **)(mesh_entry)=mesh_visual;*(BYTE **)(mesh_item+0x184)=mesh_entry;*(BYTE **)(mesh_item+0x188)=mesh_entry+20;
+    *(BYTE **)(mesh_visual+0x120)=mesh_vertices;*(BYTE **)(mesh_visual+0x124)=mesh_vertices+sizeof(mesh_vertices);*(DWORD *)(mesh_visual+0x12c)=1;
+    for(unsigned i=0;i<4;i++)*(DWORD *)(mesh_vertices+i*36+8)=0xff888888;
+    const float reset_white[4]={1,1,1,1};
+    ((void (__thiscall *)(void *,const float *))(base+0x48500))(mesh_item,reset_white);
+    for(unsigned i=0;i<4;i++)CHECK(*(DWORD *)(mesh_vertices+i*36+8)==0xffffffff);
+    CHECK(!memcmp(mesh_item+0x54,reset_white,16));
+    puts("PASS: original UI colour setter replaces grey mesh vertex colours with white; standalone toggle thumbs must retain native artwork.");
+
     BYTE *lastfm_site=base+0x34fe9c+12+0xa6;
     CHECK(install_lastfm_utf8(base)&&!lastfm_utf8_installed);
     CHECK(!memcmp(lastfm_site,lastfm_utf8_original,sizeof(lastfm_utf8_original)));
@@ -68,6 +80,7 @@ int main(int argc,char **argv){
     CHECK(WritePrivateProfileStringW(L"languages",L"cjk_enabled",L"false",config_path));
     install_unicode_trace(base);CHECK(unicode_log==INVALID_HANDLE_VALUE);
     CHECK(WritePrivateProfileStringW(L"languages",L"cjk_enabled",L"true",config_path));
+    CHECK(WritePrivateProfileStringW(L"diagnostics",L"logging_enabled",L"true",config_path));
     CHECK(WritePrivateProfileStringW(L"diagnostics",L"unicode_trace",L"1",config_path));
     CHECK(WritePrivateProfileStringW(L"diagnostics",L"cjk_render_probe",L"1",config_path));
     CHECK(WritePrivateProfileStringW(L"diagnostics",L"metadata_source_trace",L"1",config_path));
@@ -143,6 +156,6 @@ int main(int argc,char **argv){
     CHECK(strstr(output,"stage=decoded-getter field=Artist")&&strstr(output,"BUCK\\u2010TICK"));
     CHECK(strstr(output,"stage=mp3-tag-copy field=Artist"));
     CHECK(strstr(output,"input_u2010=1 output_bytes=9 output_questions=1 result=0"));
-    DeleteFileW(config_path);DeleteFileW(trace);DeleteFileW(log_path);
+    DeleteFileW(config_path);DeleteFileW(trace);DeleteFileW(log_path);temp[wcslen(temp)-1]=0;RemoveDirectoryW(temp);
     puts("PASS: opt-in tracing, original glyph/fallback behavior, native ABI/SSE/last-error preservation, Unicode enumeration/conversion, guards and deduplication");return 0;
 }

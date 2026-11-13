@@ -40,6 +40,8 @@ jobs:
           & .\build\language-text-smoke\LanguageTextSmoke.exe --disabled
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & .\build\language-text-smoke\LanguageTextSmoke.exe
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          & .\build\language-text-smoke\LanguageTextSmoke.exe latin
           exit $LASTEXITCODE
       - name: Test signed helpers on Microsoft .NET Framework x86
         shell: pwsh
@@ -151,10 +153,13 @@ jobs:
         run: |
           python -m pip install -r packaging/fonts/build-requirements.txt
           python scripts/build-cjk-component.py
+          python scripts/build-latin-component.py
+          python scripts/test_latin_component.py
           python scripts/test_cjk_atlas.py
           python scripts/test_cjk_hd_atlas.py
           python scripts/test_native_archive.py
           python scripts/test_language_component.py --host build/linux-patcher/Patcher
+          python scripts/test_font_packs.py --host build/linux-patcher/Patcher --cjk build/cjk-component/ReRiff-CJK.zip --latin build/latin-component/ReRiff-Latin.zip
       - name: Package Windows and Linux installers
         run: >-
           python packaging/build_release.py --local-patching
@@ -263,7 +268,7 @@ jobs:
               gh release view experimental --json assets --jq '.assets[].name' |
                 while IFS= read -r asset; do
                   case "$asset" in
-                    ReRiff-"$version"-*|ReRiff-"$base_version"-linux.run|ReRiff-"$base_version"-windows.zip|ReRiff-Server-x86_64.AppImage|ReRiff-Server-windows.zip|ReRiff-CJK.zip) ;;
+                    ReRiff-"$version"-*|ReRiff-"$base_version"-linux.run|ReRiff-"$base_version"-windows.zip|ReRiff-Server-x86_64.AppImage|ReRiff-Server-windows.zip|ReRiff-CJK.zip|ReRiff-Latin.zip) ;;
                     ReRiff-*) gh release delete-asset experimental "$asset" --yes ;;
                   esac
                 done

@@ -55,9 +55,12 @@ static void *scroll_sprite(void *parent,BOOL screen,int sprite,float x,float y,i
     if(screen)scroll_extras[extra_count++]=item;
     return item;
 }
-static void set_line_size(void *line,float width,float height){
-    float w=((float *)line)[12],h=((float *)line)[13];
-    if(w>0&&h>0)scale_item(line,width/w,height/h);
+static void set_line_size(void *line,float width,float scale_y){
+    /* gaOptionsMenu.initScreens IL_040a..0427 fits the sprite's width but
+     * uses menu scaleY directly. Preserve the native separator artwork's
+     * transparent padding instead of squeezing its entire texture to a pixel. */
+    float w=((float *)line)[12];
+    if(w>0&&scale_y>0)scale_item(line,width/w,scale_y);
 }
 static int view_count(void){return server_page?SERVER_ACTION_COUNT:root_count;}
 static int view_first(void){return server_page?page_first:root_first;}
@@ -229,7 +232,7 @@ static void apply_pending_focus(void *menu){
     static const float normal[4]={1,1,1,0.9f};
     for(int i=0;i<root_count;i++)colour_item(root_rows[i].text,normal);
     for(int i=0;i<SERVER_ACTION_COUNT;i++)colour_item(server_rows[server_action_order[i]],normal);
-    for(int i=0;i<3;i++)for(int p=0;p<2;p++)colour_item(toggles[i][p],normal);
+    for(int i=0;i<3;i++)colour_item(toggles[i][0],normal);
     focus_row(menu,id);
     /* Synchronize the menu's own focus/colour bookkeeping after the screen
      * focus change, rather than competing inside a selection callback. */
@@ -289,6 +292,9 @@ static void sync_scroll(void *menu){
     }
 }
 static LRESULT CALLBACK scroll_wndproc(HWND window,UINT message,WPARAM wparam,LPARAM lparam){
+    if(message==WM_MOUSEWHEEL&&main_scroll_wheel(0)){
+        wheel_remainder+=(short)HIWORD(wparam);int steps=wheel_remainder/WHEEL_DELTA;wheel_remainder-=steps*WHEEL_DELTA;main_scroll_wheel(-steps);return 0;
+    }
     if(message==WM_MOUSEWHEEL&&graphics_scroll_wheel(0)){
         wheel_remainder+=(short)HIWORD(wparam);int steps=wheel_remainder/WHEEL_DELTA;wheel_remainder-=steps*WHEEL_DELTA;
         graphics_scroll_wheel(-steps);return 0;
@@ -320,9 +326,10 @@ static BOOL init_scroll(void *menu,void *sample){
     logical_selection=0;pending_focus=SERVERS_ID;last_direction=0;
     row_x=((float *)sample)[8];row_start=((float *)sample)[9];row_gap=((float *)menu)[66];
     ui_width=row_x*2;ui_height=row_start/0.3f;
+    float safe_top=170*((float *)menu)[15]+server_row_height*0.5f;if(row_start<safe_top)row_start=safe_top;
     if(row_gap<=0||ui_height<=0)return FALSE;
     visible_rows=clamp_index((int)((ui_height-row_start-server_row_height)/row_gap)+1,1,10);
-    line_width=((float *)menu)[14]*1650.0f;
+    line_width=((float *)menu)[14]*1650.0f;if(line_width>ui_width*0.84f)line_width=ui_width*0.84f;
     arrow_dy=((float *)menu)[15]*60.0f;
     line_dy=row_gap*0.5f+((float *)menu)[15]*50.0f;
     void *group=((void **)menu)[67],*screen=((void **)menu)[46];

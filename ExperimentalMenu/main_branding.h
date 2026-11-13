@@ -35,6 +35,7 @@ static void attach_main_hits(void *menu,float padding){
     main_hit_original=(MainHitFn)table[25];main_hit_table[26]=(void *)main_row_hit;main_hit_padding=padding;
     for(int i=0;i<11;i++){void *row=((void **)menu)[62+i];if(readable(row,404)){main_hit_rows[i]=row;*(void ***)row=main_hit_table+1;}}
 }
+#include "main_scale_scroll.h"
 static void center_main_rows(void *menu){
     /* Original gaMainMenu owns eleven elUIItem rows at +248. Move those native
      * parents with setPos, preserving their child artwork and hit transforms. */
@@ -46,10 +47,11 @@ static void center_main_rows(void *menu){
         if((uintptr_t)end<(uintptr_t)begin||(uintptr_t)end-(uintptr_t)begin>16*sizeof(void *)||!readable(begin,(uintptr_t)end-(uintptr_t)begin))continue;
         for(void **child=begin;child!=end;child++){
             if(!readable(*child,180))continue;
-            float *item=*child;float width=item[12]*item[43];int origin=((int *)*child)[14];
+            float *item=*child;float parent_scale=((float *)row)[43];if(parent_scale<=0)parent_scale=1;
+            float width=item[12]*item[43]*parent_scale;int origin=((int *)*child)[14];
             if(width<=0)continue;
             float anchor=origin%3==2?1.0f:origin%3==1?0.5f:0;
-            float x=item[8]-width*anchor;
+            float x=item[8]*parent_scale-width*anchor;
             if(!found||x<left)left=x;
             if(!found||x+width>right)right=x+width;
             found=TRUE;
@@ -61,7 +63,8 @@ static void center_main_rows(void *menu){
         void *row=((void **)menu)[62+i];if(!readable(row,404))continue;
         move_item(row,x,((float *)row)[9]);
     }
-    attach_main_hits(menu,-left+((float *)menu)[73]*0.2f);
+    float parent_scale=1;for(unsigned i=0;i<11;i++)if(readable(((void **)menu)[62+i],404)){parent_scale=((float *)((void **)menu)[62+i])[43];break;}
+    if(parent_scale<=0)parent_scale=1;attach_main_hits(menu,-left/parent_scale+((float *)menu)[73]*0.2f);
 }
 static void position_watermark(void *menu){
     if(!watermark||watermark_owner!=menu)return;
@@ -96,7 +99,7 @@ static void attach_main_branding(void *menu){
 }
 static void __thiscall branded_main_init(void *menu,void *screen,void *lower){
     display_restore_startup();
-    main_init_original(menu,screen,lower);center_main_rows(menu);attach_main_branding(menu);
+    main_init_original(menu,screen,lower);main_scale_size(menu);center_main_rows(menu);main_scale_scroll_init(menu);attach_main_branding(menu);
 }
 static void __thiscall branded_main_tick(void *menu){
     display_restore_startup();display_style();
@@ -104,10 +107,10 @@ static void __thiscall branded_main_tick(void *menu){
     if(!watermark||watermark_owner!=menu)attach_main_branding(menu);
     position_watermark(menu);
     if(InterlockedCompareExchange(&aa_requested,0,0)&&!aa_attach())aa_fail("Antialiasing unavailable: graphics-device layout differs.");
-    main_tick_original(menu);
+    main_scale_tick(menu);main_tick_original(menu);main_scale_reveal(menu);
 }
 static void __thiscall branded_main_cleanup(void *menu,void *screen,void *lower){
-    detach_main_hits();
+    main_scale_cleanup();detach_main_hits();
     if(watermark&&watermark_owner==menu){
         ((int *)watermark)[1]++;remove_screen(((void **)menu)[46],watermark);watermark=NULL;watermark_owner=NULL;
     }

@@ -182,7 +182,7 @@ def main():
     except Exception as error:
         with log_path.open('a', encoding='utf-8') as log:
             log.write(type(error).__name__+': '+str(error)+'\n')
-        (args.work/'failure').write_text(type(error).__name__+'\n')
+        (args.work/'failure').write_text(type(error).__name__+': '+str(error)+'\n', encoding='utf-8')
         return 1
     return 0
 

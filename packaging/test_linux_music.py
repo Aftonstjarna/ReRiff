@@ -88,15 +88,15 @@ class MusicLinkTests(unittest.TestCase):
         self.assertFalse((self.user/'Music').exists())
         self.assertFalse(self.music.exists())
 
-    def test_xdg_config_is_read_as_data(self):
-        # Restore this helper alone to test real parsing without touching HOME.
+    def test_default_music_is_scoped_even_with_custom_xdg_setting(self):
+        # Restore the default helper without touching the real HOME.
         patch.stopall()
         home = self.root/'home'
         config = home/'.config'
         config.mkdir(parents=True)
         (config/'user-dirs.dirs').write_text('XDG_MUSIC_DIR="$HOME/Music ü $(never execute)"\n')
         with patch.object(Path, 'home', return_value=home), patch.dict(os.environ, {'XDG_CONFIG_HOME': str(config)}):
-            self.assertEqual(installer.default_music_dir(), home/'Music ü $(never execute)')
+            self.assertEqual(installer.default_music_dir(), home/'Music')
 
     def test_disabled_xdg_music_defaults_to_music_not_entire_home(self):
         patch.stopall()

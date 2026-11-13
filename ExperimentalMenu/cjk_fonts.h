@@ -34,7 +34,7 @@ typedef struct {DWORD code,page;float x,y,w,h,left,top,advance,design_w,design_h
 _Static_assert(sizeof(CjkPageMetric)==44,"paged font metric size");
 typedef struct {
     CjkPageMetric *metrics;DWORD count,ascent,pixels,pages;
-    BOOL attempted,tokens_ready[CJK_MAX_PAGES];int resource[CJK_MAX_PAGES],texture[CJK_MAX_PAGES];
+    BOOL attempted,tokens_ready[CJK_MAX_PAGES],latin[CJK_MAX_PAGES];int resource[CJK_MAX_PAGES],texture[CJK_MAX_PAGES];
 } CjkAtlas;
 typedef struct {float scale,baseline;BYTE *font;CjkAtlas *atlas;} CjkFontCache;
 static CjkFontCache cjk_fonts[CJK_FONT_LIMIT];
@@ -139,11 +139,11 @@ __attribute__((naked,noinline)) static void cjk_pen_entry(void){
         "jmp *_cjk_pen_after\n");
 }
 
-static CjkAtlas *cjk_load_atlas(unsigned tier){
-    CjkAtlas *atlas=cjk_atlases+tier;if(atlas->attempted)return atlas->metrics?atlas:NULL;
+static CjkAtlas *cjk_read_atlas(CjkAtlas *atlas,unsigned tier,BOOL latin){
     atlas->attempted=TRUE;atlas->pixels=tier==0?32:tier==1?64:96;
     WCHAR path[MAX_PATH],suffix[64];wcscpy(path,config_path);WCHAR *slash=wcsrchr(path,L'\\');
-    if(tier)_snwprintf(suffix,64,L"\\fonts\\noto-cjk\\jp%u.rrcf",(unsigned)atlas->pixels);
+    if(latin)_snwprintf(suffix,64,L"\\fonts\\noto-latin\\latin%u.rrcf",(unsigned)atlas->pixels);
+    else if(tier)_snwprintf(suffix,64,L"\\fonts\\noto-cjk\\jp%u.rrcf",(unsigned)atlas->pixels);
     else wcscpy(suffix,L"\\fonts\\noto-cjk\\jp.rrcf");
     if(!slash||(size_t)(slash-path)+wcslen(suffix)>=MAX_PATH)return NULL;wcscpy(slash,suffix);
     HANDLE file=CreateFileW(path,GENERIC_READ,FILE_SHARE_READ,NULL,OPEN_EXISTING,0,NULL);
@@ -170,7 +170,35 @@ static CjkAtlas *cjk_load_atlas(unsigned tier){
     }
     if(raw)HeapFree(GetProcessHeap(),0,raw);
     if(!ok){if(records)HeapFree(GetProcessHeap(),0,records);log_line("CJK font metrics invalid; quality tier refused.");return NULL;}
-    atlas->metrics=records;atlas->count=header[2];atlas->ascent=header[6];atlas->pages=pages;return atlas;
+    atlas->metrics=records;atlas->count=header[2];atlas->ascent=header[6];atlas->pages=pages;for(unsigned i=0;i<pages;i++)atlas->latin[i]=latin;return atlas;
+}
+/* Both independent downloads feed the same native fallback and owned VFS. */
+static int cjk_metric_compare(const void *a,const void *b){
+    DWORD x=((const CjkPageMetric *)a)->code,y=((const CjkPageMetric *)b)->code;
+    return x<y?-1:x>y;
+}
+static CjkAtlas *cjk_load_atlas(unsigned tier){
+    CjkAtlas *atlas=cjk_atlases+tier;if(atlas->attempted)return atlas->metrics?atlas:NULL;
+    CjkAtlas latin={0};
+    if(cjk_pack_enabled())cjk_read_atlas(atlas,tier,FALSE);
+    atlas->attempted=TRUE;
+    if(latin_pack_enabled()&&cjk_read_atlas(&latin,tier,TRUE)){
+        if(!atlas->metrics){*atlas=latin;return atlas;}
+        if(atlas->pages+latin.pages>CJK_MAX_PAGES){HeapFree(GetProcessHeap(),0,latin.metrics);return atlas;}
+        CjkPageMetric *merged=HeapAlloc(GetProcessHeap(),0,(atlas->count+latin.count)*sizeof(*merged));
+        if(!merged){HeapFree(GetProcessHeap(),0,latin.metrics);return atlas;}
+        memcpy(merged,atlas->metrics,atlas->count*sizeof(*merged));unsigned n=atlas->count;
+        for(unsigned i=0;i<latin.count;i++){
+            CjkPageMetric key=latin.metrics[i];
+            if(bsearch(&key,atlas->metrics,atlas->count,sizeof(key),cjk_metric_compare))continue;
+            key.page+=atlas->pages;key.top+=((float)atlas->ascent-(float)latin.ascent);merged[n++]=key;
+        }
+        qsort(merged,n,sizeof(*merged),cjk_metric_compare);
+        for(unsigned i=0;i<latin.pages;i++)atlas->latin[atlas->pages+i]=TRUE;
+        atlas->pages+=latin.pages;atlas->count=n;
+        HeapFree(GetProcessHeap(),0,atlas->metrics);HeapFree(GetProcessHeap(),0,latin.metrics);atlas->metrics=merged;
+    }
+    return atlas->metrics?atlas:NULL;
 }
 static unsigned cjk_quality_tier(float cap){return cap>64?2:cap>32?1:0;}
 static CjkAtlas *cjk_select_atlas(float cap){
@@ -181,7 +209,8 @@ static BOOL cjk_page_tokens(CjkAtlas *atlas,unsigned page){
     if(page>=atlas->pages)return FALSE;if(atlas->tokens_ready[page])return TRUE;
     typedef void *(__thiscall *TokenCtor)(void *,const char *);
     BYTE *base=(BYTE *)GetModuleHandleW(NULL);char resource[96],texture[96];
-    if(atlas->pixels==32){strcpy(resource,"fonts/reriff/cjk/jp");strcpy(texture,"reriff_cjk_jp");}
+    if(atlas->latin[page]){snprintf(resource,sizeof(resource),"fonts/reriff/latin/p%u",(unsigned)atlas->pixels);snprintf(texture,sizeof(texture),"reriff_latin_%u",(unsigned)atlas->pixels);}
+    else if(atlas->pixels==32){strcpy(resource,"fonts/reriff/cjk/jp");strcpy(texture,"reriff_cjk_jp");}
     else{snprintf(resource,sizeof(resource),"fonts/reriff/cjk/jp%u/p%03u",(unsigned)atlas->pixels,page);
         snprintf(texture,sizeof(texture),"reriff_cjk_jp%u_p%03u",(unsigned)atlas->pixels,page);}
     ((TokenCtor)(base+0x18a90))(&atlas->resource[page],resource);
