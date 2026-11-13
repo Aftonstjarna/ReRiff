@@ -142,6 +142,9 @@ package and skips an already installed version unless you switch channels or
 request a test reinstall.
 
 If your launcher cannot apply an update, install the current release manually.
+The 1.2.3 launcher has a 64 MiB download limit, below the size of the current
+installers. Download and run the 1.3.0 installer once to upgrade it; your existing
+settings and saved data are preserved.
 Client updates do not update the Docker server.
 
 ### In-game Servers menu and launcher skipping

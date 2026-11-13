@@ -64,8 +64,11 @@ series and the subsequent missing-font and Auto-scale regression checks.
 - Combine that routing with optional local-server logging without replacing
   stored profiles, scores, ghosts or uploaded files.
 
-### Validation and known limitation
+### Validation and known limitations
 
+- The 1.2.3 launcher has a 64 MiB download limit, below these installers' size.
+  Download and run the installer manually for this upgrade. Existing settings
+  and saved data are preserved; subsequent updates use the newer launcher.
 - Validate native UI input and lifecycle, Auto/manual sizing, missing font-pack
   combinations, independent font installation, shared archive ownership,
   installer rollback, update diagnostics and Python-free Linux operation.
