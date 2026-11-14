@@ -24,5 +24,5 @@ with tempfile.TemporaryDirectory(prefix='windows-cjk-setup-',dir=ROOT/'build') a
  assert run.returncode==0,run.returncode
  assert json.loads((game/'localserver/languages/cjk.json').read_text())['version']==manifest['version']
  for name,expected in manifest['required_existing'].items():assert hashlib.sha256((game/name).read_bytes()).hexdigest()==expected,name
- assert 'cjk_enabled = true' in (game/'server.ini').read_text()
+ assert 'cjk_enabled = true' in (game/'client.ini').read_text(encoding='utf-8-sig')
  print('PASS: real Windows setup, private Python, .NET Framework patching, exact DLL hashes and bundled CJK checkbox option.')

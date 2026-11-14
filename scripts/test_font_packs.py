@@ -44,7 +44,7 @@ with tempfile.TemporaryDirectory(prefix='font-packs-',dir=Path(__file__).resolve
         game=root/order[0];game.mkdir();(game/'vfs.dat').write_bytes(b'original index');(game/'vfs.zip').write_bytes(b'original archive')
         for pack in order:call(game,pack)
         validate(game)
-        call(game,'latin','disable');config=(game/'server.ini').read_text();assert 'latin_enabled = false' in config and 'cjk_enabled = true' in config
+        call(game,'latin','disable');config=(game/'client.ini').read_text(encoding='utf-8-sig');assert 'latin_enabled = false' in config and 'cjk_enabled = true' in config
         # Corrupted owned archives must be refused without changing anything.
         path=game/'vfs1.dat';saved=path.read_bytes();path.write_bytes(saved+b'bad')
         before={str(p.relative_to(game)):sha(p) for p in game.rglob('*') if p.is_file()}
