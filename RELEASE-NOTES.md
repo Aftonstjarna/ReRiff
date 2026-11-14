@@ -1,3 +1,94 @@
+# ReRiff 1.4.0-beta.2 — Prestige progression and Windows updates
+
+## In-game summary
+
+- Keep prestige rewards, Rank milestones and ghost wins consistent.
+- Configure main levels beyond 40 and Singleplayer balance.
+- Fix Windows updates and choose individual diagnostic logs.
+
+## Full release notes
+
+### Prestige progression and ghosts
+
+- Recheck the four original Rank achievements after a completed prestige-cycle
+  race using permanent main level. A level-33 player can re-earn the level
+  5/10/15/20 milestones together without waiting for permanent level 34.
+- Earn Friend or Foe in Singleplayer by beating a normal Recommended or Leader
+  ghost. Preserve completion carried over from the original save, and retain
+  the original strict score comparison and achievement award path.
+- Restore a missing own ghost record from a matching native version-18 replay
+  cache when the isolated Singleplayer store lacks it. Preserve replay bytes,
+  existing score records, conflicting files and the original native cache.
+  This fixes the verified case where an older cached personal best prevented
+  a lower new run from uploading a ghost into the new local store.
+- Show the multiplied ghost-win bonus in the native versus message. At prestige
+  1 the default 100-coin bonus displays and credits 200; payment occurs once.
+  Creator and race rewards continue using their scoped original UI/payment paths.
+- Remove the abandoned startup-crashing native ghost-queue experiment; the
+  replacement works through local storage and the original query/download path.
+
+### Permanent main levels and configurable Singleplayer balance
+
+- Continue permanent main levels above 40. By default each later level costs
+  250,000,000 XP, repeating the original 39→40 interval. Existing permanent XP
+  counts immediately, and lowering a cap does not remove any saved XP.
+- Configure `main_level_cap`, `main_level_xp_step` and `main_level_xp_growth` in
+  `[balance]` in `singleplayer.ini`. Defaults are 0, 0 and 1: no configured cap,
+  the original final XP interval, and a constant XP cost. Keep the native curve
+  through level 40 and the original prestige-cycle car unlocks/rewards.
+- Keep the native Profile level text, prestige star and fill bar. With a finite
+  cap the bar shows level relative to that cap; uncapped mode keeps native fill
+  below 40 and shows next-level progress from 40 onward.
+- Configure earned coin rates, prestige multiplier growth/cap, paint price scale
+  and permanent-level discounts in the same balance section. Invalid policies
+  fall back to defaults; saved checkpoints record the effective balance revision.
+
+### Configuration and diagnostics
+
+- Split settings into `server.ini` for connections, `client.ini` for graphics,
+  languages, launcher and logging, and `singleplayer.ini` for isolated
+  progression/balance. Keep launcher-managed LAN settings in
+  `localserver/server.ini`. Existing explicit values win during migration;
+  preserve unknown settings and retain at most two config backups per file.
+- Enable experimental isolation with `[progression] isolate_singleplayer = 1`
+  in `singleplayer.ini`, then restart in Singleplayer. Legacy combined
+  `server.ini` settings migrate automatically. Isolation remains opt-in.
+- Add individual log-category checkboxes to launcher Diagnostics with a master
+  logging switch. Keep category choices when logging is disabled, do not create
+  a logs folder when disabled, and retain any existing logs.
+
+### Windows installer and optional local server
+
+- Distinguish client packages from optional server packages when reading release
+  metadata. Ignore legacy `ReRiff-Server-*` packages rather than treating their
+  `-windows.zip` suffix as a second client installer. Still reject genuinely
+  ambiguous duplicate client packages.
+- Name future Windows local-server downloads `ReRiff-Windows-Server.zip`.
+  Update package generation, verified download/checksum selection and release
+  assembly together, including cleanup of an obsolete generated archive when
+  rebuilding a local release directory.
+- Keep Flask and its dependencies in the optional Windows server package and
+  its private Python runtime; the Windows local server does not require Podman.
+
+### Validation and remaining beta work
+
+- Live Singleplayer tests verified Rank re-awards, Leader replay download and
+  playback, Friend or Foe, retained achievements, doubled ghost-bonus display
+  and payment, and save/restart persistence. The extended-level build retained
+  level 33, the prestige star, fill bar and all saved XP after a restart.
+- Original-method execution fixtures, 3,598 curve/policy checks, native layout,
+  configuration, logging, checkpoint and package-selection regressions pass
+  locally. A real in-game level-41 promotion and native Windows gameplay with
+  this exact beta still need testing; Wine/CLR fixtures are not that retest.
+- Recommended selection may be empty when only one own best replay exists;
+  this release does not add a personal-best recommendation fallback.
+- The First Prestige flag remains stored, but its logo-bearing achievement-list
+  row is still pending. Multiplayer prestige and server-enforced balance remain
+  separate future work. None of these tests reset the user's saved XP.
+
+See `docs/PRESTIGE.md`, `docs/CONFIGURATION.md` and `docs/LOGGING.md` for setup,
+policy details and rollback boundaries. Experimental updates require opt-in.
+
 # ReRiff 1.4.0-beta.1 — Singleplayer prestige base
 
 ## In-game summary
