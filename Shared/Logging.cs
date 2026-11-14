@@ -6,16 +6,9 @@ using System.Collections.Generic;
 namespace ReRiff {
     internal static class Logging {
         internal static bool? Setting(string folder) {
-            try {
-                bool section=false;
-                foreach(string raw in File.ReadAllLines(Path.Combine(folder,"server.ini"))) {
-                    string line=raw.Trim();if(line.StartsWith("["))section=line.Equals("[diagnostics]",StringComparison.OrdinalIgnoreCase);
-                    int eq=line.IndexOf('=');if(section&&eq>0&&line.Substring(0,eq).Trim().Equals("logging_enabled",StringComparison.OrdinalIgnoreCase)) {
-                        string value=line.Substring(eq+1).Trim();return value=="1"||value.Equals("true",StringComparison.OrdinalIgnoreCase)||value.Equals("yes",StringComparison.OrdinalIgnoreCase);
-                    }
-                }
-            }catch(IOException){}catch(UnauthorizedAccessException){}
-            return null;
+            try {string value;if(!ConfigFiles.Read(folder,"diagnostics").TryGetValue("logging_enabled",out value))return null;
+            return value=="1"||value.Equals("true",StringComparison.OrdinalIgnoreCase)||value.Equals("yes",StringComparison.OrdinalIgnoreCase);
+            }catch(IOException){}catch(UnauthorizedAccessException){}return null;
         }
         internal static bool Enabled(string folder) {
             bool? saved=Setting(folder);if(saved.HasValue)return saved.Value;
@@ -27,6 +20,17 @@ namespace ReRiff {
                 string version=Path.Combine(folder,"localserver/client-version.txt");return File.Exists(version)&&File.ReadAllText(version).Contains("-");
             }catch(IOException){}catch(UnauthorizedAccessException){}
             return false;
+        }
+        internal static bool Enabled(string folder,string name) {
+            if(!Enabled(folder))return false;
+            string category=Path.GetFileNameWithoutExtension(name).ToLowerInvariant().Replace("reriff-", "").Replace('-', '_');
+            if(category.StartsWith("localserver"))category="localserver";
+            if(category=="python_setup")category="python";
+            if(category.StartsWith("installer"))category="installer";
+            try {string value;if(ConfigFiles.Read(folder,"diagnostics").TryGetValue("log_"+category,out value))
+                return value=="1"||value.Equals("true",StringComparison.OrdinalIgnoreCase)||value.Equals("yes",StringComparison.OrdinalIgnoreCase);
+            }catch(IOException){}catch(UnauthorizedAccessException){}
+            return true;
         }
         internal static byte[] Config(byte[] input,bool enabled) {
             Encoding encoding=new UTF8Encoding(false);int skip=0;
@@ -45,7 +49,7 @@ namespace ReRiff {
             Buffer.BlockCopy(preamble,0,output,0,preamble.Length);Buffer.BlockCopy(body,0,output,preamble.Length,body.Length);return output;
         }
         internal static void Append(string folder,string name,string message) {
-            if(!Enabled(folder))return;
+            if(!Enabled(folder,name))return;
             string logs=Path.Combine(folder,"logs");Directory.CreateDirectory(logs);File.AppendAllText(Path.Combine(logs,name),message);
         }
     }

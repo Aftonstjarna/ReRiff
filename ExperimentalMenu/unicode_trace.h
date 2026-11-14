@@ -20,7 +20,7 @@ static void unicode_append(char *out,size_t capacity,size_t *used,const char *fo
 }
 static __thread int unicode_logging_check;
 static void unicode_write(const char *line){
-    if(unicode_logging_check)return;unicode_logging_check=1;BOOL logging=rr_logging_ini(config_path);unicode_logging_check=0;if(!logging)return;
+    if(unicode_logging_check)return;unicode_logging_check=1;BOOL logging=rr_log_ini(config_path,L"unicode");unicode_logging_check=0;if(!logging)return;
     if(unicode_log==INVALID_HANDLE_VALUE||!TryEnterCriticalSection(&unicode_lock))return;
     size_t length=strlen(line);uint64_t hash=14695981039346656037ULL;
     for(size_t i=0;i<length;i++)hash=(hash^(BYTE)line[i])*1099511628211ULL;
@@ -228,12 +228,13 @@ static void unicode_imports(BYTE *base){
     }
 }
 static void install_unicode_trace(BYTE *base){
-    BOOL trace=rr_logging_ini(config_path)&&GetPrivateProfileIntW(L"diagnostics",L"unicode_trace",0,config_path)!=0;
+    BOOL trace=rr_log_ini(config_path,L"unicode")&&GetPrivateProfileIntW(L"diagnostics",L"unicode_trace",0,config_path)!=0;
     if(!trace&&!cjk_component_enabled())return;
     unicode_base=base;
     if(trace){
     WCHAR path[MAX_PATH];wcscpy(path,log_path);WCHAR *slash=wcsrchr(path,L'\\');if(!slash)return;
     if((size_t)(slash-path)+wcslen(L"\\ReRiff-unicode.log")>=MAX_PATH)return;
+    *slash=0;CreateDirectoryW(path,NULL);
     wcscpy(slash,L"\\ReRiff-unicode.log");
     unicode_log=CreateFileW(path,GENERIC_WRITE,FILE_SHARE_READ,NULL,CREATE_ALWAYS,FILE_ATTRIBUTE_NORMAL,NULL);
     if(unicode_log==INVALID_HANDLE_VALUE){log_line("Unicode trace could not open its log.");return;}

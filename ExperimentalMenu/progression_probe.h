@@ -107,7 +107,7 @@ static DWORD WINAPI progression_probe_worker(LPVOID argument){
     char previous[4096]="",current[4096];
     BOOL names_logged=FALSE;
     for(unsigned sample=0;sample<1200;sample++){
-        if(!rr_logging_ini(config_path))break;
+        if(!rr_log_ini(config_path,L"engine_menu"))break;
         if(progression_probe_snapshot((BYTE *)argument,current,sizeof(current))&&strcmp(previous,current)){
             log_line(current);strcpy(previous,current);
             if(!names_logged){progression_probe_save_names((BYTE *)argument);names_logged=TRUE;}
@@ -118,7 +118,7 @@ static DWORD WINAPI progression_probe_worker(LPVOID argument){
     return 0;
 }
 static void start_progression_probe(BYTE *base){
-    if(!rr_logging_ini(config_path)||!GetPrivateProfileIntW(L"progression",L"trace_enabled",0,config_path)
+    if(!rr_log_ini(config_path,L"engine_menu")||!GetPrivateProfileIntW(L"progression",L"trace_enabled",0,config_path)
         ||InterlockedCompareExchange(&progression_probe_started,1,0))return;
     progression_probe_startup(base);
     HANDLE thread=CreateThread(NULL,0,progression_probe_worker,base,0,NULL);

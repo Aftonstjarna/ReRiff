@@ -101,9 +101,9 @@ internal static class LanguageComponent
     internal static bool Present(string game,string pack="cjk") => File.Exists(Under(game, StateFor(pack)));
     internal static bool Enabled(string game,string pack="cjk")
     {
-        string path = Path.Combine(game, "server.ini"); if (!File.Exists(path)) return false;
+        string path = ReRiff.ConfigFiles.ReadPath(game,"languages"); if (!File.Exists(path)) return false;
         string section = ""; bool? saved = null; bool legacy = false;
-        foreach (string raw in File.ReadAllLines(path))
+        foreach (string raw in ReRiff.ConfigFiles.Document(game,"client.ini").Replace("\r\n","\n").Split('\n'))
         {
             string line = raw.Trim(); if (line.StartsWith("[")) section = line.ToLowerInvariant(); int eq = line.IndexOf('='); if (eq < 1) continue;
             string key = line.Substring(0, eq).Trim(), value = line.Substring(eq + 1).Trim(); bool enabled = value == "1" || value.Equals("true", StringComparison.OrdinalIgnoreCase);
@@ -112,13 +112,13 @@ internal static class LanguageComponent
         }
         return saved ?? (pack=="cjk"&&legacy);
     }
-    static byte[] Config(string game, bool enabled,string pack="cjk") { string path = Path.Combine(game, "server.ini"); var lines = File.Exists(path) ? File.ReadAllLines(path).ToList() : new List<string> { "[server]", "external_url =", "fallback_url =", "timeout_seconds = 5", "networking_enabled = true", "show_server_popup = true", "", "[launcher]", "skip_launcher = false", "auto_update_on_skip = false" }; bool section = false, found = false; int languageAt = -1; for (int i = 0; i < lines.Count; i++) { string line = lines[i].Trim(); if (line.StartsWith("[")) section = line.Equals("[languages]", StringComparison.OrdinalIgnoreCase); if (section && line.StartsWith("[")) languageAt = i; int eq = line.IndexOf('='); if (section && eq > 0 && line.Substring(0, eq).Trim().Equals(pack+"_enabled", StringComparison.OrdinalIgnoreCase)) { lines[i] = pack+"_enabled = " + (enabled ? "true" : "false"); found = true; } } if (!found) { if (languageAt >= 0) lines.Insert(languageAt + 1, pack+"_enabled = " + (enabled ? "true" : "false")); else lines.AddRange(new[] { "", "[languages]", pack+"_enabled = " + (enabled ? "true" : "false") }); } return new UTF8Encoding(false).GetBytes(string.Join("\n", lines) + "\n"); }
+    static byte[] Config(string game, bool enabled,string pack="cjk") { var lines = ReRiff.ConfigFiles.Document(game,"client.ini").Replace("\r\n","\n").Split('\n').ToList(); bool section = false, found = false; int languageAt = -1; for (int i = 0; i < lines.Count; i++) { string line = lines[i].Trim(); if (line.StartsWith("[")) section = line.Equals("[languages]", StringComparison.OrdinalIgnoreCase); if (section && line.StartsWith("[")) languageAt = i; int eq = line.IndexOf('='); if (section && eq > 0 && line.Substring(0, eq).Trim().Equals(pack+"_enabled", StringComparison.OrdinalIgnoreCase)) { lines[i] = pack+"_enabled = " + (enabled ? "true" : "false"); found = true; } } if (!found) { if (languageAt >= 0) lines.Insert(languageAt + 1, pack+"_enabled = " + (enabled ? "true" : "false")); else lines.AddRange(new[] { "", "[languages]", pack+"_enabled = " + (enabled ? "true" : "false") }); } return new UTF8Encoding(false).GetBytes(string.Join("\n", lines) + "\n"); }
     static Installed Existing(string game,string pack="cjk") { var old = Read<Installed>(File.ReadAllBytes(Under(game, StateFor(pack)))); if (old.schema != 1 || old.files == null || old.archives == null) throw new IOException("Unsupported CJK component state."); foreach (var entry in old.files) { if (!FontPath(entry.Key)) throw new IOException("Unexpected owned font path."); string path = Under(game, entry.Key); if (!File.Exists(path) || Hash(File.ReadAllBytes(path)) != entry.Value) throw new IOException("Installed CJK file changed or is missing; retained: " + entry.Key); } return old; }
     internal static Dictionary<string, byte[]> Plan(string game, string asset, string expected, bool enable,string pack="cjk")
     {
         var plan = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
-        if (!enable) { plan["server.ini"] = Config(game, false,pack); return plan; }
-        if (asset == "") { if (!Present(game,pack)) throw new IOException("Install the CJK font component first."); Existing(game,pack); plan["server.ini"] = Config(game, true,pack); return plan; }
+        if (!enable) { plan["client.ini"] = Config(game, false,pack); return plan; }
+        if (asset == "") { if (!Present(game,pack)) throw new IOException("Install the CJK font component first."); Existing(game,pack); plan["client.ini"] = Config(game, true,pack); return plan; }
         if (!Regex.IsMatch(expected, @"^[0-9a-fA-F]{64}$") || Hash(File.ReadAllBytes(asset)) != expected.ToLowerInvariant()) throw new IOException("CJK download checksum mismatch.");
         using (var zip = ZipFile.OpenRead(asset))
         {
@@ -176,7 +176,7 @@ internal static class LanguageComponent
             foreach (string file in pack=="latin"?new[]{"latin32.rrcf","latin64.rrcf","latin96.rrcf","OFL.txt"}:new[]{"jp.rrcf","jp64.rrcf","jp96.rrcf","OFL.txt"}) if (!plan.ContainsKey("fonts/noto-"+pack+"/" + file)) throw new IOException("Incomplete CJK metrics/license.");
             foreach (string file in retired) if (!plan.ContainsKey(file)) plan[file] = null;
             if(other!=null){if(package.schema!=2)throw new IOException("Upgrade to the combined CJK package first.");MergeFontVolume(plan,game,other,pack,state);}
-            plan[StateFor(pack)] = Json(state); plan["server.ini"] = Config(game, true,pack); return plan;
+            plan[StateFor(pack)] = Json(state); plan["client.ini"] = Config(game, true,pack); return plan;
         }
     }
     // Rebuild only an owned font volume; original/mod volumes are never edited.
@@ -249,7 +249,7 @@ internal static class LanguageComponent
                 var state=Existing(game,pack);
                 foreach(string name in state.files.Keys.Concat(new[]{StateFor(pack)}).Distinct())Atomic(Under(shadow,name),File.ReadAllBytes(Under(game,name)));
             }
-            if(File.Exists(Under(game,"server.ini")))Atomic(Under(shadow,"server.ini"),File.ReadAllBytes(Under(game,"server.ini")));
+            foreach(string config in new[]{"server.ini","client.ini"})if(File.Exists(Under(game,config)))Atomic(Under(shadow,config),File.ReadAllBytes(Under(game,config)));
             // Preserve occupied mod slots in the shadow without reading their contents.
             foreach(string file in Directory.GetFiles(game,"*"))if(Regex.IsMatch(Path.GetFileName(file),@"(?i)^vfs[0-9a-f]+\.(dat|zip)$")&&!File.Exists(Path.Combine(shadow,Path.GetFileName(file))))File.WriteAllBytes(Path.Combine(shadow,Path.GetFileName(file)),new byte[0]);
             if(cjk.HasValue)foreach(var item in Plan(shadow,cjkAsset,cjkHash,cjk.Value)) {result[item.Key]=item.Value;if(item.Value==null)File.Delete(Under(shadow,item.Key));else Atomic(Under(shadow,item.Key),item.Value);}

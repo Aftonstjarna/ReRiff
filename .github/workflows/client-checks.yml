@@ -8,6 +8,7 @@ on:
       - 'NativeLauncher/notification.c'
       - 'NativeLauncher/restart_protocol.h'
       - 'NativeLauncher/logging.h'
+      - 'NativeLauncher/config.h'
       - 'NewsHeaders/**'
       - 'Managed/**'
       - 'Shared/**'
@@ -25,6 +26,7 @@ on:
       - 'NativeLauncher/notification.c'
       - 'NativeLauncher/restart_protocol.h'
       - 'NativeLauncher/logging.h'
+      - 'NativeLauncher/config.h'
       - 'NewsHeaders/**'
       - 'Managed/**'
       - 'Shared/**'
@@ -59,8 +61,14 @@ jobs:
           dotnet-version: '8.0.x'
       - name: Build managed client helpers
         run: |
+          dotnet build Managed/GhostCacheSmoke.csproj -c Release -o build/client-checks
+          dotnet build Managed/ConfigSplitSmoke.csproj -c Release -o build/client-checks
           dotnet build ClientConfig/ClientConfig.csproj -c Release -o build/client-checks
           dotnet build NewsHeaders/NewsHeaders.csproj -c Release -o build/client-checks
+          dotnet build ClientConfig/Tests/ProgressionRankSmoke.csproj -c Release -o build/client-checks
+          dotnet build ClientConfig/Tests/ProgressionLevelsSmoke.csproj -c Release -o build/client-checks
+          dotnet build ClientConfig/Tests/ProgressionGhostSmoke.csproj -c Release -o build/client-checks
+          dotnet build ClientConfig/Tests/ProgressionDomainSmoke.csproj -c Release -o build/client-checks
       - name: Fetch checksum-pinned compiler
         run: python packaging/fetch_release_tools.py --asset zig.tar.xz --directory "$RUNNER_TEMP/release-tools"
       - name: Build client independently
@@ -72,7 +80,7 @@ jobs:
         run: |
           export ZIG_GLOBAL_CACHE_DIR="$RUNNER_TEMP/zig-global"
           export ZIG_LOCAL_CACHE_DIR="$RUNNER_TEMP/zig-local"
-          for source in ExperimentalMenu/test_main_scale.c ExperimentalMenu/test_display_modes.c ExperimentalMenu/test_ui_scale.c ExperimentalMenu/test_save_prompt.c ExperimentalMenu/test_prestige_prompt.c ExperimentalMenu/test_progression_domain.c ExperimentalMenu/test_progression_probe.c ExperimentalMenu/test_progression_view.c ExperimentalMenu/test_progression_badge.c ExperimentalMenu/test_progression_rewards.c ExperimentalMenu/test_progression_economy.c; do
+          for source in ExperimentalMenu/test_main_scale.c ExperimentalMenu/test_display_modes.c ExperimentalMenu/test_ui_scale.c ExperimentalMenu/test_save_prompt.c ExperimentalMenu/test_prestige_prompt.c ExperimentalMenu/test_progression_domain.c ExperimentalMenu/test_progression_probe.c ExperimentalMenu/test_progression_view.c ExperimentalMenu/test_progression_badge.c ExperimentalMenu/test_progression_rewards.c ExperimentalMenu/test_progression_economy.c ExperimentalMenu/test_progression_rank.c ExperimentalMenu/test_progression_ghost.c; do
             name=$(basename "$source" .c)
             "$RUNNER_TEMP/release-tools/zig-x86_64-linux-0.14.1/zig" cc \
               -target x86-windows-gnu -O2 -Wall -Wextra -Werror \

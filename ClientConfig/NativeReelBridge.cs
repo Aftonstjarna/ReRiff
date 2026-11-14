@@ -104,6 +104,10 @@ namespace ReRiff {
                 catch(Exception error){Log("Original progression adapter unavailable; live prestige remains disabled: "+error);}
                 try {ProgressionView.Configure(game);}
                 catch(Exception error){Log("Permanent-level display binding unavailable: "+error);}
+                try {ProgressionGhost.Configure(game);}
+                catch(Exception error){Log("Singleplayer ghost achievement binding unavailable: "+error);}
+                try {ProgressionRank.Configure(game);}
+                catch(Exception error){Log("Permanent Rank binding unavailable; original Rank checks retained: "+error);}
                 try {ProgressionEconomy.Configure(game);}
                 catch(Exception error){Log("Original economy trace unavailable; original amounts retained: "+error);}
             } catch(DllNotFoundException) { }

@@ -2,11 +2,34 @@
 import configparser
 from pathlib import Path
 
-def logging_enabled(game, default=None):
-    game=Path(game);ini=configparser.ConfigParser(interpolation=None)
+def client_settings(game):
+    ini=configparser.ConfigParser(interpolation=None)
+    for name in ('server.ini','client.ini'):
+        try:
+            raw=(Path(game)/name).read_bytes()
+            ini.read_string(raw.decode('utf-16' if raw.startswith((b'\xff\xfe',b'\xfe\xff')) else 'utf-8-sig'))
+        except FileNotFoundError:pass
+    return ini
+
+def client_config(game):
+    path=Path(game)/'client.ini'
+    if path.is_file():return path.read_bytes()
+    import io
+    source=client_settings(game);result=configparser.ConfigParser(interpolation=None)
+    for section in ('graphics','languages','launcher','diagnostics'):
+        if source.has_section(section):result[section]=dict(source[section])
+    output=io.StringIO();result.write(output);return output.getvalue().encode('utf-8')
+
+def logging_enabled(game, default=None, category=None):
+    if category is not None:
+        if not logging_enabled(game, default):return False
+        try:
+            ini=client_settings(game)
+            return ini.getboolean('diagnostics','log_'+category,fallback=True)
+        except (OSError,ValueError,configparser.Error):return True
+    game=Path(game)
     try:
-        raw=(game/'server.ini').read_bytes()
-        ini.read_string(raw.decode('utf-16' if raw.startswith((b'\xff\xfe',b'\xfe\xff')) else 'utf-8-sig'))
+        ini=client_settings(game)
         if ini.has_option('diagnostics','logging_enabled'):return ini.getboolean('diagnostics','logging_enabled')
     except (OSError,ValueError,configparser.Error):pass
     if default is not None:return default

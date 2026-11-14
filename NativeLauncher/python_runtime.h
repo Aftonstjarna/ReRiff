@@ -45,6 +45,7 @@ static BOOL python_ps_literal(const WCHAR *source,WCHAR *out,size_t capacity){
 }
 static int python_logging_override=-1;
 static void python_runtime_log(const WCHAR *game,const char *text){
+    if(!rr_log_selected(game,L"python"))return;
     if(!(python_logging_override>=0?python_logging_override:rr_logging_enabled(game,FALSE)))return;
     WCHAR path[CAP];if(_snwprintf(path,CAP,L"%ls\\logs",game)<0)return;CreateDirectoryW(path,NULL);
     if(_snwprintf(path,CAP,L"%ls\\logs\\ReRiff-python-setup.log",game)<0)return;

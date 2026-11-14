@@ -4,6 +4,7 @@ using System.Linq;
 using System.Net;
 using System.Text;
 using Parse;
+using System.Reflection;
 
 class SingleplayerSmoke {
     static void Check(bool ok, string name) { if (!ok) throw new Exception(name); Console.WriteLine("PASS: " + name); }
@@ -36,6 +37,28 @@ class SingleplayerSmoke {
                 var file = new ParseFile("ghost.dat", ghost, "application/octet-stream"); file.SaveAsync().Wait();
                 var record = new ParseObject("ghost_v1"); record["data"] = file; record["song"] = "metal-fixture"; record.SaveAsync().Wait(); fileId = record.ObjectId;
                 using (var client = new WebClient()) Check(client.DownloadData(file.Url).SequenceEqual(ghost), "original SDK upload and game-style ghost download");
+                // Missing backend ghosts may already exist as native personal bests.
+                string cache=Path.Combine(folder,"native-cache");Directory.CreateDirectory(cache);
+                typeof(ReRiff.Singleplayer).GetField("NativeGhostDirectory",BindingFlags.Instance|BindingFlags.NonPublic).SetValue(local,cache);
+                var profile=new ParseObject("Profile_Steam");profile["SystemID"]="123456789";profile["Username"]="Ghost fixture";profile.SaveAsync().Wait();
+                string ghostName="NativeSong-123456789.ghost";byte[] native;
+                using(var stream=new MemoryStream())using(var writer=new BinaryWriter(stream)) {
+                    writer.Write(18);writer.Write(5);writer.Write(123f);
+                    foreach(var part in new[]{"123456789","NativeSong","fab"}) {
+                        byte[] text=Encoding.ASCII.GetBytes(part);writer.Write(text.Length);writer.Write(text);
+                        if(part=="123456789")writer.Write(500f);
+                    }
+                    writer.Write(6);writer.Write(0);writer.Write((byte)1);native=stream.ToArray();
+                }
+                File.WriteAllBytes(Path.Combine(cache,ghostName),native);
+                var imported=ParseObject.GetQuery("ghost_v18").WhereEqualTo("song","NativeSong").FindAsync().Result.ToList();
+                Check(imported.Count==1&&imported[0].Get<int>("score")==500&&imported[0].Get<string>("user")=="123456789"&&imported[0].Get<string>("car")=="fab"&&imported[0].Get<int>("pack")==6,"native cached ghost metadata imported through normal query");
+                var savedFile=ParseObject.GetQuery("FileData").WhereEqualTo("name",ghostName).FirstAsync().Result.Get<ParseFile>("data");
+                using(var client=new WebClient())Check(client.DownloadData(savedFile.Url).SequenceEqual(native),"native ghost payload served byte-for-byte");
+                imported[0]["score"]=900;imported[0].SaveAsync().Wait();
+                imported=ParseObject.GetQuery("ghost_v18").WhereEqualTo("song","NativeSong").FindAsync().Result.ToList();
+                Check(imported.Count==1&&imported[0].Get<int>("score")==900,"repeat queries preserve existing ghost record and do not duplicate");
+                Check(File.ReadAllBytes(Path.Combine(cache,ghostName)).SequenceEqual(native),"original native cached ghost unchanged");
                 var absent = ParseObject.GetQuery("Score").GetAsync("does-not-exist");
                 try { absent.Wait(); } catch (AggregateException) { }
                 Check(absent.IsFaulted, "missing objects fail through original SDK error handling");

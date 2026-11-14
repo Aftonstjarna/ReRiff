@@ -23,9 +23,17 @@ namespace ReRiff {
         // fields so their sum is exactly the amount passed to native incTokens.
         internal static int[] RaceCoins(int race,int bonus,int current,uint prestige){
             if(race<0||bonus<0)throw new ArgumentOutOfRangeException("reward");
-            int first=Coins(race,current,prestige,1m,1m,null);
-            int second=Coins(bonus,checked(current+first),prestige,1m,1m,null);
+            var b=ProgressionBalance.Current;
+            int first=Coins(race,current,prestige,b.CoinRate,b.PrestigeGrowth,b.MultiplierCap);
+            int second=Coins(bonus,checked(current+first),prestige,b.CoinRate,b.PrestigeGrowth,b.MultiplierCap);
             return new[]{first,second};
+        }
+        // Versus advertises the ghost bonus before ResultsTokens allocates the
+        // total bank capacity between race and bonus. Keep that native nominal
+        // quote, using the same rate/cap/rounding as the subsequent payment.
+        internal static int GhostBonus(int amount,uint prestige){
+            var b=ProgressionBalance.Current;
+            return Coins(amount,0,prestige,b.CoinRate,b.PrestigeGrowth,b.MultiplierCap);
         }
         internal static int CycleXp(int nativeReward,int current,decimal rate){
             Rate(rate);if(nativeReward<0||current<0||current>2000000000)throw new ArgumentOutOfRangeException("xp");
@@ -43,7 +51,7 @@ namespace ReRiff {
         internal static int PaintPrice(int nativePrice,int mainLevel,decimal scale){
             Rate(scale);if(nativePrice<0)throw new ArgumentOutOfRangeException("price");
             if(nativePrice==0)return 0;
-            decimal adjusted=Decimal.Floor(nativePrice*scale*(1m-DefaultDiscount(mainLevel)));
+            decimal adjusted=Decimal.Floor(nativePrice*scale*(1m-ProgressionBalance.Current.Discount(mainLevel)));
             return (int)Math.Min(Int32.MaxValue,Math.Max(1m,adjusted));
         }
     }

@@ -15,7 +15,7 @@ import shutil
 import subprocess
 
 from shared_patch import apply_patch, digest
-from logging_policy import logging_enabled, logging_config
+from logging_policy import logging_enabled, logging_config, client_config, client_settings
 
 
 def auto_game():
@@ -455,7 +455,7 @@ def install(bundle, game, backups, platform, dry_run=False, restore=False, music
             next_state.update(music_link=enabled, music_dir=str(chosen_music.expanduser().resolve()))
         plan['localserver/install-state.json'] = (json.dumps(next_state, indent=2)+'\n').encode()
         enabled = logging if logging is not None else logging_enabled(game, development)
-        plan['server.ini'] = logging_config(plan.get('server.ini', (game/'server.ini').read_bytes() if (game/'server.ini').is_file() else b''), enabled)
+        plan['client.ini'] = logging_config(plan.get('client.ini', client_config(game)), enabled)
         collector = 'localserver/diagnostics/Collect-ReRiffStartup.ps1'
         if enabled and collector in plan: plan['logs/Collect-ReRiffStartup.ps1'] = plan[collector]
         if not enabled:

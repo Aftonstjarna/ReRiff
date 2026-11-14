@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType><TargetFramework>net45</TargetFramework>
+    <PlatformTarget>x86</PlatformTarget><AssemblyName>test_progression_ghost_managed</AssemblyName>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="ProgressionGhostSmoke.cs" />
+    <Compile Include="../Progression*.cs" Exclude="../ProgressionDomain.cs" />
+    <Compile Include="../NativeReelBridge.cs" /><Compile Include="../../Shared/ConfigFiles.cs" />
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net45" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+</Project>

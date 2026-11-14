@@ -21,13 +21,24 @@ class ProgressionRewardsSmoke {
         for(uint count=0;count<5;count++){
             int[] parts=ProgressionRewards.RaceCoins(180,100,1000,count);
             Check(parts[0]==180*(count+1)&&parts[1]==100*(count+1),"Race/bonus display components match multiplier");
+            Check(ProgressionRewards.GhostBonus(100,count)==parts[1],"Versus nominal bonus matches the later credited ghost component");
             Check(parts[0]+parts[1]==ProgressionRewards.Coins(280,1000,count,1m,1m,null),"Component sum equals credited reward");
         }
+        var originalBalance=ProgressionBalance.Current;
+        try {
+            ProgressionBalance.Current=new ProgressionBalance{CoinRate=.375m,PrestigeGrowth=.5m,MultiplierCap=2m,CreatorRate=99m};
+            for(uint count=0;count<10;count++){
+                int quote=ProgressionRewards.GhostBonus(101,count);
+                Check(quote==ProgressionRewards.RaceCoins(180,101,1000,count)[1],"Versus uses coin rate, growth, cap and floor rather than creator rate");
+            }
+            ProgressionBalance.Current.CoinRate=0;
+            Check(ProgressionRewards.GhostBonus(100,1)==0,"Disabled rewards display zero");
+        }finally{ProgressionBalance.Current=originalBalance;}
         int[] capped=ProgressionRewards.RaceCoins(100,100,Int32.MaxValue-150,1);
         Check(capped[0]==150&&capped[1]==0,"Race and bonus share destination headroom");
         int[] empty=ProgressionRewards.RaceCoins(0,100,Int32.MaxValue-5,2);
         Check(empty[0]==0&&empty[1]==5,"Bonus uses headroom when race reward is zero");
         bool refused=false;try{ProgressionRewards.Coins(1,0,0,-1m,1m,null);}catch(ArgumentOutOfRangeException){refused=true;}Check(refused,"Invalid policy refused");
-        Console.WriteLine("PASS: prestige coin awards, untouched debits, cap/rounding/overflow, native cycle-XP bound and permanent-level pack discounts; scoped source hook arithmetic validated; nonzero prestige still needs live testing");
+        Console.WriteLine("PASS: prestige coin awards and versus bonus quote, untouched debits, cap/rounding/overflow, native cycle-XP bound and permanent-level pack discounts");
     }
 }

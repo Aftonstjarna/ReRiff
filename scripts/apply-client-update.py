@@ -167,7 +167,7 @@ def main():
     if game is None:
         try: game=Path(json.loads((args.work/'prepared.json').read_text())['game'])
         except (OSError,ValueError,KeyError): pass
-    enabled=game is not None and logging_enabled(game)
+    enabled=game is not None and logging_enabled(game, category="update")
     log_path=game/'logs/update.log' if enabled else Path(os.devnull)
     try:
         log_path.parent.mkdir(parents=True,exist_ok=True)

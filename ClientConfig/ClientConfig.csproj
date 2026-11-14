@@ -9,18 +9,20 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="ClientConfig.cs" />
-    <Compile Include="Singleplayer.cs" />
+    <Compile Include="CachedGhost.cs" /><Compile Include="Singleplayer.cs" />
     <Compile Include="ProgressionDomain.cs" />
     <Compile Include="ProgressionStore.cs" />
     <Compile Include="ProgressionCheckpoints.cs" />
     <Compile Include="ProgressionNative.cs" />
     <Compile Include="ProgressionView.cs" />
-    <Compile Include="ProgressionRewards.cs" />
+    <Compile Include="ProgressionRank.cs" />
+    <Compile Include="ProgressionGhost.cs" />
+    <Compile Include="ProgressionBalance.cs" /><Compile Include="ProgressionRewards.cs" />
     <Compile Include="ProgressionEconomy.cs" />
     <Compile Include="ProgressionPurchaseTest.cs" />
     <Compile Include="NativeReelBridge.cs" />
     <Reference Include="System.Web.Extensions" />
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net40" Version="1.0.3" PrivateAssets="all" />
   </ItemGroup>
-  <ItemGroup><Compile Include="../Shared/Logging.cs" Link="Logging.cs" /></ItemGroup>
+  <ItemGroup><Compile Include="../Shared/Logging.cs" Link="Logging.cs" /><Compile Include="../Shared/ConfigFiles.cs" Link="ConfigFiles.cs" /></ItemGroup>
 </Project>

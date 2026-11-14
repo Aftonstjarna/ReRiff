@@ -54,7 +54,7 @@ internal static class LinuxClientHost {
         public readonly Dictionary<string,string> Values=new();public readonly HashSet<string> Flags=new();
         public Options(string[] args) {
             var switches=new HashSet<string>{"--dry-run","--restore","--cjk","--no-cjk","--latin","--no-latin","--logging","--no-logging","--no-music-link","--prepare","--cli","--help"};
-            var values=new HashSet<string>{"--bundle","--game-dir","--backup-dir","--music-dir","--root","--result","--asset","--sha256","--work","--archive","--channel","--platform"};
+            var values=new HashSet<string>{"--bundle","--game-dir","--backup-dir","--music-dir","--root","--log","--result","--asset","--sha256","--work","--archive","--channel","--platform"};
             for(int i=0;i<args.Length;i++) {string key=args[i];if(switches.Contains(key)){if(!Flags.Add(key))throw new ArgumentException("Duplicate option: "+key);}else if(values.Contains(key)&&i+1<args.Length){if(!Values.TryAdd(key,args[++i]))throw new ArgumentException("Duplicate option: "+key);}else throw new ArgumentException("Unknown or incomplete option: "+key);}
         }
         public string Get(string key,string fallback="")=>Values.GetValueOrDefault(key,fallback);
@@ -69,7 +69,8 @@ internal static class LinuxClientHost {
             if(args.Length==0)throw new ArgumentException("Use install, update, server-control, stop-servers, print-game-dir or print-music-dir.");
             string command=args[0];int offset=command=="server-control"?2:1;var options=new Options(args.Skip(offset).ToArray());
             switch(command) {
-                case "logging-status":return ReRiff.Logging.Enabled(options.Need("--root"))?0:1;
+                case "config-migrate": {string game=options.Need("--root");if(!File.Exists(Path.Combine(game,"Game.exe")))throw new IOException("Game.exe not found.");ReRiff.ConfigFiles.Migrate(game);return 0;}
+                case "logging-status":return ReRiff.Logging.Enabled(options.Need("--root"),options.Get("--log",""))?0:1;
                 case "print-game-dir":Console.WriteLine(AutoGame());break;
                 case "print-music-dir":Console.WriteLine(MusicDir());break;
                 case "install":
@@ -180,7 +181,7 @@ internal static class LinuxClientHost {
                 state=new JsonObject{["version"]=Text(manifest,"version"),["backup_dir"]=backups,["patched"]=patched,["music_link"]=music,["music_dir"]=musicPath};
                 plan["localserver/install-state.json"]=Encoding.UTF8.GetBytes(state.ToJsonString()+"\n");
                 bool logging=options.Has("--logging")||(!options.Has("--no-logging")&&(ReRiff.Logging.Setting(game)??development));
-                plan["server.ini"]=ReRiff.Logging.Config(plan.TryGetValue("server.ini",out var currentIni)?currentIni:File.Exists(game+"/server.ini")?File.ReadAllBytes(game+"/server.ini"):Array.Empty<byte>(),logging);
+                plan["client.ini"]=ReRiff.Logging.Config(plan.TryGetValue("client.ini",out var currentIni)?currentIni:Encoding.UTF8.GetBytes(ReRiff.ConfigFiles.Document(game,"client.ini")),logging);
                 if(logging&&plan.TryGetValue("localserver/diagnostics/Collect-ReRiffStartup.ps1",out var collectorBytes))plan["logs/Collect-ReRiffStartup.ps1"]=collectorBytes;
                 if(!logging)foreach(string name in plan.Keys.Where(n=>n.StartsWith("logs/",StringComparison.Ordinal)).ToArray())plan.Remove(name);
                 if(options.Get("--work")!=""&&File.Exists(Path.Combine(options.Get("--work"),"resume-command.txt")))plan["localserver/update-notification.ini"]=Encoding.UTF8.GetBytes("[update]\nversion="+Text(manifest,"version")+"\n");
@@ -252,7 +253,7 @@ internal static class LinuxClientHost {
     static void Update(Options options) {
         string work=options.Need("--work"),game=options.Get("--game-dir");
         if(game==""&&File.Exists(work+"/prepared.json"))game=Text(ReadJson(work+"/prepared.json"),"game");
-        bool logging=game!=""&&ReRiff.Logging.Enabled(game);
+        bool logging=game!=""&&ReRiff.Logging.Enabled(game,"update.log");
         string log=game!=""?Path.Combine(game,"logs/update.log"):work+"/update.log";if(logging)Directory.CreateDirectory(Path.GetDirectoryName(log)!);
         var stdout=Console.Out;var stderr=Console.Error;
         using var writer=logging?new StreamWriter(log,append:true){AutoFlush=true}:new StreamWriter(Stream.Null){AutoFlush=true};Console.SetOut(writer);Console.SetError(writer);
@@ -303,7 +304,7 @@ internal static class LinuxClientHost {
     [DllImport("libc",SetLastError=true)]static extern int kill(int pid,int signal);
     static void StopServers(string root) {
         root=Path.GetFullPath(root);
-        if(File.Exists(root+"/ReRiff-Server-x86_64.AppImage")&&File.Exists(root+"/native/config.json")) {
+        if(File.Exists(root+"/ReRiff-Server-x86_64.AppImage")&&(File.Exists(root+"/server.ini")||File.Exists(root+"/native/config.json"))) {
             string result=Path.GetTempFileName();try{if(Server("stop",new Options(new[]{"--root",root,"--result",result}))!=0)throw new IOException("Owned server shutdown failed.");}finally{File.Delete(result);}
         }
         // Old trace-server processes are matched by both script and server root.

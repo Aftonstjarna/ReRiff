@@ -12,10 +12,11 @@ static void __thiscall position_mock(void *item,const float *point){((float *)it
 static void __thiscall enable_mock(void *item,BYTE enabled){(void)item;if(enabled)abort();}
 static unsigned __thiscall font_mock(void *number){if(number!=badge_number)abort();return 9;}
 static void __thiscall raw_mock(void *item,const WCHAR *text){
-    if(item==badge_number){if(wcscmp(text,L"33"))abort();((float *)item)[12]=40*text_height/30;}
+    if(item==badge_number){if(!*text||wcsspn(text,L"0123456789")!=wcslen(text))abort();((float *)item)[12]=20*wcslen(text)*text_height/30;}
     else if(item==badge_suffix){if(*text&&wcscmp(text,L"x2"))abort();((float *)item)[12]=*text?20*text_height/30:0;}
     else abort();((float *)item)[13]=text_height;
-    *(WORD *)badge_glyph='3';*(float *)(badge_glyph+0x18)=(20*text_height/30)/1000;*(float *)(badge_glyph+0x20)=5*text_height/30;
+    if(item==badge_number)*(WORD *)badge_glyph=(WORD)text[0];
+    *(float *)(badge_glyph+0x18)=(20*text_height/30)/1000;*(float *)(badge_glyph+0x20)=5*text_height/30;
 }
 static void *__thiscall sprite_mock(void *ui,int id,const float *point,int origin,int screen){
     if(ui!=badge_ui||id!=89||origin!=4||screen!=-1||point[0]||point[1])abort();stars++;
@@ -56,6 +57,15 @@ int main(void){
         CHECK(stars==1&&text_items==1);
         CHECK(fabsf(((float *)badge_star)[9]-((float *)badge_number)[9])<.01f);
         CHECK(fabsf(((float *)badge_star)[43]*20-text_height*20/30)<.01f);
+    }
+    const WCHAR *extended[]={L"41 *",L"100 *x2",L"1000 *x2",L"2147483647 *x2"};
+    for(unsigned i=0;i<5;i++)for(unsigned j=0;j<4;j++){
+        progression_badge_restore(badge_menu);text_height=heights[i];
+        CHECK(progression_badge_render(badge_parent,badge_number,extended[j]));
+        float star_left=((float *)badge_star)[8]-((float *)badge_star)[43]*20*.5f;
+        float text_right=((float *)badge_number)[8]+((float *)badge_number)[12]*.5f;
+        CHECK(star_left>text_right&&stars==1&&text_items==1);
+        CHECK(fabsf(((float *)badge_star)[9]-((float *)badge_number)[9])<.01f);
     }
     progression_cleanup_original=cleanup_mock;progression_profile_cleanup(badge_menu,NULL,NULL);CHECK(cleanup_calls==1&&!progression_badge_number);
     puts("PASS: native difficulty sprite89, star-only first prestige, x2 suffix, native digit ink height/baseline and sibling-panel transform, centred layout, reuse, hiding and original cleanup forwarding");return 0;

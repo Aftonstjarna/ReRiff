@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk">
+<PropertyGroup><OutputType>Exe</OutputType><AssemblyName>test_config_split_managed</AssemblyName><TargetFramework>net45</TargetFramework><EnableDefaultCompileItems>false</EnableDefaultCompileItems></PropertyGroup>
+<ItemGroup><Compile Include="ConfigSplitSmoke.cs"/><Compile Include="../Shared/ConfigFiles.cs"/><Compile Include="../ClientConfig/ProgressionBalance.cs"/><Compile Include="../ClientConfig/ProgressionRewards.cs"/><PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net45" Version="1.0.3" PrivateAssets="all"/></ItemGroup>
+</Project>

@@ -19,8 +19,11 @@ namespace ReRiff {
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         private delegate int GenerationQuote(int amount);
         private static readonly GenerationQuote GenerationCallback=QuoteGeneration;
+        private static readonly GenerationQuote GhostQuoteCallback=QuoteGhostBonus;
         [DllImport("ReRiff.Notify.dll",CallingConvention=CallingConvention.Cdecl,ExactSpelling=true)]
         private static extern int ReRiffConfigureProgressionRewards(IntPtr quote);
+        [DllImport("ReRiff.Notify.dll",CallingConvention=CallingConvention.Cdecl,ExactSpelling=true)]
+        private static extern int ReRiffConfigureProgressionGhostQuote(IntPtr quote);
         [DllImport("ReRiff.Notify.dll",CallingConvention=CallingConvention.Cdecl,ExactSpelling=true)]
         private static extern IntPtr ReRiffGetProgressionRaceContext();
         private static int QuoteGeneration(int amount){
@@ -28,8 +31,18 @@ namespace ReRiff {
                 if(amount<0||!ProgressionCheckpoints.Ready||ProgressionNative.Bound==null)return amount;
                 var progress=ProgressionCheckpoints.DisplayProgress(ProgressionNative.Bound.CycleXp());
                 if(progress==null)return amount;
-                int quote=ProgressionRewards.Coins(amount,ProgressionNative.Bound.CoinBalance(),progress.PrestigeCount,1m,1m,null);
+                int quote=ProgressionRewards.Coins(amount,ProgressionNative.Bound.CoinBalance(),progress.PrestigeCount,ProgressionBalance.Current.CreatorRate,ProgressionBalance.Current.PrestigeGrowth,ProgressionBalance.Current.MultiplierCap);
                 NativeReelBridge.Log("Prestige generation quote: original="+amount+" quoted="+quote+" prestige="+progress.PrestigeCount);
+                return quote;
+            }catch(Exception error){Error(error);return amount;}
+        }
+        private static int QuoteGhostBonus(int amount){
+            try {
+                if(amount<0||!ProgressionCheckpoints.Ready||ProgressionNative.Bound==null)return amount;
+                var progress=ProgressionCheckpoints.DisplayProgress(ProgressionNative.Bound.CycleXp());
+                if(progress==null)return amount;
+                int quote=ProgressionRewards.GhostBonus(amount,progress.PrestigeCount);
+                NativeReelBridge.Log("Prestige ghost bonus display: original="+amount+" quoted="+quote+" prestige="+progress.PrestigeCount);
                 return quote;
             }catch(Exception error){Error(error);return amount;}
         }
@@ -115,7 +128,7 @@ namespace ReRiff {
                 }
             }catch(Exception error){Error(error);}return raw;
         }
-        internal static int CoinPackPrice(int original,int iapIndex,int mainLevel){return original<0||iapIndex>=0?original:ProgressionRewards.PaintPrice(original,mainLevel,1m);}
+        internal static int CoinPackPrice(int original,int iapIndex,int mainLevel){return original<0||iapIndex>=0?original:ProgressionRewards.PaintPrice(original,mainLevel,ProgressionBalance.Current.PaintScale);}
         internal static int TestCoinPackPrice(IntPtr paint,int car,int pack,int mainLevel){
             if(originalPrice==null||originalIap==null||originalIap(paint,car,pack)>=0)throw new InvalidOperationException("Purchase test requires a native coin pack");
             int raw=originalPrice(paint,car,pack);if(raw<=0)throw new InvalidOperationException("Purchase test requires a paid coin pack");
@@ -183,6 +196,13 @@ namespace ReRiff {
             var iap=game.ResolveMethod(0x0600138e) as MethodInfo;
             if(price==null||price.Name!="gaVehiclePaintManager.getPackPrice"||coins==null||coins.Name!="gaSaveGameChunkProgression.incTokens"||iap==null||iap.Name!="gaVehiclePaintManager.getPackIAPIndex")throw new IOException("Original economy methods differ");
             BindAndValidate(price,coins,iap);
+            var ghostBase=game.ResolveField(0x04000747);
+            var versus=game.ResolveMethod(0x06000769) as MethodInfo;
+            byte[] versusIl=versus==null?null:versus.GetMethodBody().GetILAsByteArray();
+            if(ghostBase.Name!="?s_tokensBeatOpponentGhost@gaResultsTokens@@2HB"||!ghostBase.IsStatic||ghostBase.IsLiteral||ghostBase.IsInitOnly
+                ||ghostBase.FieldType!=typeof(int)||versus==null||versus.Name!="gaResultsVersus.initScreens"||versusIl==null||versusIl.Length<0x530
+                ||!versusIl.Skip(0x52b).Take(5).SequenceEqual(new byte[]{0x7e,0x47,0x07,0,4}))throw new IOException("Original versus reward field/formatter differs");
+            if(ReRiffConfigureProgressionGhostQuote(Marshal.GetFunctionPointerForDelegate(GhostQuoteCallback))!=1)throw new IOException("Native ghost display registration refused");
             if(ReRiffConfigureProgressionRewards(Marshal.GetFunctionPointerForDelegate(GenerationCallback))!=1)throw new IOException("Native reward context registration refused");
         }
     }

@@ -52,6 +52,27 @@ typedef struct Setup {
     pid_t child;
     int finished,exit_code,temporary_log;
 } Setup;
+static int installer_log_selected(const char *game) {
+    char path[32768],line[1024];snprintf(path,sizeof(path),"%s/client.ini",game);if(access(path,F_OK))snprintf(path,sizeof(path),"%s/server.ini",game);
+    char *contents=NULL;gsize length=0;
+    if(!ui.g_file_get_contents(path,&contents,&length,NULL))return 1;
+    if(length>=2&&((unsigned char)contents[0]==255||(unsigned char)contents[0]==254)) {
+        gsize written=0;char *utf8=ui.g_convert(contents,(gssize)length,"UTF-8","UTF-16",NULL,&written,NULL);ui.g_free(contents);contents=utf8;length=written;
+    }
+    if(!contents)return 1;
+    unsigned skip=length>=3&&!memcmp(contents,"\xef\xbb\xbf",3)?3:0;
+    FILE *file=fmemopen(contents+skip,length-skip,"r");if(!file){ui.g_free(contents);return 1;}int section=0,enabled=1;
+    while(fgets(line,sizeof(line),file)) {
+        char *p=line;while(*p==' '||*p=='\t')p++;
+        if(*p=='[')section=!strncasecmp(p,"[diagnostics]",13);
+        if(section&&!strncasecmp(p,"log_installer",13)) {
+            p+=13;while(*p==' '||*p=='\t')p++;if(*p++!='=')continue;
+            while(*p==' '||*p=='\t')p++;enabled=!strncasecmp(p,"true",4)||!strncasecmp(p,"yes",3)||*p=='1';
+        }
+    }
+    fclose(file);ui.g_free(contents);return enabled;
+}
+
 static void set_status(Setup *s,const char *text){ui.gtk_label_set_text((GtkLabel *)s->status,text);}
 static void refresh_log(Setup *s) {
     if(!s->log_path)return;
@@ -101,12 +122,13 @@ static void install_clicked(GtkWidget *widget,gpointer data) {
     }
     ui.g_free(exe);
     gboolean logging=ui.gtk_toggle_button_get_active((GtkToggleButton *)s->logging_check);
-    char *logs=logging?ui.g_build_filename(game,"logs",NULL):ui.g_build_filename("/tmp",NULL);
-    if(logging&&ui.g_mkdir_with_parents(logs,0700)){
+    gboolean save_log=logging&&installer_log_selected(game);
+    char *logs=save_log?ui.g_build_filename(game,"logs",NULL):ui.g_build_filename("/tmp",NULL);
+    if(save_log&&ui.g_mkdir_with_parents(logs,0700)){
         set_status(s,"Could not create the installer log folder. Check the game-folder permissions.");
         ui.g_free(logs);ui.g_free(game);return;
     }
-    if(s->temporary_log&&s->log_path)unlink(s->log_path);s->temporary_log=!logging;
+    if(s->temporary_log&&s->log_path)unlink(s->log_path);s->temporary_log=!save_log;
     ui.g_free(s->log_path);s->log_path=ui.g_build_filename(logs,"installer-XXXXXX.log",NULL);ui.g_free(logs);
     int fd=mkstemps(s->log_path,4);
     if(fd<0){set_status(s,"Could not create the installer log. No game files were changed.");ui.g_free(game);return;}
@@ -129,7 +151,7 @@ static void install_clicked(GtkWidget *widget,gpointer data) {
         posix_spawn_file_actions_destroy(&actions);
     }
     close(fd);ui.g_free(runtime);ui.g_free(game);
-    ui.gtk_label_set_text((GtkLabel *)s->log_label,logging?s->log_path:"Setup details are temporary while logging is disabled.");
+    ui.gtk_label_set_text((GtkLabel *)s->log_label,save_log?s->log_path:"Setup details are temporary while logging is disabled.");
     if(error){s->child=0;set_status(s,"Could not start the bundled Linux runtime. No game files were changed.");return;}
     s->finished=0;s->exit_code=0;
     ui.gtk_widget_set_sensitive(s->cjk_check,FALSE);ui.gtk_widget_set_sensitive(s->latin_check,FALSE);ui.gtk_widget_set_sensitive(s->logging_check,FALSE);
@@ -157,7 +179,8 @@ static void music_toggled(GtkWidget *widget,gpointer data){
 static void language_folder_changed(GtkWidget *widget,gpointer data){
     (void)widget;Setup *s=data;if(s->child)return;
     char *game=ui.gtk_file_chooser_get_filename((GtkFileChooser *)s->folder);if(!game)return;
-    char *path=ui.g_build_filename(game,"server.ini",NULL),*contents=NULL;gsize length=0;GError *error=NULL;
+    char *path=ui.g_build_filename(game,"client.ini",NULL),*contents=NULL;
+    if(access(path,F_OK)){ui.g_free(path);path=ui.g_build_filename(game,"server.ini",NULL);}gsize length=0;GError *error=NULL;
     FILE *file=NULL;
     if(ui.g_file_get_contents(path,&contents,&length,&error)) {
         if(length>=2&&((unsigned char)contents[0]==255||(unsigned char)contents[0]==254)) {

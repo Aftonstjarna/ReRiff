@@ -19,7 +19,7 @@ namespace ReRiff {
             if(metadataEnabled>=0)return metadataEnabled==1;
             bool diagnostics=false,enabled=false;
             try{
-                foreach(string raw in File.ReadAllLines(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"server.ini"))){
+                foreach(string raw in ConfigFiles.Document(AppDomain.CurrentDomain.BaseDirectory,"client.ini").Replace("\r\n","\n").Split('\n')){
                     string line=raw.Trim();
                     if(line.StartsWith("[",StringComparison.Ordinal))diagnostics=string.Equals(line,"[diagnostics]",StringComparison.OrdinalIgnoreCase);
                     int equals=line.IndexOf('=');
@@ -39,7 +39,7 @@ namespace ReRiff {
             return output.ToString();
         }
         private static void MetadataWrite(string line){
-            if(!Logging.Enabled(AppDomain.CurrentDomain.BaseDirectory))return;
+            if(!Logging.Enabled(AppDomain.CurrentDomain.BaseDirectory,"ReRiff-metadata.log"))return;
             lock(metadataLock){
                 if(metadataRecords>=4096||metadataSeen.Contains(line))return;
                 string folder=Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"logs");Directory.CreateDirectory(folder);

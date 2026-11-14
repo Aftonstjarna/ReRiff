@@ -11,7 +11,7 @@ using dnlib.DotNet;
 using dnlib.DotNet.Emit;
 
 class ExtractProgressionFixture {
-    static readonly uint[] Tokens={0x06001254,0x06000e82,0x0600124c,0x0600124d,0x0600124e,0x0600124f,0x0600125b,0x0600125c,0x0600125d,0x0600125e,0x0600138b,0x06001036,0x06001263,0x0600138d,0x0600138e,0x06001259};
+    static readonly uint[] Tokens={0x06001254,0x06000e82,0x0600124c,0x0600124d,0x0600124e,0x0600124f,0x0600125b,0x0600125c,0x0600125d,0x0600125e,0x0600138b,0x06001036,0x06001263,0x0600138d,0x0600138e,0x06001259,0x060005d4,0x060007ac};
     static TypeSig Normalize(ModuleDef target,TypeSig type){
         type=type.RemovePinnedAndModifiers();
         if(type.FullName=="gaAchievements/AchievementTypes"){
@@ -67,9 +67,14 @@ class ExtractProgressionFixture {
                     else if(operand is Local)operand=body.Variables[((Local)operand).Index];
                     else if(operand is Parameter)operand=next.Parameters[((Parameter)operand).Index];
                     else if(operand is IMethod){
-                        var called=((IMethod)operand).ResolveMethodDef();
-                        if(called==null||!methods.ContainsKey(called.MDToken.Raw))throw new IOException("External call forbidden in fixture: "+operand);
-                        operand=methods[called.MDToken.Raw];
+                        var reference=(IMethod)operand;
+                        if(token==0x060007ac&&instruction.Offset==7&&reference.FullName=="System.Double System.Math::Floor(System.Double)")
+                            operand=target.Import(typeof(Math).GetMethod("Floor",new[]{typeof(double)}));
+                        else {
+                            var called=reference.ResolveMethodDef();
+                            if(called==null||!methods.ContainsKey(called.MDToken.Raw))throw new IOException("External call forbidden in fixture: "+operand);
+                            operand=methods[called.MDToken.Raw];
+                        }
                     }else if(operand is IField){
                         var field=((IField)operand).ResolveFieldDef();
                         if(field==null||field.MDToken.Raw!=0x0400126f)throw new IOException("External field forbidden in fixture");

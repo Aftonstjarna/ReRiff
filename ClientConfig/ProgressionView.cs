@@ -23,7 +23,7 @@ namespace ReRiff {
         [DllImport("ReRiff.Notify.dll",CallingConvention=CallingConvention.Cdecl,ExactSpelling=true)]
         private static extern int ReRiffConfigureProgressionView([In] IntPtr[] callbacks,int count);
         internal static string Identity(int level,uint prestige){
-            if(level<0||level>40)throw new ArgumentOutOfRangeException("level");
+            if(level<0)throw new ArgumentOutOfRangeException("level");
             // The native view replaces this layout marker with difficulty sprite 89;
             // xN is omitted for the first prestige. No font pack is required.
             return level.ToString(CultureInfo.InvariantCulture)+(prestige==0?"":" *"+(prestige==1?"":"x"+prestige.ToString(CultureInfo.InvariantCulture)));
@@ -32,33 +32,35 @@ namespace ReRiff {
             if(progress==null||nativeLevel==null||driver==null)throw new InvalidOperationException("Permanent level is not ready");
             return (int)PermanentLevel(driver(),progress.MainXp,nativeLevel);
         }
-        internal static float PermanentLevel(IntPtr currentDriver,ulong xp,ProfileLevel calculate){
+        internal static decimal PermanentLevel(IntPtr currentDriver,ulong xp,ProfileLevel calculate){
             byte[] vector=ProgressionNative.Read(currentDriver,12);
             uint first=BitConverter.ToUInt32(vector,0),last=BitConverter.ToUInt32(vector,4),end=BitConverter.ToUInt32(vector,8);
             if(first==0||last<first||end<last||(last-first)%4!=0||(last-first)/4<2||(last-first)/4>128)throw new IOException("Invalid native level table");
-            int count=(int)((last-first)/4);byte[] thresholds=ProgressionNative.Read(new IntPtr(unchecked((int)first)),count*4);
+            int count=(int)((last-first)/4);if(count!=41)throw new IOException("Original main level table length differs");
+            byte[] thresholds=ProgressionNative.Read(new IntPtr(unchecked((int)first)),count*4);
             int previous=-1;
             for(int i=0;i<count;i++){
                 int value=BitConverter.ToInt32(thresholds,i*4);
                 if(value<0||value<=previous)throw new IOException("Native level thresholds are not increasing");previous=value;
             }
+            if(xp>=(ulong)previous)return ProgressionBalance.Current.ExtendedMainLevel(xp,count-1,previous,previous-BitConverter.ToInt32(thresholds,(count-2)*4));
             IntPtr explicitXp=Marshal.AllocHGlobal(4);
             try {
                 Marshal.WriteInt32(explicitXp,(int)Math.Min(xp,(ulong)previous));
                 float result=calculate(currentDriver,explicitXp);
                 if(Single.IsNaN(result)||Single.IsInfinity(result)||result<0||result>40)throw new IOException("Invalid original profile level");
-                return result;
+                return (decimal)(double)result;
             }finally{Marshal.FreeHGlobal(explicitXp);}
         }
         private static int Render(IntPtr text,int capacity,IntPtr factor,int cycleXp){
             try {
                 var progress=ProgressionCheckpoints.DisplayProgress(cycleXp);
                 if(progress==null||capacity<2||text==IntPtr.Zero||factor==IntPtr.Zero||nativeLevel==null||driver==null)return 0;
-                float level=PermanentLevel(driver(),progress.MainXp,nativeLevel);
+                decimal level=PermanentLevel(driver(),progress.MainXp,nativeLevel);
                 string identity=Identity((int)level,progress.PrestigeCount);
                 if(identity.Length>=capacity)return 0;
                 Marshal.Copy((identity+"\0").ToCharArray(),0,text,identity.Length+1);
-                Marshal.Copy(new[]{Math.Min(1f,level/40f)},0,factor,1);
+                Marshal.Copy(new[]{ProgressionBalance.Current.MainLevelFill(level)},0,factor,1);
                 if(lastIdentity!=identity){lastIdentity=identity;NativeReelBridge.Log("Permanent-level Profile display: main_level="+(int)level+" prestige="+progress.PrestigeCount+" native_cycle_xp="+cycleXp+" permanent_xp="+progress.MainXp);}
                 return 1;
             }catch(Exception error){if(!errorLogged){errorLogged=true;NativeReelBridge.Log("Permanent-level display unavailable: "+error);}return 0;}

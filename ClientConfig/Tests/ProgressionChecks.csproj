@@ -11,7 +11,7 @@
     <Compile Include="$(SmokeTest)Smoke.cs" />
     <Compile Include="../ProgressionStore.cs" Condition="'$(SmokeTest)' != 'ProgressionRewards'" />
     <Compile Include="../ProgressionCheckpoints.cs" Condition="'$(SmokeTest)' == 'ProgressionCheckpoints' Or '$(SmokeTest)' == 'PrestigeTransaction'" />
-    <Compile Include="../ProgressionRewards.cs" Condition="'$(SmokeTest)' == 'ProgressionRewards'" />
+    <Compile Include="../ProgressionBalance.cs" /><Compile Include="../../Shared/ConfigFiles.cs" /><Compile Include="../ProgressionRewards.cs" Condition="'$(SmokeTest)' == 'ProgressionRewards'" />
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net45" Version="1.0.3" PrivateAssets="all" />
   </ItemGroup>
   <Target Name="ValidateSmokeTest" BeforeTargets="PrepareForBuild">

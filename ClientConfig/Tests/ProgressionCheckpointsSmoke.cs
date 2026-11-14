@@ -28,7 +28,29 @@ class ProgressionCheckpointsSmoke {
             ProgressionCheckpoints.Process(path,1,1300);
             bool refused=false;try{ProgressionCheckpoints.Process(path,2,0);}catch(IOException){refused=true;}
             Check(refused&&store.Read().Progress.PrestigeCount==0,"No automatic prestige/reset from changed XP");
-            Console.WriteLine("PASS: native load/save checkpoint events, permanent XP observation, restart reuse, interrupted working-copy recovery and no automatic reset");
+            // The real original level table ends at 1 billion XP (level 40).
+            // A prestige cycle must keep contributing to the permanent total
+            // across that boundary, including totals beyond signed native XP.
+            string cappedPath=Path.Combine(root,"reriff-sp-capped.bin");
+            var cappedStore=new ProgressionStore(Path.Combine(root,Path.Combine("ReRiff-progression","reriff-sp-capped")),"singleplayer|reriff-sp-capped");
+            string revision=store.Read().Progress.BalanceRevision;
+            var capped=cappedStore.Initialize(initial,1000000000,1000000000,revision);
+            capped=cappedStore.Commit(race,new ProgressionStore.State(capped.Progress.Generation+1,1000000000,0,1,revision),capped.Progress.Generation);
+            File.WriteAllBytes(cappedPath,race);
+            ProgressionCheckpoints.Process(cappedPath,0,0);ProgressionCheckpoints.Process(cappedPath,1,0);
+            var preview=ProgressionCheckpoints.DisplayProgress(250000);
+            Check(preview.MainXp==1000250000&&preview.CycleXp==250000&&preview.PrestigeCount==1,"Prestige XP previews above the main level cap");
+            Check(cappedStore.Read().Progress.MainXp==1000000000,"Display preview does not credit XP twice");
+            File.WriteAllBytes(cappedPath,interrupted);ProgressionCheckpoints.Process(cappedPath,2,250000);
+            Check(cappedStore.Read().Progress.MainXp==1000250000,"Prestige XP commits above the main level cap");
+            ProgressionCheckpoints.Process(cappedPath,2,2000000000);
+            Check(cappedStore.Read().Progress.MainXp==3000000000UL,"Permanent XP exceeds signed native XP without losing prestige gains");
+            ulong generation=cappedStore.Read().Progress.Generation;
+            ProgressionCheckpoints.Process(cappedPath,0,0);ProgressionCheckpoints.Process(cappedPath,1,2000000000);
+            ProgressionCheckpoints.Process(cappedPath,2,2000000000);
+            capped=cappedStore.Read();
+            Check(capped.Progress.Generation==generation&&capped.Progress.MainXp==3000000000UL&&capped.Progress.CycleXp==2000000000&&capped.Progress.PrestigeCount==1,"Capped main-level XP survives restart and repeated save exactly once");
+            Console.WriteLine("PASS: native checkpoints, permanent prestige XP beyond the main level cap and signed native range, restart reuse, interrupted recovery and no automatic reset");
         }finally{Directory.Delete(root,true);}
     }
 }

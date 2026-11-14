@@ -46,8 +46,8 @@ namespace ReRiff {
                     ||checkpoint.Progress.CycleXp!=0)throw new IOException("Native prestige save did not commit; restart to recover");
             }finally{pendingPrestige=null;}
         }
-        private static readonly string NativeRevision=Revision();
-        private static string Revision(){using(var sha=SHA256.Create())return BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes("ReRiff default singleplayer coin-pack discounts v1; scoped race and creator rewards v1"))).Replace("-","").ToLowerInvariant();}
+        private static string NativeRevision { get { return Revision(); } }
+        private static string Revision(){using(var sha=SHA256.Create())return BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes("ReRiff default singleplayer coin-pack discounts v1; scoped race and creator rewards v1; post-race permanent Rank recheck v1; singleplayer normal-ghost Friend or Foe v1|"+ProgressionBalance.Current.Revision))).Replace("-","").ToLowerInvariant();}
         private static void Atomic(string path,byte[] bytes){
             string temporary=path+"."+Guid.NewGuid().ToString("N")+".tmp";
             try {

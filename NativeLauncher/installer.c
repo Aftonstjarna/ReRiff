@@ -47,10 +47,10 @@ static int install(LPWSTR arguments) {
     else while(*arguments&&*arguments!=L' '&&*arguments!=L'\t')arguments++;
     _snwprintf(command,CAP,L"\"%ls\\localserver\\windows-python\\python.exe\" -X utf8 -c \"%ls\" \"%ls\" \"%ls\\installer.py\" --platform windows %ls",game,bootstrap,root,root,arguments);
     command[CAP-1]=0;
-    _snwprintf(log,CAP,L"%ls\\logs",*game?game:root);log[CAP-1]=0;if(logging)CreateDirectoryW(log,NULL);
+    _snwprintf(log,CAP,L"%ls\\logs",*game?game:root);log[CAP-1]=0;BOOL save_log=logging&&rr_log_selected(game,L"installer");if(save_log)CreateDirectoryW(log,NULL);
     _snwprintf(log,CAP,L"%ls\\logs\\installer.log",*game?game:root);log[CAP-1]=0;
     SECURITY_ATTRIBUTES security={sizeof(security),NULL,TRUE};
-    HANDLE output=CreateFileW(logging?log:L"NUL",GENERIC_WRITE,FILE_SHARE_READ,&security,CREATE_ALWAYS,FILE_ATTRIBUTE_NORMAL,NULL);
+    HANDLE output=CreateFileW(save_log?log:L"NUL",GENERIC_WRITE,FILE_SHARE_READ,&security,CREATE_ALWAYS,FILE_ATTRIBUTE_NORMAL,NULL);
     STARTUPINFOW start;PROCESS_INFORMATION process;ZeroMemory(&start,sizeof(start));ZeroMemory(&process,sizeof(process));start.cb=sizeof(start);
     start.dwFlags=STARTF_USESHOWWINDOW|STARTF_USESTDHANDLES;start.wShowWindow=SW_HIDE;
     start.hStdOutput=output;start.hStdError=output;start.hStdInput=GetStdHandle(STD_INPUT_HANDLE);

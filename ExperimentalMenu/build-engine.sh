@@ -81,3 +81,11 @@ mkdir -p build/experimental-engine-menu
 "$zig_tool" cc -target x86-windows-gnu -O2 -Wall -Wextra -Werror \
   ExperimentalMenu/test_progression_badge.c -o build/experimental-engine-menu/test-progression-badge.exe \
   -Wl,--image-base,0x10000000 -luser32 -lgdi32 -ladvapi32 -static
+
+"$zig_tool" cc -target x86-windows-gnu -O2 -Wall -Wextra -Werror \
+  ExperimentalMenu/test_progression_rank.c -o build/experimental-engine-menu/test-progression-rank.exe \
+  -Wl,--image-base,0x10000000 -luser32 -lgdi32 -ladvapi32 -static
+
+"$zig_tool" cc -target x86-windows-gnu -O2 -Wall -Wextra -Werror \
+  ExperimentalMenu/test_progression_ghost.c -o build/experimental-engine-menu/test-progression-ghost.exe \
+  -Wl,--image-base,0x10000000 -luser32 -lgdi32 -ladvapi32 -static

@@ -33,7 +33,7 @@ with tempfile.TemporaryDirectory(prefix='full-cjk-test-',dir=ROOT/'build') as te
   assert {n:hash_file(game/n) for n in before}==manifest['required_existing']
   state=json.loads((game/'localserver/languages/cjk.json').read_text())
   assert state['version']==manifest['version']
-  assert 'cjk_enabled = true' in (game/'server.ini').read_text()
+  assert 'cjk_enabled = true' in (game/'client.ini').read_text()
   assert len(state['archives'])==1 and 'combined' in state['archives']
   if prototype:
    assert state['archives']=={'combined':'vfs2'}

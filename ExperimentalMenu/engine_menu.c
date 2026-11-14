@@ -82,7 +82,7 @@ static DWORD restart_started;
 
 #include "../NativeLauncher/logging.h"
 static void log_line(const char *line) {
-    if(!rr_logging_ini(config_path))return;
+    if(!rr_log_ini(config_path,L"engine_menu"))return;
     HANDLE file=CreateFileW(log_path,FILE_APPEND_DATA,FILE_SHARE_READ,NULL,OPEN_ALWAYS,FILE_ATTRIBUTE_NORMAL,NULL);
     if (file!=INVALID_HANDLE_VALUE) {
         DWORD written; WriteFile(file,line,(DWORD)strlen(line),&written,NULL);
@@ -642,6 +642,8 @@ static BOOL cjk_component_enabled(void){return cjk_pack_enabled()||latin_pack_en
 #include "prestige_prompt.h"
 #include "progression_view.h"
 #include "progression_economy.h"
+#include "progression_rank.h"
+#include "progression_ghost.h"
 #include "progression_rewards.h"
 #include "cjk_fonts.h"
 #include "cjk_direct_visuals.h"
@@ -683,7 +685,7 @@ __declspec(dllexport) BOOL __cdecl ReRiffStartEngineMenu(void) {
     wcscpy(log_path,config_path);wcscat(log_path,L"logs");
     wcscpy(log_path,config_path); wcscat(log_path,L"logs\\ReRiff-engine-menu.log");
     wcscat(config_path,L"server.ini");
-    if(rr_logging_ini(config_path)){WCHAR logs[MAX_PATH];wcscpy(logs,log_path);WCHAR *end=wcsrchr(logs,L'\\');if(end){*end=0;CreateDirectoryW(logs,NULL);}}
+    if(rr_log_ini(config_path,L"engine_menu")){WCHAR logs[MAX_PATH];wcscpy(logs,log_path);WCHAR *end=wcsrchr(logs,L'\\');if(end){*end=0;CreateDirectoryW(logs,NULL);}}
     BYTE *base=(BYTE *)GetModuleHandleW(NULL);
     if(!supported_file(path)){log_line("Refused: unsupported Game.exe file hash or size.");return FALSE;}
     if(!validate_image(base)){
@@ -695,6 +697,7 @@ __declspec(dllexport) BOOL __cdecl ReRiffStartEngineMenu(void) {
         (const WCHAR *)(uintptr_t)&ReRiffStartEngineMenu,&pinned)) return FALSE;
     if(!install_lastfm_utf8(base))log_line("Last.fm UTF-8 correction refused: original CIL bytes differ.");
     if(!install_progression_economy(base))log_line("Economy trace wrappers refused: original CIL differs.");
+    if(!install_progression_rank(base))log_line("Permanent Rank hook refused: original checker differs.");
     start_progression_probe(base);
     if(!install_flac_sample_rate(base))log_line("FLAC sample-rate patch guard refused; original decoder retained.");
     void **table=(void **)(base+0x7a5a7c); DWORD protection;
@@ -723,6 +726,7 @@ __declspec(dllexport) BOOL __cdecl ReRiffStartEngineMenu(void) {
     if(!install_graphics_aa_menu(base))log_line("Native antialiasing control could not be installed.");
     if(!install_main_branding(base))log_line("Main-menu branding could not be installed.");
     if(!install_save_prompt(base))log_line("Native save prompt could not be installed.");
+    if(!install_progression_ghost(base))log_line("Singleplayer ghost achievement hook refused: original versus entry differs.");
     if(!install_progression_rewards(base))log_line("Native reward entry hooks refused; original awards retained.");
     if(!install_progression_view(base))log_line("Permanent-level Profile display hook unavailable.");
     if(!install_ui_scale(base))log_line("Native UI-scale extension could not be installed.");

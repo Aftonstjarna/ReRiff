@@ -64,13 +64,15 @@ def install(server, source):
         os.replace(stage, package);moved = True
         try:
             import json
-            atomic(server.config_path, json.dumps(server.config, indent=2)+'\n')
+            server.write_config()
         except BaseException:
             shutil.rmtree(package)
             if previous.exists():
                 os.replace(previous, package)
             if old_config is not None:
                 server.config_path.write_bytes(old_config)
+            elif server.config_path.exists():
+                server.config_path.unlink()
             raise
         return 'Local server installed. Use '+server.address+' in Secondary server.'
     except BaseException:

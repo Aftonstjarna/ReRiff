@@ -12,22 +12,14 @@ namespace ReRiff {
         private static extern int MessageBoxW(IntPtr window,string message,string title,uint flags);
 
         internal static bool Enabled(string folder) {
-            string path=Path.Combine(folder,"server.ini");
-            if(!File.Exists(path))return false;
-            bool section=false;
-            foreach(string raw in File.ReadAllLines(path)) {
-                string line=raw.Trim();
-                if(line.StartsWith("[")&&line.EndsWith("]")){section=line.Equals("[progression]",StringComparison.OrdinalIgnoreCase);continue;}
-                if(!section||line.StartsWith("#")||line.StartsWith(";"))continue;
-                int equals=line.IndexOf('=');
-                if(equals>0&&line.Substring(0,equals).Trim().Equals("isolate_singleplayer",StringComparison.OrdinalIgnoreCase))
-                    return line.Substring(equals+1).Trim()=="1";
-            }
-            return false;
+            string value;return ConfigFiles.Read(folder,"progression").TryGetValue("isolate_singleplayer",out value)&&value=="1";
         }
 
         internal static void Prepare(string folder,string endpoint) {
-            if(!Singleplayer.IsEndpoint(endpoint))return;
+            bool singleplayer=Singleplayer.IsEndpoint(endpoint);
+            if(singleplayer){try{ProgressionBalance.Load(folder);}catch(Exception error){ProgressionBalance.Current=new ProgressionBalance();NativeReelBridge.Log("Singleplayer balance rejected; default policy retained: "+error.Message);}}
+            ProgressionGhost.SetSingleplayer(singleplayer);
+            if(!singleplayer)return;
             if(!Enabled(folder))return;
             try {
                 if(ReRiffConfigureProgressionCheckpoint(ProgressionCheckpoints.CallbackPointer)!=1)throw new InvalidOperationException("Native checkpoint registration failed.");

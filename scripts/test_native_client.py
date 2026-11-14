@@ -81,6 +81,12 @@ class NativeClientTests(unittest.TestCase):
         self.install('--no-logging','--no-music-link')
         self.assertEqual((self.game/'logs/retained.log').read_bytes(),b'old diagnostic')
         self.call('logging-status','--root',self.game,success=False)
+    def test_individual_logs_follow_master_and_preserve_selections(self):
+        for encoding in ('utf-8','utf-16'):
+            (self.game/'server.ini').write_text('[diagnostics]\nlogging_enabled=true\nlog_localserver=false\nlog_update=true\n',encoding=encoding)
+            self.call('logging-status','--root',self.game,'--log','ReRiff-localserver-helper.log',success=False)
+            self.call('logging-status','--root',self.game,'--log','update.log')
+            self.assertFalse((self.game/'logs').exists())
     def test_stable_retains_only_originals_and_config_snapshots(self):
         self.manifest['channel']='stable'
         (self.game/'extra.ini').write_bytes(b'old config')

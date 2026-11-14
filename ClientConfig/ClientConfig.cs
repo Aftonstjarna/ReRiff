@@ -94,6 +94,7 @@ namespace ReRiff {
         }
 
         public static string Select(string folder) {
+            try{ConfigFiles.Migrate(folder);}catch(IOException){}catch(UnauthorizedAccessException){}
             string config = Path.Combine(folder, "server.ini");
             string external = "", fallback = "";
             int timeout = 5000;

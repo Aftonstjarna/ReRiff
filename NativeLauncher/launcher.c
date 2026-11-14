@@ -25,7 +25,7 @@
 #include "logging.h"
 #define WM_COMPLETE (WM_APP + 1)
 #define WM_GAME_RUNNING (WM_APP + 2)
-enum { EXTERNAL=101, FALLBACK, TIMEOUT, POPUP, SAVE, PLAY, LOCAL, EXTERNAL_ONLY, STOP, UPDATE, EXPERIMENTAL, NETWORKING, SKIP_LAUNCHER, AUTO_UPDATE_SKIP, CJK_INSTALL, LOGGING, LATIN_INSTALL, UPDATE_DETAILS };
+enum { EXTERNAL=101, FALLBACK, TIMEOUT, POPUP, SAVE, PLAY, LOCAL, EXTERNAL_ONLY, STOP, UPDATE, EXPERIMENTAL, NETWORKING, SKIP_LAUNCHER, AUTO_UPDATE_SKIP, CJK_INSTALL, LOGGING, LATIN_INSTALL, UPDATE_DETAILS, LOG_CATEGORY_BASE=500 };
 static WCHAR folder[CAP], ini[CAP], message[1024];
 static WCHAR game_arguments[CAP];
 static BOOL force_show_launcher, suppress_auto_update, automatic_update, force_auto_reinstall;
@@ -41,7 +41,11 @@ static BOOL settings_observed=FALSE;
 static BOOL installed_experimental=FALSE, requested_experimental=FALSE;
 static HFONT font;
 static HWND launcher_tabs,latin_checkbox,language_checkbox,language_description,logging_checkbox;
-static HWND diagnostic_controls[8];static unsigned diagnostic_count;static BOOL creating_diagnostics;
+static const WCHAR *log_categories[]={L"launcher",L"client",L"network",L"engine_menu",L"unicode",L"metadata",L"news",L"languages",L"localserver",L"singleplayer",L"update",L"installer",L"python"};
+static const WCHAR *log_labels[]={L"Launcher",L"Client connections",L"Network errors",L"Game menus and progression",L"Unicode rendering",L"Song metadata",L"News and release notes",L"Font installation",L"Local server and helper",L"Singleplayer storage",L"Updates",L"Installer",L"Python setup"};
+#define LOG_CATEGORY_COUNT (sizeof(log_categories)/sizeof(log_categories[0]))
+static HWND log_checkboxes[LOG_CATEGORY_COUNT];
+static HWND diagnostic_controls[24];static unsigned diagnostic_count;static BOOL creating_diagnostics;
 static HWND server_page_controls[40],language_page_controls[8];
 static unsigned server_page_count,language_page_count;
 static BOOL creating_languages,changing_language;
@@ -66,7 +70,7 @@ static void channel_title(void) {
 }
 
 static void log_message(const WCHAR *text) {
-    if(!rr_logging_enabled(folder,strstr(RERIFF_VERSION,"-")!=NULL))return;
+    if(!rr_log_enabled(folder,L"launcher",strstr(RERIFF_VERSION,"-")!=NULL))return;
     WCHAR name[CAP]; char utf8[4096]; DWORD written;
     path(name,L"logs");CreateDirectoryW(name,NULL);
     path(name, L"logs\\ReRiff-launcher.log");
@@ -339,7 +343,7 @@ static HWND control(const WCHAR *cls,const WCHAR *text,DWORD style,int x,int y,i
             FreeLibrary(theme);
         }
     }
-    if(handle){if(creating_diagnostics){if(diagnostic_count<8)diagnostic_controls[diagnostic_count++]=handle;}else if(creating_languages){if(language_page_count<8)language_page_controls[language_page_count++]=handle;}else if(server_page_count<40)server_page_controls[server_page_count++]=handle;}
+    if(handle){if(creating_diagnostics){if(diagnostic_count<24)diagnostic_controls[diagnostic_count++]=handle;}else if(creating_languages){if(language_page_count<8)language_page_controls[language_page_count++]=handle;}else if(server_page_count<40)server_page_controls[server_page_count++]=handle;}
     SendMessageW(handle,WM_SETFONT,(WPARAM)font,TRUE);return handle;
 }
 
@@ -377,18 +381,17 @@ static BOOL save(void) {
 
 /* Watch content rather than timestamps: the game replaces the INI atomically. */
 static BOOL read_settings_signature(ULONGLONG *signature) {
-    HANDLE file=CreateFileW(ini,GENERIC_READ,FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,NULL,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,NULL);
-    if(file==INVALID_HANDLE_VALUE){
-        if(GetLastError()==ERROR_FILE_NOT_FOUND){*signature=0;return TRUE;}
-        return FALSE;
+    ULONGLONG hash=14695981039346656037ULL;
+    const WCHAR *names[]={L"server.ini",L"client.ini",L"singleplayer.ini"};
+    for(unsigned n=0;n<3;n++) {
+        WCHAR name[CAP];path(name,names[n]);
+        HANDLE file=CreateFileW(name,GENERIC_READ,FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,NULL,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,NULL);
+        if(file==INVALID_HANDLE_VALUE){if(GetLastError()==ERROR_FILE_NOT_FOUND)continue;return FALSE;}
+        BYTE block[4096];DWORD count;BOOL ok=TRUE;hash^=n+1;
+        for(;;){if(!ReadFile(file,block,sizeof(block),&count,NULL)){ok=FALSE;break;}if(!count)break;for(DWORD i=0;i<count;i++){hash^=block[i];hash*=1099511628211ULL;}}
+        CloseHandle(file);if(!ok)return FALSE;
     }
-    BYTE block[4096];DWORD count;ULONGLONG hash=14695981039346656037ULL;BOOL ok=TRUE;
-    for(;;){
-        if(!ReadFile(file,block,sizeof(block),&count,NULL)){ok=FALSE;break;}
-        if(!count)break;
-        for(DWORD i=0;i<count;i++){hash^=block[i];hash*=1099511628211ULL;}
-    }
-    CloseHandle(file);if(ok)*signature=hash;return ok;
+    *signature=hash;return TRUE;
 }
 
 static void update_networking_controls(void) {
@@ -397,8 +400,17 @@ static void update_networking_controls(void) {
     EnableWindow(fallback,enabled&&SendMessageW(only_checkbox,BM_GETCHECK,0,0)!=BST_CHECKED);
 }
 
+static void reload_log_controls(void) {
+    BOOL enabled=rr_logging_enabled(folder,installed_experimental);
+    if(logging_checkbox)SendMessageW(logging_checkbox,BM_SETCHECK,enabled?BST_CHECKED:BST_UNCHECKED,0);
+    for(unsigned i=0;i<LOG_CATEGORY_COUNT;i++)if(log_checkboxes[i]) {
+        SendMessageW(log_checkboxes[i],BM_SETCHECK,rr_log_selected(folder,log_categories[i])?BST_CHECKED:BST_UNCHECKED,0);
+        EnableWindow(log_checkboxes[i],enabled);
+    }
+}
+
 static void reload_settings_controls(void) {
-    if(logging_checkbox)SendMessageW(logging_checkbox,BM_SETCHECK,rr_logging_enabled(folder,installed_experimental)?BST_CHECKED:BST_UNCHECKED,0);
+    reload_log_controls();
     WCHAR value[4096];
     settings_observed=read_settings_signature(&settings_signature);
     /* Another process (the game menu) can atomically replace this file. */
@@ -479,11 +491,14 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
         creating_languages=FALSE;
         creating_diagnostics=TRUE;
         logging_checkbox=control(L"BUTTON",L"Enable diagnostic logging",BS_AUTOCHECKBOX|WS_TABSTOP,22,26,590,32,LOGGING);
-        control(L"STATIC",L"Save launcher and client logs in the game's logs folder. Logging defaults on for beta/development builds and off for stable builds.\n\nExisting logs are kept when logging is disabled. Restart a running local server to apply its logging change.\n\nLogs may contain local file paths and server addresses; review them before sharing.",0,22,76,585,200,0);
-        control(L"BUTTON",L"View update details",WS_TABSTOP,22,300,200,32,UPDATE_DETAILS);
+        control(L"STATIC",L"Choose which logs to save. The master switch keeps your selections.\nExisting logs are kept; restart the game or local server after changes.",0,22,68,585,46,0);
+        for(unsigned i=0;i<LOG_CATEGORY_COUNT;i++)
+            log_checkboxes[i]=control(L"BUTTON",log_labels[i],BS_AUTOCHECKBOX|WS_TABSTOP,22+(i%2)*300,122+(i/2)*32,290,28,LOG_CATEGORY_BASE+i);
+        control(L"STATIC",L"Logs may contain file paths and server addresses; review before sharing.",0,22,356,585,40,0);
+        control(L"BUTTON",L"View update details",WS_TABSTOP,22,405,200,32,UPDATE_DETAILS);
         creating_diagnostics=FALSE;
         SendMessageW(logging_checkbox,BM_SETCHECK,rr_logging_enabled(folder,installed_experimental)?BST_CHECKED:BST_UNCHECKED,0);
-        language_controls();select_launcher_page();
+        reload_log_controls();language_controls();select_launcher_page();
         channel_title();local_server_controls();
         reload_settings_controls();
         SetTimer(hwnd,1,500,NULL);
@@ -491,13 +506,19 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
     }
     if(event==WM_NOTIFY&&((NMHDR *)lp)->hwndFrom==launcher_tabs&&((NMHDR *)lp)->code==TCN_SELCHANGE){select_launcher_page();return 0;}
     if (event==WM_COMMAND) {
+        if(LOWORD(wp)>=LOG_CATEGORY_BASE&&LOWORD(wp)<LOG_CATEGORY_BASE+LOG_CATEGORY_COUNT) {
+            unsigned i=LOWORD(wp)-LOG_CATEGORY_BASE;WCHAR key[80];_snwprintf(key,80,L"log_%ls",log_categories[i]);
+            BOOL enabled=SendMessageW(log_checkboxes[i],BM_GETCHECK,0,0)==BST_CHECKED;
+            if(!WritePrivateProfileStringW(L"diagnostics",key,enabled?L"true":L"false",ini))reload_log_controls();
+            settings_observed=read_settings_signature(&settings_signature);return 0;
+        }
         switch (LOWORD(wp)) {
             case UPDATE_DETAILS:show_update_details();break;
             case LOGGING: {
                 BOOL enabled=SendMessageW(logging_checkbox,BM_GETCHECK,0,0)==BST_CHECKED;
                 if(WritePrivateProfileStringW(L"diagnostics",L"logging_enabled",enabled?L"true":L"false",ini)) {
                     if(enabled){WCHAR logs[CAP],source[CAP],target[CAP];path(logs,L"logs");CreateDirectoryW(logs,NULL);path(source,L"localserver\\diagnostics\\Collect-ReRiffStartup.ps1");path(target,L"logs\\Collect-ReRiffStartup.ps1");CopyFileW(source,target,TRUE);}
-                    settings_observed=read_settings_signature(&settings_signature);SetWindowTextW(status,enabled?L"Diagnostic logging enabled.":L"Logging disabled. Existing logs were kept.");
+                    reload_log_controls();settings_observed=read_settings_signature(&settings_signature);SetWindowTextW(status,enabled?L"Diagnostic logging enabled.":L"Logging disabled. Existing logs were kept.");
                 }
                 break;
             }

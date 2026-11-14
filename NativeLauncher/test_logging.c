@@ -14,6 +14,16 @@ int main(void){
  SendMessageW(logging_checkbox,BM_SETCHECK,BST_CHECKED,0);SendMessageW(hwnd,WM_COMMAND,LOGGING,0);assert(rr_logging_ini(ini));log_message(L"enabled");assert(GetFileAttributesW(file)!=INVALID_FILE_ATTRIBUTES);
  WIN32_FILE_ATTRIBUTE_DATA before,after;assert(GetFileAttributesExW(file,GetFileExInfoStandard,&before));
  SendMessageW(logging_checkbox,BM_SETCHECK,BST_UNCHECKED,0);SendMessageW(hwnd,WM_COMMAND,LOGGING,0);assert(!rr_logging_ini(ini));log_message(L"must not append");assert(GetFileAttributesExW(file,GetFileExInfoStandard,&after));assert(before.nFileSizeLow==after.nFileSizeLow&&GetFileAttributesW(logs)!=INVALID_FILE_ATTRIBUTES);
+ assert(IsWindowEnabled(log_checkboxes[0])==FALSE);
+ SendMessageW(logging_checkbox,BM_SETCHECK,BST_CHECKED,0);SendMessageW(hwnd,WM_COMMAND,LOGGING,0);
+ assert(IsWindowEnabled(log_checkboxes[0]));
+ SendMessageW(log_checkboxes[0],BM_SETCHECK,BST_UNCHECKED,0);SendMessageW(hwnd,WM_COMMAND,LOG_CATEGORY_BASE,0);
+ assert(!rr_log_enabled(folder,L"launcher",FALSE));assert(rr_log_enabled(folder,L"unicode",FALSE));
+ log_message(L"category disabled");assert(GetFileAttributesExW(file,GetFileExInfoStandard,&after));assert(before.nFileSizeLow==after.nFileSizeLow);
+ SendMessageW(logging_checkbox,BM_SETCHECK,BST_UNCHECKED,0);SendMessageW(hwnd,WM_COMMAND,LOGGING,0);
+ SendMessageW(logging_checkbox,BM_SETCHECK,BST_CHECKED,0);SendMessageW(hwnd,WM_COMMAND,LOGGING,0);
+ assert(SendMessageW(log_checkboxes[0],BM_GETCHECK,0,0)==BST_UNCHECKED);
+ assert(diagnostic_count==LOG_CATEGORY_COUNT+4);
  DestroyWindow(hwnd);DeleteFileW(file);RemoveDirectoryW(logs);DeleteFileW(ini);DeleteFileW(marker);RemoveDirectoryW(L"localserver");SetCurrentDirectoryW(previous);RemoveDirectoryW(root);
  puts("PASS: native Diagnostics toggle, no disabled log directory, enabled writes and preserved disabled logs");return 0;
 }

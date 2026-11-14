@@ -92,12 +92,14 @@ with tempfile.TemporaryDirectory(prefix='reriff languages ü ') as temporary:
     (stable/'server.ini').write_bytes(config)
     call('install','--asset',path(combined),'--sha256',merged_sha,target=stable)
     assert not (stable/'.bak/versions').exists()
-    assert list((stable/'.bak/configs').glob('*-server.ini'))
+    assert (stable/'server.ini').read_bytes()==config
+    assert (stable/'client.ini').is_file()
     call('disable',target=stable)
     assert not (stable/'.bak/versions').exists()
+    client_config=(stable/'client.ini').read_bytes()
     for i in range(4):
-        (stable/'server.ini').write_bytes(config+b'\n# revision '+str(i).encode()+b'\n')
+        (stable/'client.ini').write_bytes(client_config+b'\n# revision '+str(i).encode()+b'\n')
         call('disable',target=stable)
-    assert {p.read_bytes() for p in (stable/'.bak/configs').glob('*-server.ini')}=={
-        config+b'\n# revision 2\n',config+b'\n# revision 3\n'}
+    assert {p.read_bytes() for p in (stable/'.bak/configs').glob('*-client.ini')}=={
+        client_config+b'\n# revision 2\n',client_config+b'\n# revision 3\n'}
     print('PASS: verified font packages, two-to-one volume migration, retired-file backups, unowned archive collision, config preservation, offline enable/disable, modified-file refusal and rollback.')

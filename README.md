@@ -152,7 +152,7 @@ Client updates do not update the Docker server.
 Open **Settings → Servers** to change **Skip launcher**, **Primary server only**
 and **Singleplayer**. Save your changes with **Save settings** or **Save and
 return**. **Return without saving** discards edits. The launcher edits the same
-preferences in `server.ini`.
+preferences in `server.ini` and `client.ini`.
 
 **Skip launcher** takes effect on the next start. Fresh installs show the launcher.
 
@@ -257,6 +257,11 @@ The launcher edits `server.ini` beside `Game.exe`:
 - **Primary server only:** skips the secondary server; singleplayer remains available.
 - **Singleplayer:** selects local play while retaining both saved server addresses.
 - **Use servers:** enables primary → secondary → singleplayer selection.
+
+Shared graphics, language, launcher and logging preferences live in `client.ini`.
+Singleplayer progression and balance live in `singleplayer.ini`. The optional
+LAN service uses `localserver/server.ini`. Existing combined configurations
+migrate automatically; see [configuration files](docs/CONFIGURATION.md).
 
 ### Quick deploy a local or LAN server
 

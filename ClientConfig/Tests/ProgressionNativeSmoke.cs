@@ -88,9 +88,14 @@ class ProgressionNativeSmoke {
                 Check(calculate(driver,IntPtr.Zero)==0,"Native level still reads zero cycle XP");
                 var display=ProgressionCheckpoints.DisplayProgress(0);
                 Check((int)ProgressionView.PermanentLevel(driver,display.MainXp,calculate)==1,"Permanent display uses saved main XP through original level helper");
-                Check(ProgressionView.PermanentLevel(driver,UInt64.MaxValue,calculate)==40,"Permanent XP safely clamps only for the original display helper");
+                Check(ProgressionView.PermanentLevel(driver,40000,calculate)==40&&ProgressionView.PermanentLevel(driver,41500,calculate)==41.5m,"Permanent main levels extend the original final interval");
+                Check(ProgressionView.PermanentLevel(driver,UInt64.MaxValue,calculate)==Int32.MaxValue,"Uncapped permanent identity saturates safely at its integer representation");
+                var oldPolicy=ProgressionBalance.Current;
+                try{ProgressionBalance.Current=new ProgressionBalance{MainLevelCap=40};Check(ProgressionView.PermanentLevel(driver,UInt64.MaxValue,calculate)==40,"Configurable main level cap can retain the original maximum");}
+                finally{ProgressionBalance.Current=oldPolicy;}
                 Check(Bytes(progression,296).SequenceEqual(untouchedProgression),"Displaying permanent identity never changes cycle progression");
                 Check(ProgressionView.Identity(40,0)=="40"&&ProgressionView.Identity(40,1)=="40 *"&&ProgressionView.Identity(40,2)=="40 *x2","Prestige identity and no font-pack dependency");
+                Check(ProgressionView.Identity(100,1)=="100 *","Extended main identity retains the native star marker");
                 Check(ProgressionCheckpoints.DisplayProgress(50).MainXp==1284&&store.Read().Progress.MainXp==1234,"Display accounts for unsaved native XP without writing counters");
                 Marshal.WriteInt32(thresholds,4,0);Check(Refused(()=>ProgressionView.PermanentLevel(driver,1234,calculate)),"Malformed native level table refused");Marshal.WriteInt32(thresholds,4,1000);
                 var coins=(TokenDelta)NativeReelBridge.CreateCall(type.GetMethod("gaSaveGameChunkProgression.incTokens"),typeof(TokenDelta),false);
