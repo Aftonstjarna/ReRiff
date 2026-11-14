@@ -1,3 +1,32 @@
+# ReRiff 1.3.2 — Simpler setup and singleplayer controls
+
+## In-game summary
+
+- Windows setup now uses one window with options and a progress bar.
+- Enable or disable singleplayer with a launcher checkbox.
+- Launchers share the saved singleplayer setting with the game menu.
+
+## Full release notes
+
+### Windows setup
+
+- Collect the game folder, CJK and Latin font options, diagnostic logging,
+  private Python download consent and optional GitHub visit in one window.
+- Keep setup responsive while installation runs, with an animated progress
+  bar and status messages for Python preparation and game installation.
+- Show completion and failure in the setup window; allow retry after failure.
+- Preserve the command-line setup interface used by automatic updates.
+
+### Singleplayer controls on Windows and Linux/Proton
+
+- Replace the Singleplayer button and inverse Use servers checkbox with one
+  Enable singleplayer checkbox in the shared launcher UI.
+- Save the game's existing server.networking_enabled setting immediately;
+  checking singleplayer disables network server selection on the next start.
+- Preserve primary and secondary server addresses and unrelated unsaved edits.
+  Continue reflecting settings saved from the in-game menu in the launcher.
+- Retain automatic singleplayer fallback when configured servers do not respond.
+
 # ReRiff 1.3.1 — LAN quick deploy
 
 ## In-game summary

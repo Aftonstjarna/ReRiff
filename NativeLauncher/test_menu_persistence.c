@@ -41,7 +41,7 @@ int main(void) {
     SendMessageW(host,WM_TIMER,1,0);
     WCHAR value[4096];GetWindowTextW(external,value,4096);if(*value)return 4;
     if(SendMessageW(only_checkbox,BM_GETCHECK,0,0)!=BST_UNCHECKED)return 5;
-    if(SendMessageW(networking_checkbox,BM_GETCHECK,0,0)!=BST_UNCHECKED)return 13;
+    if(SendMessageW(networking_checkbox,BM_GETCHECK,0,0)!=BST_CHECKED)return 13;
     GetWindowTextW(fallback,value,4096);if(wcscmp(value,L"http://127.0.0.1:5144"))return 14;
     if(IsWindowEnabled(external)||IsWindowEnabled(fallback))return 15;
     if(SendMessageW(skip_checkbox,BM_GETCHECK,0,0)!=BST_CHECKED||SendMessageW(auto_update_checkbox,BM_GETCHECK,0,0)!=BST_CHECKED)return 21;
@@ -51,7 +51,7 @@ int main(void) {
     GetWindowTextW(external,value,4096);if(wcscmp(value,L"https://unsaved.example"))return 16;
     WritePrivateProfileStringW(L"server",L"networking_enabled",L"true",ini);
     SendMessageW(host,WM_ACTIVATE,WA_ACTIVE,0);
-    if(SendMessageW(networking_checkbox,BM_GETCHECK,0,0)!=BST_CHECKED||!IsWindowEnabled(fallback))return 17;
+    if(SendMessageW(networking_checkbox,BM_GETCHECK,0,0)!=BST_UNCHECKED||!IsWindowEnabled(fallback))return 17;
     SendMessageW(host,WM_COMPLETE,TRUE,1);
     /* Keep the worker disabled: this checks dispatch without launching a game. */
     busy=TRUE;
@@ -63,17 +63,28 @@ int main(void) {
     SendMessageW(skip_checkbox,BM_SETCHECK,BST_UNCHECKED,0);
     if(!save())return 6;
     if(launcher_preference(L"skip_launcher")||!launcher_preference(L"auto_update_on_skip"))return 22;
-    SendMessageW(networking_checkbox,BM_SETCHECK,BST_UNCHECKED,0);
+    SendMessageW(networking_checkbox,BM_SETCHECK,BST_CHECKED,0);
     if(!save())return 18;
     GetPrivateProfileStringW(L"server",L"networking_enabled",L"missing",value,4096,ini);if(wcscmp(value,L"false"))return 19;
     GetPrivateProfileStringW(L"server",L"fallback_url",L"",value,4096,ini);if(wcscmp(value,L"http://127.0.0.1:5144"))return 20;
-    /* The Singleplayer button changes mode without clearing either address. */
+    /* Both checkbox directions immediately save only the game's shared mode. */
     SetWindowTextW(external,L"https://primary.example");
     SetWindowTextW(fallback,L"https://secondary.example");
-    SendMessageW(host,WM_COMMAND,LOCAL,0);
-    if(SendMessageW(networking_checkbox,BM_GETCHECK,0,0)!=BST_UNCHECKED)return 23;
-    GetWindowTextW(external,value,4096);if(wcscmp(value,L"https://primary.example"))return 24;
-    GetWindowTextW(fallback,value,4096);if(wcscmp(value,L"https://secondary.example"))return 25;
+    if(GetDlgItem(host,LOCAL))return 26; /* No duplicate singleplayer button. */
+    if((GetWindowLongPtrW(networking_checkbox,GWL_STYLE)&BS_TYPEMASK)!=BS_AUTOCHECKBOX)return 27;
+    for(int checked=0;checked<2;checked++){
+        SendMessageW(networking_checkbox,BM_SETCHECK,checked?BST_CHECKED:BST_UNCHECKED,0);
+        SendMessageW(host,WM_COMMAND,NETWORKING,0);
+        GetPrivateProfileStringW(L"server",L"networking_enabled",L"missing",value,4096,ini);
+        if(wcscmp(value,checked?L"false":L"true"))return 28;
+        if(!!IsWindowEnabled(external)==!!checked||!!IsWindowEnabled(fallback)==!!checked)return 29;
+        GetWindowTextW(external,value,4096);if(wcscmp(value,L"https://primary.example"))return 24;
+        GetWindowTextW(fallback,value,4096);if(wcscmp(value,L"https://secondary.example"))return 25;
+        GetPrivateProfileStringW(L"server",L"external_url",L"missing",value,4096,ini);if(*value)return 30;
+        GetPrivateProfileStringW(L"server",L"fallback_url",L"",value,4096,ini);if(wcscmp(value,L"http://127.0.0.1:5144"))return 31;
+        SendMessageW(host,WM_TIMER,1,0);
+        GetWindowTextW(external,value,4096);if(wcscmp(value,L"https://primary.example"))return 32;
+    }
     WritePrivateProfileStringW(L"server",L"networking_enabled",L"false",ini);
     WritePrivateProfileStringW(L"server",L"networking_enabled",L"true",ini);
     WritePrivateProfileStringW(L"server",L"fallback_url",L"",ini);

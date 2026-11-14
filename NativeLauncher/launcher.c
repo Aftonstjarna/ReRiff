@@ -358,7 +358,7 @@ static BOOL save(void) {
     GetWindowTextW(external,a,4096);GetWindowTextW(fallback,b,4096);GetWindowTextW(timeout_edit,t,32);
     WCHAR *end; double seconds=wcstod(t,&end);
     BOOL only=SendMessageW(only_checkbox,BM_GETCHECK,0,0)==BST_CHECKED;
-    BOOL enabled=SendMessageW(networking_checkbox,BM_GETCHECK,0,0)==BST_CHECKED;
+    BOOL enabled=SendMessageW(networking_checkbox,BM_GETCHECK,0,0)!=BST_CHECKED;
     if ((enabled&&(!valid_url(a)||(!only&&!valid_url(b))))||!*t||*end||!(seconds>0 && seconds<=60)) {
         MessageBoxW(window,L"Use HTTP(S) URLs and a timeout greater than 0 and at most 60 seconds.",L"Invalid settings",MB_OK|MB_ICONWARNING);return FALSE;
     }
@@ -392,7 +392,7 @@ static BOOL read_settings_signature(ULONGLONG *signature) {
 }
 
 static void update_networking_controls(void) {
-    BOOL enabled=SendMessageW(networking_checkbox,BM_GETCHECK,0,0)==BST_CHECKED;
+    BOOL enabled=SendMessageW(networking_checkbox,BM_GETCHECK,0,0)!=BST_CHECKED;
     EnableWindow(external,enabled);EnableWindow(only_checkbox,enabled);
     EnableWindow(fallback,enabled&&SendMessageW(only_checkbox,BM_GETCHECK,0,0)!=BST_CHECKED);
 }
@@ -410,7 +410,7 @@ static void reload_settings_controls(void) {
     SendMessageW(popup,BM_SETCHECK,(_wcsicmp(value,L"false")&&_wcsicmp(value,L"no")&&wcscmp(value,L"0"))?BST_CHECKED:BST_UNCHECKED,0);
     SendMessageW(only_checkbox,BM_SETCHECK,external_only()?BST_CHECKED:BST_UNCHECKED,0);
     GetPrivateProfileStringW(L"server",L"networking_enabled",L"true",value,4096,ini);
-    SendMessageW(networking_checkbox,BM_SETCHECK,(_wcsicmp(value,L"false")&&_wcsicmp(value,L"no")&&wcscmp(value,L"0"))?BST_CHECKED:BST_UNCHECKED,0);
+    SendMessageW(networking_checkbox,BM_SETCHECK,(_wcsicmp(value,L"false")&&_wcsicmp(value,L"no")&&wcscmp(value,L"0"))?BST_UNCHECKED:BST_CHECKED,0);
     SendMessageW(skip_checkbox,BM_SETCHECK,launcher_preference(L"skip_launcher")?BST_CHECKED:BST_UNCHECKED,0);
     SendMessageW(auto_update_checkbox,BM_SETCHECK,launcher_preference(L"auto_update_on_skip")?BST_CHECKED:BST_UNCHECKED,0);
     update_networking_controls();
@@ -460,13 +460,12 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
         timeout_edit=control(L"EDIT",L"5",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,172,146,95,28,TIMEOUT);
         popup=control(L"BUTTON",L"Show the selected server or singleplayer when the game starts",BS_AUTOCHECKBOX|WS_TABSTOP,22,191,590,28,POPUP);
         only_checkbox=control(L"BUTTON",L"Primary server only (skip secondary server)",BS_AUTOCHECKBOX|WS_TABSTOP,22,225,590,28,EXTERNAL_ONLY);
-        networking_checkbox=control(L"BUTTON",L"Use servers (otherwise play singleplayer)",BS_AUTOCHECKBOX|WS_TABSTOP,22,259,600,28,NETWORKING);
+        networking_checkbox=control(L"BUTTON",L"Enable singleplayer",BS_AUTOCHECKBOX|WS_TABSTOP,22,259,600,28,NETWORKING);
         skip_checkbox=control(L"BUTTON",L"Skip launcher",BS_AUTOCHECKBOX|WS_TABSTOP,22,293,165,28,SKIP_LAUNCHER);
         auto_update_checkbox=control(L"BUTTON",L"Auto-update when skipping launcher",BS_AUTOCHECKBOX|WS_TABSTOP,195,293,425,28,AUTO_UPDATE_SKIP);
         control(L"STATIC",L"If neither server responds, the game uses singleplayer automatically.",0,22,332,600,24,0);
         status=control(L"STATIC",L"Checking server settings...",0,22,359,600,50,0);
         local_server_hint=control(L"STATIC",L"Local server: http://127.0.0.1:5144 — enter in Secondary server",0,22,417,600,22,0);
-        control(L"BUTTON",L"Singleplayer",WS_TABSTOP,22,445,145,34,LOCAL);
         stop_button=control(L"BUTTON",L"Install local server",WS_TABSTOP,180,445,150,34,STOP);
         save_button=control(L"BUTTON",L"Save settings",WS_TABSTOP,345,445,130,34,SAVE);
         play_button=control(L"BUTTON",L"Play",WS_TABSTOP|BS_DEFPUSHBUTTON,490,445,130,34,PLAY);
@@ -504,8 +503,20 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
             }
             case LATIN_INSTALL:begin(SendMessageW(latin_checkbox,BM_GETCHECK,0,0)==BST_CHECKED?6:7);break;
             case CJK_INSTALL:begin(SendMessageW(language_checkbox,BM_GETCHECK,0,0)==BST_CHECKED?4:5);break;
-            case LOCAL:SendMessageW(networking_checkbox,BM_SETCHECK,BST_UNCHECKED,0);update_networking_controls();break;
-            case NETWORKING:case EXTERNAL_ONLY:update_networking_controls();break;
+            case NETWORKING: {
+                /* Same saved mode as the native in-game toggle. Do not save
+                 * unrelated, possibly unfinished edits or clear server URLs. */
+                BOOL singleplayer=SendMessageW(networking_checkbox,BM_GETCHECK,0,0)==BST_CHECKED;
+                if(WritePrivateProfileStringW(L"server",L"networking_enabled",singleplayer?L"false":L"true",ini)){
+                    settings_observed=read_settings_signature(&settings_signature);
+                    SetWindowTextW(status,singleplayer?L"Singleplayer enabled. Applies on the next game start.":L"Singleplayer disabled. Configured servers apply on the next game start.");
+                }else{
+                    SendMessageW(networking_checkbox,BM_SETCHECK,singleplayer?BST_UNCHECKED:BST_CHECKED,0);
+                    SetWindowTextW(status,L"Could not save the singleplayer setting to server.ini.");
+                }
+                update_networking_controls();break;
+            }
+            case EXTERNAL_ONLY:update_networking_controls();break;
             case STOP:begin(2);break;
             case EXPERIMENTAL:
                 requested_experimental=SendMessageW(experimental_checkbox,BM_GETCHECK,0,0)==BST_CHECKED;
