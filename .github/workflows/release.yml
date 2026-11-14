@@ -149,15 +149,10 @@ jobs:
         run: |
           python scripts/test_native_client.py --helper build/linux-patcher/Patcher
           python scripts/test-linux-runtime.py --client build/linux-patcher/Patcher --server build/linux-runtime/ReRiff-Server-x86_64.AppImage
-      - name: Build and verify optional CJK font component
+      - name: Fetch pinned independent font packs and verify client installation
         run: |
-          python -m pip install -r packaging/fonts/build-requirements.txt
-          python scripts/build-cjk-component.py
-          python scripts/build-latin-component.py
-          python scripts/test_latin_component.py
-          python scripts/test_cjk_atlas.py
-          python scripts/test_cjk_hd_atlas.py
-          python scripts/test_native_archive.py
+          python -m unittest discover -s packaging -p test_font_assets.py -v
+          python scripts/fetch-font-components.py
           python scripts/test_language_component.py --host build/linux-patcher/Patcher
           python scripts/test_font_packs.py --host build/linux-patcher/Patcher --cjk build/cjk-component/ReRiff-CJK.zip --latin build/latin-component/ReRiff-Latin.zip
       - name: Package Windows and Linux installers

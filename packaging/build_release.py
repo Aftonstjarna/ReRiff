@@ -15,6 +15,7 @@ import zlib
 
 from shared_patch import make_patch, digest
 from release_notes import release_notes
+from font_assets import load_pin, validate_component
 
 ROOT = Path(__file__).resolve().parent.parent
 PYTHON_SHA = '9e35319bffedab8b36ad44d8f377cb4f1733bcec257a0b6d04d94f01486ddb38'
@@ -72,13 +73,11 @@ def build(args):
         patches[name] = {'file': path.relative_to(common).as_posix(), 'original': metadata['original'], 'patched': metadata['patched']}
         print(name, 'delta:',len(encoded),'bytes')
     font_pack=ROOT/'build/cjk-component/ReRiff-CJK.zip'
-    with zipfile.ZipFile(font_pack) as fonts:
-        if json.loads(fonts.read('component.json')).get('version')!=version:
-            raise ValueError('Rebuild the CJK component for this VERSION before packaging.')
+    font_pin = load_pin()
+    validate_component(font_pack, font_pin, 'cjk')
     copy(font_pack,common/'components/ReRiff-CJK.zip')
     latin_pack=ROOT/'build/latin-component/ReRiff-Latin.zip'
-    with zipfile.ZipFile(latin_pack) as fonts:
-        if json.loads(fonts.read('component.json')).get('version')!=version: raise ValueError('Rebuild the Latin component for this VERSION.')
+    validate_component(latin_pack, font_pin, 'latin')
     copy(latin_pack,common/'components/ReRiff-Latin.zip')
     payload = common/'payload'
     copy(ROOT/'scripts/Collect-ReRiffStartup.ps1', payload/'localserver/diagnostics/Collect-ReRiffStartup.ps1')

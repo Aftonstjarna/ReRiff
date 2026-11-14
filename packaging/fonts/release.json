@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "repository": "Aftonstjarna/ReRiff-Fonts",
+  "version": "1.0.0",
+  "packs": {
+    "cjk": {
+      "asset": "ReRiff-CJK.zip",
+      "size": 111350222,
+      "sha256": "d9f37369960297df21f69ebf49a7398a87a0b3865e124f00f63bf4932a27be38"
+    },
+    "latin": {
+      "asset": "ReRiff-Latin.zip",
+      "size": 364480,
+      "sha256": "5efddad1e1e02d0340981d66c1430daf62cea5094f28694e31a424cd80bb4bd6"
+    }
+  }
+}

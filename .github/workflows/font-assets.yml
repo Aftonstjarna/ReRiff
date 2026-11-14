@@ -1,0 +1,42 @@
+name: Verify pinned font assets
+on:
+  push:
+    paths:
+      - packaging/font_assets.py
+      - packaging/fonts/release.json
+      - packaging/test_font_assets.py
+      - packaging/build_release.py
+      - scripts/fetch-font-components.py
+      - .github/workflows/font-assets.yml
+  pull_request:
+    paths:
+      - packaging/font_assets.py
+      - packaging/fonts/release.json
+      - packaging/test_font_assets.py
+      - packaging/build_release.py
+      - scripts/fetch-font-components.py
+      - .github/workflows/font-assets.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '8.0.x'
+      - name: Check pinned downloads and cache safety
+        run: python -m unittest discover -s packaging -p test_font_assets.py -v
+      - name: Fetch and verify independent font release
+        run: python scripts/fetch-font-components.py
+      - name: Build client language installer
+        run: python scripts/build-linux-patcher.py
+      - name: Verify client font installation and shared archive lifecycle
+        run: |
+          python scripts/test_language_component.py --host build/linux-patcher/Patcher
+          python scripts/test_font_packs.py --host build/linux-patcher/Patcher --cjk build/cjk-component/ReRiff-CJK.zip --latin build/latin-component/ReRiff-Latin.zip

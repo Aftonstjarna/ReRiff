@@ -676,12 +676,14 @@ python3 scripts/build-linux-installer.py --zig /path/to/zig
 RERIFF_RELEASE_CHANNEL=stable python3 scripts/build-windows-launcher.py --zig /path/to/zig
 python3 scripts/build-song-catalog.py --zig /path/to/zig
 python3 scripts/build-windows-server.py
-python3 -m pip install -r packaging/fonts/build-requirements.txt
-python3 scripts/build-cjk-component.py
-python3 scripts/build-latin-component.py
+python3 scripts/fetch-font-components.py
 # Build-time container engine only; players do not need it.
 bash scripts/build-linux-runtime.sh
 ```
+
+Font packs are built and versioned in [ReRiff-Fonts](https://github.com/Aftonstjarna/ReRiff-Fonts).
+Client builds reuse the release pinned in `packaging/fonts/release.json` and
+verify its checksums. Language installation checks still run for each client.
 
 The launcher, updater, notification DLL, and Windows setup are native Win32.
 The server's identity engine is C++. The server backend and Windows installation
