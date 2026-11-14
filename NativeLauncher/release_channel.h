@@ -116,6 +116,11 @@ typedef struct ReleasePackage {char version[128],filename[256];} ReleasePackage;
 static BOOL release_filename(const char *name){
     return *name&&name[0]!='.'&&strspn(name,"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._")==strlen(name);
 }
+/* Server packages are separate install targets, including legacy releases
+ * whose server ZIP used the same platform suffix as the client. */
+static BOOL release_server_package(const char *name){
+    return !strncmp(name,"ReRiff-Server-",14)||!strcmp(name,"ReRiff-Windows-Server.zip");
+}
 static BOOL release_package(const char *json,BOOL linux_package,ReleasePackage *package){
     memset(package,0,sizeof(*package));const char *p=release_space(json);if(*p++!='{')return FALSE;
     BOOL have_version=FALSE,have_artifacts=FALSE;char key[128];
@@ -132,7 +137,7 @@ static BOOL release_package(const char *json,BOOL linux_package,ReleasePackage *
             while(*p!=']'){
                 char name[256];p=release_string(p,name,sizeof(name));if(!p)return FALSE;
                 size_t length=strlen(name),tail=strlen(suffix);
-                if(length>tail&&!strcmp(name+length-tail,suffix)){
+                if(!release_server_package(name)&&length>tail&&!strcmp(name+length-tail,suffix)){
                     if(*package->filename||!release_filename(name))return FALSE;strcpy(package->filename,name);
                 }
                 p=release_space(p);if(*p==']')break;if(*p++!=',')return FALSE;p=release_space(p);

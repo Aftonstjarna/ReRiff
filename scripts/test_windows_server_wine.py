@@ -22,7 +22,7 @@ def main():
     parser.add_argument('--launcher-test', type=Path, help='Native launcher Windows-control regression executable')
     parser.add_argument('--python', type=Path, required=True, help='Unpacked official Windows embedded Python')
     args = parser.parse_args()
-    asset = ROOT/'build/windows-server/ReRiff-Server-windows.zip'
+    asset = ROOT/'build/windows-server/ReRiff-Windows-Server.zip'
     digest = hashlib.sha256(asset.read_bytes()).hexdigest()
     env = dict(os.environ, WINEPREFIX=str(args.prefix.resolve()), WINEDEBUG='-all', WINEDLLOVERRIDES='mscoree,mshtml=')
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))

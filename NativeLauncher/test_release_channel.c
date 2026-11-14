@@ -49,6 +49,15 @@ int main(int argc,char **argv){
     const char *metadata="{\"version\":\"preview-next+candidate\",\"artifacts\":[\"ReRiff-source.tar.gz\",\"client-test-linux.run\",\"client-test-windows.zip\"],\"commit\":\"abc\"}";
     CHECK(release_package(metadata,TRUE,&package)&&!strcmp(package.version,"preview-next+candidate")&&!strcmp(package.filename,"client-test-linux.run"));
     CHECK(release_package(metadata,FALSE,&package)&&!strcmp(package.filename,"client-test-windows.zip"));
+    /* Both server naming conventions must be ignored by the client updater. */
+    const char *with_servers="{\"version\":\"1.4.0-beta.1\",\"artifacts\":[\"ReRiff-Server-windows.zip\",\"ReRiff-1.4.0-beta.1-windows.zip\",\"ReRiff-Windows-Server.zip\",\"ReRiff-Server-x86_64.AppImage\",\"ReRiff-1.4.0-beta.1-linux.run\"]}";
+    CHECK(release_package(with_servers,FALSE,&package)&&!strcmp(package.filename,"ReRiff-1.4.0-beta.1-windows.zip"));
+    CHECK(release_package(with_servers,TRUE,&package)&&!strcmp(package.filename,"ReRiff-1.4.0-beta.1-linux.run"));
+    CHECK(release_package("{\"version\":\"next\",\"artifacts\":[\"client-windows.zip\",\"ReRiff-Server-windows.zip\"]}",FALSE,&package)&&!strcmp(package.filename,"client-windows.zip"));
+    CHECK(!release_package("{\"version\":\"next\",\"artifacts\":[\"ReRiff-Server-windows.zip\",\"ReRiff-Windows-Server.zip\"]}",FALSE,&package));
+    CHECK(!release_package("{\"version\":\"next\",\"artifacts\":[\"a-windows.zip\",\"b-windows.zip\"]}",FALSE,&package));
+    /* Restore the original candidate before testing repeat-update decisions. */
+    CHECK(release_package(metadata,FALSE,&package)&&!strcmp(package.version,"preview-next+candidate"));
     CHECK(!release_needs_install(package.version,package.version,TRUE,TRUE,FALSE));
     CHECK(release_needs_install(package.version,package.version,FALSE,TRUE,FALSE));
     CHECK(release_needs_install(package.version,package.version,TRUE,TRUE,TRUE));
