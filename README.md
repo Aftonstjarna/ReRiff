@@ -26,7 +26,11 @@ leaderboards and ghosts.
 
 **Launcher — Servers**
 
-![Launcher server settings, singleplayer, local-server installation and updates](docs/images/reriff-launcher.png)
+![Development launcher with Force singleplayer and concise checkbox labels](docs/images/reriff-launcher.png)
+
+Development launcher shown: hover over checkboxes for explanations.
+**Force singleplayer** skips servers; when unchecked, unavailable or absent
+servers still fall back to singleplayer automatically.
 
 Linux play requires Proton and the game's Windows .NET Framework setup.
 
@@ -272,8 +276,10 @@ The launcher edits `server.ini` beside `Game.exe`:
 - **Secondary server:** optional fallback, such as another shared server or
   the launcher-managed server at `http://127.0.0.1:5144` on this PC.
 - **Primary server only:** skips the secondary server; singleplayer remains available.
-- **Singleplayer:** selects local play while retaining both saved server addresses.
-- **Use servers:** enables primary → secondary → singleplayer selection.
+- **Force singleplayer:** skips server connections and selects local play while
+  retaining both saved server addresses. When unchecked, the game tries Primary,
+  then Secondary, and automatically uses singleplayer if neither is configured
+  or available. The preference applies on the next game start.
 
 Shared graphics, language, launcher and logging preferences live in `client.ini`.
 Singleplayer progression and balance live in `singleplayer.ini`. The optional
@@ -291,8 +297,8 @@ private Python runtime and bundled Flask dependencies; Linux/Proton uses a
 self-contained server AppImage. The server is downloaded on demand rather than
 included in the client installer.
 
-On the host PC, enter `http://127.0.0.1:5144` in **Secondary server**, enable
-**Use servers**, leave **Primary server only** unchecked, and save. Primary is
+On the host PC, enter `http://127.0.0.1:5144` in **Secondary server**, leave
+**Force singleplayer** and **Primary server only** unchecked, and save. Primary is
 tried first. To use only your local server, leave Primary empty.
 
 **LAN access:** other PCs can use `http://<host-LAN-IP>:5144` in
