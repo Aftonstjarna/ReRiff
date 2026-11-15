@@ -258,8 +258,8 @@ class VanillaInstallerTests(unittest.TestCase):
         (self.game/'logs/ReRiff-client.log').write_bytes(b'current diagnostics')
         self.install()
         self.assertFalse((self.game/'ReRiff-client.log').exists())
-        self.assertEqual((self.game/'logs/ReRiff-client.log').read_bytes(),b'current diagnostics')
-        moved=list((self.game/'logs').glob('legacy-*-ReRiff-client.log'))
+        self.assertEqual(next((self.game/'logs/archive').rglob('ReRiff-client.log')).read_bytes(),b'current diagnostics')
+        moved=list((self.game/'logs/archive').rglob('legacy-*-ReRiff-client.log'))
         self.assertEqual(len(moved),1)
         self.assertEqual(moved[0].read_bytes(),b'older diagnostics')
 

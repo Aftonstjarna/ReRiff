@@ -80,6 +80,9 @@ static void position_watermark(void *menu){
     if(*(DWORD *)((BYTE *)watermark+76))enable_input(watermark,FALSE);
 }
 static void deliver_update_notice(void){
+#if RERIFF_DEVELOPMENT_BUILD
+    return; /* An unpublished client must not announce itself as a beta update. */
+#endif
     if(GetFileAttributesW(update_notice_path)==INVALID_FILE_ATTRIBUTES)return;
     WCHAR version[64];GetPrivateProfileStringW(L"update",L"version",L"",version,64,update_notice_path);
     if(!*version||wcscmp(version,MENU_WIDE(RERIFF_VERSION)))return;
@@ -87,7 +90,12 @@ static void deliver_update_notice(void){
     if(queue_update_notice(text))DeleteFileW(update_notice_path);
 }
 static void attach_main_branding(void *menu){
-    watermark_owner=menu;watermark=create_text(L"ReRiff v" MENU_WIDE(RERIFF_VERSION),0,0,3,2,0,-1,FALSE,-1,FALSE,TRUE);
+#if RERIFF_DEVELOPMENT_BUILD
+    const WCHAR *version_text=L"ReRiff development build";
+#else
+    const WCHAR *version_text=L"ReRiff v" MENU_WIDE(RERIFF_VERSION);
+#endif
+    watermark_owner=menu;watermark=create_text(version_text,0,0,3,2,0,-1,FALSE,-1,FALSE,TRUE);
     if(watermark){
         ((int *)watermark)[2]=-1;((int *)watermark)[15]=100;
         menu_item(watermark,FALSE);enable_input(watermark,FALSE);

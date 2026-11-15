@@ -15,7 +15,7 @@ import shutil
 import subprocess
 
 from shared_patch import apply_patch, digest
-from logging_policy import logging_enabled, logging_config, client_config, client_settings
+from logging_policy import logging_enabled, logging_config, client_config, client_settings, archive_grouped_logs
 
 
 def auto_game():
@@ -572,6 +572,7 @@ def install(bundle, game, backups, platform, dry_run=False, restore=False, music
                     import time
                     target=logs/('legacy-'+str(time.time_ns())+'-'+name)
                 old.rename(target)
+        if not restore: archive_grouped_logs(game)
     except OSError as error:
         print('Could not relocate legacy diagnostics: '+str(error))
     print(('Original DLLs restored.' if restore else 'ReRiff '+manifest['version']+' installed.')+'\nGame: '+str(game)+'\nBackups: '+str(backups)+'\nExisting settings and saved data preserved.')

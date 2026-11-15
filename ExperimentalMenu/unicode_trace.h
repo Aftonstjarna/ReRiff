@@ -3,6 +3,7 @@
  * and reports/CJK-FONT-INTEGRATION.md. */
 #include <stdarg.h>
 static BYTE *unicode_base;
+static WCHAR unicode_log_path[MAX_PATH];
 static HANDLE unicode_log=INVALID_HANDLE_VALUE;
 static CRITICAL_SECTION unicode_lock;
 static unsigned unicode_bytes,unicode_records;
@@ -27,7 +28,7 @@ static void unicode_write(const char *line){
     for(unsigned i=0;i<unicode_seen_count;i++)if(unicode_seen[i]==hash){LeaveCriticalSection(&unicode_lock);return;}
     if(unicode_records<4096&&unicode_bytes+length+2<4*1024*1024){
         unicode_seen[unicode_records%512]=hash;if(unicode_seen_count<512)unicode_seen_count++;
-        DWORD count;WriteFile(unicode_log,line,(DWORD)length,&count,NULL);WriteFile(unicode_log,"\r\n",2,&count,NULL);
+        rr_log_append(unicode_log_path,"unicode",line);
         unicode_records++;unicode_bytes+=(unsigned)length+2;
     }
     LeaveCriticalSection(&unicode_lock);
@@ -233,10 +234,11 @@ static void install_unicode_trace(BYTE *base){
     unicode_base=base;
     if(trace){
     WCHAR path[MAX_PATH];wcscpy(path,log_path);WCHAR *slash=wcsrchr(path,L'\\');if(!slash)return;
-    if((size_t)(slash-path)+wcslen(L"\\ReRiff-unicode.log")>=MAX_PATH)return;
+    if((size_t)(slash-path)+wcslen(L"\\ReRiff-text.log")>=MAX_PATH)return;
     *slash=0;CreateDirectoryW(path,NULL);
-    wcscpy(slash,L"\\ReRiff-unicode.log");
-    unicode_log=CreateFileW(path,GENERIC_WRITE,FILE_SHARE_READ,NULL,CREATE_ALWAYS,FILE_ATTRIBUTE_NORMAL,NULL);
+    wcscpy(slash,L"\\ReRiff-text.log");
+    wcscpy(unicode_log_path,path);
+    unicode_log=CreateFileW(path,FILE_READ_ATTRIBUTES,FILE_SHARE_READ|FILE_SHARE_WRITE,NULL,OPEN_ALWAYS,FILE_ATTRIBUTE_NORMAL,NULL);
     if(unicode_log==INVALID_HANDLE_VALUE){log_line("Unicode trace could not open its log.");return;}
     InitializeCriticalSection(&unicode_lock);unicode_base=base;
     unicode_write("Unicode trace enabled; UTF-16 code units are escaped, buffers bounded to 256 units, duplicate records suppressed, limit 4 MiB/4096 records. This log contains local filenames and visible text.");
@@ -282,5 +284,5 @@ static void install_unicode_trace(BYTE *base){
         if(!a||!b||!c||!d||!e||!f||!g||!h||!i||!j){cjk_render_enabled=0;log_line("CJK font hooks refused: an original function differs or another hook is present.");}
         else {cjk_install_direct(base);if(!cjk_direct_enabled){cjk_render_enabled=0;log_line("CJK visual integration refused; original rendering retained.");}}
     }
-    if(trace){install_metadata_source_trace(base);unicode_imports(base);}log_line(trace?"Unicode trace enabled: logs/ReRiff-unicode.log.":cjk_render_enabled==0?"CJK font integration is inactive; inspect earlier guard failures.":"Installed CJK font fallback (restart required after changing Languages).");
+    if(trace){install_metadata_source_trace(base);unicode_imports(base);}log_line(trace?"Unicode trace enabled: logs/ReRiff-text.log.":cjk_render_enabled==0?"CJK font integration is inactive; inspect earlier guard failures.":"Installed CJK font fallback (restart required after changing Languages).");
 }

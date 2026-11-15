@@ -11,7 +11,7 @@ int main(void){
     CHECK(text_entry_begin(owner,L"PRIMARY SERVER",L"https://example.com",done,server_text_valid));
     CHECK(!text_entry_begin(owner,L"SECONDARY SERVER",L"",done,NULL));CHECK(text_entry_busy());
     text_entry_caption_at(dialog,text_entry_blink_at);CHECK(wcsstr(drawn,L"https://example.com|")!=NULL);
-    CHECK(text_entry_message(NULL,WM_CHAR,L'/',0));CHECK(text_entry_message(NULL,WM_CHAR,L'つ',0));
+    CHECK(text_entry_message(NULL,WM_CHAR,L'/',0));CHECK(text_entry_message(NULL,WM_UNICHAR,L'つ',0));
     CHECK(text_entry_message(NULL,WM_KEYDOWN,VK_RETURN,0));CHECK(text_entry_overlay_tick(dialog));CHECK(pops==1&&results==0);
     save_prompt_tick(owner);CHECK(results==1&&!wcscmp(accepted,L"https://example.com/つ")&&!text_entry_active);
     CHECK(text_entry_begin(owner,L"SECONDARY SERVER",L"https://cancel.example",done,server_text_valid));

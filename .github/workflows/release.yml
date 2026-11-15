@@ -136,7 +136,7 @@ jobs:
         run: python -m pip install Pillow==12.0.0
       - name: Build native launcher, notification, and Windows setup
         run: |
-          python scripts/build-windows-launcher.py --zig "$RUNNER_TEMP/release-tools/zig-x86_64-linux-0.14.1/zig"
+          python scripts/build-windows-launcher.py --release --zig "$RUNNER_TEMP/release-tools/zig-x86_64-linux-0.14.1/zig"
           python scripts/verify-windows-manifests.py
       - name: Install Linux setup build dependencies
         timeout-minutes: 5

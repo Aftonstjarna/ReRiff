@@ -19,6 +19,12 @@
 
 #ifndef RERIFF_VERSION
 #define RERIFF_VERSION "development"
+#ifndef RERIFF_DEVELOPMENT_BUILD
+#define RERIFF_DEVELOPMENT_BUILD 1
+#endif
+#endif
+#ifndef RERIFF_DEVELOPMENT_BUILD
+#define RERIFF_DEVELOPMENT_BUILD 0
 #endif
 #define MENU_WIDE_(x) L##x
 #define MENU_WIDE(x) MENU_WIDE_(x)
@@ -85,11 +91,7 @@ static DWORD restart_started;
 #include "../NativeLauncher/logging.h"
 static void log_line(const char *line) {
     if(!rr_log_ini(config_path,L"engine_menu"))return;
-    HANDLE file=CreateFileW(log_path,FILE_APPEND_DATA,FILE_SHARE_READ,NULL,OPEN_ALWAYS,FILE_ATTRIBUTE_NORMAL,NULL);
-    if (file!=INVALID_HANDLE_VALUE) {
-        DWORD written; WriteFile(file,line,(DWORD)strlen(line),&written,NULL);
-        WriteFile(file,"\r\n",2,&written,NULL); CloseHandle(file);
-    }
+    rr_log_append(log_path,"engine_menu",line);
 }
 
 static void load_settings(void) {
@@ -262,10 +264,13 @@ static void update_toggles(void *menu) {
 static BOOL graphics_scroll_wheel(int delta);
 static BOOL main_scroll_wheel(int delta);
 static BOOL menu_overlay_active(void);
+static BOOL picker_search_message(HWND window,UINT message,WPARAM key,LPARAM flags);
 static BOOL text_entry_message(HWND window,UINT message,WPARAM key,LPARAM flags);
+static void text_input_attach_queue(HWND window);
 #include "settings_scroll.h"
 #include "save_prompt.h"
 #include "text_entry.h"
+#include "steam_keyboard.h"
 static void server_save_prompt_result(void *menu,int choice);
 static BOOL prestige_prompt_intercept(void *menu,int selection);
 
@@ -590,7 +595,11 @@ static BOOL supported_file(const WCHAR *path) {
 #include "display_modes.h"
 static void cjk_direct_refresh(void);
 #include "picker_alphabet.h"
+static BOOL picker_search_before(void *menu);
+static void picker_search_after(void *menu);
+static void picker_search_forget(void *menu);
 #include "ui_scale.h"
+#include "picker_search.h"
 #include "ui_scale_slider.h"
 #include "graphics_aa_menu.h"
 #include "main_branding.h"
@@ -714,6 +723,21 @@ static BOOL cjk_component_enabled(void){return cjk_pack_enabled()||latin_pack_en
 #include "cjk_fonts.h"
 #include "cjk_direct_visuals.h"
 #include "unicode_trace.h"
+/* Steam can retain the original WNDPROC and deliver overlay text directly,
+ * bypassing a later SetWindowLongPtr subclass. Keep both routes equivalent. */
+static WNDPROC text_entry_native_previous;
+static unsigned text_entry_native_messages;
+static LRESULT CALLBACK text_entry_native_proc(HWND window,UINT message,WPARAM key,LPARAM flags){
+    if(picker_search_message(window,message,key,flags)||text_entry_message(window,message,key,flags)){
+        if(text_entry_native_messages++<8)log_line("Text input accepted through original window procedure.");
+        return message==WM_UNICHAR&&key==UNICODE_NOCHAR?TRUE:0;
+    }
+    return text_entry_native_previous(window,message,key,flags);
+}
+static BOOL install_text_entry_native(BYTE *base){
+    static const BYTE expected[]={0x55,0x8b,0xec,0x53,0x8b,0x5d,0x0c};
+    return unicode_detour(base+0x8c6e0,expected,sizeof(expected),text_entry_native_proc,(void **)&text_entry_native_previous);
+}
 
 __declspec(dllexport) BOOL __cdecl ReRiffConfigureNativeReel(void **methods,int count) {
     WCHAR path[MAX_PATH];DWORD length=GetModuleFileNameW(NULL,path,MAX_PATH);
@@ -746,10 +770,10 @@ __declspec(dllexport) BOOL __cdecl ReRiffStartEngineMenu(void) {
     WCHAR path[MAX_PATH]; DWORD length=GetModuleFileNameW(NULL,path,MAX_PATH);
     if (!length || length>=MAX_PATH) return FALSE;
     WCHAR *slash=wcsrchr(path,L'\\');
-    if (!slash || (size_t)(slash-path)+1+wcslen(L"logs\\ReRiff-engine-menu.log")>=MAX_PATH) return FALSE;
+    if (!slash || (size_t)(slash-path)+1+wcslen(L"logs\\ReRiff-game.log")>=MAX_PATH) return FALSE;
     wcscpy(config_path,path); config_path[slash-path+1]=0;
     wcscpy(log_path,config_path);wcscat(log_path,L"logs");
-    wcscpy(log_path,config_path); wcscat(log_path,L"logs\\ReRiff-engine-menu.log");
+    wcscpy(log_path,config_path); wcscat(log_path,L"logs\\ReRiff-game.log");
     wcscat(config_path,L"server.ini");
     if(rr_log_ini(config_path,L"engine_menu")){WCHAR logs[MAX_PATH];wcscpy(logs,log_path);WCHAR *end=wcsrchr(logs,L'\\');if(end){*end=0;CreateDirectoryW(logs,NULL);}}
     BYTE *base=(BYTE *)GetModuleHandleW(NULL);
@@ -797,6 +821,7 @@ __declspec(dllexport) BOOL __cdecl ReRiffStartEngineMenu(void) {
     if(!install_progression_rewards(base))log_line("Native reward entry hooks refused; original awards retained.");
     if(!install_progression_level_quote(base))log_line("Level-up reward message quote refused; original message retained.");
     if(!install_progression_view(base))log_line("Permanent-level Profile display hook unavailable.");
+    if(!install_text_entry_native(base))log_line("Original text-input entry hook refused: prologue differs.");
     if(!install_ui_scale(base))log_line("Native UI-scale extension could not be installed.");
     install_unicode_trace(base);
     if(borderless_active)aa_attach();

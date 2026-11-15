@@ -17,6 +17,9 @@
 #ifndef RERIFF_VERSION
 #define RERIFF_VERSION "0.1.0"
 #endif
+#ifndef RERIFF_DEVELOPMENT_BUILD
+#define RERIFF_DEVELOPMENT_BUILD 0
+#endif
 #define RERIFF_WIDE_LITERAL_(value) L##value
 #define RERIFF_WIDE_LITERAL(value) RERIFF_WIDE_LITERAL_(value)
 #ifndef RERIFF_HEALTH_URL
@@ -43,8 +46,8 @@ static BOOL settings_observed=FALSE;
 static BOOL installed_experimental=FALSE, requested_experimental=FALSE;
 static HFONT font;
 static HWND launcher_tabs,latin_checkbox,language_checkbox,language_description,logging_checkbox;
-static const WCHAR *log_categories[]={L"launcher",L"client",L"network",L"engine_menu",L"unicode",L"metadata",L"news",L"languages",L"localserver",L"singleplayer",L"update",L"installer",L"python"};
-static const WCHAR *log_labels[]={L"Launcher",L"Client connections",L"Network errors",L"Game menus and progression",L"Unicode rendering",L"Song metadata",L"News and release notes",L"Font installation",L"Local server and helper",L"Singleplayer storage",L"Updates",L"Installer",L"Python setup"};
+static const WCHAR *log_categories[]={L"launcher",L"connections",L"game",L"text",L"languages",L"localserver",L"update",L"installer",L"python"};
+static const WCHAR *log_labels[]={L"Launcher",L"Connections, network and news",L"Menus, progression and saves",L"Unicode and song metadata",L"Font installation",L"Local server and helper",L"Updates",L"Installer",L"Python setup"};
 #define LOG_CATEGORY_COUNT (sizeof(log_categories)/sizeof(log_categories[0]))
 static HWND log_checkboxes[LOG_CATEGORY_COUNT];
 static HWND diagnostic_controls[24];static unsigned diagnostic_count;static BOOL creating_diagnostics;
@@ -65,10 +68,17 @@ static void load_channel(void) {
     requested_experimental=installed_experimental;
 }
 
-static void channel_title(void) {
-    SetWindowTextW(window,installed_experimental
+static const WCHAR *launcher_title(void) {
+#if RERIFF_DEVELOPMENT_BUILD
+    return L"ReRiff Launcher — development build";
+#else
+    return installed_experimental
         ? L"ReRiff Launcher v" RERIFF_WIDE_LITERAL(RERIFF_VERSION) L" — Experimental"
-        : L"ReRiff Launcher v" RERIFF_WIDE_LITERAL(RERIFF_VERSION));
+        : L"ReRiff Launcher v" RERIFF_WIDE_LITERAL(RERIFF_VERSION);
+#endif
+}
+static void channel_title(void) {
+    SetWindowTextW(window,launcher_title());
 }
 
 static void log_message(const WCHAR *text) {
@@ -497,7 +507,7 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
         creating_languages=FALSE;
         creating_diagnostics=TRUE;
         logging_checkbox=control(L"BUTTON",L"Enable diagnostic logging",BS_AUTOCHECKBOX|WS_TABSTOP,22,26,590,32,LOGGING);
-        control(L"STATIC",L"Choose which logs to save. The master switch keeps your selections.\nExisting logs are kept; restart the game or local server after changes.",0,22,68,585,46,0);
+        control(L"STATIC",L"Related diagnostics share a log. The master switch keeps your selections.\nExisting logs are kept; restart the game or local server after changes.",0,22,68,585,46,0);
         for(unsigned i=0;i<LOG_CATEGORY_COUNT;i++)
             log_checkboxes[i]=control(L"BUTTON",log_labels[i],BS_AUTOCHECKBOX|WS_TABSTOP,22+(i%2)*300,122+(i/2)*32,290,28,LOG_CATEGORY_BASE+i);
         control(L"STATIC",L"Logs may contain file paths and server addresses; review before sharing.",0,22,356,585,40,0);
@@ -620,7 +630,7 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE previous,LPWSTR command,int sho
     WNDCLASSW cls;ZeroMemory(&cls,sizeof(cls));cls.lpfnWndProc=procedure;cls.hInstance=instance;cls.lpszClassName=L"ReRiffNativeLauncher";
     cls.hCursor=LoadCursorW(NULL,IDC_ARROW);cls.hbrBackground=(HBRUSH)(COLOR_WINDOW+1);
     RegisterClassW(&cls);
-    HWND handle=CreateWindowExW(0,cls.lpszClassName,L"ReRiff Launcher v" RERIFF_WIDE_LITERAL(RERIFF_VERSION),WS_OVERLAPPED|WS_CAPTION|WS_SYSMENU|WS_MINIMIZEBOX,
+    HWND handle=CreateWindowExW(0,cls.lpszClassName,launcher_title(),WS_OVERLAPPED|WS_CAPTION|WS_SYSMENU|WS_MINIMIZEBOX,
         CW_USEDEFAULT,CW_USEDEFAULT,660,615,NULL,NULL,instance,NULL);
     if (!handle) return 1;
     ShowWindow(handle,show);UpdateWindow(handle);

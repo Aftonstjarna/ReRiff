@@ -11,12 +11,26 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--zig', default='zig')
 parser.add_argument('--component', choices=('all', 'launcher', 'client'), default='all',
                     help='Build launcher/setup or injected client independently; all preserves release builds')
+kind = parser.add_mutually_exclusive_group()
+kind.add_argument('--development', action='store_true', help='Label launcher and in-game client as development builds')
+kind.add_argument('--release', action='store_true', help='Use the release version for official packaged builds')
 parser.add_argument('--output-dir', type=Path, default=Path('build'))
 args = parser.parse_args()
 root = Path(__file__).resolve().parent.parent
 version = (root/'VERSION').read_text().strip()
 if not re.fullmatch(r'\d+\.\d+\.\d+(?:-(?:beta\.)?[1-9]\d*)?', version):
     raise ValueError('Invalid VERSION')
+# Local changes must not present themselves as an already published beta.
+# The publishing workflow opts in explicitly; a pristine matching tag is also
+# reproducible as a release. Source archives/unversioned trees default to dev.
+development_build = not args.release
+if not args.development and not args.release:
+    try:
+        tag = subprocess.check_output(['git', 'describe', '--exact-match', '--tags', 'HEAD'], cwd=root, stderr=subprocess.DEVNULL, text=True).strip()
+        dirty = subprocess.check_output(['git', 'status', '--porcelain', '--untracked-files=normal'], cwd=root, text=True).strip()
+        development_build = bool(dirty) or tag not in (version, 'v'+version)
+    except (OSError, subprocess.CalledProcessError):
+        development_build = True
 output = args.output_dir if args.output_dir.is_absolute() else root/args.output_dir
 output.mkdir(parents=True, exist_ok=True)
 env = dict(os.environ)
@@ -30,7 +44,7 @@ if args.component in ('all', 'launcher'):
     rc=output/'app.rc';rc.write_text(content)
     subprocess.run([args.zig,'rc','/fo',str(resource),str(rc)],check=True,env=env)
     subprocess.run([args.zig,'cc','-target','x86-windows-gnu','-municode','-Wl,--subsystem,windows',
-                    '-O2','-Wall','-Wextra','-Werror','-DRERIFF_VERSION="'+version+'"',str(root/'NativeLauncher/launcher.c'),str(resource),
+                    '-O2','-Wall','-Wextra','-Werror','-DRERIFF_VERSION="'+version+'"','-DRERIFF_DEVELOPMENT_BUILD='+str(int(development_build)),str(root/'NativeLauncher/launcher.c'),str(resource),
                     '-o',str(output/'ReRiff-Launcher.exe'),'-lcomctl32','-lwininet','-lshell32','-luser32','-lgdi32','-ladvapi32','-static'],check=True,env=env)
     subprocess.run([args.zig,'cc','-target','x86-windows-gnu','-municode','-Wl,--subsystem,windows',
                     '-O2','-Wall','-Wextra','-Werror',str(root/'NativeLauncher/updater.c'),str(resource),
@@ -40,5 +54,5 @@ if args.component in ('all', 'launcher'):
                     '-o',str(output/'ReRiff-Setup.exe'),'-lcomdlg32','-lcomctl32','-lshell32','-luser32','-lgdi32','-lwininet','-ladvapi32','-static'],check=True,env=env)
 if args.component in ('all', 'client'):
     subprocess.run([args.zig,'cc','-target','x86-windows-gnu','-shared','-O2','-Wall','-Wextra','-Werror',
-                    '-DRERIFF_VERSION="'+version+'"',str(root/'ExperimentalMenu/engine_menu.c'),'-o',str(output/'ReRiff.Notify.dll'),
+                    '-DRERIFF_VERSION="'+version+'"','-DRERIFF_DEVELOPMENT_BUILD='+str(int(development_build)),str(root/'ExperimentalMenu/engine_menu.c'),'-o',str(output/'ReRiff.Notify.dll'),
                     '-luser32','-lgdi32','-ladvapi32','-static'],check=True,env=env)

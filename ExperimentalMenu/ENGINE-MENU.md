@@ -585,3 +585,34 @@ only the intended full-notes URL remains. The original `gaNewsMenu.initScreens`
 extracts a link for its original Visit URL control. ReRiff reuses that path;
 no extra popup, scrolling system or native control replacement is introduced.
 The full current-version notes remain in the installed file and on GitHub.
+
+
+### Local development labels
+
+Unpublished local clients display `ReRiff development build` in-game; the launcher
+displays `ReRiff Launcher — development build` under the same build conditions.
+Development clients do not
+consume a release-update notice. `scripts/build-windows-launcher.py` defaults
+to this label unless the checkout is clean at the exact VERSION tag. Use
+`--development` explicitly for local experiments; the publishing workflow uses
+`--release` to retain the beta/stable version label in official packages. This
+changes the displayed client label without changing updater version metadata.
+
+### Search input lifecycle regression
+
+The picker attaches the existing window input hook on entry, independently of
+Settings. The HWND regression checks Ctrl+F and Unicode input before Settings
+has ever opened, plus keyboard/controller cancellation in both directions.
+Controller B cancels the shared editor even while a Steam keyboard request is
+pending; A stays suppressed during that request to avoid accepting a search
+while selecting a virtual key. A native Y press satisfies the connection gate;
+mouse and keyboard activation still require a successful XInput connection
+check before requesting Steam input. Steam interface and request failures are
+logged without recording search text. The actual Steam overlay requires live
+validation; mocked API tests do not establish that it appears in-game.
+
+Search currently uses manually opened keyboards only, per user preference.
+Opening the field never requests a Steam keyboard. Focus changes do not end the
+inline editor, and it continues to consume keyboard text messages until explicit
+accept/cancel or picker cleanup. The HWND fixture rejects any automatic Steam
+binding attempt and verifies text after WM_KILLFOCUS.

@@ -23,7 +23,14 @@ int main(void){
  SendMessageW(logging_checkbox,BM_SETCHECK,BST_UNCHECKED,0);SendMessageW(hwnd,WM_COMMAND,LOGGING,0);
  SendMessageW(logging_checkbox,BM_SETCHECK,BST_CHECKED,0);SendMessageW(hwnd,WM_COMMAND,LOGGING,0);
  assert(SendMessageW(log_checkboxes[0],BM_GETCHECK,0,0)==BST_UNCHECKED);
- assert(diagnostic_count==LOG_CATEGORY_COUNT+4);
+ assert(LOG_CATEGORY_COUNT==9&&diagnostic_count==LOG_CATEGORY_COUNT+4);
+ assert(WritePrivateProfileStringW(L"diagnostics",L"log_network",L"false",ini));
+ assert(!rr_log_selected(folder,L"network")&&rr_log_selected(folder,L"connections"));
+ SendMessageW(log_checkboxes[1],BM_SETCHECK,BST_UNCHECKED,0);SendMessageW(hwnd,WM_COMMAND,LOG_CATEGORY_BASE+1,0);
+ assert(!rr_log_selected(folder,L"client")&&!rr_log_selected(folder,L"network")&&!rr_log_selected(folder,L"news"));
+ SendMessageW(log_checkboxes[1],BM_SETCHECK,BST_CHECKED,0);SendMessageW(hwnd,WM_COMMAND,LOG_CATEGORY_BASE+1,0);
+ assert(rr_log_selected(folder,L"network"));
+
  DestroyWindow(hwnd);DeleteFileW(file);RemoveDirectoryW(logs);DeleteFileW(ini);DeleteFileW(marker);RemoveDirectoryW(L"localserver");SetCurrentDirectoryW(previous);RemoveDirectoryW(root);
  puts("PASS: native Diagnostics toggle, no disabled log directory, enabled writes and preserved disabled logs");return 0;
 }

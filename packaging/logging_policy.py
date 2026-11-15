@@ -25,7 +25,9 @@ def logging_enabled(game, default=None, category=None):
         if not logging_enabled(game, default):return False
         try:
             ini=client_settings(game)
-            return ini.getboolean('diagnostics','log_'+category,fallback=True)
+            group={'client':'connections','network':'connections','news':'connections','engine_menu':'game','singleplayer':'game','unicode':'text','metadata':'text'}.get(category,category)
+            key='log_'+(group if ini.has_option('diagnostics','log_'+group) else category)
+            return ini.getboolean('diagnostics',key,fallback=True)
         except (OSError,ValueError,configparser.Error):return True
     game=Path(game)
     try:
@@ -57,3 +59,19 @@ def logging_config(raw,enabled):
         if at is None:lines+=['','[diagnostics]',value]
         else:lines.insert(at+1,value)
     return bom+(newline.join(lines)+newline).encode(encoding)
+
+def archive_grouped_logs(game):
+    """Retain superseded component logs byte-for-byte outside the active list."""
+    import uuid
+    logs=Path(game)/'logs'
+    names={'ReRiff-'+name+'.log' for name in ('client','network','news','engine-menu','singleplayer','unicode','metadata')}
+    sources=[p for p in logs.iterdir() if p.is_file() and (p.name in names or any(p.name.startswith('legacy-') and p.name.endswith('-'+name) for name in names))] if logs.is_dir() else []
+    if not sources:return {}
+    archive=logs/'archive'/('before-grouped-'+uuid.uuid4().hex)
+    archive.mkdir(parents=True)
+    moved={}
+    for source in sources:
+        target=archive/source.name
+        source.rename(target)
+        moved[str(source)]=str(target)
+    return moved

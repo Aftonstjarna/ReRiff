@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Text;
+using System.Threading;
 using System.Collections.Generic;
 
 namespace ReRiff {
@@ -21,14 +22,29 @@ namespace ReRiff {
             }catch(IOException){}catch(UnauthorizedAccessException){}
             return false;
         }
-        internal static bool Enabled(string folder,string name) {
-            if(!Enabled(folder))return false;
+        internal static string Category(string name) {
             string category=Path.GetFileNameWithoutExtension(name).ToLowerInvariant().Replace("reriff-", "").Replace('-', '_');
             if(category.StartsWith("localserver"))category="localserver";
             if(category=="python_setup")category="python";
             if(category.StartsWith("installer"))category="installer";
-            try {string value;if(ConfigFiles.Read(folder,"diagnostics").TryGetValue("log_"+category,out value))
-                return value=="1"||value.Equals("true",StringComparison.OrdinalIgnoreCase)||value.Equals("yes",StringComparison.OrdinalIgnoreCase);
+            return category;
+        }
+        internal static string Group(string category) {
+            if(category=="client"||category=="network"||category=="news")return "connections";
+            if(category=="engine_menu"||category=="singleplayer")return "game";
+            if(category=="unicode"||category=="metadata")return "text";
+            return category;
+        }
+        internal static string FileName(string name) {
+            string category=Category(name),group=Group(category);
+            return group!=category?"ReRiff-"+group+".log":name;
+        }
+        internal static bool Enabled(string folder,string name) {
+            if(!Enabled(folder))return false;
+            string category=Category(name),group=Group(category);
+            try {string value;var settings=ConfigFiles.Read(folder,"diagnostics");
+                if(settings.TryGetValue("log_"+group,out value)||settings.TryGetValue("log_"+category,out value))
+                    return value=="1"||value.Equals("true",StringComparison.OrdinalIgnoreCase)||value.Equals("yes",StringComparison.OrdinalIgnoreCase);
             }catch(IOException){}catch(UnauthorizedAccessException){}
             return true;
         }
@@ -50,7 +66,17 @@ namespace ReRiff {
         }
         internal static void Append(string folder,string name,string message) {
             if(!Enabled(folder,name))return;
-            string logs=Path.Combine(folder,"logs");Directory.CreateDirectory(logs);File.AppendAllText(Path.Combine(logs,name),message);
+            using(var mutex=new Mutex(false,@"Local\ReRiff.Diagnostics")) {
+                bool acquired=false;
+                try {
+                    try {acquired=mutex.WaitOne(1000);}catch(AbandonedMutexException){acquired=true;}
+                    if(!acquired)return;
+                    string logs=Path.Combine(folder,"logs");Directory.CreateDirectory(logs);
+                    string target=FileName(name);
+                    if(target!=name)message="["+Category(name)+"] "+message;
+                    File.AppendAllText(Path.Combine(logs,target),message,new UTF8Encoding(false));
+                }finally{if(acquired)mutex.ReleaseMutex();}
+            }
         }
     }
 }

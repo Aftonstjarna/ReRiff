@@ -221,7 +221,7 @@ static BOOL progression_domain_native_xp(int *xp){
 }
 static void progression_domain_stop(const char *reason){
     log_line(reason);
-    MessageBoxW(NULL,L"The experimental progression checkpoint could not be prepared or committed safely. ReRiff will close without resetting the original save. See logs/ReRiff-engine-menu.log.",L"ReRiff experimental progression",MB_OK|MB_ICONERROR);
+    MessageBoxW(NULL,L"The experimental progression checkpoint could not be prepared or committed safely. ReRiff will close without resetting the original save. See logs/ReRiff-game.log.",L"ReRiff experimental progression",MB_OK|MB_ICONERROR);
     ExitProcess(1);
 }
 __declspec(dllexport) int __cdecl ReRiffConfigureProgressionCheckpoint(ProgressCheckpointFn callback){

@@ -146,7 +146,7 @@ int main(int argc,char **argv){
     CHECK(WritePrivateProfileStringW(L"diagnostics",L"cjk_hd_probe",L"1",config_path));
     cjk_install_direct(base);CHECK(cjk_direct_enabled&&cjk_hd_ready&&cjk_pages_finish_original);
     CloseHandle(unicode_log);unicode_log=INVALID_HANDLE_VALUE;
-    WCHAR trace[MAX_PATH];wcscpy(trace,temp);wcscat(trace,L"ReRiff-unicode.log");
+    WCHAR trace[MAX_PATH];wcscpy(trace,temp);wcscat(trace,L"ReRiff-text.log");
     file=CreateFileW(trace,GENERIC_READ,FILE_SHARE_READ,NULL,OPEN_EXISTING,0,NULL);CHECK(file!=INVALID_HANDLE_VALUE);
     char output[32768]={0};DWORD count;CHECK(ReadFile(file,output,sizeof(output)-1,&count,NULL));CloseHandle(file);
     CHECK(strstr(output,"requested=U+65E5 selected=U+003F match=false"));

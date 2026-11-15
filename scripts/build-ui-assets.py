@@ -34,10 +34,10 @@ def build(output):
         logo=logo.crop(bounds);logo.thumbnail((480,80),Image.Resampling.LANCZOS)
         preview=Image.new('RGBA',logo.size,(26,26,26,255));preview.alpha_composite(logo);preview.save(output/'reriff-logo.png')
         write_bitmap(logo,output/'reriff-logo.bmp')
-        # About one screen pixel of outline at the launcher's button size.
+        # A lighter outline: two asset pixels, retaining the existing canvas size.
         padded=ImageOps.expand(logo,border=4,fill=(0,0,0,0))
         outline=Image.new('RGBA',padded.size,(0,0,0,0))
-        outline.putalpha(padded.getchannel('A').filter(ImageFilter.MaxFilter(9)))
+        outline.putalpha(padded.getchannel('A').filter(ImageFilter.MaxFilter(5)))
         outline.alpha_composite(padded)
         outline.save(output/'reriff-logo-button.png')
         write_bitmap(outline,output/'reriff-logo-button.bmp')

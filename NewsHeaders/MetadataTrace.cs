@@ -43,9 +43,9 @@ namespace ReRiff {
             lock(metadataLock){
                 if(metadataRecords>=4096||metadataSeen.Contains(line))return;
                 string folder=Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"logs");Directory.CreateDirectory(folder);
-                string path=Path.Combine(folder,"ReRiff-metadata.log");
+                string path=Path.Combine(folder,Logging.FileName("ReRiff-metadata.log"));
                 if(File.Exists(path)&&new FileInfo(path).Length>=4*1024*1024)return;
-                File.AppendAllText(path,DateTime.UtcNow.ToString("o")+" "+line+Environment.NewLine,Encoding.UTF8);
+                Logging.Append(AppDomain.CurrentDomain.BaseDirectory,"ReRiff-metadata.log",DateTime.UtcNow.ToString("o")+" "+line+Environment.NewLine);
                 metadataRecords++;if(metadataSeen.Count<512)metadataSeen.Add(line);
             }
         }

@@ -1,3 +1,66 @@
+# ReRiff 1.4.0-beta.6 — Library search and grouped diagnostics
+
+## In-game summary
+
+- Search your music library, including tracks not yet imported.
+- Open music search with Y, Ctrl+F or a click.
+- Find related diagnostics together in fewer log files.
+
+## Full release notes
+
+### Music-library search
+
+- Add an inline search field to the native music picker. Xbox Y, Ctrl+F and
+  clicking the field begin editing; Enter/A finishes editing, and Esc/B clears
+  search before native Back can leave the picker. Retain the editor across
+  keyboard focus changes and wait for Back to be released after cancellation.
+- Recursively search the Music folder, saved favourites, the current folder and
+  cached-track locations, including unimported audio files. Match filenames,
+  paths and available cached title/artist metadata, with case-insensitive,
+  Unicode-width, hiragana/katakana and romaji matching.
+- Publish cached tracks and progressive filesystem snapshots instead of waiting
+  for the entire scan. Ignore an invalid optional song catalogue and continue
+  searching files; retain worker errors rather than displaying Searching forever.
+- Build results through the original picker list and selection routines. Keep
+  native spacing, artwork, clipping and scrolling, and preserve original folder
+  entries for cancellation. Picker wraparound remains excluded.
+
+### Diagnostic logs and launcher
+
+- Reduce the launcher from thirteen diagnostic categories to nine. Combine
+  client/network/news into ReRiff-connections.log, menus/progression/singleplayer
+  into ReRiff-game.log, and Unicode/metadata into ReRiff-text.log. Prefix grouped
+  records with their component and coordinate native/managed appends.
+- Preserve older per-component preferences until a group is explicitly changed.
+  Move superseded logs into logs/archive without changing their contents.
+- Reduce the outline around the ReRiff launcher button logo.
+- Show development build in the game and launcher for unpublished local builds.
+  Official release packages display their beta version; updater version metadata
+  remains separate from the development label.
+- Include scoped text-input diagnostics that count queue/editor messages without
+  recording typed text, plus direct Unicode-character input support.
+
+### Validation and known limitations
+
+- Live Proton testing confirmed working library search. The tested library
+  contained 6,533 tracks and completed enumeration in about 1.5 seconds; timings
+  depend on storage and library size. Automated checks cover cache failure
+  recovery, matching, unimported files, native result ownership, cancellation,
+  shared text editing, grouped log preferences and diagnostic archive retention.
+- Search displays at most 200 result rows and scans at most 100,000 files that
+  match supported audio extensions. Unreadable folders or the limit produce a
+  partial scan; nested links/junctions are not followed. These can be selected as
+  roots. High UI scales and layouts beyond those tested need further live checks.
+- Steam's virtual keyboard remains unable to deliver input in the tested
+  desktop/Proton configuration. Physical typing works when that keyboard is
+  closed. Automatic keyboard summoning is disabled, and investigation is paused.
+  No Steam keyboard fix is claimed by this beta.
+- M4A files can appear in search, but M4A decoding remains unsupported. This
+  release does not restore M4A playback.
+- Existing multiplayer prestige, server/account isolation and coin-message
+  changes remain included. This is an opt-in prerelease; stable remains the
+  default update channel.
+
 # ReRiff 1.4.0-beta.5 — Server editing and multiplayer prestige
 
 ## In-game summary
