@@ -3,7 +3,7 @@
 Play Riff Racer on Windows or Linux/Proton with singleplayer, shared
 leaderboards and ghosts.
 
-[Download stable 1.3.1](https://github.com/Aftonstjarna/ReRiff/releases/latest)
+[Download stable](https://github.com/Aftonstjarna/ReRiff/releases/latest)
 · [Install and update](#install-or-update)
 · [Steam launch options](#launch-through-steam)
 · [Server settings](#server-settings)
