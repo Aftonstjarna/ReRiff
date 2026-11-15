@@ -23,7 +23,11 @@ int main(void){
  SendMessageW(logging_checkbox,BM_SETCHECK,BST_UNCHECKED,0);SendMessageW(hwnd,WM_COMMAND,LOGGING,0);
  SendMessageW(logging_checkbox,BM_SETCHECK,BST_CHECKED,0);SendMessageW(hwnd,WM_COMMAND,LOGGING,0);
  assert(SendMessageW(log_checkboxes[0],BM_GETCHECK,0,0)==BST_UNCHECKED);
- assert(LOG_CATEGORY_COUNT==9&&diagnostic_count==LOG_CATEGORY_COUNT+4);
+ assert(LOG_CATEGORY_COUNT==9&&diagnostic_count==LOG_CATEGORY_COUNT+2);
+ TOOLINFOW tool={0};tool.cbSize=sizeof(tool);tool.hwnd=hwnd;tool.uId=(UINT_PTR)logging_checkbox;
+ assert(SendMessageW(checkbox_tooltips,TTM_GETTOOLINFOW,0,(LPARAM)&tool));
+ assert((tool.uFlags&(TTF_IDISHWND|TTF_SUBCLASS))==(TTF_IDISHWND|TTF_SUBCLASS));
+ assert(wcsstr(tool.lpszText,L"Existing logs")||wcsstr(tool.lpszText,L"existing logs"));
  assert(WritePrivateProfileStringW(L"diagnostics",L"log_network",L"false",ini));
  assert(!rr_log_selected(folder,L"network")&&rr_log_selected(folder,L"connections"));
  SendMessageW(log_checkboxes[1],BM_SETCHECK,BST_UNCHECKED,0);SendMessageW(hwnd,WM_COMMAND,LOG_CATEGORY_BASE+1,0);
