@@ -26,7 +26,11 @@ leaderboards and ghosts.
 
 **Launcher — Servers**
 
-![Launcher server settings, singleplayer, local-server installation and updates](docs/images/reriff-launcher.png)
+![Development launcher with Force singleplayer and concise checkbox labels](docs/images/reriff-launcher.png)
+
+Development launcher shown: hover over checkboxes for explanations.
+**Force singleplayer** skips servers; when unchecked, unavailable or absent
+servers still fall back to singleplayer automatically.
 
 Linux play requires Proton and the game's Windows .NET Framework setup.
 
