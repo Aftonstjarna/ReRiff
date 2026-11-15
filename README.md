@@ -3,7 +3,8 @@
 Play Riff Racer on Windows or Linux/Proton with singleplayer, shared
 leaderboards and ghosts.
 
-[Download stable 1.3.1](https://github.com/Aftonstjarna/ReRiff/releases/latest)
+[Download stable](https://github.com/Aftonstjarna/ReRiff/releases/latest)
+· [Beta 1.4.0-beta.6](https://github.com/Aftonstjarna/ReRiff/releases/tag/v1.4.0-beta.6)
 · [Install and update](#install-or-update)
 · [Steam launch options](#launch-through-steam)
 · [Server settings](#server-settings)
@@ -28,6 +29,27 @@ leaderboards and ghosts.
 ![Launcher server settings, singleplayer, local-server installation and updates](docs/images/reriff-launcher.png)
 
 Linux play requires Proton and the game's Windows .NET Framework setup.
+
+## Current beta
+
+Stable is the default download and update channel. The opt-in
+[1.4.0-beta.6 release](https://github.com/Aftonstjarna/ReRiff/releases/tag/v1.4.0-beta.6)
+adds whole-library music search, editable server addresses, experimental prestige
+progression and grouped diagnostics. See its release notes for validation and
+remaining limitations.
+
+In the music picker, press **Xbox Y**, **Ctrl+F**, or click the search field.
+Search includes unimported music in the Music folder, saved favourites, current
+folder and cached-track locations. It matches filenames, paths and available
+song metadata, including kana and romaji. **Enter/A** finishes editing;
+**Esc/B** clears search before Back can leave the picker. Results arrive during
+scanning; up to 200 matches are displayed, with a 100,000-audio-file scan limit.
+
+![Music picker filtering library files for the search term caress](docs/images/reriff-music-search.png)
+
+Steam virtual-keyboard input remains unresolved in the tested Proton setup;
+automatic summoning is disabled. Use a physical keyboard with Steam's keyboard
+closed. M4A files may appear in search, but M4A playback is not supported.
 
 ## Install or update
 
@@ -89,8 +111,9 @@ it is downloaded only when you choose **Install local server**. The game still
 requires its Windows .NET Framework setup inside Proton.
 
 If Windows selects an external server but game features stay offline, include
-`logs/ReRiff-network.log` from the game folder when reporting the failure.
-The startup report collector includes this log automatically.
+the connection logs listed under [Admin panel and logs](#admin-panel-and-logs)
+when reporting the failure.
+The startup report collector includes available connection logs automatically.
 
 Failed updates show a reason in the launcher. Open **Diagnostics → View update
 details** for scrollable temporary error details and saved update-log entries.
@@ -118,7 +141,7 @@ one additional native VFS pair (`.dat` and `.zip`) and retains the original game
 mods. Updates refuse changed owned files. The tested Japanese glyph forms are
 used across CJK text; regional typography selection is not yet available.
 
-![Japanese song title alongside Latin artist text on a shared leaderboard](docs/images/reriff-cjk-leaderboard.png)
+![Driver profile showing a prestige star beside level 33 and a Japanese song title](docs/images/reriff-profile.png)
 
 ### Automatic client updates
 
@@ -131,18 +154,16 @@ The title bar shows the running version. Settings and saved data are retained.
 
 Stable is the default channel. Check **Use experimental releases (prereleases)**
 to test betas, or uncheck it to return to stable. New betas use `X.X.X-beta.N`,
-starting with `1.2.4-beta.1`; older `X.X.X-N` names remain supported.
+with older `X.X.X-N` names retained for updater compatibility.
 
-**Stable 1.2.3 launchers require a manual update to recognize beta names.**
 Experimental updates select the most recently published GitHub prerelease;
 stable updates use GitHub Latest. The updater verifies the selected release's
 package and skips an already installed version unless you switch channels or
 request a test reinstall.
 
-If your launcher cannot apply an update, install the current release manually.
-The 1.2.3 launcher has a 64 MiB download limit, below the size of the current
-installers. Download and run the 1.3.0 installer once to upgrade it; your existing
-settings and saved data are preserved.
+If an older launcher cannot recognize beta names or download current installers,
+install the current release manually once. Your settings and saved data are
+preserved.
 Client updates do not update the Docker server.
 
 ### In-game Servers menu and launcher skipping
@@ -153,6 +174,11 @@ Open **Settings → Servers** to change **Skip launcher**, **Primary server only
 and **Singleplayer**. Save your changes with **Save settings** or **Save and
 return**. **Return without saving** discards edits. The launcher edits the same
 preferences in `server.ini` and `client.ini`.
+
+**In the 1.4.0 beta**, select Primary or Secondary server to edit its address
+in-game, then confirm or cancel the text entry.
+
+![In-game Secondary server address editor with confirm and cancel controls](docs/images/reriff-server-editor.png)
 
 **Skip launcher** takes effect on the next start. Fresh installs show the launcher.
 
@@ -195,15 +221,8 @@ quotes. Steam's forwarded command must point to `Game.exe` beside the launcher.
 Put launcher flags such as `--skip-launcher` before `%command%`; game arguments
 forwarded after `Game.exe` are retained. Use the current launcher for Steam command forwarding.
 
-On Linux, use the shell bridge to launch the Windows EXE through Steam's Proton.
-**Stable 1.2.3** installs it at `localserver/steam-launcher.sh`:
-
-```text
-"/path/to/Riff Racer/localserver/steam-launcher.sh" -- %command%
-```
-
-**Upcoming installers** also place the bridge beside `ReRiff-Launcher.exe` as
-**ReRiff-Launcher.sh**. If that file is present, use:
+On Linux, use **ReRiff-Launcher.sh** beside `ReRiff-Launcher.exe` to launch
+through Steam's Proton:
 
 ```text
 "/path/to/Riff Racer/ReRiff-Launcher.sh" -- %command%
@@ -221,13 +240,11 @@ To test an unattended update on Linux, use:
 "/path/to/Riff Racer/ReRiff-Launcher.sh" --test-auto-update -- %command%
 ```
 
-For stable 1.2.3, substitute `localserver/steam-launcher.sh` in these examples.
-
 Remove `--test-auto-update` after testing. It implies skipping the launcher for
 that invocation. Current bridges also recognize this flag after `%command%`.
 
-Both bridge locations retain the same argument forwarding; the old path remains
-supported for existing Steam launch options. Do not use the Windows `.exe`
+The older `localserver/steam-launcher.sh` path remains supported for existing
+Steam launch options, with the same argument forwarding. Do not use the Windows `.exe`
 directly before `%command%` on Linux.
 
 The Windows launcher runs in Steam's Proton prefix. Singleplayer storage runs
@@ -239,12 +256,12 @@ The launcher waits for the game to exit so Steam keeps the session active.
 Open **News** for the installed client's patch notes and server announcements.
 Choose **Visit URL** for that release's full notes on GitHub. News
 shows up to three concise summary points. Client notes ship with the installer;
-delivery diagnostics are recorded in `logs/ReRiff-news.log` when logging is enabled.
+delivery diagnostics use the connection logs described below when logging is enabled.
 
 ![In-game News with a short release summary and a link to the full notes](docs/images/reriff-news.png)
 
-The supplied Languages and in-game screenshots show the beta.6 preview of
-features included in the stable releases.
+The launcher, profile, address-editor and search screenshots show a development
+build of the 1.4.0 beta features. Other screenshots may show earlier releases.
 
 ## Server settings
 
@@ -412,6 +429,8 @@ directory are copied into the game's `.bak` folder; the previous copies are kept
 
 ## Troubleshooting
 
+![Launcher Diagnostics tab with nine grouped logging categories and View update details](docs/images/reriff-diagnostics.png)
+
 Enable **Diagnostic logging** in setup or the launcher's **Diagnostics** tab
 before reproducing an issue. Logging defaults on for beta/development builds
 and off for stable builds; an explicit choice is retained across updates.
@@ -419,12 +438,10 @@ The game creates `logs` only when logging is enabled. Disabling it keeps
 existing logs and the folder unchanged. Restart a running local server after
 changing its logging setting. Review logs before sharing them.
 
-**High-rate FLAC produces an overlong track:** a 96 kHz / 24-bit source can
-produce a track much longer than its audio. This also reproduces with the
-original engine plus the offline patch. A separately resampled 44.1 kHz / 24-bit
-copy produced the expected analysis span in the comparison. Keep the original
-music and generate a fresh track from the resampled copy; reusing the old cached
-analysis retains the bug. See [issue #2](https://github.com/Aftonstjarna/ReRiff/issues/2).
+**Previously generated FLAC tracks have the wrong duration:** current builds
+correct the original decoder's sample-rate handling for new analysis. Old cached
+analysis can retain the timing error; generate a fresh track rather than reusing
+that cache. See [the FLAC investigation](reports/FLAC-SAMPLE-RATE.md).
 
 For a white-screen crash on Windows, install the complete package with
 `ReRiff-Setup.exe` first; copying the launcher alone leaves required helpers
@@ -447,7 +464,7 @@ If a different failure persists, send the generated startup report.
   once. Updated launchers distinguish actual host-helper completion from Wine's
   wrapper exit status, including when no local backend is running.
 - **Cannot connect over LAN:** check the saved external URL and port, container
-  port mapping/host networking, TCP firewall rule, and `logs/ReRiff-client.log`. A
+  port mapping/host networking, TCP firewall rule, and the connection logs below. A
   public-URL setting alone does not expose a port. Restart the game to reselect.
 - **Same song has separate leaderboards:** update the server and both launchers,
   ensure the exact source files are accessible, and relaunch each client. Metadata
@@ -608,16 +625,26 @@ override it explicitly. Normal stored News announcements are retained.
 For a local server, open `http://127.0.0.1:5144/admin`. For a shared server, use
 its configured address with `/admin`.
 
-- Client selection: `logs/ReRiff-client.log` under the game folder.
-- Launcher and updates: `logs/ReRiff-launcher.log`; update errors also identify a
-  working folder for extracted update files. The update log is `logs/update.log`.
-- Native menu startup: `logs/ReRiff-engine-menu.log`; network errors: `logs/ReRiff-network.log`.
+In 1.4.0-beta.6 and later, related diagnostics share files and retain component
+labels. The launcher exposes nine categories. Older per-component preferences
+are preserved until you change their group; superseded logs move to
+`logs/archive/` during installation.
+
+- Connections, server selection and News: `logs/ReRiff-connections.log`.
+- Native menus and singleplayer progression: `logs/ReRiff-game.log`.
+- Text input, Unicode and metadata: `logs/ReRiff-text.log`.
+- Launcher: `logs/ReRiff-launcher.log`; updates: `logs/update.log`.
+- Optional local server: `logs/ReRiff-localserver.log`.
 - Setup: `logs/installer.log` on Windows and `logs/installer-*.log` on Linux.
   Private Python downloads: `logs/ReRiff-python-setup.log` on Windows.
   Startup collection reports are also saved under `logs/`.
 - Legacy local backend: `localserver/server-console.log` and
   `localserver/server/data/traces/`.
 - Docker: `docker logs reriff-server` and `/data/traces/` inside the container.
+
+Stable 1.3.2 still uses separate `ReRiff-client.log`, `ReRiff-network.log`,
+`ReRiff-news.log`, `ReRiff-engine-menu.log`, `ReRiff-singleplayer.log`,
+`ReRiff-unicode.log` and `ReRiff-metadata.log` files under `logs/`.
 
 Credentials are redacted from structured traces; player and song names remain.
 
@@ -664,7 +691,12 @@ server. The Docker image already includes both libraries; singleplayer needs nei
 
 ## Build and release
 
-Client source builds use .NET SDK 8 and Zig 0.14.1:
+Client source builds use .NET SDK 8 and Zig 0.14.1.
+
+Unpublished local builds display **development build** in both the launcher and
+game. The native build script detects a clean matching version tag; use
+`--development` to force the development label or `--release` when producing an
+official versioned package. Release workflows explicitly select `--release`.
 
 Managed helpers use the committed `Managed/ReRiff.snk` development key for a
 reproducible strong-name identity required by the Windows .NET Framework loader.
@@ -719,6 +751,19 @@ The workflow builds and checks both installers before publishing assets and
 checksums. Each release has its own notes; the full changelog is in
 [RELEASE-NOTES.md](RELEASE-NOTES.md). Publish the stable base version after its
 build passes all checks.
+
+### Repository history
+
+Some older commits appear more than once with the same title. The history
+contains parallel versions of an older commit chain with different parent
+hashes, later joined by merges. Several pairs have identical file snapshots;
+others differ. Repeated titles do not mean features are installed or run twice.
+Published history and release tags are retained so existing release references
+continue to identify their tested commits.
+
+GitHub provides the source ZIP and tarball for each release automatically;
+there is no separately uploaded source archive. For version-specific changes,
+use the release notes rather than counting repeated commit titles.
 
 The vendored extended backend originates from
 [rumbadebu/riffapi-local-extended](https://github.com/rumbadebu/riffapi-local-extended)
