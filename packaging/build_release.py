@@ -16,6 +16,7 @@ import zlib
 from shared_patch import make_patch, digest
 from release_notes import release_notes
 from font_assets import load_pin, validate_component
+from release_metadata import release_metadata
 
 ROOT = Path(__file__).resolve().parent.parent
 PYTHON_SHA = '9e35319bffedab8b36ad44d8f377cb4f1733bcec257a0b6d04d94f01486ddb38'
@@ -176,7 +177,7 @@ __RERIFF_PAYLOAD__
         subprocess.run(['git','archive','--format=tar.gz',f'--prefix=ReRiff-{version}/','HEAD'],cwd=ROOT,stdout=stream,check=True)
     artifacts = sorted(p for p in output.iterdir() if p.suffix in ('.run','.zip','.gz','.AppImage'))
     (output/'SHA256SUMS').write_text(''.join(digest(p.read_bytes())+'  '+p.name+'\n' for p in artifacts))
-    (output/'release.json').write_text(json.dumps({'version':version,'commit':commit,'artifacts':[p.name for p in artifacts]},indent=2)+'\n')
+    (output/'release.json').write_text(json.dumps(release_metadata(output, version, commit),indent=2)+'\n')
     (output/'RELEASE-NOTES.md').write_text(notes, encoding='utf-8')
     # User documentation lives on the main repository README, not per release.
     (output/'README-LINUX.md').unlink(missing_ok=True)

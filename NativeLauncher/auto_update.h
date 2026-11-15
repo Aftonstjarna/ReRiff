@@ -152,7 +152,7 @@ static BOOL check_updates(void) {
     if(!update_download(session,url,metadata,65535))goto done;
     FILE *file=_wfopen(metadata,L"rb");if(!file)goto done;
     size_t n=fread(body,1,UPDATE_JSON_LIMIT-1,file);body[n]=0;fclose(file);
-    failure=L"The selected release does not list a valid installer for this platform";
+    failure=L"The selected release has invalid or unsupported update metadata, or no compatible client installer";
     if(!release_package(body,is_wine(),&package))goto done;
     if(!release_needs_install(package.version,RERIFF_VERSION,requested_experimental,installed_experimental,force_auto_reinstall)){
         wcscpy(message,L"You have the latest published release on this channel.");ok=TRUE;goto done;
@@ -171,6 +171,12 @@ static BOOL check_updates(void) {
     while(fgets(line,sizeof(line),file)){
         if(sscanf(line,"%64[0123456789abcdefABCDEF] %511s",sum,listed)==2&&strlen(sum)==64&&!strcmp(listed,filename_u8))strcpy(expected,sum);
     }fclose(file);if(!*expected)goto done;
+    if(package.explicit_metadata&&_stricmp(expected,package.sha256)){
+        failure=L"The package metadata and release checksum disagree";goto done;
+    }
+    if(package.explicit_metadata&&package.size>256ULL*1024*1024){
+        failure=L"This package exceeds the download size supported by this launcher; install the newer release manually";goto done;
+    }
     _snwprintf(archive,CAP,L"%ls\\%ls",work,filename);archive[CAP-1]=0;
     _snwprintf(url,CAP,L"https://github.com/Aftonstjarna/ReRiff/releases/download/%ls/%ls",release_tag,filename);url[CAP-1]=0;
     failure=L"Could not download the release package";
@@ -178,6 +184,13 @@ static BOOL check_updates(void) {
     if(!update_download(session,url,archive,256*1024*1024))goto done;
     failure=L"The release checksum did not match";
     if(automatic_update){if(progress_cancelled())goto done;progress_report(PROGRESS_VERIFY,-1);}
+    if(package.explicit_metadata){
+        WIN32_FILE_ATTRIBUTE_DATA info;
+        if(!GetFileAttributesExW(archive,GetFileExInfoStandard,&info)
+            ||(((ULONGLONG)info.nFileSizeHigh<<32)|info.nFileSizeLow)!=package.size){
+            failure=L"The downloaded package size does not match release metadata";goto done;
+        }
+    }
     if(!update_digest(archive,expected))goto done;
     if(automatic_update&&progress_cancelled())goto done;
     MultiByteToWideChar(CP_UTF8,0,expected,-1,hash_w,65);

@@ -11,6 +11,7 @@ import tarfile
 import tempfile
 import zipfile
 import os
+import re
 try:
     from logging_policy import logging_enabled
 except ModuleNotFoundError:
@@ -23,6 +24,40 @@ def safe_name(name):
     if path.is_absolute() or '..' in path.parts or '\\' in name or ':' in name:
         raise ValueError('Unsafe archive path')
     return path
+
+
+def validate_release_package(metadata, archive, expected, platform):
+    schema = metadata.get('schema', 1)
+    if type(schema) is not int or schema not in (1, 2):
+        raise ValueError('Unsupported release metadata schema')
+    if schema == 1 and 'packages' not in metadata:
+        if archive.name not in metadata.get('artifacts', []):
+            raise ValueError('Release package is not listed in metadata')
+        return
+    packages = metadata.get('packages')
+    if schema != 2 or not isinstance(packages, list) or len(packages) > 128:
+        raise ValueError('Invalid explicit release package metadata')
+    matches = []
+    for package in packages:
+        if not isinstance(package, dict):
+            raise ValueError('Invalid explicit release package metadata')
+        for key, limit in [('component',63), ('platform',31), ('architecture',31), ('filename',255)]:
+            value = package.get(key)
+            if not isinstance(value,str) or not value or len(value.encode('utf8')) > limit:
+                raise ValueError('Invalid release package identity')
+        if not re.fullmatch(r'[A-Za-z0-9_-][A-Za-z0-9._-]*',package['filename']):
+            raise ValueError('Invalid release package filename')
+        if type(package.get('size')) is not int or not 0 < package['size'] <= 2**64-1:
+            raise ValueError('Invalid release package size')
+        if not isinstance(package.get('sha256'),str) or not re.fullmatch(r'[0-9a-fA-F]{64}',package['sha256']):
+            raise ValueError('Invalid release package checksum')
+        if (package['component'],package['platform'],package['architecture']) == ('client',platform,'x86' if platform=='windows' else 'x86_64'):
+            matches.append(package)
+    if len(matches)!=1:
+        raise ValueError('Expected one client package for this platform and architecture')
+    package=matches[0]
+    if package['filename']!=archive.name or package['size']!=archive.stat().st_size or package['sha256'].lower()!=expected.lower():
+        raise ValueError('Release package metadata mismatch')
 
 
 def prepare(archive, expected, work, game, platform, channel=None):
@@ -82,8 +117,7 @@ def prepare(archive, expected, work, game, platform, channel=None):
         metadata = json.loads(metadata_path.read_text())
         if manifest.get('version') != metadata.get('version'):
             raise ValueError('Release package version mismatch')
-        if archive.name not in metadata.get('artifacts', []):
-            raise ValueError('Release package is not listed in metadata')
+        validate_release_package(metadata, archive, expected, platform)
     installer = load_installer(root)
     installer.install(root, game, None, platform, dry_run=True)
     if platform == 'windows':

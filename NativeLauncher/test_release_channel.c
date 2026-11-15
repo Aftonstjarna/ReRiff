@@ -11,6 +11,12 @@ typedef int BOOL;
 #define RELEASE(tag,pre,draft,date) "{\"tag_name\":\"" tag "\",\"prerelease\":" pre ",\"draft\":" draft ",\"published_at\":\"" date "\"}"
 
 int main(int argc,char **argv){
+    if(argc==4&&!strcmp(argv[1],"--package")){
+        FILE *file=fopen(argv[2],"rb");CHECK(file);CHECK(!fseek(file,0,SEEK_END));long length=ftell(file);CHECK(length>=0);rewind(file);
+        char *json=calloc((size_t)length+1,1);CHECK(json);CHECK(fread(json,1,(size_t)length,file)==(size_t)length);fclose(file);
+        ReleasePackage p;BOOL ok=release_package(json,!strcmp(argv[3],"linux"),&p);free(json);if(!ok)return 2;
+        printf("%s\n%s\n%llu\n%d\n",p.filename,p.sha256,p.size,p.explicit_metadata);return 0;
+    }
     GithubRelease selected={0};unsigned count=0;
     const char *releases="["
         RELEASE("v99.0.0-10","true","false","2026-10-01T01:00:00Z") ","
@@ -56,6 +62,37 @@ int main(int argc,char **argv){
     CHECK(release_package("{\"version\":\"next\",\"artifacts\":[\"client-windows.zip\",\"ReRiff-Server-windows.zip\"]}",FALSE,&package)&&!strcmp(package.filename,"client-windows.zip"));
     CHECK(!release_package("{\"version\":\"next\",\"artifacts\":[\"ReRiff-Server-windows.zip\",\"ReRiff-Windows-Server.zip\"]}",FALSE,&package));
     CHECK(!release_package("{\"version\":\"next\",\"artifacts\":[\"a-windows.zip\",\"b-windows.zip\"]}",FALSE,&package));
+    /* Explicit identities are authoritative, including arbitrary filenames.
+     * An ambiguous compatibility list cannot override typed client selection. */
+    const char *sha="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    char typed[8192],entry[2048];
+    snprintf(entry,sizeof(entry),"{\"component\":\"client\",\"platform\":\"windows\",\"architecture\":\"x86\",\"filename\":\"payload.data\",\"size\":123,\"sha256\":\"%s\"}",sha);
+    snprintf(typed,sizeof(typed),"{\"schema\":2,\"version\":\"next\",\"artifacts\":[\"a-windows.zip\",\"b-windows.zip\"],\"packages\":[%s]}",entry);
+    CHECK(release_package(typed,FALSE,&package)&&package.explicit_metadata&&package.size==123&&!strcmp(package.filename,"payload.data")&&!strcmp(package.sha256,sha));
+    CHECK(!release_package(typed,TRUE,&package));
+    snprintf(typed,sizeof(typed),"{\"schema\":2,\"version\":\"next\",\"packages\":[%s,%s]}",entry,entry);
+    CHECK(!release_package(typed,FALSE,&package));
+    const char *bad_typed[]={
+        "{\"component\":\"server\",\"platform\":\"windows\",\"architecture\":\"x86\",\"filename\":\"a-windows.zip\",\"size\":123,\"sha256\":\"%s\"}",
+        "{\"component\":\"client\",\"platform\":\"windows\",\"architecture\":\"arm64\",\"filename\":\"a-windows.zip\",\"size\":123,\"sha256\":\"%s\"}",
+        "{\"component\":\"client\",\"component\":\"client\",\"platform\":\"windows\",\"architecture\":\"x86\",\"filename\":\"a.zip\",\"size\":123,\"sha256\":\"%s\"}",
+        "{\"component\":\"client\",\"platform\":\"windows\",\"architecture\":\"x86\",\"filename\":\"../a.zip\",\"size\":123,\"sha256\":\"%s\"}",
+        "{\"component\":\"client\",\"platform\":\"windows\",\"architecture\":\"x86\",\"filename\":\"a.zip\",\"size\":0,\"sha256\":\"%s\"}",
+        "{\"component\":\"client\",\"platform\":\"windows\",\"architecture\":\"x86\",\"filename\":\"a.zip\",\"size\":-1,\"sha256\":\"%s\"}",
+        "{\"component\":\"client\",\"platform\":\"windows\",\"architecture\":\"x86\",\"filename\":\"a.zip\",\"size\":1.5,\"sha256\":\"%s\"}",
+        "{\"component\":\"client\",\"platform\":\"windows\",\"architecture\":\"x86\",\"filename\":\"a.zip\",\"size\":18446744073709551616,\"sha256\":\"%s\"}",
+        "{\"component\":\"client\",\"platform\":\"windows\",\"architecture\":\"x86\",\"filename\":\"a.zip\",\"size\":123,\"sha256\":\"bad\"}",
+        "{\"component\":\"client\",\"platform\":\"windows\",\"architecture\":\"x86\",\"filename\":\"a.zip\",\"size\":123}",
+        "{\"component\":\"client\",\"platform\":\"windows\",\"architecture\":\"x86\",\"filename\":\"a.zip\",\"size\":true,\"sha256\":\"%s\"}"
+    };
+    for(size_t i=0;i<sizeof(bad_typed)/sizeof(*bad_typed);i++){
+        snprintf(entry,sizeof(entry),bad_typed[i],sha);
+        snprintf(typed,sizeof(typed),"{\"schema\":2,\"version\":\"next\",\"artifacts\":[\"valid-windows.zip\"],\"packages\":[%s]}",entry);
+        CHECK(!release_package(typed,FALSE,&package));
+    }
+    CHECK(!release_package("{\"schema\":2,\"version\":\"next\",\"artifacts\":[\"valid-windows.zip\"]}",FALSE,&package));
+    CHECK(!release_package("{\"schema\":3,\"version\":\"next\",\"artifacts\":[\"valid-windows.zip\"]}",FALSE,&package));
+    CHECK(!release_package("{\"version\":\"next\",\"packages\":[],\"artifacts\":[\"valid-windows.zip\"]}",FALSE,&package));
     /* Restore the original candidate before testing repeat-update decisions. */
     CHECK(release_package(metadata,FALSE,&package)&&!strcmp(package.version,"preview-next+candidate"));
     CHECK(!release_needs_install(package.version,package.version,TRUE,TRUE,FALSE));

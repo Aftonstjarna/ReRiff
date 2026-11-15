@@ -15,6 +15,8 @@ on:
       - 'scripts/build-linux-patcher.py'
       - 'scripts/test-linux-installer.py'
       - 'scripts/test_client_update.py'
+      - 'scripts/apply-client-update.py'
+      - 'scripts/test_native_client.py'
       - 'scripts/test_steam_bridge.py'
       - 'VERSION'
       - 'packaging/fetch_release_tools.py'
@@ -33,6 +35,8 @@ on:
       - 'scripts/build-linux-patcher.py'
       - 'scripts/test-linux-installer.py'
       - 'scripts/test_client_update.py'
+      - 'scripts/apply-client-update.py'
+      - 'scripts/test_native_client.py'
       - 'scripts/test_steam_bridge.py'
       - 'VERSION'
       - 'packaging/fetch_release_tools.py'
@@ -56,6 +60,10 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.13'
+      - name: Verify explicit release metadata and update preflight
+        run: |
+          python -m unittest discover -s packaging -p test_release_metadata.py -v
+          python scripts/test_client_update.py
       - name: Fetch checksum-pinned compiler
         run: python packaging/fetch_release_tools.py --asset zig.tar.xz --directory "$RUNNER_TEMP/release-tools"
       - name: Build launcher independently
@@ -67,7 +75,7 @@ jobs:
         run: |
           export ZIG_GLOBAL_CACHE_DIR="$RUNNER_TEMP/zig-global"
           export ZIG_LOCAL_CACHE_DIR="$RUNNER_TEMP/zig-local"
-          for source in NativeLauncher/test_channel.c NativeLauncher/test_languages.c NativeLauncher/test_logging.c NativeLauncher/test_menu_persistence.c; do
+          for source in NativeLauncher/test_release_channel.c NativeLauncher/test_channel.c NativeLauncher/test_languages.c NativeLauncher/test_logging.c NativeLauncher/test_menu_persistence.c; do
             name=$(basename "$source" .c)
             "$RUNNER_TEMP/release-tools/zig-x86_64-linux-0.14.1/zig" cc \
               -target x86-windows-gnu -O2 -Wall -Wextra -Werror \

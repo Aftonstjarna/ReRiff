@@ -200,6 +200,23 @@ class NativeClientTests(unittest.TestCase):
         work=self.root/'update';work.mkdir();self.prepare(archive,checksum,work)
         self.assertTrue(os.access(work/'ReRiff-ClientHost',os.X_OK));self.assertFalse((self.game/'a.txt').exists())
         self.call('update','--work',work);self.assertTrue((work/'success').exists());self.assertEqual((self.game/'a.txt').read_bytes(),b'updated');self.retained()
+    def test_explicit_update_metadata_validation(self):
+        local=self.game/'localserver';local.mkdir();shutil.copy2(ROOT/'scripts/linux-runtime.sh',local/'linux-runtime.sh')
+        archive,checksum=self.archive()
+        original=dict(component='client',platform='linux',architecture='x86_64',filename=archive.name,size=archive.stat().st_size,sha256=checksum)
+        cases=[('ok',None,None),('component','component','server'),('architecture','architecture','arm64'),('size','size',1),('sha256','sha256','0'*64),('filename','filename','other.run'),('schema','schema',3),('null-schema','schema',None),('duplicate','duplicate',None)]
+        for name,field,value in cases:
+            with self.subTest(name=name):
+                work=self.root/('explicit-'+name);work.mkdir();package=dict(original)
+                metadata=dict(schema=2,version=self.manifest['version'],artifacts=[archive.name],packages=[package])
+                if field=='schema':metadata['schema']=value
+                elif field=='duplicate':metadata['packages'].append(dict(package))
+                elif field:package[field]=value
+                (work/'latest-release.json').write_text(json.dumps(metadata))
+                self.prepare(archive,checksum,work,success=field is None)
+                self.assertEqual((work/'prepared.json').exists(),field is None)
+        self.retained()
+
     def test_update_checksum_metadata_and_archive_paths(self):
         self.config=self.config.replace(b'false',b'true');(self.game/'server.ini').write_bytes(self.config)
         archive,checksum=self.archive();work=self.root/'bad-checksum';work.mkdir();self.prepare(archive,'0'*64,work,False);self.assertTrue((work/'failure').exists())

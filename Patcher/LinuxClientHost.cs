@@ -20,6 +20,31 @@ internal static class LinuxClientHost {
     static string Text(JsonObject obj,string key,string fallback="") => obj[key]?.GetValue<string>() ?? fallback;
     static bool Flag(JsonObject obj,string key,bool fallback=false) => obj[key]?.GetValue<bool>() ?? fallback;
     static JsonObject Map(JsonObject obj,string key) => obj[key]?.AsObject() ?? new JsonObject();
+    static void ValidateReleasePackage(JsonObject metadata,string archive,string expected,string platform) {
+        int schema=metadata.ContainsKey("schema")?(metadata["schema"]?.GetValue<int>()??throw new IOException("Invalid release metadata schema.")):1;
+        if(schema==1&&!metadata.ContainsKey("packages")) {
+            if(metadata["artifacts"]?.AsArray().Any(p=>p?.GetValue<string>()==Path.GetFileName(archive))!=true)throw new IOException("Release package is not listed in metadata.");
+            return;
+        }
+        if(schema!=2||metadata["packages"] is not JsonArray packages||packages.Count>128)throw new IOException("Unsupported or invalid release package metadata.");
+        JsonObject? selected=null;
+        foreach(var entry in packages) {
+            if(entry is not JsonObject package)throw new IOException("Invalid release package metadata.");
+            foreach(var field in new[]{("component",63),("platform",31),("architecture",31),("filename",255)}) {
+                string value=Text(package,field.Item1);
+                if(value.Length==0||Encoding.UTF8.GetByteCount(value)>field.Item2)throw new IOException("Invalid release package identity.");
+            }
+            if(!Regex.IsMatch(Text(package,"filename"),@"\A[A-Za-z0-9_-][A-Za-z0-9._-]*\z")
+                ||!Regex.IsMatch(Text(package,"sha256"),@"\A[0-9a-fA-F]{64}\z")
+                ||package["size"] is not JsonValue number||!number.TryGetValue<ulong>(out var size)||size==0)throw new IOException("Invalid release package size, filename or checksum.");
+            if(Text(package,"component")=="client"&&Text(package,"platform")==platform&&Text(package,"architecture")== (platform=="windows"?"x86":"x86_64")) {
+                if(selected!=null)throw new IOException("Ambiguous release package identity.");selected=package;
+            }
+        }
+        if(selected==null||Text(selected,"filename")!=Path.GetFileName(archive)
+            ||selected["size"]!.GetValue<ulong>()!=(ulong)new FileInfo(archive).Length
+            ||!Text(selected,"sha256").Equals(expected,StringComparison.OrdinalIgnoreCase))throw new IOException("Release package metadata mismatch.");
+    }
     static string Under(string root,string relative) {
         if(string.IsNullOrWhiteSpace(relative)||Path.IsPathRooted(relative)||relative.Contains('\\')||relative.Contains(':')||relative.Split('/').Any(p=>p==".."))throw new IOException("Unsafe package path.");
         string full=Path.GetFullPath(Path.Combine(root,relative));
@@ -265,7 +290,7 @@ internal static class LinuxClientHost {
                 string bundle=Path.GetDirectoryName(manifests[0])!;var manifest=ReadJson(manifests[0]);
                 if(Text(manifest,"platform")!="linux"||!Flag(manifest,"update_only"))throw new IOException("Expected an update-only Linux package.");
                 if(options.Get("--channel")!=""&&options.Get("--channel")!=Text(manifest,"channel","stable"))throw new IOException("Release channel mismatch.");
-                if(File.Exists(work+"/latest-release.json")){var metadata=ReadJson(work+"/latest-release.json");if(Text(metadata,"version")!=Text(manifest,"version")||metadata["artifacts"]?.AsArray().Any(p=>p?.GetValue<string>()==Path.GetFileName(archive))!=true)throw new IOException("Release metadata mismatch.");}
+                if(File.Exists(work+"/latest-release.json")){var metadata=ReadJson(work+"/latest-release.json");if(Text(metadata,"version")!=Text(manifest,"version"))throw new IOException("Release metadata mismatch.");ValidateReleasePackage(metadata,archive,expected,"linux");}
                 string next=Path.Combine(bundle,"payload/localserver/ReRiff-ClientHost");
                 if(File.Exists(next)) {
                     string expectedHost=Text(Map(manifest,"files"),"payload/localserver/ReRiff-ClientHost");if(expectedHost==""||HashFile(next)!=expectedHost)throw new IOException("Native helper checksum mismatch.");

@@ -136,6 +136,29 @@ class ClientUpdateTest(unittest.TestCase):
                 self.assertEqual((self.game/'localserver/client-version.txt').read_text(), 'preview-next+candidate\n')
                 self.assertEqual((self.game/'server.ini').read_bytes(), self.config)
 
+    def test_explicit_package_preflight_both_platforms(self):
+        for platform in ('windows','linux'):
+            with self.subTest(platform=platform):
+                archive,checksum=self.package(platform)
+                work=self.root/('typed-'+platform);work.mkdir()
+                package=dict(component='client',platform=platform,architecture='x86' if platform=='windows' else 'x86_64',filename=archive.name,size=archive.stat().st_size,sha256=checksum)
+                (work/'latest-release.json').write_text(json.dumps(dict(schema=2,version='9.0.0-2',packages=[package])))
+                update.prepare(archive,checksum,work,self.game,platform)
+                self.assertTrue((work/'prepared.json').is_file())
+
+    def test_explicit_mismatches_stop_before_installer(self):
+        archive,checksum=self.package('linux')
+        original=dict(component='client',platform='linux',architecture='x86_64',filename=archive.name,size=archive.stat().st_size,sha256=checksum)
+        for index,(field,value) in enumerate([('component','server'),('platform','windows'),('architecture','arm64'),('filename','other.run'),('size',1),('sha256','0'*64)]):
+            with self.subTest(field=field):
+                work=self.root/('typed-mismatch-'+str(index));work.mkdir();package=dict(original);package[field]=value
+                (work/'latest-release.json').write_text(json.dumps(dict(schema=2,version='9.0.0-2',packages=[package],artifacts=[archive.name])))
+                with mock.patch.object(update,'load_installer') as loader:
+                    with self.assertRaises(ValueError):update.prepare(archive,checksum,work,self.game,'linux')
+                    loader.assert_not_called()
+                self.assertFalse((work/'prepared.json').exists())
+                self.assertEqual((self.game/'ReRiff-Launcher.exe').read_bytes(),b'old launcher')
+
     def test_metadata_mismatch_stops_before_loading_installer(self):
         archive, digest = self.package('linux')
         for version, artifacts, error in [('different', [archive.name], 'version mismatch'),

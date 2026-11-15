@@ -193,6 +193,7 @@ jobs:
         run: |
           cc -std=c99 -Wall -Wextra -Werror -Wno-misleading-indentation NativeLauncher/test_release_channel.c -o build/test-release-channel
           build/test-release-channel
+          python -m unittest discover -s packaging -p test_release_metadata.py -v
           python scripts/test_client_update.py
           python scripts/test_steam_bridge.py
           python scripts/test_podman_server.py
