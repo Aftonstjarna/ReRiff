@@ -526,6 +526,7 @@ static BOOL supported_file(const WCHAR *path) {
 #include "antialiasing.h"
 #include "display_modes.h"
 static void cjk_direct_refresh(void);
+#include "picker_alphabet.h"
 #include "ui_scale.h"
 #include "ui_scale_slider.h"
 #include "graphics_aa_menu.h"
@@ -638,6 +639,7 @@ static BOOL cjk_pack_enabled(void){
 static BOOL cjk_component_enabled(void){return cjk_pack_enabled()||latin_pack_enabled();}
 #include "lastfm_utf8.h"
 #include "progression_probe.h"
+#include "first_prestige_entry.h"
 #include "progression_domain.h"
 #include "prestige_prompt.h"
 #include "progression_view.h"

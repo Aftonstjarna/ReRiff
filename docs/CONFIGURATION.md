@@ -33,6 +33,11 @@ creator_reward_rate = 1
 prestige_multiplier_growth = 1
 prestige_multiplier_cap = 0
 paint_price_scale = 1
+; Example: 0.5 halves base prices; a 1000-coin pack with 20% discount costs 400.
+discount_mode = legacy
+discount_start_level = 10
+discount_start = 0.10
+discount_increase = 0.05
 discount_level_10 = 0.10
 discount_level_20 = 0.20
 discount_level_30 = 0.25
@@ -61,6 +66,33 @@ and stay below 1 (maximum 0.99); the gap factor is 0–1. The interval must be a
 positive whole number. An invalid policy is rejected as a whole, logged when
 enabled, and the default policy is used. Loading a new policy never prestiges or
 resets a save. The next save records the effective balance revision.
+
+### Discounts every X levels
+
+Choose `interval` mode to set the starting level and increase the discount by a
+fixed number of percentage points every `discount_interval` levels:
+
+```ini
+[balance]
+discount_mode = interval
+discount_start_level = 10
+discount_start = 0.20
+discount_interval = 5
+discount_increase = 0.05
+discount_maximum = 0.50
+```
+
+This gives 0% below level 10, 20% at 10, 25% at 15, 30% at 20,
+35% at 25, 40% at 30, 45% at 35 and 50% from 40 onward. Increases happen
+only at each interval; the final discount stays capped. `0.05` means five
+percentage points, not five percent of the previous discount.
+
+The starting level must be a nonnegative whole number and the interval a
+positive whole number. Discounts use fractions from 0 to 0.99; the starting
+discount cannot exceed the maximum. Interval mode overrides the three legacy
+`discount_level_*` values and the remaining-gap factor. Leaving `discount_mode`
+absent, empty or `legacy` preserves existing behavior and balance revisions.
+Fully restart the game after editing. Changing prices does not reset progress.
 
 ### Main levels above 40
 

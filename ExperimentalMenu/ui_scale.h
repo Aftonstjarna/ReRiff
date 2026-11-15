@@ -64,7 +64,7 @@ static void __thiscall ui_menu_init(void *menu,void *screen,void *lower){
     ui_layout_reference(factor);ui_setup_fonts(factor);
     ((TickFn)hook->table[9])(menu); /* Original gaMenu.setupMenuScale. */
     UiCanvas *previous=ui_scope_set(hook->canvas.width?&hook->canvas:NULL);
-    hook->init(menu,screen,lower);ui_scope_set(previous);
+    picker_alpha_forget(menu);hook->init(menu,screen,lower);ui_scope_set(previous);
     if(hook->canvas.width){char trace[160];snprintf(trace,sizeof(trace),"UI scale: value=%d native font/menu factor=%.2f canvas=%.0fx%.0f.",ui_scale_value,factor,actual[0],actual[1]);log_line(trace);}
 }
 static void ui_refresh_scale(void){
@@ -78,12 +78,12 @@ static void ui_refresh_scale(void){
 static void __thiscall ui_menu_tick(void *menu){
     UiMenuHook *hook=ui_menu(menu);if(!hook)return;
     UiCanvas *previous=ui_scope_set(hook->canvas.width?&hook->canvas:NULL);
-    hook->tick(menu);ui_scope_set(previous);ui_refresh_scale();cjk_direct_refresh();
+    hook->tick(menu);picker_alpha_tick(menu);ui_scope_set(previous);ui_refresh_scale();cjk_direct_refresh();
 }
 static void __thiscall ui_menu_cleanup(void *menu,void *screen,void *lower){
     UiMenuHook *hook=ui_menu(menu);if(!hook)return;
     UiCanvas *previous=ui_scope_set(hook->canvas.width?&hook->canvas:NULL);
-    hook->cleanup(menu,screen,lower);ui_scope_set(previous);hook->canvas=(UiCanvas){0};
+    picker_alpha_forget(menu);hook->cleanup(menu,screen,lower);ui_scope_set(previous);hook->canvas=(UiCanvas){0};
 }
 static BOOL install_ui_scale(BYTE *base){
     if(*(void **)(base+0x5fbf44+16)!=(void *)(base+0x929d0)||*(void **)(base+0x6004b0+32)!=(void *)(base+0x15b470))return FALSE;

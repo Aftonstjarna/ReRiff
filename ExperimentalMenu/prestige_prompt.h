@@ -22,8 +22,7 @@ static BOOL prestige_prompt_context(void *menu){
 static BOOL prestige_prompt_eligible(void){
     BYTE *base=(BYTE *)GetModuleHandleW(NULL);
     /* Original Profile loop: ldloc.1; ldc.i4.s 18; beq IL_06D8. */
-    static const BYTE visible_skip[]={0x07,0x1f,0x12,0x3b,0x1d,0x05,0,0};
-    if(!readable(base+0x325d7b,8)||memcmp(base+0x325d7b,visible_skip,8))return FALSE;
+    if(!first_prestige_skip_valid(base))return FALSE;
     /* Original input switch case 3 targets body +0x100 -> state 44,
      * verified against gaCredits.{ctor}; do not infer IDs from row order. */
     static const BYTE credits_switch[]={0x45,0x05,0,0,0,0x5a,0,0,0,0x05,0,0,0,0x6e,0,0,0,0x46,0,0,0,0x82,0,0,0};

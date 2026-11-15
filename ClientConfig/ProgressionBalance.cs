@@ -11,11 +11,14 @@ namespace ReRiff {
         internal decimal? MultiplierCap;
         internal decimal Discount10=.10m,Discount20=.20m,Discount30=.25m,DiscountMaximum=.30m,GapFactor=.5m;
         internal int DiscountInterval=10;
+        internal bool IntervalDiscount;
+        internal int DiscountStartLevel=10;
+        internal decimal DiscountStart=.10m,DiscountIncrease=.05m;
         internal int MainLevelCap;
         internal ulong MainLevelXpStep;
         internal decimal MainLevelXpGrowth=1m;
         internal static ProgressionBalance Current=new ProgressionBalance();
-        internal const string Defaults="[balance]\n; Applied to isolated Singleplayer only; restart to apply.\ncoin_reward_rate = 1\ncreator_reward_rate = 1\nprestige_multiplier_growth = 1\n; 0 means uncapped; otherwise at least 1.\nprestige_multiplier_cap = 0\npaint_price_scale = 1\n; Discounts are fractions: 0.10 means 10 percent.\ndiscount_level_10 = 0.10\ndiscount_level_20 = 0.20\ndiscount_level_30 = 0.25\ndiscount_maximum = 0.30\ndiscount_interval = 10\ndiscount_remaining_gap_factor = 0.5\n; Permanent main levels only; 0 cap is uncapped, 0 step uses native 39-to-40 XP.\nmain_level_cap = 0\nmain_level_xp_step = 0\n; Each later level costs step * growth^(level - 40). 1 keeps a constant cost.\nmain_level_xp_growth = 1\n";
+        internal const string Defaults="[balance]\n; Applied to isolated Singleplayer only; restart to apply.\ncoin_reward_rate = 1\ncreator_reward_rate = 1\nprestige_multiplier_growth = 1\n; 0 means uncapped; otherwise at least 1.\nprestige_multiplier_cap = 0\npaint_price_scale = 1\n; Example: 0.5 halves base prices; a 1000-coin pack with 20% discount costs 400.\n; Discounts are fractions: 0.10 means 10 percent.\n; interval uses configurable starting level and fixed percentage-point increases.\n; legacy preserves the original 10/20/30 curve.\ndiscount_mode = legacy\ndiscount_start_level = 10\ndiscount_start = 0.10\ndiscount_increase = 0.05\ndiscount_level_10 = 0.10\ndiscount_level_20 = 0.20\ndiscount_level_30 = 0.25\ndiscount_maximum = 0.30\ndiscount_interval = 10\ndiscount_remaining_gap_factor = 0.5\n; Permanent main levels only; 0 cap is uncapped, 0 step uses native 39-to-40 XP.\nmain_level_cap = 0\nmain_level_xp_step = 0\n; Each later level costs step * growth^(level - 40). 1 keeps a constant cost.\nmain_level_xp_growth = 1\n";
         private static decimal Number(Dictionary<string,string> values,string key,decimal fallback,decimal min,decimal max) {
             string text;decimal value;if(!values.TryGetValue(key,out text))return fallback;
             if(!Decimal.TryParse(text,NumberStyles.AllowDecimalPoint|NumberStyles.AllowLeadingSign,CultureInfo.InvariantCulture,out value)||value<min||value>max)throw new InvalidDataException("Invalid Singleplayer balance value: "+key);
@@ -27,9 +30,22 @@ namespace ReRiff {
             if(cap>0&&cap<1)throw new InvalidDataException("Multiplier cap must be 0 or at least 1");b.MultiplierCap=cap==0?(decimal?)null:cap;
             b.PaintScale=Number(values,"paint_price_scale",1,0,1000000);
             b.DiscountMaximum=Number(values,"discount_maximum",.30m,0,.99m);
-            b.Discount10=Number(values,"discount_level_10",.10m,0,b.DiscountMaximum);b.Discount20=Number(values,"discount_level_20",.20m,b.Discount10,b.DiscountMaximum);b.Discount30=Number(values,"discount_level_30",.25m,b.Discount20,b.DiscountMaximum);
+            string mode;
+            if(values.TryGetValue("discount_mode",out mode)&&!String.IsNullOrWhiteSpace(mode)
+                &&!mode.Equals("legacy",StringComparison.OrdinalIgnoreCase)&&!mode.Equals("interval",StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("discount_mode must be legacy or interval");
+            b.IntervalDiscount=mode!=null&&mode.Equals("interval",StringComparison.OrdinalIgnoreCase);
             decimal interval=Number(values,"discount_interval",10,1,1000000);if(interval!=Decimal.Truncate(interval))throw new InvalidDataException("Discount interval must be a whole number");b.DiscountInterval=(int)interval;
-            b.GapFactor=Number(values,"discount_remaining_gap_factor",.5m,0,1);
+            if(b.IntervalDiscount) {
+                decimal startLevel=Number(values,"discount_start_level",10,0,Int32.MaxValue);
+                if(startLevel!=Decimal.Truncate(startLevel))throw new InvalidDataException("Discount starting level must be a whole number");
+                b.DiscountStartLevel=(int)startLevel;
+                b.DiscountStart=Number(values,"discount_start",.10m,0,b.DiscountMaximum);
+                b.DiscountIncrease=Number(values,"discount_increase",.05m,0,.99m);
+            } else {
+                b.Discount10=Number(values,"discount_level_10",.10m,0,b.DiscountMaximum);b.Discount20=Number(values,"discount_level_20",.20m,b.Discount10,b.DiscountMaximum);b.Discount30=Number(values,"discount_level_30",.25m,b.Discount20,b.DiscountMaximum);
+                b.GapFactor=Number(values,"discount_remaining_gap_factor",.5m,0,1);
+            }
             decimal levelCap=Number(values,"main_level_cap",0,0,Int32.MaxValue);
             if(levelCap!=Decimal.Truncate(levelCap)||(levelCap>0&&levelCap<40))throw new InvalidDataException("Main level cap must be 0 or a whole number of at least 40");
             b.MainLevelCap=(int)levelCap;
@@ -51,7 +67,13 @@ namespace ReRiff {
             Current=Parse(values);
         }
         internal decimal Discount(int level) {
-            if(level<0)throw new ArgumentOutOfRangeException("level");if(level<10)return 0;if(level<20)return Discount10;if(level<30)return Discount20;
+            if(level<0)throw new ArgumentOutOfRangeException("level");
+            if(IntervalDiscount) {
+                if(level<DiscountStartLevel)return 0;
+                int steps=(level-DiscountStartLevel)/DiscountInterval;
+                return Math.Min(DiscountMaximum,DiscountStart+steps*DiscountIncrease);
+            }
+            if(level<10)return 0;if(level<20)return Discount10;if(level<30)return Discount20;
             decimal gap=DiscountMaximum-Discount30;for(int i=0,n=Math.Min((level-30)/DiscountInterval,96);i<n;i++)gap*=GapFactor;return DiscountMaximum-gap;
         }
         private static decimal BoundedMultiply(decimal left,decimal right,decimal limit){
@@ -100,6 +122,7 @@ namespace ReRiff {
         }
         internal string Revision {
             get {string text=String.Join("|",Array.ConvertAll(new decimal[]{CoinRate,CreatorRate,PrestigeGrowth,MultiplierCap??0,PaintScale,Discount10,Discount20,Discount30,DiscountMaximum,GapFactor,DiscountInterval,MainLevelCap,MainLevelXpStep,MainLevelXpGrowth},v=>v.ToString(CultureInfo.InvariantCulture)));
+                if(IntervalDiscount)text+="|discount-interval-v1|"+DiscountStartLevel.ToString(CultureInfo.InvariantCulture)+"|"+DiscountStart.ToString("G29",CultureInfo.InvariantCulture)+"|"+DiscountIncrease.ToString("G29",CultureInfo.InvariantCulture);
                 using(var sha=SHA256.Create())return BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(text))).Replace("-","").ToLowerInvariant();}
         }
     }

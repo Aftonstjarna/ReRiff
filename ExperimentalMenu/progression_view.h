@@ -9,7 +9,10 @@ typedef int (__cdecl *ProgressLocalTestFn)(void);
 static ProgressLocalTestFn progression_local_test;
 static TickFn progression_profile_original;
 static DWORD *progression_friend_length;
+static void first_prestige_row_clear(void);
 #include "progression_badge.h"
+#include "progression_achievement_probe.h"
+#include "first_prestige_row.h"
 static BOOL progression_view_update(void *menu,int cycle_xp){
     if(!progression_summary||!progression_fill||!raw_text||!readable(menu,408)
         ||!readable(progression_friend_length,4)||*progression_friend_length
@@ -27,6 +30,8 @@ static void __thiscall progression_profile_tick(void *menu){
     progression_profile_original(menu);
     int xp=0;
     if(progression_domain_active&&progression_load_observed&&progression_domain_native_xp(&xp)){
+        achievement_probe_tick(menu);
+        first_prestige_row_update(menu);
         if(progression_local_test&&readable(progression_friend_length,4)&&!*progression_friend_length&&progression_local_test()<0)
             progression_domain_stop("Authorized local purchase test failed; last committed checkpoint retained.");
         progression_view_update(menu,xp);

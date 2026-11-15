@@ -6,7 +6,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="ProgressionLevelsSmoke.cs" />
-    <Compile Include="../ProgressionBalance.cs" /><Compile Include="../../Shared/ConfigFiles.cs" />
+    <Compile Include="../ProgressionBalance.cs" /><Compile Include="../ProgressionRewards.cs" /><Compile Include="../../Shared/ConfigFiles.cs" />
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net45" Version="1.0.3" PrivateAssets="all" />
   </ItemGroup>
 </Project>

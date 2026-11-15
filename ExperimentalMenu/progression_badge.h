@@ -76,5 +76,5 @@ static BOOL progression_badge_render(void *parent,void *number,const WCHAR *iden
     show_item(progression_badge_star,TRUE);show_item(progression_badge_suffix,marker[1]!=0);return TRUE;
 }
 static void __thiscall progression_profile_cleanup(void *menu,void *screen,void *lower){
-    progression_badge_restore(menu);progression_badge_clear();progression_cleanup_original(menu,screen,lower);
+    progression_badge_restore(menu);progression_badge_clear();first_prestige_row_clear();progression_cleanup_original(menu,screen,lower);
 }

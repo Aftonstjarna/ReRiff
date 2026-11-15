@@ -250,6 +250,7 @@ __declspec(dllexport) int __cdecl ReRiffPrepareProgressionDomain(int singleplaye
     }
     InterlockedExchange(&progression_domain_pending,1);
     progression_domain_active=TRUE;
+    if(!first_prestige_entry_install(base))log_line("First Prestige list extension unavailable; original achievement list retained.");
     log_line("Singleplayer isolation armed; import waits for first native save-file access; reset requires eligible Credits confirmation.");
     return 1;
 }

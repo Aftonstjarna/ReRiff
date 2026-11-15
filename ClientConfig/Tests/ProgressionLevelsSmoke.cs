@@ -54,6 +54,38 @@ class ProgressionLevelsSmoke {
             bool refused=false;try{ProgressionBalance.Parse(new Dictionary<string,string>{{pair.Item1,pair.Item2}});}catch(InvalidDataException){refused=true;}
             Check(refused,"Invalid curve refused: "+pair.Item1);
         }
-        Console.WriteLine("PASS: {0} extended-level default/custom-curve, cap, boundary, overflow, native fill and INI-policy checks",checks);
+        var custom=new Dictionary<string,string>{{"discount_mode","interval"},{"discount_start_level","10"},{"discount_start","0.20"},{"discount_interval","5"},{"discount_increase","0.05"},{"discount_maximum","0.50"}};
+        b=ProgressionBalance.Parse(custom);
+        foreach(int level in new[]{0,9,10,14,15,19,20,24,25,29,30,34,35,39,40,41,Int32.MaxValue}){
+            decimal expected=level<10?0:level<15?.20m:level<20?.25m:level<25?.30m:level<30?.35m:level<35?.40m:level<40?.45m:.50m;
+            Check(b.Discount(level)==expected,"Requested interval discount at level "+level);
+        }
+        var oldPolicy=ProgressionBalance.Current;
+        try {
+            ProgressionBalance.Current=b;
+            Check(ProgressionRewards.PaintPrice(1000,10,1)==800&&ProgressionRewards.PaintPrice(1000,15,1)==750
+                &&ProgressionRewards.PaintPrice(1000,20,1)==700&&ProgressionRewards.PaintPrice(1000,30,1)==600
+                &&ProgressionRewards.PaintPrice(1000,40,1)==500,"Native-price policy uses interval discounts");
+            Check(ProgressionRewards.PaintPrice(3,15,1)==2&&ProgressionRewards.PaintPrice(1,40,1)==1
+                &&ProgressionRewards.PaintPrice(0,40,1)==0,"Rounding and paid/free pack boundaries preserved");
+        }finally{ProgressionBalance.Current=oldPolicy;}
+        Check(b.Revision!=defaults.Revision,"Interval settings included in balance revision");
+        string revision=b.Revision;custom["discount_start"]="0.200";custom["discount_increase"]="0.050";
+        Check(ProgressionBalance.Parse(custom).Revision==revision,"Equivalent fractions preserve revision");
+        custom["discount_level_10"]="invalid overridden value";
+        Check(ProgressionBalance.Parse(custom).Discount(15)==.25m,"Interval mode overrides legacy milestones");
+        foreach(var pair in new[]{Tuple.Create("discount_mode","invalid"),Tuple.Create("discount_start_level","-1"),Tuple.Create("discount_start_level","10.5"),Tuple.Create("discount_start","0.51"),Tuple.Create("discount_increase","-0.1"),Tuple.Create("discount_increase","NaN"),Tuple.Create("discount_interval","0"),Tuple.Create("discount_interval","1.5")}){
+            var invalid=new Dictionary<string,string>(custom);invalid[pair.Item1]=pair.Item2;
+            bool refused=false;try{ProgressionBalance.Parse(invalid);}catch(InvalidDataException){refused=true;}
+            Check(refused,"Invalid interval policy refused: "+pair.Item1);
+        }
+        b=ProgressionBalance.Parse(new Dictionary<string,string>{{"discount_mode"," "}});
+        Check(b.Revision==defaults.Revision,"Legacy balance revision preserved");
+        foreach(int level in new[]{0,9,10,19,20,29,30,39,40,50,100})Check(b.Discount(level)==defaults.Discount(level),"Legacy discount compatibility");
+        custom.Remove("discount_level_10");custom["discount_start_level"]="0";custom["discount_interval"]="3";
+        b=ProgressionBalance.Parse(custom);Check(b.Discount(0)==.20m&&b.Discount(2)==.20m&&b.Discount(3)==.25m,"Starting at zero with arbitrary interval");
+        custom["discount_start_level"]="17";custom["discount_increase"]="0";
+        b=ProgressionBalance.Parse(custom);Check(b.Discount(16)==0&&b.Discount(Int32.MaxValue)==.20m,"Arbitrary start and zero growth");
+        Console.WriteLine("PASS: {0} extended-level and interval-discount, price, cap, boundary, overflow, legacy and INI-policy checks",checks);
     }
 }
