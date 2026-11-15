@@ -1,4 +1,4 @@
-"""Opt-in trusted-client progression. Tokens are provisioned by the operator.
+"""Opt-in trusted-client progression. Accounts are allocated on first connection; credentials stay client-owned.
 
 The native save stays opaque. Gameplay observations are NOT anticheat proof.
 SQLite commits the save and server-derived progression counters together.
@@ -14,6 +14,8 @@ from pathlib import Path
 import re
 import secrets
 import sqlite3
+import threading
+import time
 import uuid
 
 MAX_SAVE = 1024 * 1024
@@ -86,6 +88,20 @@ class Store:
             except sqlite3.IntegrityError:
                 raise Refused('Account already provisioned; credentials were not replaced', 409) from None
         return token
+
+    def connect_account(self, token, create):
+        """Retrying first connection with the same secret returns the same UUID."""
+        digest = self.token_hash(token)
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            row = db.execute('SELECT account_id FROM accounts WHERE token_hash=?', (digest,)).fetchone()
+            if row is not None:
+                return row['account_id']
+            if not create:
+                raise Refused('Account credential is no longer valid; restore your credential backup', 401)
+            account = str(uuid.uuid4())
+            db.execute('INSERT INTO accounts(account_id, token_hash) VALUES (?, ?)', (account, digest))
+            return account
 
     @staticmethod
     def token_hash(token):
@@ -195,10 +211,37 @@ def register(app, data, server_id, balance_module):
     mode = os.environ.get('RERIFF_PROGRESSION_MODE', 'disabled')
     environ = dict(os.environ)
     store = Store(data) if mode == 'trusted' else None
+    password = environ.get('RERIFF_SERVER_PASSWORD', '')
+    password_digest = hashlib.sha256(password.encode('utf-8')).digest()
+    admission_lock = threading.Lock()
+    admission_times = []
+
+    def check_password():
+        if not password:
+            return
+        encoded = request.headers.get('X-ReRiff-Server-Password', '')
+        try:
+            if len(encoded) > 4096:
+                raise ValueError()
+            supplied = base64.b64decode(encoded, validate=True)
+        except ValueError:
+            supplied = b''
+        if not hmac.compare_digest(hashlib.sha256(supplied).digest(), password_digest):
+            raise Refused('Server password required or incorrect', 403)
+
+    def limit_admission():
+        # Bound anonymous registration and password attempts, without trusting
+        # proxy-forwarded IP headers or retaining an unbounded per-IP map.
+        with admission_lock:
+            now = time.monotonic()
+            admission_times[:] = [stamp for stamp in admission_times if now-stamp < 60]
+            if len(admission_times) >= 600:
+                raise Refused('Too many connection attempts; try again shortly', 429)
+            admission_times.append(now)
 
     def bound_request():
         if request.path.startswith('/reriff/progression'):
-            request.max_content_length = 2*MAX_SAVE
+            request.max_content_length = 4096 if request.path.endswith('/connect') else 2*MAX_SAVE
 
     app.before_request_funcs.setdefault(None, []).insert(0, bound_request)
 
@@ -225,9 +268,44 @@ def register(app, data, server_id, balance_module):
         except Refused:
             return {'serverCheckpoints': False, 'prestigeReset': False, 'trustedClientProgression': False}
 
+    def info():
+        try:
+            policy()
+            response = jsonify(protocol=1, serverId=server_id, automaticAccounts=True,
+                               passwordRequired=bool(password), capabilities=capability())
+        except Refused as error:
+            response = jsonify(error=str(error)); response.status_code = error.status
+        response.headers['Cache-Control'] = 'no-store'
+        return response
+
+    def connect_account():
+        try:
+            policy()
+            limit_admission()
+            check_password()
+            header = request.headers.get('Authorization', '')
+            token = header[7:] if header.startswith('Bearer ') else ''
+            raw = request.get_data(cache=True)
+            if len(raw) > 4096:
+                raise Refused('Connection request too large', 413)
+            try:
+                payload = json.loads(raw, object_pairs_hook=balance_module.unique_object)
+            except (ValueError, RecursionError):
+                raise Refused('Invalid connection request') from None
+            exact(payload, 'create')
+            if type(payload['create']) is not bool:
+                raise Refused('Invalid account creation flag')
+            account = store.connect_account(token, payload['create'])
+            response = jsonify(protocol=1, serverId=server_id, accountId=account)
+        except Refused as error:
+            response = jsonify(error=str(error)); response.status_code = error.status
+        response.headers['Cache-Control'] = 'no-store'
+        return response
+
     def handle(prestige=False):
         try:
             current = policy()
+            check_password()
             header = request.headers.get('Authorization', '')
             account = store.account(header[7:] if header.startswith('Bearer ') else '')
             if request.method == 'GET':
@@ -253,6 +331,8 @@ def register(app, data, server_id, balance_module):
             response.headers['Cache-Control'] = 'no-store'
             return response
 
+    app.add_url_rule('/reriff/progression/info', 'progression_info', info, methods=['GET'])
+    app.add_url_rule('/reriff/progression/connect', 'progression_connect', connect_account, methods=['POST'])
     app.add_url_rule('/reriff/progression', 'progression_load', handle, methods=['GET'])
     app.add_url_rule('/reriff/progression/checkpoint', 'progression_save', handle, methods=['POST'])
     app.add_url_rule('/reriff/progression/prestige', 'progression_prestige', lambda: handle(True), methods=['POST'])

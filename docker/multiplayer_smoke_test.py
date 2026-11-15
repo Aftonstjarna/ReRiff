@@ -19,11 +19,13 @@ def main():
     name='reriff-progression-'+uuid.uuid4().hex[:10]
     volume=name+'-data'
     token='a'*64  # Synthetic credential, only in this isolated test volume.
+    server_password=''
     opener=urllib.request.build_opener(urllib.request.ProxyHandler({}))
     def engine(*command):return subprocess.check_output([args.engine,*command],text=True).strip()
     def request(path,body=None,credential=token):
         headers={'Content-Type':'application/json'}
         if credential:headers['Authorization']='Bearer '+credential
+        if server_password:headers['X-ReRiff-Server-Password']=base64.b64encode(server_password.encode()).decode()
         data=json.dumps(body).encode() if isinstance(body,dict) else body
         req=urllib.request.Request(base+path,data=data,headers=headers)
         with opener.open(req,timeout=10) as response:return json.loads(response.read())
@@ -36,7 +38,7 @@ def main():
     def start():
         engine('run','-d','--name',name,'--read-only','--tmpfs','/tmp','--cap-drop=all',
                '--security-opt=no-new-privileges','-p','127.0.0.1::5144','-v',volume+':/data',
-               '-e','RERIFF_PROGRESSION_MODE=trusted',args.image)
+               '-e','RERIFF_PROGRESSION_MODE=trusted','-e','RERIFF_SERVER_PASSWORD='+server_password,args.image)
         return 'http://127.0.0.1:'+engine('port',name,'5144/tcp').splitlines()[0].rsplit(':',1)[1]
     engine('volume','create',volume)
     try:
@@ -77,6 +79,19 @@ def main():
         engine('stop','--time','10',name);engine('rm',name)
         base=start();assert ready()==server_id
         assert request('/reriff/progression')==before
+        engine('stop','--time','10',name);engine('rm',name)
+        server_password='test-password-only'
+        base=start();assert ready()==server_id
+        assert request('/reriff/progression/info')['passwordRequired'] is True
+        try:opener.open(urllib.request.Request(base+'/reriff/progression',headers={'Authorization':'Bearer '+token}),timeout=10)
+        except urllib.error.HTTPError as error:assert error.code==403
+        else:raise AssertionError('Existing credential bypassed server password')
+        assert request('/reriff/progression')==before
+        if args.client_command:
+            subprocess.run([*args.client_command,base,server_id,account,server_password],check=True)
+        trace=engine('exec',name,'python','-c',"from pathlib import Path;print(''.join(p.read_text() for p in Path('/data/traces').glob('*.jsonl')))")
+        assert server_password not in trace and base64.b64encode(server_password.encode()).decode() not in trace
+        print('PASS: password-locked reconnect and private password headers')
         print('PASS: trusted progression HTTP, credentials, immutable UUID, confirmed reset/retry, private traces, bounded bodies and complete checkpoint after container recreation')
     except Exception:
         subprocess.run([args.engine,'logs',name],check=False)

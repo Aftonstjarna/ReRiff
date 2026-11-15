@@ -173,3 +173,53 @@ class MultiplayerTests(unittest.TestCase):
         request=self.request();request['snapshot']['cycleXp']=True
         self.assertEqual(client.post('/reriff/progression/checkpoint',headers=headers,json=request).status_code,400)
         self.assertIsNone(self.store.read(self.account))
+
+    def test_automatic_accounts_discovery_retry_and_reconnect(self):
+        client=self.app(RERIFF_PROGRESSION_MODE='trusted')
+        info=client.get('/reriff/progression/info')
+        self.assertEqual(info.status_code,200)
+        self.assertFalse(info.json['passwordRequired'])
+        self.assertTrue(info.json['automaticAccounts'])
+        token='c'*64;headers={'Authorization':'Bearer '+token}
+        first=client.post('/reriff/progression/connect',headers=headers,json={'create':True})
+        self.assertEqual(first.status_code,200)
+        self.assertEqual(str(uuid.UUID(first.json['accountId'])),first.json['accountId'])
+        for create in (True,False):
+            self.assertEqual(client.post('/reriff/progression/connect',headers=headers,json={'create':create}).json,first.json)
+        self.assertEqual(client.get('/reriff/progression',headers=headers).json['accountId'],first.json['accountId'])
+        self.assertEqual(client.post('/reriff/progression/connect',headers={'Authorization':'Bearer '+'d'*64},json={'create':False}).status_code,401)
+        self.store.rotate_token(first.json['accountId'])
+        self.assertEqual(client.post('/reriff/progression/connect',headers=headers,json={'create':False}).status_code,401)
+        self.assertEqual(self.app().get('/reriff/progression/info').status_code,404)
+
+    def test_automatic_account_concurrent_retry(self):
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+            ids=list(pool.map(lambda _:self.store.connect_account('e'*64,True),range(8)))
+        self.assertEqual(len(set(ids)),1)
+
+    def test_server_password_checks_creation_and_existing_progression(self):
+        password='test-pässword'
+        client=self.app(RERIFF_PROGRESSION_MODE='trusted',RERIFF_SERVER_PASSWORD=password)
+        self.assertTrue(client.get('/reriff/progression/info').json['passwordRequired'])
+        headers={'Authorization':'Bearer '+'f'*64}
+        for supplied in ('','wrong','%%invalid%%'):
+            headers['X-ReRiff-Server-Password']=supplied
+            self.assertEqual(client.post('/reriff/progression/connect',headers=headers,json={'create':True}).status_code,403)
+        with self.assertRaises(Refused):self.store.account('f'*64)
+        headers['X-ReRiff-Server-Password']=base64.b64encode(password.encode()).decode()
+        joined=client.post('/reriff/progression/connect',headers=headers,json={'create':True})
+        self.assertEqual(joined.status_code,200)
+        self.assertEqual(client.get('/reriff/progression',headers=headers).status_code,200)
+        del headers['X-ReRiff-Server-Password']
+        self.assertEqual(client.get('/reriff/progression',headers=headers).status_code,403)
+        self.assertEqual(client.post('/reriff/progression/checkpoint',headers=headers,json=self.request()).status_code,403)
+        self.assertEqual(client.post('/reriff/progression/prestige',headers=headers,json=self.reset_request()).status_code,403)
+
+    def test_admission_is_bounded_and_strict(self):
+        client=self.app(RERIFF_PROGRESSION_MODE='trusted')
+        headers={'Authorization':'Bearer '+'c'*64}
+        self.assertEqual(client.post('/reriff/progression/connect',headers=headers,json={'create':'true'}).status_code,400)
+        self.assertEqual(client.post('/reriff/progression/connect',headers=headers,data=b'x'*4097).status_code,413)
+        for _ in range(598):
+            self.assertEqual(client.post('/reriff/progression/connect',headers=headers,json={'create':True}).status_code,200)
+        self.assertEqual(client.post('/reriff/progression/connect',headers=headers,json={'create':True}).status_code,429)
