@@ -31,7 +31,7 @@ class ReleaseMetadataTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
         self.version = '1.4.0-beta.3'
-        self.names = [f'ReRiff-{self.version}-windows.zip',f'ReRiff-{self.version}-linux.run','ReRiff-Windows-Server.zip','ReRiff-Server-x86_64.AppImage','ReRiff-CJK.zip','ReRiff-Latin.zip',f'ReRiff-{self.version}-source.tar.gz']
+        self.names = [f'ReRiff-{self.version}-windows.zip',f'ReRiff-{self.version}-linux.run','ReRiff-Windows-Server.zip','ReRiff-Server-x86_64.AppImage','ReRiff-CJK.zip','ReRiff-Latin.zip']
         for name in self.names:(self.root/name).write_bytes(name.encode())
     def tearDown(self): self.temp.cleanup()
     def parse(self, metadata, platform, valid=True):
@@ -43,7 +43,7 @@ class ReleaseMetadataTests(unittest.TestCase):
         metadata=release_metadata(self.root,self.version,'test-commit')
         self.assertEqual(metadata['schema'],2)
         self.assertEqual(metadata['artifacts'],sorted(self.names))
-        self.assertEqual(len(metadata['packages']),7)
+        self.assertEqual(len(metadata['packages']),6)
         for platform in ('windows','linux'):
             package=next(p for p in metadata['packages'] if p['component']=='client' and p['platform']==platform)
             self.assertEqual(self.parse(metadata,platform),[package['filename'],package['sha256'],str(package['size']),'1'])

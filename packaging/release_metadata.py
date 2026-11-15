@@ -14,7 +14,6 @@ def release_metadata(output, version, commit):
         ('server', 'linux', 'x86_64', 'ReRiff-Server-x86_64.AppImage'),
         ('fonts-cjk', 'any', 'any', 'ReRiff-CJK.zip'),
         ('fonts-latin', 'any', 'any', 'ReRiff-Latin.zip'),
-        ('source', 'any', 'any', f'ReRiff-{version}-source.tar.gz'),
     ]
     packages = []
     for component, platform, architecture, filename in specs:

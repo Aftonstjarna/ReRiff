@@ -187,10 +187,10 @@ __RERIFF_PAYLOAD__
     # A local rebuild may reuse dist/vVERSION from before the server rename.
     # Do not re-advertise the obsolete ZIP in release.json or SHA256SUMS.
     (output/'ReRiff-Server-windows.zip').unlink(missing_ok=True)
-    # Source archive excludes original game files, player data, and caches.
-    with (output/f'ReRiff-{version}-source.tar.gz').open('wb') as stream:
-        subprocess.run(['git','archive','--format=tar.gz',f'--prefix=ReRiff-{version}/','HEAD'],cwd=ROOT,stdout=stream,check=True)
-    artifacts = sorted(p for p in output.iterdir() if p.suffix in ('.run','.zip','.gz','.AppImage'))
+    # GitHub supplies source archives for the release tag. Remove the old
+    # duplicate when rebuilding an existing output directory.
+    (output/f'ReRiff-{version}-source.tar.gz').unlink(missing_ok=True)
+    artifacts = sorted(p for p in output.iterdir() if p.suffix in ('.run','.zip','.AppImage'))
     (output/'SHA256SUMS').write_text(''.join(digest(p.read_bytes())+'  '+p.name+'\n' for p in artifacts))
     (output/'release.json').write_text(json.dumps(release_metadata(output, version, commit),indent=2)+'\n')
     (output/'RELEASE-NOTES.md').write_text(notes, encoding='utf-8')
