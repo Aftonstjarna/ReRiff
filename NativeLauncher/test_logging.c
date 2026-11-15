@@ -10,7 +10,7 @@ int main(void){
  log_message(L"disabled");assert(GetFileAttributesW(logs)==INVALID_FILE_ATTRIBUTES);
  WNDCLASSW cls={0};cls.lpfnWndProc=procedure;cls.hInstance=GetModuleHandleW(NULL);cls.lpszClassName=L"LoggingTest";RegisterClassW(&cls);busy=TRUE;
  HWND hwnd=CreateWindowW(cls.lpszClassName,L"",WS_OVERLAPPED,0,0,660,615,NULL,NULL,cls.hInstance,NULL);assert(hwnd);
- assert(SendMessageW(logging_checkbox,BM_GETCHECK,0,0)==BST_UNCHECKED);assert(SendMessageW(launcher_tabs,TCM_GETITEMCOUNT,0,0)==3);
+ assert(SendMessageW(logging_checkbox,BM_GETCHECK,0,0)==BST_UNCHECKED);assert(SendMessageW(launcher_tabs,TCM_GETITEMCOUNT,0,0)==4);
  SendMessageW(logging_checkbox,BM_SETCHECK,BST_CHECKED,0);SendMessageW(hwnd,WM_COMMAND,LOGGING,0);assert(rr_logging_ini(ini));log_message(L"enabled");assert(GetFileAttributesW(file)!=INVALID_FILE_ATTRIBUTES);
  WIN32_FILE_ATTRIBUTE_DATA before,after;assert(GetFileAttributesExW(file,GetFileExInfoStandard,&before));
  SendMessageW(logging_checkbox,BM_SETCHECK,BST_UNCHECKED,0);SendMessageW(hwnd,WM_COMMAND,LOGGING,0);assert(!rr_logging_ini(ini));log_message(L"must not append");assert(GetFileAttributesExW(file,GetFileExInfoStandard,&after));assert(before.nFileSizeLow==after.nFileSizeLow&&GetFileAttributesW(logs)!=INVALID_FILE_ATTRIBUTES);
