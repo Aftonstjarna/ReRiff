@@ -25,6 +25,7 @@ RUN python -m pip install --no-cache-dir -r /app/docker/requirements.txt \
 
 COPY vendor/riffapi-local-extended/ /app/server/
 COPY VERSION /app/server/VERSION
+COPY Progression/balance.py Progression/balance.json /app/Progression/
 COPY --from=catalog-build /out/libreriff-catalog.so /app/server/libreriff-catalog.so
 COPY --from=catalog-build /out/libreriff-news.so /app/server/libreriff-news.so
 COPY scripts/trace-server.py /app/trace-server.py

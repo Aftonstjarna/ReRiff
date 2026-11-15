@@ -29,6 +29,10 @@ def create_app(data_dir=None, public_url=None, lan_url=None, log_dir=None, trace
                            {'public': public, 'lan': lan}).items() if value
     }
     backend.ensure_dirs()
+    balance_spec = importlib.util.spec_from_file_location('reriff_balance', ROOT/'Progression/balance.py')
+    balance = importlib.util.module_from_spec(balance_spec)
+    balance_spec.loader.exec_module(balance)
+    balance.register_endpoint(backend.app, data, backend._identity_module.server_id(data))
     spec = importlib.util.spec_from_file_location('reriff_trace', ROOT/'trace-server.py')
     trace = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(trace)

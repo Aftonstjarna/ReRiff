@@ -2,7 +2,37 @@ name: Build and publish server container
 
 on:
   push:
+    paths:
+      - Dockerfile
+      - .dockerignore
+      - compose.yaml
+      - VERSION
+      - docker/**
+      - vendor/riffapi-local-extended/**
+      - ServerSync/**
+      - Progression/**
+      - packaging/requirements.txt
+      - scripts/trace-server.py
+      - scripts/test_server_identity.py
+      - scripts/test_song_aliases.py
+      - docs/tests/**
+      - .github/workflows/container.yml
   pull_request:
+    paths:
+      - Dockerfile
+      - .dockerignore
+      - compose.yaml
+      - VERSION
+      - docker/**
+      - vendor/riffapi-local-extended/**
+      - ServerSync/**
+      - Progression/**
+      - packaging/requirements.txt
+      - scripts/trace-server.py
+      - scripts/test_server_identity.py
+      - scripts/test_song_aliases.py
+      - docs/tests/**
+      - .github/workflows/container.yml
   workflow_dispatch:
 
 concurrency:
@@ -39,8 +69,9 @@ jobs:
           fi
           echo "publish=$publish" >> "$GITHUB_OUTPUT"
 
-      - name: Validate standalone host Compose file
+      - name: Validate image-only and standalone host Compose files
         run: |
+          docker compose --env-file docker/server.env.example config --quiet
           cp docker/server.env.example docker/server.env
           docker compose -f docker/compose.host.yaml config --quiet
           rm docker/server.env
@@ -66,6 +97,9 @@ jobs:
             --env RERIFF_NEWS_LIBRARY=/app/server/libreriff-news.so \
             reriff-server:ci python -m unittest \
             scripts.test_server_identity scripts.test_song_aliases
+          docker run --rm --network none \
+            --mount "type=bind,source=$PWD,target=/src,readonly" \
+            --workdir /src reriff-server:ci python -m unittest discover -s Progression -v
 
       - name: Test the running server and persistent storage
         run: python3 docker/smoke_test.py --image reriff-server:ci
