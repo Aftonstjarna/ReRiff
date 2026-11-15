@@ -3,6 +3,7 @@
 #include <commctrl.h>
 #define RERIFF_PROGRESS_EVENT (WM_APP+71)
 enum { PROGRESS_CHECK, PROGRESS_DOWNLOAD, PROGRESS_VERIFY, PROGRESS_PREPARE, PROGRESS_INSTALL, PROGRESS_RESUME };
+static HWND progress_sink;
 static HWND progress_window,progress_label,progress_bar,progress_cancel;
 static HFONT progress_font;
 static volatile LONG progress_state;
@@ -11,8 +12,15 @@ static BOOL progress_cancelled(void){return InterlockedCompareExchange(&progress
 static inline BOOL progress_commit(void){return InterlockedCompareExchange(&progress_state,2,0)!=1;}
 static void progress_report(int stage,int percent){
     LONG value=stage*102+percent+1;
-    if(progress_window&&InterlockedExchange(&progress_last,value)!=value)
-        PostMessageW(progress_window,RERIFF_PROGRESS_EVENT,(WPARAM)stage,(LPARAM)percent);
+    if((progress_window||progress_sink)&&InterlockedExchange(&progress_last,value)!=value)
+        PostMessageW(progress_window?progress_window:progress_sink,RERIFF_PROGRESS_EVENT,(WPARAM)stage,(LPARAM)percent);
+}
+static void progress_set_bar(HWND bar,int percent){
+        LONG_PTR style=GetWindowLongPtrW(bar,GWL_STYLE);
+        if(percent>=0)SendMessageW(bar,PBM_SETMARQUEE,FALSE,0);
+        SetWindowLongPtrW(bar,GWL_STYLE,percent<0?style|PBS_MARQUEE:style&~PBS_MARQUEE);
+        if(percent<0)SendMessageW(bar,PBM_SETMARQUEE,TRUE,40);
+        if(percent>=0)SendMessageW(bar,PBM_SETPOS,percent,0);
 }
 static LRESULT CALLBACK progress_procedure(HWND self,UINT event,WPARAM wp,LPARAM lp){
     if((event==WM_COMMAND&&LOWORD(wp)==IDCANCEL)||event==WM_CLOSE){
@@ -26,11 +34,7 @@ static LRESULT CALLBACK progress_procedure(HWND self,UINT event,WPARAM wp,LPARAM
         static const WCHAR *labels[]={L"Checking for updates...",L"Downloading update...",L"Verifying download...",L"Preparing installation...",L"Installing update; please wait...",L"Starting game..."};
         if(wp<sizeof(labels)/sizeof(labels[0]))SetWindowTextW(progress_label,labels[wp]);
         int percent=(int)(INT_PTR)lp;
-        LONG_PTR style=GetWindowLongPtrW(progress_bar,GWL_STYLE);
-        if(percent>=0)SendMessageW(progress_bar,PBM_SETMARQUEE,FALSE,0);
-        SetWindowLongPtrW(progress_bar,GWL_STYLE,percent<0?style|PBS_MARQUEE:style&~PBS_MARQUEE);
-        if(percent<0)SendMessageW(progress_bar,PBM_SETMARQUEE,TRUE,40);
-        if(percent>=0)SendMessageW(progress_bar,PBM_SETPOS,percent,0);
+        progress_set_bar(progress_bar,percent);
         EnableWindow(progress_cancel,InterlockedCompareExchange(&progress_state,0,0)==0);
         return 0;
     }

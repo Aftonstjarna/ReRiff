@@ -28,7 +28,7 @@ static BOOL update_download(HINTERNET session,const WCHAR *url,const WCHAR *dest
                     if(read>maximum-total){_snwprintf(update_problem,512,L"The download exceeded this launcher's %.1f MiB limit. Install the newer release manually.",maximum/(1024.0*1024.0));ok=FALSE;break;}
                     if(!WriteFile(file,block,read,&written,NULL)||written!=read){error=GetLastError();_snwprintf(update_problem,512,L"Could not save the download (system error %lu). Check disk space and folder permissions.",(unsigned long)error);ok=FALSE;break;}
                     total+=read;
-                    if(automatic_update)progress_report(automatic_progress_stage,expected_bytes?(int)((ULONGLONG)total*100/expected_bytes):-1);
+                    progress_report(automatic_progress_stage,expected_bytes?(int)((ULONGLONG)total*100/expected_bytes):-1);
                 }
                 CloseHandle(file);
             }
@@ -180,10 +180,10 @@ static BOOL check_updates(void) {
     _snwprintf(archive,CAP,L"%ls\\%ls",work,filename);archive[CAP-1]=0;
     _snwprintf(url,CAP,L"https://github.com/Aftonstjarna/ReRiff/releases/download/%ls/%ls",release_tag,filename);url[CAP-1]=0;
     failure=L"Could not download the release package";
-    if(automatic_update){automatic_progress_stage=PROGRESS_DOWNLOAD;progress_report(PROGRESS_DOWNLOAD,0);}
+    automatic_progress_stage=PROGRESS_DOWNLOAD;progress_report(PROGRESS_DOWNLOAD,0);
     if(!update_download(session,url,archive,256*1024*1024))goto done;
     failure=L"The release checksum did not match";
-    if(automatic_update){if(progress_cancelled())goto done;progress_report(PROGRESS_VERIFY,-1);}
+    if(automatic_update&&progress_cancelled())goto done;progress_report(PROGRESS_VERIFY,-1);
     if(package.explicit_metadata){
         WIN32_FILE_ATTRIBUTE_DATA info;
         if(!GetFileAttributesExW(archive,GetFileExInfoStandard,&info)
@@ -196,7 +196,7 @@ static BOOL check_updates(void) {
     MultiByteToWideChar(CP_UTF8,0,expected,-1,hash_w,65);
     path(source,L"localserver\\apply-client-update.py");
     failure=L"Could not start installer preflight";
-    if(automatic_update)progress_report(PROGRESS_PREPARE,-1);
+    progress_report(PROGRESS_PREPARE,-1);
     _snwprintf(name,CAP,L"%ls\\apply-client-update.py",work);name[CAP-1]=0;
     if(!is_wine()) {
         WCHAR policy[CAP],destination[CAP];path(policy,L"localserver\\logging_policy.py");

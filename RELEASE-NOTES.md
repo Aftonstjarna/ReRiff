@@ -1,3 +1,12 @@
+# Unreleased — Next beta
+
+- Add a launcher progress bar between the status message and local-server
+  address, using the same native styling as automatic updates. Show download
+  progress when available, animate operations without a percentage, and reset
+  when work finishes. Keep the bar visible across launcher tabs.
+- Validation: development launcher, updater and setup build succeeded. Live
+  layout and operation-progress testing remain pending; not installed locally.
+
 # ReRiff 1.4.0-beta.7 — Cleaner launcher controls
 
 ## In-game summary

@@ -37,7 +37,7 @@ static BOOL force_show_launcher, suppress_auto_update, automatic_update, force_a
 static DWORD restart_parent_pid;
 #include "restart_protocol.h"
 static HWND window, status, external, fallback, timeout_edit, popup, play_button, save_button;
-static HWND only_checkbox, stop_button, update_button;
+static HWND only_checkbox, stop_button, update_button, launcher_progress;
 static BOOL busy = FALSE, playing = FALSE, checking_update = FALSE;
 static HWND experimental_checkbox;
 static HWND networking_checkbox, skip_checkbox, auto_update_checkbox;
@@ -332,13 +332,14 @@ static DWORD WINAPI worker(LPVOID parameter) {
 
 static void begin(int action) {
     if (busy) return;
+    progress_last=-999;progress_set_bar(launcher_progress,-1);
     busy=TRUE;playing=action==1;checking_update=action==3;changing_language=action>=4&&action<=7;
     EnableWindow(language_checkbox,FALSE);EnableWindow(latin_checkbox,FALSE);EnableWindow(logging_checkbox,FALSE);
     EnableWindow(play_button,FALSE);EnableWindow(save_button,FALSE);EnableWindow(stop_button,FALSE);EnableWindow(update_button,FALSE);EnableWindow(experimental_checkbox,FALSE);
     SetWindowTextW(status,action==6?L"Installing and enabling Latin/European fonts...":action==7?L"Disabling Latin/European fonts...":action==4?L"Installing and enabling CJK fonts...":action==5?L"Disabling CJK fonts...":action==3?L"Checking published GitHub releases...":action==2?(local_server_state==2?L"Stopping the local server...":local_server_state==1&&local_server_package_current()?L"Starting the local server...":L"Downloading and installing the optional local server..."):L"Checking server settings...");
     HANDLE thread=CreateThread(NULL,4*1024*1024,worker,(LPVOID)(INT_PTR)action,STACK_SIZE_PARAM_IS_A_RESERVATION,NULL);
     if (thread) CloseHandle(thread);
-    else { busy=FALSE; EnableWindow(play_button,TRUE);EnableWindow(save_button,TRUE);EnableWindow(stop_button,TRUE);EnableWindow(update_button,TRUE);EnableWindow(experimental_checkbox,TRUE);SetWindowTextW(status,L"Could not start launcher worker."); }
+    else { progress_set_bar(launcher_progress,0);busy=FALSE; EnableWindow(play_button,TRUE);EnableWindow(save_button,TRUE);EnableWindow(stop_button,TRUE);EnableWindow(update_button,TRUE);EnableWindow(experimental_checkbox,TRUE);SetWindowTextW(status,L"Could not start launcher worker."); }
 }
 
 static HWND control(const WCHAR *cls,const WCHAR *text,DWORD style,int x,int y,int w,int h,int id) {
@@ -469,7 +470,7 @@ static void select_launcher_page(void){
     SendMessageW(checkbox_tooltips,TTM_POP,0,0);
     for(unsigned i=0;i<server_page_count;i++){
         HWND item=server_page_controls[i];
-        if(item!=status&&item!=play_button&&item!=update_button&&item!=experimental_checkbox)ShowWindow(item,page!=0?SW_HIDE:SW_SHOW);
+        if(item!=status&&item!=play_button&&item!=update_button&&item!=experimental_checkbox&&item!=launcher_progress)ShowWindow(item,page!=0?SW_HIDE:SW_SHOW);
     }
     for(unsigned i=0;i<language_page_count;i++)ShowWindow(language_page_controls[i],languages?SW_SHOW:SW_HIDE);
     for(unsigned i=0;i<diagnostic_count;i++)ShowWindow(diagnostic_controls[i],page==2?SW_SHOW:SW_HIDE);
@@ -480,7 +481,7 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
     if (event==WM_CREATE) {
         rr_brand_icon(hwnd);
         window=hwnd;font=CreateFontW(-16,0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,0,0,CLEARTYPE_QUALITY,0,L"Segoe UI");
-        INITCOMMONCONTROLSEX common={sizeof(common),ICC_TAB_CLASSES|ICC_WIN95_CLASSES};InitCommonControlsEx(&common);
+        INITCOMMONCONTROLSEX common={sizeof(common),ICC_TAB_CLASSES|ICC_WIN95_CLASSES|ICC_PROGRESS_CLASS};InitCommonControlsEx(&common);
         checkbox_tooltips=CreateWindowExW(WS_EX_TOPMOST,TOOLTIPS_CLASSW,NULL,
             WS_POPUP|TTS_ALWAYSTIP|TTS_NOPREFIX,CW_USEDEFAULT,CW_USEDEFAULT,
             CW_USEDEFAULT,CW_USEDEFAULT,hwnd,NULL,GetModuleHandleW(NULL),NULL);
@@ -503,7 +504,10 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
         networking_checkbox=control(L"BUTTON",L"Force singleplayer",BS_AUTOCHECKBOX|WS_TABSTOP,22,259,600,28,NETWORKING);
         skip_checkbox=control(L"BUTTON",L"Skip launcher",BS_AUTOCHECKBOX|WS_TABSTOP,22,293,165,28,SKIP_LAUNCHER);
         auto_update_checkbox=control(L"BUTTON",L"Auto-update when skipping launcher",BS_AUTOCHECKBOX|WS_TABSTOP,195,293,425,28,AUTO_UPDATE_SKIP);
-        status=control(L"STATIC",L"Checking server settings...",0,22,359,600,50,0);
+        status=control(L"STATIC",L"Checking server settings...",0,22,347,600,38,0);
+        launcher_progress=control(PROGRESS_CLASSW,L"",0,22,389,600,22,0);
+        SendMessageW(launcher_progress,PBM_SETRANGE32,0,100);
+        progress_sink=hwnd;
         local_server_hint=control(L"STATIC",L"Local server: http://127.0.0.1:5144 — enter in Secondary server",0,22,417,600,22,0);
         HWND github_button=control(L"BUTTON",L"ReRiff on GitHub",WS_TABSTOP|BS_BITMAP|BS_CENTER|BS_VCENTER,22,445,150,34,RERIFF_BRAND_CONTROL);
         rr_brand_button(github_button);
@@ -589,14 +593,15 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
     }
     if(event==WM_TIMER&&wp==1){refresh_changed_settings();return 0;}
     if(event==WM_ACTIVATE&&LOWORD(wp)!=WA_INACTIVE)refresh_changed_settings();
-    if (event==WM_GAME_RUNNING) { SetWindowTextW(status,L"Game running. Keep the launcher open until the game closes.");ShowWindow(window,SW_MINIMIZE);return 0; }
+    if(event==RERIFF_PROGRESS_EVENT){if(busy)progress_set_bar(launcher_progress,(int)(INT_PTR)lp);return 0;}
+    if (event==WM_GAME_RUNNING) { progress_set_bar(launcher_progress,0); SetWindowTextW(status,L"Game running. Keep the launcher open until the game closes.");ShowWindow(window,SW_MINIMIZE);return 0; }
     if (event==WM_COMPLETE) {
         if (lp==2) { DestroyWindow(hwnd);return 0; }
         if(changing_language){settings_observed=read_settings_signature(&settings_signature);changing_language=FALSE;}
         if (lp==1) reload_settings_controls();
         requested_experimental=installed_experimental;
         SendMessageW(experimental_checkbox,BM_SETCHECK,installed_experimental?BST_CHECKED:BST_UNCHECKED,0);
-        busy=FALSE;playing=FALSE;EnableWindow(play_button,TRUE);EnableWindow(save_button,TRUE);EnableWindow(stop_button,TRUE);EnableWindow(update_button,TRUE);EnableWindow(experimental_checkbox,TRUE);SetWindowTextW(status,message);
+        progress_set_bar(launcher_progress,0);busy=FALSE;playing=FALSE;EnableWindow(play_button,TRUE);EnableWindow(save_button,TRUE);EnableWindow(stop_button,TRUE);EnableWindow(update_button,TRUE);EnableWindow(experimental_checkbox,TRUE);SetWindowTextW(status,message);
         local_server_controls();language_controls();EnableWindow(language_checkbox,TRUE);EnableWindow(latin_checkbox,TRUE);EnableWindow(logging_checkbox,TRUE);
         if(!wp&&checking_update&&*update_failure)show_update_details();checking_update=FALSE;
         if (lp) ShowWindow(window,SW_RESTORE);return 0;
@@ -605,7 +610,7 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
         if (busy) { SetWindowTextW(status,L"Wait for server startup or close the game before closing this launcher.");return 0; }
         DestroyWindow(hwnd);return 0;
     }
-    if (event==WM_DESTROY) { KillTimer(hwnd,1);rr_brand_cleanup();DeleteObject(font);PostQuitMessage(0);return 0; }
+    if (event==WM_DESTROY) { progress_sink=NULL;KillTimer(hwnd,1);rr_brand_cleanup();DeleteObject(font);PostQuitMessage(0);return 0; }
     return DefWindowProcW(hwnd,event,wp,lp);
 }
 
