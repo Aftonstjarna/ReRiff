@@ -45,7 +45,7 @@ static ULONGLONG settings_signature;
 static BOOL settings_observed=FALSE;
 static BOOL installed_experimental=FALSE, requested_experimental=FALSE;
 static HFONT font;
-static HWND launcher_tabs,latin_checkbox,language_checkbox,language_description,logging_checkbox;
+static HWND launcher_tabs,latin_checkbox,language_checkbox,checkbox_tooltips,logging_checkbox;
 static const WCHAR *log_categories[]={L"launcher",L"connections",L"game",L"text",L"languages",L"localserver",L"update",L"installer",L"python"};
 static const WCHAR *log_labels[]={L"Launcher",L"Connections, network and news",L"Menus, progression and saves",L"Unicode and song metadata",L"Font installation",L"Local server and helper",L"Updates",L"Installer",L"Python setup"};
 #define LOG_CATEGORY_COUNT (sizeof(log_categories)/sizeof(log_categories[0]))
@@ -456,8 +456,17 @@ static void language_controls(void){
     GetPrivateProfileStringW(L"languages",L"latin_enabled",L"false",value,16,ini);
     SendMessageW(latin_checkbox,BM_SETCHECK,(!_wcsicmp(value,L"true")||!wcscmp(value,L"1"))?BST_CHECKED:BST_UNCHECKED,0);
 }
+/* Standard Win32 tooltips preserve native checkbox input and tab navigation.
+ * Text is backed by static literals for the lifetime of the launcher. */
+static void checkbox_help(HWND checkbox,const WCHAR *text) {
+    TOOLINFOW tool={0};tool.cbSize=sizeof(tool);
+    tool.uFlags=TTF_IDISHWND|TTF_SUBCLASS;tool.hwnd=window;
+    tool.uId=(UINT_PTR)checkbox;tool.lpszText=(LPWSTR)text;
+    SendMessageW(checkbox_tooltips,TTM_ADDTOOLW,0,(LPARAM)&tool);
+}
 static void select_launcher_page(void){
     int page=(int)SendMessageW(launcher_tabs,TCM_GETCURSEL,0,0);BOOL languages=page==1;
+    SendMessageW(checkbox_tooltips,TTM_POP,0,0);
     for(unsigned i=0;i<server_page_count;i++){
         HWND item=server_page_controls[i];
         if(item!=status&&item!=play_button&&item!=update_button&&item!=experimental_checkbox)ShowWindow(item,page!=0?SW_HIDE:SW_SHOW);
@@ -471,7 +480,12 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
     if (event==WM_CREATE) {
         rr_brand_icon(hwnd);
         window=hwnd;font=CreateFontW(-16,0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,0,0,CLEARTYPE_QUALITY,0,L"Segoe UI");
-        INITCOMMONCONTROLSEX common={sizeof(common),ICC_TAB_CLASSES};InitCommonControlsEx(&common);
+        INITCOMMONCONTROLSEX common={sizeof(common),ICC_TAB_CLASSES|ICC_WIN95_CLASSES};InitCommonControlsEx(&common);
+        checkbox_tooltips=CreateWindowExW(WS_EX_TOPMOST,TOOLTIPS_CLASSW,NULL,
+            WS_POPUP|TTS_ALWAYSTIP|TTS_NOPREFIX,CW_USEDEFAULT,CW_USEDEFAULT,
+            CW_USEDEFAULT,CW_USEDEFAULT,hwnd,NULL,GetModuleHandleW(NULL),NULL);
+        SendMessageW(checkbox_tooltips,TTM_SETMAXTIPWIDTH,0,440);
+        SendMessageW(checkbox_tooltips,TTM_SETDELAYTIME,TTDT_AUTOPOP,20000);
         launcher_tabs=CreateWindowExW(0,WC_TABCONTROLW,L"",WS_CHILD|WS_VISIBLE|WS_TABSTOP,10,6,630,548,hwnd,NULL,GetModuleHandleW(NULL),NULL);
         SendMessageW(launcher_tabs,WM_SETFONT,(WPARAM)font,TRUE);
         TCITEMW tab={0};tab.mask=TCIF_TEXT;tab.pszText=L"Servers";SendMessageW(launcher_tabs,TCM_INSERTITEMW,0,(LPARAM)&tab);
@@ -484,12 +498,11 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
         fallback=control(L"EDIT",L"",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,172,104,448,28,FALLBACK);
         control(L"STATIC",L"Timeout (seconds)",0,22,150,145,24,0);
         timeout_edit=control(L"EDIT",L"5",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,172,146,95,28,TIMEOUT);
-        popup=control(L"BUTTON",L"Show the selected server or singleplayer when the game starts",BS_AUTOCHECKBOX|WS_TABSTOP,22,191,590,28,POPUP);
-        only_checkbox=control(L"BUTTON",L"Primary server only (skip secondary server)",BS_AUTOCHECKBOX|WS_TABSTOP,22,225,590,28,EXTERNAL_ONLY);
-        networking_checkbox=control(L"BUTTON",L"Enable singleplayer",BS_AUTOCHECKBOX|WS_TABSTOP,22,259,600,28,NETWORKING);
+        popup=control(L"BUTTON",L"Show startup notification",BS_AUTOCHECKBOX|WS_TABSTOP,22,191,590,28,POPUP);
+        only_checkbox=control(L"BUTTON",L"Primary server only",BS_AUTOCHECKBOX|WS_TABSTOP,22,225,590,28,EXTERNAL_ONLY);
+        networking_checkbox=control(L"BUTTON",L"Force singleplayer",BS_AUTOCHECKBOX|WS_TABSTOP,22,259,600,28,NETWORKING);
         skip_checkbox=control(L"BUTTON",L"Skip launcher",BS_AUTOCHECKBOX|WS_TABSTOP,22,293,165,28,SKIP_LAUNCHER);
         auto_update_checkbox=control(L"BUTTON",L"Auto-update when skipping launcher",BS_AUTOCHECKBOX|WS_TABSTOP,195,293,425,28,AUTO_UPDATE_SKIP);
-        control(L"STATIC",L"If neither server responds, the game uses singleplayer automatically.",0,22,332,600,24,0);
         status=control(L"STATIC",L"Checking server settings...",0,22,359,600,50,0);
         local_server_hint=control(L"STATIC",L"Local server: http://127.0.0.1:5144 — enter in Secondary server",0,22,417,600,22,0);
         HWND github_button=control(L"BUTTON",L"ReRiff on GitHub",WS_TABSTOP|BS_BITMAP|BS_CENTER|BS_VCENTER,22,445,150,34,RERIFF_BRAND_CONTROL);
@@ -498,22 +511,30 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
         save_button=control(L"BUTTON",L"Save settings",WS_TABSTOP,345,445,130,34,SAVE);
         play_button=control(L"BUTTON",L"Play",WS_TABSTOP|BS_DEFPUSHBUTTON,490,445,130,34,PLAY);
         update_button=control(L"BUTTON",L"Update from GitHub",WS_TABSTOP,22,489,155,30,UPDATE);
-        experimental_checkbox=control(L"BUTTON",L"Use experimental releases (prereleases)",BS_AUTOCHECKBOX|WS_TABSTOP,195,489,420,30,EXPERIMENTAL);
+        experimental_checkbox=control(L"BUTTON",L"Use experimental releases",BS_AUTOCHECKBOX|WS_TABSTOP,195,489,420,30,EXPERIMENTAL);
         SendMessageW(experimental_checkbox,BM_SETCHECK,installed_experimental?BST_CHECKED:BST_UNCHECKED,0);
         creating_languages=TRUE;
-        language_checkbox=control(L"BUTTON",L"Install and enable CJK fonts (Chinese, Japanese, Korean)",BS_AUTOCHECKBOX|WS_TABSTOP,22,26,590,32,CJK_INSTALL);
-        latin_checkbox=control(L"BUTTON",L"Install and enable Latin/European fonts (including Polish)",BS_AUTOCHECKBOX|WS_TABSTOP,22,68,590,32,LATIN_INSTALL);
-        language_description=control(L"STATIC",L"Adds missing characters throughout the game, including file names, song metadata, leaderboards and pause screens.\n\nFonts stay in the game folder. High-resolution text is selected automatically. Restart the game after changing this option.\n\nCJK downloads about 105 MiB; Latin/European is a separate small download. Both share one extra font archive pair. Unchecking disables support and retains the installed fonts. This does not translate the menus.",0,22,118,585,220,0);
+        language_checkbox=control(L"BUTTON",L"CJK fonts",BS_AUTOCHECKBOX|WS_TABSTOP,22,26,590,32,CJK_INSTALL);
+        latin_checkbox=control(L"BUTTON",L"Latin/European fonts",BS_AUTOCHECKBOX|WS_TABSTOP,22,68,590,32,LATIN_INSTALL);
         creating_languages=FALSE;
         creating_diagnostics=TRUE;
         logging_checkbox=control(L"BUTTON",L"Enable diagnostic logging",BS_AUTOCHECKBOX|WS_TABSTOP,22,26,590,32,LOGGING);
-        control(L"STATIC",L"Related diagnostics share a log. The master switch keeps your selections.\nExisting logs are kept; restart the game or local server after changes.",0,22,68,585,46,0);
         for(unsigned i=0;i<LOG_CATEGORY_COUNT;i++)
-            log_checkboxes[i]=control(L"BUTTON",log_labels[i],BS_AUTOCHECKBOX|WS_TABSTOP,22+(i%2)*300,122+(i/2)*32,290,28,LOG_CATEGORY_BASE+i);
-        control(L"STATIC",L"Logs may contain file paths and server addresses; review before sharing.",0,22,356,585,40,0);
+            log_checkboxes[i]=control(L"BUTTON",log_labels[i],BS_AUTOCHECKBOX|WS_TABSTOP,22+(i%2)*300,78+(i/2)*32,290,28,LOG_CATEGORY_BASE+i);
         control(L"BUTTON",L"View update details",WS_TABSTOP,22,405,200,32,UPDATE_DETAILS);
         creating_diagnostics=FALSE;
         SendMessageW(logging_checkbox,BM_SETCHECK,rr_logging_enabled(folder,installed_experimental)?BST_CHECKED:BST_UNCHECKED,0);
+        checkbox_help(popup,L"Show the selected server or singleplayer when the game starts.");
+        checkbox_help(only_checkbox,L"Skip the secondary server. If the primary server is absent or unavailable, use singleplayer automatically.");
+        checkbox_help(networking_checkbox,L"Skip server connections and force singleplayer on the next start. When unchecked, singleplayer is still chosen automatically if servers are absent or unavailable. Saved server addresses are retained.");
+        checkbox_help(skip_checkbox,L"Start the game without showing the launcher. Applies on the next start; use --show-launcher to open settings again.");
+        checkbox_help(auto_update_checkbox,L"Check the selected release channel for updates before starting when the launcher is skipped. A failed check starts the installed version.");
+        checkbox_help(experimental_checkbox,L"Use opt-in beta releases for updates. Uncheck to use stable releases.");
+        checkbox_help(language_checkbox,L"Install and enable Chinese, Japanese and Korean characters in filenames, song metadata, leaderboards and pause screens. Downloads about 105 MiB. Restart the game after changing this option. Unchecking retains the fonts. Both font options share one extra archive pair; menus are not translated. High-resolution text is selected automatically.");
+        checkbox_help(latin_checkbox,L"Install and enable missing Latin/European letters, including Polish, throughout the game. A separate small download shares the CJK font archive pair. Restart the game after changing this option. Unchecking retains the fonts; menus are not translated. High-resolution text is selected automatically.");
+        checkbox_help(logging_checkbox,L"Enable diagnostic logging for the selected categories. Related diagnostics share a log. Disabling keeps your selections and existing logs. Restart the game or local server after changes. Logs may contain file paths and server addresses; review before sharing.");
+        for(unsigned i=0;i<LOG_CATEGORY_COUNT;i++)
+            checkbox_help(log_checkboxes[i],L"Include this category when diagnostic logging is enabled. Related components share a log. Existing logs are kept. Restart the game or local server after changes. Logs may contain file paths and server addresses; review before sharing.");
         reload_log_controls();language_controls();select_launcher_page();
         channel_title();local_server_controls();
         reload_settings_controls();
@@ -549,7 +570,7 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
                 BOOL singleplayer=SendMessageW(networking_checkbox,BM_GETCHECK,0,0)==BST_CHECKED;
                 if(WritePrivateProfileStringW(L"server",L"networking_enabled",singleplayer?L"false":L"true",ini)){
                     settings_observed=read_settings_signature(&settings_signature);
-                    SetWindowTextW(status,singleplayer?L"Singleplayer enabled. Applies on the next game start.":L"Singleplayer disabled. Configured servers apply on the next game start.");
+                    SetWindowTextW(status,singleplayer?L"Singleplayer forced. Servers will be skipped on the next game start.":L"Servers will be tried first next start, with singleplayer as fallback.");
                 }else{
                     SendMessageW(networking_checkbox,BM_SETCHECK,singleplayer?BST_UNCHECKED:BST_CHECKED,0);
                     SetWindowTextW(status,L"Could not save the singleplayer setting to server.ini.");

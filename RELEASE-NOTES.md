@@ -1,3 +1,39 @@
+# ReRiff 1.4.0-beta.7 — Cleaner launcher controls
+
+## In-game summary
+
+- Hover over launcher checkboxes to read their explanations.
+- Force singleplayer clearly skips servers without disabling fallback.
+
+## Full release notes
+
+### Launcher
+
+- Rename Enable singleplayer to Force singleplayer. Clarify that unchecking it
+  tries configured servers first, then automatically falls back to singleplayer
+  when servers are absent or unavailable. Saved addresses and behavior remain
+  unchanged; status messages describe what happens on the next game start.
+- Move checkbox explanations into standard Windows hover tooltips across Servers,
+  Languages and Diagnostics. Shorten checkbox labels and remove persistent help
+  blocks while retaining status messages and native checkbox navigation.
+- Keep font download, restart, retention and language details in the font tooltips.
+  Keep logging retention, restart and sharing guidance in diagnostic tooltips.
+- Refresh README screenshots and setup guidance, distinguish stable and beta
+  features, and explain the repeated older commit history.
+
+### Validation and known limitations
+
+- The native development build compiled successfully and was installed locally;
+  the supplied screenshot confirms the simplified Servers layout. Full hover
+  behavior across platforms and display scales still needs live validation.
+- Release publication runs the client, launcher, native and installer regression
+  checks, including update and rollback validation.
+- Library search and grouped diagnostics from beta.6 remain included. Steam
+  virtual-keyboard input remains unresolved in the tested Proton configuration;
+  automatic summoning is disabled and investigation remains paused.
+- M4A files can appear in search, but M4A playback remains unsupported.
+- This is an opt-in prerelease. Stable remains the default update channel.
+
 # ReRiff 1.4.0-beta.6 — Library search and grouped diagnostics
 
 ## In-game summary
