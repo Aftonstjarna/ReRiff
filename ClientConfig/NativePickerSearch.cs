@@ -20,7 +20,7 @@ namespace ReRiff {
         private static readonly Callback callback=Dispatch;
         private static Construct wideCtor,narrowCtor;
         private static One wideDtor,narrowDtor,vectorDtor,rebuild,visibility;
-        private static Two push,swap,selected;
+        private static Two push,swap,selected,rememberFolder;
         private static ConvertPath shortPath;
         private static Func<IntPtr> saveGame;
         private static readonly object gate=new object();
@@ -57,6 +57,9 @@ namespace ReRiff {
             visibility=Bind<One>(game,0x06001056,"gaFileSelectInterface.updateVisibility");
             selected=Bind<Two>(game,0x0600104f,"gaFileSelectInterface.onFileSelected");
             shortPath=Bind<ConvertPath>(game,0x0600105d,"gaFileSelectInterface.getSystemShortFilename");
+            var remember=Array.Find(game.GetMethods(BindingFlags.Static|BindingFlags.Public|BindingFlags.NonPublic),method=>method.Name=="gaSaveGame.setLastFolderAccessed");
+            if(remember==null)throw new IOException("Original last-folder setter missing");
+            rememberFolder=NativeReelBridge.CreateCall(remember,typeof(Two),false) as Two;
             saveGame=ProgressionNative.Singleton(game,0x0400126f,"?ms_instance@gaSaveGame@@0PAV1@A");
             if(ReRiffConfigurePickerSearch(Marshal.GetFunctionPointerForDelegate(callback))!=1)throw new IOException("Picker search registration refused");
         }
@@ -153,6 +156,19 @@ namespace ReRiff {
                 swap(IntPtr.Add(session.Menu,276),vector);session.Shown=shown;session.Total=matches.Length;rebuild(session.Menu);visibility(session.Menu);
             }finally{vectorDtor(vector);Marshal.FreeHGlobal(vector);Marshal.FreeHGlobal(entry);}
         }
+        private static void RememberFolder(IntPtr menu,string filename) {
+            string parent=Path.GetDirectoryName(filename);
+            if(String.IsNullOrEmpty(parent))throw new IOException("Search result has no parent folder");
+            IntPtr save=saveGame();if(save==IntPtr.Zero)throw new IOException("Original library unavailable");
+            IntPtr wide=Storage(24),narrow=Storage(24),text=Marshal.StringToHGlobalUni(parent);
+            bool converted=false,consumed=false;
+            try {
+                wideCtor(wide,text);shortPath(menu,narrow,wide);converted=true;
+                if(Marshal.ReadInt32(narrow,16)==0)throw new IOException("Search folder conversion failed");
+                // Like native handleScreenInput: setter consumes its by-value string.
+                consumed=true;rememberFolder(save,narrow);
+            }finally{if(converted&&!consumed)narrowDtor(narrow);Marshal.FreeHGlobal(wide);Marshal.FreeHGlobal(narrow);Marshal.FreeHGlobal(text);}
+        }
         private static int Select(Session session,int row) {
             if(session.Shown==null||row<0||row>=session.Shown.Length)return 0;
             string path=session.Shown[row].Filename.Substring(4);if(!File.Exists(path))return -2;
@@ -166,6 +182,7 @@ namespace ReRiff {
                 IntPtr data=Marshal.ReadInt32(narrow,20)<16?narrow:Marshal.ReadIntPtr(narrow);
                 byte[] filename=new byte[length+5];filename[0]=(byte)'h';filename[1]=(byte)'s';filename[2]=(byte)'t';filename[3]=(byte)':';Marshal.Copy(data,filename,4,length);
                 IntPtr bytes=Marshal.AllocHGlobal(filename.Length);try{Marshal.Copy(filename,0,bytes,filename.Length);narrowCtor(chosen,bytes);constructed=true;}finally{Marshal.FreeHGlobal(bytes);}
+                RememberFolder(session.Menu,path);
                 selected(session.Menu,chosen);return 1;
             }finally{if(constructed)narrowDtor(chosen);if(converted)narrowDtor(narrow);Marshal.FreeHGlobal(wide);Marshal.FreeHGlobal(narrow);Marshal.FreeHGlobal(chosen);Marshal.FreeHGlobal(text);}
         }

@@ -1,11 +1,41 @@
-# Unreleased — Next beta
+# ReRiff 1.4.0-beta.8 — Post-race picker fix and launcher progress
 
-- Add a launcher progress bar between the status message and local-server
-  address, using the same native styling as automatic updates. Show download
-  progress when available, animate operations without a percentage, and reset
-  when work finishes. Keep the bar visible across launcher tabs.
-- Validation: development launcher, updater and setup build succeeded. Live
-  layout and operation-progress testing remain pending; not installed locally.
+## In-game summary
+
+- Reopen New Track after racing a song selected through search.
+- Follow update progress directly in the launcher.
+
+## Full release notes
+
+### Music picker
+
+- Remember a search result's parent folder using the original game folder setter
+  before selecting the track. This restores the folder handoff used by New Track
+  on the results screen, addressing the blank picker after racing a searched song.
+- Retain the original short-path conversion and native string ownership. Add a
+  regression checking the remembered parent and balanced allocations.
+
+### Launcher
+
+- Add a progress bar between the status message and local-server address using
+  the same native control and styling as automatic updates. Display download
+  progress when available, animate work without a percentage, and reset when
+  work finishes. Keep the indicator visible across launcher tabs.
+- Preserve the Force singleplayer label, hover explanations and grouped logs
+  introduced in earlier betas.
+
+### Validation and known limitations
+
+- The user confirmed the local search-to-race-to-New Track retest works. The
+  managed bridge regression passed 17 checks with native UI calls mocked.
+- Native development builds succeeded and were installed locally. Launcher
+  progress across all operations and display scales still needs live validation.
+- Release publication runs client, launcher, native, installer, update and
+  rollback checks before publishing the packages.
+- Steam virtual-keyboard input remains unresolved in the tested Proton setup;
+  automatic summoning is disabled and investigation remains paused.
+- M4A search results remain supported, but M4A playback is not restored.
+- This is an opt-in prerelease; stable remains the default update channel.
 
 # ReRiff 1.4.0-beta.7 — Cleaner launcher controls
 

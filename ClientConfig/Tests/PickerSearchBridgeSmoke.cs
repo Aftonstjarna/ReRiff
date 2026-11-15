@@ -6,7 +6,7 @@ using System.Text;
 class PickerSearchBridgeSmoke {
     static Type bridge=typeof(ReRiff.ClientConfig).Assembly.GetType("ReRiff.NativePickerSearch",true),songType=typeof(ReRiff.ClientConfig).Assembly.GetType("ReRiff.LibrarySearchSong",true);
     static BindingFlags fields=BindingFlags.Static|BindingFlags.NonPublic,instance=BindingFlags.Instance|BindingFlags.NonPublic;
-    static int allocations,layouts,checks;static string chosen;
+    static int allocations,layouts,checks;static string chosen,remembered;
     static void Check(bool ok,string text){checks++;if(!ok)throw new Exception(text);}
     static IntPtr Memory(int size){var p=Marshal.AllocHGlobal(size);for(int i=0;i<size;i++)Marshal.WriteByte(p,i,0);return p;}
     static IntPtr Ctor(IntPtr p,IntPtr text){string s=Marshal.PtrToStringUni(text);Marshal.WriteIntPtr(p,Marshal.StringToHGlobalUni(s));Marshal.WriteInt32(p,16,s.Length);Marshal.WriteInt32(p,20,Math.Max(8,s.Length));allocations++;return p;}
@@ -18,13 +18,15 @@ class PickerSearchBridgeSmoke {
     static void VectorDtor(IntPtr vector){int count=Count(vector);IntPtr data=Marshal.ReadIntPtr(vector);for(int i=0;i<count;i++)Dtor(IntPtr.Add(data,i*28));if(data!=IntPtr.Zero)Marshal.FreeHGlobal(data);for(int i=0;i<12;i+=4)Marshal.WriteInt32(vector,i,0);}
     static void Rebuild(IntPtr menu){layouts++;Check(Count(IntPtr.Add(menu,276))>=0,"Rebuild sees coherent vector");}
     static IntPtr ConvertPath(IntPtr menu,IntPtr storage,IntPtr wide){string path=Marshal.PtrToStringUni(Marshal.ReadIntPtr(wide));Dtor(wide);IntPtr text=Marshal.StringToHGlobalAnsi(path);try{return NarrowCtor(storage,text);}finally{Marshal.FreeHGlobal(text);}}
+    static IntPtr SaveGame(){return new IntPtr(1);}
+    static void RememberFolder(IntPtr save,IntPtr folder){remembered=Marshal.PtrToStringAnsi(Marshal.ReadIntPtr(folder));Dtor(folder);}
     static void Selected(IntPtr menu,IntPtr filename){byte[] bytes=new byte[Marshal.ReadInt32(filename,16)];Marshal.Copy(Marshal.ReadIntPtr(filename),bytes,0,bytes.Length);chosen=Encoding.UTF8.GetString(bytes);}
     static void Bind(string field,string method){var f=bridge.GetField(field,fields);f.SetValue(null,Delegate.CreateDelegate(f.FieldType,typeof(PickerSearchBridgeSmoke).GetMethod(method,fields)));}
     static object Song(string path,string title){return Activator.CreateInstance(songType,instance,null,new object[]{"hst:"+path,"id",title,"Artist"},null);}
     static void Set(object obj,string name,object value){obj.GetType().GetField(name,instance).SetValue(obj,value);}
     static int Dispatch(int op,IntPtr menu,string text,int arg){IntPtr p=text==null?IntPtr.Zero:Marshal.StringToHGlobalUni(text);try{return (int)bridge.GetMethod("Dispatch",fields).Invoke(null,new object[]{op,menu,p,arg});}finally{if(p!=IntPtr.Zero)Marshal.FreeHGlobal(p);}}
     static void Main(){
-        Bind("wideCtor","Ctor");Bind("wideDtor","Dtor");Bind("narrowCtor","NarrowCtor");Bind("narrowDtor","Dtor");Bind("vectorDtor","VectorDtor");Bind("push","Push");Bind("swap","Swap");Bind("rebuild","Rebuild");Bind("visibility","Rebuild");Bind("shortPath","ConvertPath");Bind("selected","Selected");
+        Bind("wideCtor","Ctor");Bind("wideDtor","Dtor");Bind("narrowCtor","NarrowCtor");Bind("narrowDtor","Dtor");Bind("vectorDtor","VectorDtor");Bind("push","Push");Bind("swap","Swap");Bind("rebuild","Rebuild");Bind("visibility","Rebuild");Bind("shortPath","ConvertPath");Bind("selected","Selected");Bind("rememberFolder","RememberFolder");Bind("saveGame","SaveGame");
         IntPtr menu=Memory(512),entry=Memory(28),text=Marshal.StringToHGlobalUni("original-folder");string path=Path.GetTempFileName();
         try {
             Ctor(entry,text);Marshal.WriteInt32(entry,24,3);Push(IntPtr.Add(menu,276),entry);Dtor(entry);
@@ -37,6 +39,7 @@ class PickerSearchBridgeSmoke {
             Check(Dispatch(2,menu,null,0)==2&&Count(IntPtr.Add(menu,276))==2,"Native rows built from matches");
             Check(Marshal.ReadIntPtr(menu,276)!=original&&Marshal.PtrToStringUni(Marshal.ReadIntPtr(original))=="original-folder","Original vector retained without mutation");
             Check(Dispatch(4,menu,null,0)==1&&chosen=="hst:"+path,"Selection uses original conversion and hst prefix");
+            Check(remembered==Path.GetDirectoryName(path),"Selection remembers the actual result folder for post-race reopening");
             Set(session,"Matches",new int[0]);Set(session,"Revision",1);Set(session,"Published",1);
             Check(Dispatch(2,menu,null,0)==0&&Count(IntPtr.Add(menu,276))==0,"Zero results have no fake selectable file");
             Check(Dispatch(4,menu,null,0)==0,"Empty selection refused");
