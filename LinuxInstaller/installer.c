@@ -19,7 +19,7 @@
 #endif
 /* Only APIs available on GTK 3.10 / GLib 2.52 or earlier. No GTK link dependency. */
 #define GTK_API(X) \
- X(gtk_init_check) X(gtk_window_new) X(gtk_window_set_title) X(gtk_window_set_default_size) \
+ X(gtk_window_set_icon_from_file) X(gtk_image_new_from_file) X(gtk_init_check) X(gtk_window_new) X(gtk_window_set_title) X(gtk_window_set_default_size) \
  X(gtk_container_set_border_width) X(gtk_box_new) X(gtk_container_add) X(gtk_box_pack_start) \
  X(gtk_label_new) X(gtk_label_set_text) X(gtk_label_set_line_wrap) X(gtk_misc_set_alignment) \
  X(gtk_file_chooser_button_new) X(gtk_file_chooser_set_filename) X(gtk_file_chooser_get_filename) \
@@ -207,6 +207,10 @@ static void create_window(Setup *s) {
     ui.gtk_container_set_border_width((GtkContainer *)s->window,20);
     GtkWidget *outer=ui.gtk_scrolled_window_new(NULL,NULL);ui.gtk_container_add((GtkContainer *)s->window,outer);
     GtkWidget *box=ui.gtk_box_new(GTK_ORIENTATION_VERTICAL,12);ui.gtk_container_add((GtkContainer *)outer,box);
+    char *icon=ui.g_build_filename(s->bundle,"branding","reriff-icon.png",NULL);
+    if(!access(icon,R_OK))ui.gtk_window_set_icon_from_file((GtkWindow *)s->window,icon,NULL);ui.g_free(icon);
+    char *logo=ui.g_build_filename(s->bundle,"branding","reriff-logo.png",NULL);
+    if(!access(logo,R_OK))ui.gtk_box_pack_start((GtkBox *)box,ui.gtk_image_new_from_file(logo),FALSE,FALSE,0);ui.g_free(logo);
     ui.gtk_box_pack_start((GtkBox *)box,label("Install ReRiff for Linux / Proton"),FALSE,FALSE,0);
     ui.gtk_box_pack_start((GtkBox *)box,label("Close Riff Racer and its launcher, then choose the game folder containing Game.exe. Settings, scores, and server data are kept. Original DLL backups are verified and stored in the game's .bak folder."),FALSE,FALSE,0);
     s->folder=ui.gtk_file_chooser_button_new("Choose the Riff Racer game folder",GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER);

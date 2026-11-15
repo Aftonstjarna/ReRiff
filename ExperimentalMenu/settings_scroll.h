@@ -292,6 +292,7 @@ static void sync_scroll(void *menu){
     }
 }
 static LRESULT CALLBACK scroll_wndproc(HWND window,UINT message,WPARAM wparam,LPARAM lparam){
+    if(text_entry_message(window,message,wparam,lparam))return 0;
     if(message==WM_MOUSEWHEEL&&main_scroll_wheel(0)){
         wheel_remainder+=(short)HIWORD(wparam);int steps=wheel_remainder/WHEEL_DELTA;wheel_remainder-=steps*WHEEL_DELTA;main_scroll_wheel(-steps);return 0;
     }

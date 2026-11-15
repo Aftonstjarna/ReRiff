@@ -447,6 +447,19 @@ def install(bundle, game, backups, platform, dry_run=False, restore=False, music
                         if not re.fullmatch(r'vfs[1-9a-f][0-9a-f]?\.(dat|zip)', name) or name in plan or (game/name).is_symlink() or digest((game/name).read_bytes()) != expected:
                             raise ValueError('Unsafe or changed obsolete CJK archive: '+name)
                         plan[name] = None
+        artwork = manifest.get('core_artwork')
+        if artwork:
+            with tempfile.TemporaryDirectory(prefix='reriff-artwork-plan-') as scratch:
+                command = [str(bundle/'patcher/ReRiff-Patcher.exe'), '--core-artwork',
+                           '--game-dir', str(game), '--stage', scratch,
+                           '--dat', str(bundle/artwork['dat']), '--dat-sha256', artwork['dat_sha256'],
+                           '--zip', str(bundle/artwork['zip']), '--zip-sha256', artwork['zip_sha256'],
+                           '--reserved', ','.join(name for name in plan if re.fullmatch(r'vfs[0-9a-f]+\.(dat|zip)', name))]
+                result = subprocess.run(command, capture_output=True, text=True, timeout=30)
+                if result.returncode:
+                    raise ValueError(result.stdout+result.stderr)
+                for path in Path(scratch).rglob('*'):
+                    if path.is_file(): plan[path.relative_to(scratch).as_posix()] = path.read_bytes()
         next_state = {'version': manifest['version'], 'backup_dir': str(backups),
                       'patched': {n: digest(plan[n] if n in plan else (game/n).read_bytes()) for n in manifest['required_existing']} if local_patching else ({n: digest(plan[n]) for n in originals} if originals else state.get('patched',manifest.get('required_existing',{})))}
         if platform == 'linux':

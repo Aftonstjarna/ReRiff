@@ -200,6 +200,8 @@ internal static class LinuxClientHost {
                     var component=Map(manifest,"language_component");var european=Map(manifest,"latin_component");
                     foreach(var item in LanguageComponent.Selections(game,cjk?Under(bundle,Text(component,"file")):"",Text(component,"sha256"),cjk,latin?Under(bundle,Text(european,"file")):"",Text(european,"sha256"),latin))plan[item.Key]=item.Value;
                 }
+                var artwork=Map(manifest,"core_artwork");
+                if(artwork.Count!=0)foreach(var item in CoreArtwork.Plan(game,Under(bundle,Text(artwork,"dat")),Text(artwork,"dat_sha256"),Under(bundle,Text(artwork,"zip")),Text(artwork,"zip_sha256"),plan.Keys))plan[item.Key]=item.Value;
                 var patched=new JsonObject();foreach(var pair in required)patched[pair.Key]=Hash(plan.TryGetValue(pair.Key,out var data)?data:File.ReadAllBytes(Under(game,pair.Key)));
                 bool music=!options.Has("--no-music-link")&&(options.Get("--music-dir")!=""||Flag(state,"music_link",true));
                 string musicPath=Path.GetFullPath(options.Get("--music-dir",Text(state,"music_dir",MusicDir())));

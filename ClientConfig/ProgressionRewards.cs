@@ -1,9 +1,8 @@
 using System;
 
 namespace ReRiff {
-    // Award/price transforms for verified native call boundaries. These are
-    // Paint prices use the shared native getter; awards remain observation-only.
-    // Never infer rewards from net coins.
+    // Shared award/price arithmetic for verified native call boundaries and
+    // their nominal message quotes. Never infer rewards from net coins.
     internal static class ProgressionRewards {
         private static void Rate(decimal value){if(value<0||value>1000000m)throw new ArgumentOutOfRangeException("rate");}
         internal static int Coins(int nativeDelta,int current,uint prestige,decimal baseRate,decimal growth,decimal? cap){
@@ -31,7 +30,8 @@ namespace ReRiff {
         // Versus advertises the ghost bonus before ResultsTokens allocates the
         // total bank capacity between race and bonus. Keep that native nominal
         // quote, using the same rate/cap/rounding as the subsequent payment.
-        internal static int GhostBonus(int amount,uint prestige){
+        internal static int GhostBonus(int amount,uint prestige){return CoinBonus(amount,prestige);}
+        internal static int CoinBonus(int amount,uint prestige){
             var b=ProgressionBalance.Current;
             return Coins(amount,0,prestige,b.CoinRate,b.PrestigeGrowth,b.MultiplierCap);
         }

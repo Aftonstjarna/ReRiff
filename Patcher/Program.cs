@@ -2,6 +2,8 @@ using dnlib.DotNet;
 using dnlib.DotNet.Emit;
 using dnlib.DotNet.Writer;
 
+if (args.Length > 0 && args[0] == "--core-artwork") { Environment.Exit(CoreArtwork.Run(args.Skip(1).ToArray())); return; }
+
 if (args.Length > 0 && args[0] == "--language-component") { Environment.ExitCode=LanguageComponent.Run(args.Skip(1).ToArray()); return; }
 
 #if NET8_0_OR_GREATER

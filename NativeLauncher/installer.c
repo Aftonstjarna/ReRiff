@@ -15,6 +15,8 @@
 #endif
 #define CAP 32768
 #include "python_runtime.h"
+#include "branding.h"
+
 static HWND setup_window, path_edit, status_text, progress_bar, install_button;
 static HWND options[5];
 static BOOL installing=FALSE, completed=FALSE;
@@ -124,7 +126,8 @@ static LRESULT CALLBACK setup_proc(HWND window,UINT message,WPARAM wparam,LPARAM
         if(!wparam&&SendMessageW(options[4],BM_GETCHECK,0,0)==BST_CHECKED)ShellExecuteW(window,L"open",L"https://github.com/Aftonstjarna/ReRiff",NULL,NULL,SW_SHOWNORMAL);
         break;
     case WM_CLOSE:if(!installing)DestroyWindow(window);break;
-    case WM_DESTROY:PostQuitMessage(0);break;
+    case WM_DRAWITEM:if(rr_brand_draw((const DRAWITEMSTRUCT *)lparam))return TRUE;break;
+    case WM_DESTROY:rr_brand_cleanup();PostQuitMessage(0);break;
     default:return DefWindowProcW(window,message,wparam,lparam);
     }return 0;
 }
@@ -137,7 +140,9 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE previous,LPWSTR arguments,int s
     RECT bounds={0,0,620,470};AdjustWindowRectEx(&bounds,WS_OVERLAPPED|WS_CAPTION|WS_SYSMENU|WS_MINIMIZEBOX,FALSE,WS_EX_CONTROLPARENT);
     setup_window=CreateWindowExW(WS_EX_CONTROLPARENT,cls.lpszClassName,L"ReRiff setup",WS_OVERLAPPED|WS_CAPTION|WS_SYSMENU|WS_MINIMIZEBOX,
         CW_USEDEFAULT,CW_USEDEFAULT,bounds.right-bounds.left,bounds.bottom-bounds.top,NULL,NULL,instance,NULL);
-    control(setup_window,L"STATIC",L"Close Riff Racer before installing. Select its game folder:",0,20,18,580,24,0);
+    rr_brand_icon(setup_window);
+    control(setup_window,L"STATIC",L"",SS_OWNERDRAW,20,10,220,30,RERIFF_BRAND_CONTROL);
+    control(setup_window,L"STATIC",L"Close Riff Racer, then select its game folder.",0,260,10,340,32,0);
     path_edit=control(setup_window,L"EDIT",L"",WS_TABSTOP|ES_AUTOHSCROLL,20,47,470,26,12);
     control(setup_window,L"BUTTON",L"Browse...",WS_TABSTOP,500,47,100,26,10);
     const WCHAR *labels[]={L"Enable Chinese, Japanese and Korean fonts (about 105 MiB)",L"Enable Latin/European fonts, including Polish (small download)",L"Enable diagnostic logging",L"Download verified private Python from python.org if required",L"Open the GitHub repository after installation"};

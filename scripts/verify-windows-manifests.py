@@ -1,11 +1,13 @@
 """Verify embedded execution-level resources in the built Windows programs."""
 from pathlib import Path
+import argparse
 import struct
 import xml.etree.ElementTree as ET
 
 root = Path(__file__).resolve().parents[1]
+parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--build-dir',type=Path,default=root/'build');args=parser.parse_args()
 for name in ('ReRiff-Launcher.exe', 'ReRiff-Updater.exe', 'ReRiff-Setup.exe'):
-    data = (root/'build'/name).read_bytes()
+    data = (args.build_dir/name).read_bytes()
     pe = struct.unpack_from('<I', data, 0x3c)[0]
     assert data[pe:pe+4] == b'PE\0\0'
     sections, optional_size = struct.unpack_from('<H', data, pe+6)[0], struct.unpack_from('<H', data, pe+20)[0]
@@ -24,6 +26,9 @@ for name in ('ReRiff-Launcher.exe', 'ReRiff-Updater.exe', 'ReRiff-Setup.exe'):
         start = resource+relative
         named, ids = struct.unpack_from('<HH', data, start+12)
         return [struct.unpack_from('<II', data, start+16+8*i) for i in range(named+ids)]
+    for kind, identity in ((14,101),(2,102),(2,103)):
+        resource_type=next(value for key,value in entries(0) if key==kind)
+        assert any(key==identity for key,value in entries(resource_type&0x7fffffff)), (name,kind,identity)
     manifest_type = next(value for key, value in entries(0) if key == 24)
     assert manifest_type & 0x80000000
     manifest_id = next(value for key, value in entries(manifest_type & 0x7fffffff) if key == 1)
@@ -34,4 +39,4 @@ for name in ('ReRiff-Launcher.exe', 'ReRiff-Updater.exe', 'ReRiff-Setup.exe'):
     manifest = ET.fromstring(data[offset(rva):offset(rva)+size].rstrip(b'\0'))
     execution = next(node for node in manifest.iter() if node.tag.endswith('requestedExecutionLevel'))
     assert execution.attrib == {'level': 'asInvoker', 'uiAccess': 'false'}, name
-    print(f'PASS: {name} embeds asInvoker execution level')
+    print(f'PASS: {name} embeds asInvoker execution level, application icon and logo')

@@ -18,7 +18,7 @@ on:
       - 'scripts/build-windows-launcher.py'
       - 'scripts/build-prestige-artwork.py'
       - 'scripts/test_prestige_artwork.py'
-      - 'docs/images/prestige-reriff.png'
+      - 'images/reriff-prestige-achievement.png'
       - 'packaging/core/**'
       - 'VERSION'
       - 'packaging/fetch_release_tools.py'
@@ -40,7 +40,7 @@ on:
       - 'scripts/build-windows-launcher.py'
       - 'scripts/build-prestige-artwork.py'
       - 'scripts/test_prestige_artwork.py'
-      - 'docs/images/prestige-reriff.png'
+      - 'images/reriff-prestige-achievement.png'
       - 'packaging/core/**'
       - 'VERSION'
       - 'packaging/fetch_release_tools.py'
@@ -78,6 +78,8 @@ jobs:
           dotnet build ClientConfig/ClientConfig.csproj -c Release -o build/client-checks
           dotnet build NewsHeaders/NewsHeaders.csproj -c Release -o build/client-checks
           dotnet build ClientConfig/Tests/ProgressionRankSmoke.csproj -c Release -o build/client-checks
+          dotnet build ClientConfig/Tests/ProgressionLevelQuoteSmoke.csproj -c Release -o build/client-checks
+          dotnet build ClientConfig/Tests/KanaSearchSmoke.csproj -c Release -o build/client-checks
           dotnet build ClientConfig/Tests/ProgressionLevelsSmoke.csproj -c Release -o build/client-checks
           dotnet build ClientConfig/Tests/ProgressionGhostSmoke.csproj -c Release -o build/client-checks
           dotnet build ClientConfig/Tests/ProgressionDomainSmoke.csproj -c Release -o build/client-checks
@@ -92,7 +94,7 @@ jobs:
         run: |
           export ZIG_GLOBAL_CACHE_DIR="$RUNNER_TEMP/zig-global"
           export ZIG_LOCAL_CACHE_DIR="$RUNNER_TEMP/zig-local"
-          for source in ExperimentalMenu/test_main_scale.c ExperimentalMenu/test_display_modes.c ExperimentalMenu/test_ui_scale.c ExperimentalMenu/test_picker_alphabet.c ExperimentalMenu/test_save_prompt.c ExperimentalMenu/test_prestige_prompt.c ExperimentalMenu/test_progression_domain.c ExperimentalMenu/test_progression_probe.c ExperimentalMenu/test_progression_view.c ExperimentalMenu/test_progression_badge.c ExperimentalMenu/test_progression_achievement_probe.c ExperimentalMenu/test_first_prestige_entry.c ExperimentalMenu/test_progression_rewards.c ExperimentalMenu/test_progression_economy.c ExperimentalMenu/test_progression_rank.c ExperimentalMenu/test_progression_ghost.c; do
+          for source in ExperimentalMenu/test_main_scale.c ExperimentalMenu/test_display_modes.c ExperimentalMenu/test_ui_scale.c ExperimentalMenu/test_picker_alphabet.c ExperimentalMenu/test_server_config_save.c ExperimentalMenu/test_text_entry.c ExperimentalMenu/test_text_entry_overlay.c ExperimentalMenu/test_save_prompt.c ExperimentalMenu/test_prestige_prompt.c ExperimentalMenu/test_progression_domain.c ExperimentalMenu/test_progression_probe.c ExperimentalMenu/test_progression_view.c ExperimentalMenu/test_progression_badge.c ExperimentalMenu/test_progression_achievement_probe.c ExperimentalMenu/test_first_prestige_entry.c ExperimentalMenu/test_progression_rewards.c ExperimentalMenu/test_progression_level_reward.c ExperimentalMenu/test_progression_economy.c ExperimentalMenu/test_progression_rank.c ExperimentalMenu/test_progression_ghost.c; do
             name=$(basename "$source" .c)
             "$RUNNER_TEMP/release-tools/zig-x86_64-linux-0.14.1/zig" cc \
               -target x86-windows-gnu -O2 -Wall -Wextra -Werror \

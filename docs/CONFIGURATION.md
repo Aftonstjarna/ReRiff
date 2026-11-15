@@ -132,3 +132,15 @@ data_dir = data
 The port must be 1024–65535. `data_dir` is `data`, or `podman/data` for a retained
 legacy installation. Service configuration is independent of connection fields
 in the game root's `server.ini` and of Singleplayer's economy.
+
+## In-game server-address editing
+
+In Settings → Servers, select Primary Server or Secondary Server to edit its
+address. Typing, arrow keys, Home/End, Shift selection, Ctrl+A and Ctrl+V work
+in the editor. Ctrl+Z undoes an edit; Ctrl+Y or Ctrl+Shift+Z redoes it. Consecutive
+typing is grouped, and each newly opened field starts a separate history.
+
+Enter accepts the pending edit; Esc cancels it. Use the Servers save actions
+to persist accepted changes. HTTP/HTTPS addresses with a host are accepted; an
+empty address clears that endpoint. Leaving without saving preserves the
+previously saved settings. This prototype does not provide an on-screen keyboard.

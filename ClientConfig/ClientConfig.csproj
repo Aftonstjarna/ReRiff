@@ -20,7 +20,7 @@
     <Compile Include="ProgressionBalance.cs" /><Compile Include="ProgressionRewards.cs" />
     <Compile Include="ProgressionEconomy.cs" />
     <Compile Include="ProgressionPurchaseTest.cs" />
-    <Compile Include="NativeReelBridge.cs" />
+    <Compile Include="NativeReelBridge.cs" /><Compile Include="KanaSearch.cs" />
     <Reference Include="System.Web.Extensions" />
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net40" Version="1.0.3" PrivateAssets="all" />
   </ItemGroup>

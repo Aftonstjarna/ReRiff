@@ -45,3 +45,39 @@ calls for on/off state. No new native hook or hardcoded replacement shade is add
 Tests exercise scrolling/focus cycles, verify bar highlighting still propagates,
 and ensure none of these paths dispatch colour resets to standalone thumbs.
 Live appearance remains subject to a user retest after restarting the game.
+
+## Follow-up: persistent white appearance after removing colour resets
+
+A local live trace on the reproduced failure observed no calls to the thumb's
+virtual colour setter. Its stored item RGBA and first visual's quad RGBA stayed
+white before and after the visible change. The video shows native grey thumbs
+on entry, then pale/coloured thumbs as focus moves over bars. This does not
+establish a new destructive thumb-colour write; drawing over the thumb remains
+a hypothesis. The earlier correction removed explicit resets but was not a
+complete live fix.
+
+Original gaGraphicsOptions.initScreens at IL +0x0720 calls
+`elUI.createButtonSprite(ui, 73, 4, 0, position, Origin5)` for the bar, and
+at +0x07D5 calls `elUI.createSprite(ui, 74, position, Origin0, -1)` for its
+standalone thumb. It sets bar offsets72=0 and152/156/160=1. Neither creation
+sequence writes the custom ReRiff value100 to item+60.
+
+Native createButtonSprite at RVA0x222C0 wraps createSprite at RVA0x22030,
+then ORs item+372 with6 and writes the supplied input mask at+64. This is an
+actual flag difference from plain sprite creation, not an alternate texture.
+The Servers candidate now reuses the original button constructor for bars
+(with no separate click target) and retains both constructors' defaults at+60.
+It still uses the row's native input handling and leaves thumb colour untouched.
+The control-construction test verifies three button bars and unchanged defaults.
+Its visual effect is pending an in-game retest; no successful rendering claim
+is made from these code comparisons alone.
+
+## Native-construction live result
+
+After a full restart, the user confirmed that all three Servers thumbs stay grey
+while focus moves between them and after scrolling down and back up. The candidate
+uses the original button-bar constructor and preserves constructor defaults; the
+combined change is validated visually, but this test does not independently
+isolate the effect of the constructor flag difference from the removed +60 write.
+Temporary forwarding colour hooks and snapshots were removed after this result.
+The separate Skip Launcher save-path correction was also confirmed by the user.

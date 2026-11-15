@@ -15,7 +15,7 @@ spec.loader.exec_module(art)
 
 class PrestigeArtworkTests(unittest.TestCase):
     def test_authored_alpha_and_actual_native_dds(self):
-        source = ROOT/'docs/images/prestige-reriff.png'
+        source = ROOT/'images/reriff-prestige-achievement.png'
         before = hashlib.sha256(source.read_bytes()).digest()
         with tempfile.TemporaryDirectory() as temp:
             target = Path(temp)/'texture.brres'

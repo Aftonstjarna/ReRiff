@@ -91,6 +91,10 @@ static void picker_alpha_tick(void *menu){
     if(!picker_alpha_context(menu,&context)){picker_alpha_armed=FALSE;return;}
     if(!picker_alpha_logged){
         char text[192];snprintf(text,sizeof(text),"Picker alphabet probe: rows=%u phase=%u focus=%d mode=%s; native keyboard jump bound.",context.count,context.phase,context.focus,PICKER_ALPHA_NAVIGATION?"navigate":"observe-only");log_line(text);picker_alpha_logged=TRUE;
+        void *overlay=readable(overlay_manager,4)&&readable(*overlay_manager,48)?((void **)*overlay_manager)[11]:NULL;
+        void **rows=*(void ***)((BYTE *)menu+324);void *first=readable(rows,4)?rows[0]:NULL;
+        if(readable(first,404)){char layout[192];snprintf(layout,sizeof(layout),"Picker text-entry layout: overlay_active=%d overlay_is_menu=%d first_y=%.1f height=%.1f count=%u.",overlay!=NULL,overlay==menu,((float *)first)[9],((float *)first)[13],context.count);log_line(layout);}
+
     }
     float left=0,right=0;
     if(!picker_alpha_triggers(&left,&right)){picker_alpha_armed=FALSE;return;}

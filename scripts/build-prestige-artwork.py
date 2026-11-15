@@ -59,7 +59,7 @@ def build(source, destination):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--source', type=Path, default=ROOT/'docs/images/prestige-reriff.png')
+    parser.add_argument('--source', type=Path, default=ROOT/'images/reriff-prestige-achievement.png')
     parser.add_argument('--output', type=Path, default=ROOT/'packaging/core/graphics/reriff/achievements/batchtextures.brres')
     args = parser.parse_args()
     print(build(args.source, args.output), args.output)

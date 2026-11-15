@@ -20,6 +20,25 @@ namespace ReRiff {
         private delegate int GenerationQuote(int amount);
         private static readonly GenerationQuote GenerationCallback=QuoteGeneration;
         private static readonly GenerationQuote GhostQuoteCallback=QuoteGhostBonus;
+        private static readonly GenerationQuote LevelQuoteCallback=QuoteLevelBonus;
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        private delegate int LevelReward(IntPtr driver,int level);
+        private static LevelReward originalLevelReward;
+        private static Func<IntPtr> levelDriver;
+        [DllImport("ReRiff.Notify.dll",CallingConvention=CallingConvention.Cdecl,ExactSpelling=true)]
+        private static extern int ReRiffConfigureProgressionLevelQuote(IntPtr quote);
+        private static int QuoteLevelBonus(int level){
+            int original=0;
+            try {
+                original=originalLevelReward(levelDriver(),level);
+                if(original<0||!ProgressionCheckpoints.Ready||ProgressionNative.Bound==null)return original;
+                var progress=ProgressionCheckpoints.DisplayProgress(ProgressionNative.Bound.CycleXp());
+                if(progress==null)return original;
+                int quote=ProgressionRewards.CoinBonus(original,progress.PrestigeCount);
+                NativeReelBridge.Log("Prestige level-up bonus display: level="+level+" original="+original+" quoted="+quote+" prestige="+progress.PrestigeCount);
+                return quote;
+            }catch(Exception error){Error(error);return original;}
+        }
         [DllImport("ReRiff.Notify.dll",CallingConvention=CallingConvention.Cdecl,ExactSpelling=true)]
         private static extern int ReRiffConfigureProgressionRewards(IntPtr quote);
         [DllImport("ReRiff.Notify.dll",CallingConvention=CallingConvention.Cdecl,ExactSpelling=true)]
@@ -203,6 +222,13 @@ namespace ReRiff {
                 ||ghostBase.FieldType!=typeof(int)||versus==null||versus.Name!="gaResultsVersus.initScreens"||versusIl==null||versusIl.Length<0x530
                 ||!versusIl.Skip(0x52b).Take(5).SequenceEqual(new byte[]{0x7e,0x47,0x07,0,4}))throw new IOException("Original versus reward field/formatter differs");
             if(ReRiffConfigureProgressionGhostQuote(Marshal.GetFunctionPointerForDelegate(GhostQuoteCallback))!=1)throw new IOException("Native ghost display registration refused");
+            var levelReward=game.ResolveMethod(0x06001034) as MethodInfo;
+            var formatter=game.ResolveMethod(0x06000785) as MethodInfo;
+            if(levelReward==null||levelReward.Name!="gaDriverLevel.getTokenRewardAtLevel"||!levelReward.GetMethodBody().GetILAsByteArray().SequenceEqual(Hex("031a5a021f0c584a584a2a"))
+                ||formatter==null||formatter.Name!="gaResultsXP.tick")throw new IOException("Original level-up reward getter/formatter differs");
+            originalLevelReward=(LevelReward)NativeReelBridge.CreateCall(levelReward,typeof(LevelReward),false);
+            levelDriver=ProgressionNative.Singleton(game,0x04000f11,"?ms_pInstance@gaDriverLevel@@0PAV1@A");
+            if(ReRiffConfigureProgressionLevelQuote(Marshal.GetFunctionPointerForDelegate(LevelQuoteCallback))!=1)throw new IOException("Native level-up display registration refused");
             if(ReRiffConfigureProgressionRewards(Marshal.GetFunctionPointerForDelegate(GenerationCallback))!=1)throw new IOException("Native reward context registration refused");
         }
     }
