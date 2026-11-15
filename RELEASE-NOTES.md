@@ -1,3 +1,53 @@
+# ReRiff 1.4.0-beta.9 — Last.fm scrobbling
+
+## In-game summary
+
+- Link Last.fm directly from the launcher's new tab.
+- Scrobble completed races or a configurable listening percentage.
+- Retry pending scrobbles automatically after temporary failures.
+
+## Full release notes
+
+### Last.fm
+
+- Add opt-in account linking, disconnect and listening settings directly in a
+  native launcher tab. Approve access in your browser; no Last.fm password is
+  entered into ReRiff. Supply your own application API key and shared secret in
+  the local client.ini [lastfm] section before linking.
+- Scrobble tagged songs after a completed race or the configured listening
+  percentage (80% by default). Enforce Last.fm's additional requirements: tracks
+  longer than 30 seconds and listening for half the song or four minutes,
+  whichever is shorter. Pauses, seeks and long stalls do not count as listening.
+- Reuse the original race lifecycle, audio position/duration and song catalogue
+  metadata. Preserve pause/resume progress, detect restarts, and avoid duplicate
+  submission when a track already qualified before the results screen.
+- Send Now Playing at race playback start. Handle network requests on a worker,
+  persist up to 500 pending scrobbles for the linked session, and retry temporary
+  failures with backoff. Disabling or disconnecting stops sending; pending
+  scrobbles are not replayed into a different linked session.
+- Accept Last.fm's URL-safe authorization tokens, including hyphens and
+  underscores. Keep credentials and sessions out of logs and release artifacts;
+  use the existing game diagnostic category rather than adding another log.
+
+### Validation and known limitations
+
+- Live account linking succeeded. The game log confirmed Last.fm accepted a
+  scrobble before the race finished with the 80% setting, leaving no queued tracks.
+- 38 managed checks passed for signing, token validation, listening rules,
+  configuration preservation, queue persistence, account isolation and retries.
+  Native fixtures passed for the inline tab, settings, race hook guards,
+  lifecycle forwarding and existing progression rewards. Original hook addresses
+  were checked against the pinned unmodified game executable.
+- Each installation currently needs its own Last.fm application credentials.
+  Keep client.ini private: it contains the application secret and account session.
+  Tracks without usable artist/title metadata are skipped instead of guessing
+  from filenames. Restart the game after linking or changing listening settings.
+- An abrupt exit can lose a newly qualified track before the worker saves it.
+  A lost API acknowledgement can cause a retry using the original timestamp.
+- Steam virtual-keyboard input remains unresolved in the tested Proton setup;
+  investigation remains paused. M4A playback is not restored.
+- This is an opt-in prerelease; stable remains the default update channel.
+
 # ReRiff 1.4.0-beta.8 — Post-race picker fix and launcher progress
 
 ## In-game summary

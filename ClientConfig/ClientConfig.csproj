@@ -9,6 +9,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="ClientConfig.cs" />
+    <Compile Include="LastFmNative.cs" /><Compile Include="LastFmService.cs" /><Compile Include="../Shared/LastFm.cs" Link="LastFm.cs" />
     <Compile Include="CachedGhost.cs" /><Compile Include="Singleplayer.cs" />
     <Compile Include="ProgressionDomain.cs" />
     <Compile Include="ProgressionRemote.cs" />

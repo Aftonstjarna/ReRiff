@@ -9,6 +9,9 @@ on:
       - 'NativeLauncher/restart_protocol.h'
       - 'NativeLauncher/logging.h'
       - 'NativeLauncher/config.h'
+      - 'NativeLauncher/launcher.c'
+      - 'NativeLauncher/lastfm.h'
+      - 'NativeLauncher/test_lastfm.c'
       - 'NewsHeaders/**'
       - 'Managed/**'
       - 'Shared/**'
@@ -34,6 +37,9 @@ on:
       - 'NativeLauncher/restart_protocol.h'
       - 'NativeLauncher/logging.h'
       - 'NativeLauncher/config.h'
+      - 'NativeLauncher/launcher.c'
+      - 'NativeLauncher/lastfm.h'
+      - 'NativeLauncher/test_lastfm.c'
       - 'NewsHeaders/**'
       - 'Managed/**'
       - 'Shared/**'
@@ -82,6 +88,7 @@ jobs:
           dotnet build Managed/GhostCacheSmoke.csproj -c Release -o build/client-checks
           dotnet build Managed/ConfigSplitSmoke.csproj -c Release -o build/client-checks
           dotnet build ClientConfig/ClientConfig.csproj -c Release -o build/client-checks
+          dotnet build ClientConfig/Tests/LastFmSmoke.csproj -c Release -o build/client-checks
           dotnet build NewsHeaders/NewsHeaders.csproj -c Release -o build/client-checks
           dotnet build ClientConfig/Tests/ProgressionRankSmoke.csproj -c Release -o build/client-checks
           dotnet build ClientConfig/Tests/ProgressionLevelQuoteSmoke.csproj -c Release -o build/client-checks
@@ -105,7 +112,7 @@ jobs:
         run: |
           export ZIG_GLOBAL_CACHE_DIR="$RUNNER_TEMP/zig-global"
           export ZIG_LOCAL_CACHE_DIR="$RUNNER_TEMP/zig-local"
-          for source in ExperimentalMenu/test_main_scale.c ExperimentalMenu/test_display_modes.c ExperimentalMenu/test_ui_scale.c ExperimentalMenu/test_picker_alphabet.c ExperimentalMenu/test_picker_search.c ExperimentalMenu/test_steam_keyboard.c ExperimentalMenu/test_server_config_save.c ExperimentalMenu/test_text_entry.c ExperimentalMenu/test_text_input_queue.c ExperimentalMenu/test_text_entry_overlay.c ExperimentalMenu/test_save_prompt.c ExperimentalMenu/test_prestige_prompt.c ExperimentalMenu/test_progression_domain.c ExperimentalMenu/test_progression_probe.c ExperimentalMenu/test_progression_view.c ExperimentalMenu/test_progression_badge.c ExperimentalMenu/test_progression_achievement_probe.c ExperimentalMenu/test_first_prestige_entry.c ExperimentalMenu/test_progression_rewards.c ExperimentalMenu/test_progression_level_reward.c ExperimentalMenu/test_progression_economy.c ExperimentalMenu/test_progression_rank.c ExperimentalMenu/test_progression_ghost.c; do
+          for source in ExperimentalMenu/test_lastfm_scrobbler.c ExperimentalMenu/test_main_scale.c ExperimentalMenu/test_display_modes.c ExperimentalMenu/test_ui_scale.c ExperimentalMenu/test_picker_alphabet.c ExperimentalMenu/test_picker_search.c ExperimentalMenu/test_steam_keyboard.c ExperimentalMenu/test_server_config_save.c ExperimentalMenu/test_text_entry.c ExperimentalMenu/test_text_input_queue.c ExperimentalMenu/test_text_entry_overlay.c ExperimentalMenu/test_save_prompt.c ExperimentalMenu/test_prestige_prompt.c ExperimentalMenu/test_progression_domain.c ExperimentalMenu/test_progression_probe.c ExperimentalMenu/test_progression_view.c ExperimentalMenu/test_progression_badge.c ExperimentalMenu/test_progression_achievement_probe.c ExperimentalMenu/test_first_prestige_entry.c ExperimentalMenu/test_progression_rewards.c ExperimentalMenu/test_progression_level_reward.c ExperimentalMenu/test_progression_economy.c ExperimentalMenu/test_progression_rank.c ExperimentalMenu/test_progression_ghost.c; do
             name=$(basename "$source" .c)
             "$RUNNER_TEMP/release-tools/zig-x86_64-linux-0.14.1/zig" cc \
               -target x86-windows-gnu -O2 -Wall -Wextra -Werror \
@@ -113,6 +120,12 @@ jobs:
               -o "build/client-checks/$name.exe" -Wl,--image-base,0x10000000 \
               -lcomctl32 -lcomdlg32 -lwininet -lshell32 -luser32 -lgdi32 -ladvapi32 -static
           done
+      - name: Build native Last.fm tab regression
+        run: >-
+          "$RUNNER_TEMP/release-tools/zig-x86_64-linux-0.14.1/zig" cc
+          -target x86-windows-gnu -municode -O2 -Wall -Wextra -Werror
+          NativeLauncher/test_lastfm.c -o build/client-checks/test_lastfm.exe
+          -lcomctl32 -lwininet -lshell32 -luser32 -lgdi32 -ladvapi32 -static
       - uses: actions/upload-artifact@v4
         with:
           name: client-checks-${{ github.sha }}
@@ -135,6 +148,8 @@ jobs:
       - name: Run native regressions on Windows
         shell: pwsh
         run: |
+          & ./component/LastFmSmoke.exe
+          if ($LASTEXITCODE -ne 0) { throw "Last.fm regression failed" }
           & ./component/MultiplayerCheckpointsSmoke.exe
           if ($LASTEXITCODE -ne 0) { throw "Multiplayer checkpoint regression failed" }
           Get-ChildItem component/test_*.exe | ForEach-Object {

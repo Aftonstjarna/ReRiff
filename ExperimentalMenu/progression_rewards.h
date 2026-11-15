@@ -51,6 +51,7 @@ static void __thiscall reward_race_enter(void *menu,int state){
     /* Some completed races bypass versus entry. The matched helper enforces
      * actual singleplayer mode, so this also supports non-isolated saves. */
     progression_ghost_after_race();
+    scrobble_completed();
     void *previous=reward_race_context;DWORD previous_thread=reward_context_thread;
     if(progression_domain_active&&progression_load_observed&&readable(menu,400)){
         /* XP/results preparation has completed. Recheck earned main-level
@@ -89,7 +90,7 @@ static BOOL reward_entry_guard(BYTE *base,DWORD table,unsigned index,DWORD thunk
         &&*(DWORD *)(entry+2)==(DWORD)(base+fixup);
 }
 static BOOL install_progression_rewards(BYTE *base){
-    if(!reward_generation_quote)return TRUE;if(reward_hooks_installed)return TRUE;
+    if(!reward_generation_quote&&!scrobble_observer)return TRUE;if(reward_hooks_installed)return TRUE;
     static const BYTE tuneable_read[]={0x7e,0x13,0x10,0,0x04,0x1f,0x14,0x58,0x4a};
     static const BYTE ghost_read[]={0x7e,0x47,0x07,0,0x04};
     if(!reward_entry_guard(base,0x7a3f10,2,0x22ecec,0x7a3f90)

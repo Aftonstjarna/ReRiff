@@ -718,6 +718,7 @@ static BOOL cjk_component_enabled(void){return cjk_pack_enabled()||latin_pack_en
 #include "progression_economy.h"
 #include "progression_rank.h"
 #include "progression_ghost.h"
+#include "lastfm_scrobbler.h"
 #include "progression_rewards.h"
 #include "progression_level_reward.h"
 #include "cjk_fonts.h"
@@ -785,6 +786,7 @@ __declspec(dllexport) BOOL __cdecl ReRiffStartEngineMenu(void) {
     HMODULE pinned;
     if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_PIN,
         (const WCHAR *)(uintptr_t)&ReRiffStartEngineMenu,&pinned)) return FALSE;
+    if(!install_scrobbler(base))log_line("Last.fm playback hook refused: original race differs.");
     if(!install_lastfm_utf8(base))log_line("Last.fm UTF-8 correction refused: original CIL bytes differ.");
     if(!install_progression_economy(base))log_line("Economy trace wrappers refused: original CIL differs.");
     if(!install_progression_rank(base))log_line("Permanent Rank hook refused: original checker differs.");

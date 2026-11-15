@@ -103,6 +103,8 @@ namespace ReRiff {
                     Delegate callback=CreateCall(original,typeof(Overlay),false);Roots.Add(callback);overlayPointers[i]=Marshal.GetFunctionPointerForDelegate(callback);
                 }
                 ReRiffConfigureNativePrompt(overlayPointers,2);
+                try {LastFmNative.Configure(game);}
+                catch {Log("Last.fm playback binding unavailable.");}
                 try {NativePickerSearch.Configure(game);}
                 catch(Exception error){Log("Picker search unavailable: "+error);}
                 try {ProgressionNative.Configure(game);}

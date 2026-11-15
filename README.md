@@ -4,7 +4,7 @@ Play Riff Racer on Windows or Linux/Proton with singleplayer, shared
 leaderboards and ghosts.
 
 [Download stable](https://github.com/Aftonstjarna/ReRiff/releases/latest)
-· [Beta 1.4.0-beta.8](https://github.com/Aftonstjarna/ReRiff/releases/tag/v1.4.0-beta.8)
+· [Beta 1.4.0-beta.9](https://github.com/Aftonstjarna/ReRiff/releases/tag/v1.4.0-beta.9)
 · [Install and update](#install-or-update)
 · [Steam launch options](#launch-through-steam)
 · [Server settings](#server-settings)
@@ -37,7 +37,7 @@ Linux play requires Proton and the game's Windows .NET Framework setup.
 ## Current beta
 
 Stable is the default download and update channel. The opt-in
-[1.4.0-beta.8 release](https://github.com/Aftonstjarna/ReRiff/releases/tag/v1.4.0-beta.8)
+[1.4.0-beta.9 release](https://github.com/Aftonstjarna/ReRiff/releases/tag/v1.4.0-beta.9)
 adds whole-library music search, editable server addresses, experimental prestige
 progression and grouped diagnostics. See its release notes for validation and
 remaining limitations.
@@ -146,6 +146,37 @@ mods. Updates refuse changed owned files. The tested Japanese glyph forms are
 used across CJK text; regional typography selection is not yet available.
 
 ![Driver profile showing a prestige star beside level 33 and a Japanese song title](docs/images/reriff-profile.png)
+
+### Last.fm scrobbling (beta)
+
+Open the **Last.fm** tab in the launcher. Add your own application's
+`api_key` and `shared_secret` to `[lastfm]` in `client.ini`, click **Link account**,
+approve access in your browser, then click **Finish linking**. Enable scrobbling,
+save, and restart the game. ReRiff never asks for your Last.fm password.
+
+```ini
+[lastfm]
+enabled = false
+api_key =
+shared_secret =
+scrobble_percent = 80
+```
+
+A completed race or the configured listening percentage qualifies a tagged song.
+Pauses and playback jumps do not count. Last.fm additionally requires a track
+longer than 30 seconds and listening for half its duration or four minutes,
+whichever is shorter. Tracks without usable artist/title metadata are skipped;
+ReRiff does not guess tags from filenames. Now Playing is sent when racing starts.
+
+Temporary failures retry with backoff. Up to 500 pending scrobbles are stored in
+`lastfm-queue.json`, tied to the linked session. Disabling or disconnecting stops
+sending; reconnecting to a different session does not replay the old queue.
+`client.ini` contains application credentials and the linked account session:
+keep it private. The queue contains listening history, but no credentials.
+
+Account linking and a race scrobble have been verified in the tested Proton
+setup. An abrupt game termination can lose a newly qualified track before it reaches the queue;
+a lost API acknowledgement can cause a retry of the same timestamp.
 
 ### Automatic client updates
 

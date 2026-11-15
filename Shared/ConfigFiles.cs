@@ -10,7 +10,7 @@ namespace ReRiff {
     internal static class ConfigFiles {
         internal static string Name(string section) {
             switch(section.ToLowerInvariant()) {
-                case "graphics":case "languages":case "launcher":case "diagnostics":return "client.ini";
+                case "lastfm":case "graphics":case "languages":case "launcher":case "diagnostics":return "client.ini";
                 case "progression":return "singleplayer.ini";
                 default:return "server.ini";
             }
