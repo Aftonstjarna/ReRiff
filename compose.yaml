@@ -7,6 +7,7 @@ services:
     volumes:
       - reriff-data:/data
     environment:
+      RERIFF_PROGRESSION_MODE: "${RERIFF_PROGRESSION_MODE:-disabled}"
       RERIFF_PUBLIC_URL: "${RERIFF_PUBLIC_URL:-}"
       RERIFF_LAN_URL: "${RERIFF_LAN_URL:-}"
       # Pass through balance settings from .env or the shell; absent keys use image defaults.

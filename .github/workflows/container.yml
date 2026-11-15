@@ -104,6 +104,9 @@ jobs:
       - name: Test the running server and persistent storage
         run: python3 docker/smoke_test.py --image reriff-server:ci
 
+      - name: Test authenticated multiplayer progression and restart recovery
+        run: python3 docker/multiplayer_smoke_test.py --image reriff-server:ci
+
       - name: Run inherited API suites and container recreation checks
         run: python3 docs/tests/test_container.py --image reriff-server:ci
 

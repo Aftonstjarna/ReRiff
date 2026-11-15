@@ -32,7 +32,7 @@ def build(wheels, download=True):
     (target/'docker').mkdir()
     shutil.copy2(ROOT/'docker/server.py', target/'docker/server.py')
     (target/'Progression').mkdir()
-    for name in ('balance.py', 'balance.json'):
+    for name in ('balance.py', 'balance.json', 'multiplayer.py'):
         shutil.copy2(ROOT/'Progression'/name, target/'Progression'/name)
     shutil.copy2(ROOT/'scripts/trace-server.py', target/'trace-server.py')
     shutil.copy2(ROOT/'LICENSE', target/'LICENSE')

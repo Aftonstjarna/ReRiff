@@ -279,7 +279,7 @@ class Balance:
         return (maximum is None or count < maximum) and required.issubset(set(achieved))
 
 
-def register_endpoint(app, data_dir, server_id):
+def register_endpoint(app, data_dir, server_id, capabilities=None):
     """Read-only beta capability. No profile writes, resets or client rewards."""
     from flask import jsonify
     # Capture the process environment at application creation. Recreate a
@@ -290,9 +290,11 @@ def register_endpoint(app, data_dir, server_id):
     def reriff_balance():
         try:
             policy = Balance.from_env(environ)
+            flags = {'policyPreview': True, 'progressionEnforced': False, 'prestigeReset': False, 'antiCheatVerified': False}
+            if capabilities is not None:
+                flags.update(capabilities())
             response = jsonify({'schema': 1, 'serverId': server_id, 'balanceRevision': policy.revision,
-                'balance': policy.config, 'capabilities': {'policyPreview': True, 'progressionEnforced': False,
-                'prestigeReset': False, 'antiCheatVerified': False}})
+                'balance': policy.config, 'capabilities': flags})
             response.headers['Cache-Control'] = 'no-store'
             return response
         except PolicyError:
