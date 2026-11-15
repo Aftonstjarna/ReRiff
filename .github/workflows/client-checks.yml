@@ -18,6 +18,9 @@ on:
       - 'scripts/build-windows-launcher.py'
       - 'scripts/build-prestige-artwork.py'
       - 'scripts/test_prestige_artwork.py'
+      - 'scripts/test_multiplayer_transport.py'
+      - 'scripts/test_progression_discovery.py'
+      - 'Progression/**'
       - 'images/reriff-prestige-achievement.png'
       - 'packaging/core/**'
       - 'VERSION'
@@ -40,6 +43,9 @@ on:
       - 'scripts/build-windows-launcher.py'
       - 'scripts/build-prestige-artwork.py'
       - 'scripts/test_prestige_artwork.py'
+      - 'scripts/test_multiplayer_transport.py'
+      - 'scripts/test_progression_discovery.py'
+      - 'Progression/**'
       - 'images/reriff-prestige-achievement.png'
       - 'packaging/core/**'
       - 'VERSION'
@@ -83,6 +89,9 @@ jobs:
           dotnet build ClientConfig/Tests/ProgressionLevelsSmoke.csproj -c Release -o build/client-checks
           dotnet build ClientConfig/Tests/ProgressionGhostSmoke.csproj -c Release -o build/client-checks
           dotnet build ClientConfig/Tests/ProgressionDomainSmoke.csproj -c Release -o build/client-checks
+          dotnet build ClientConfig/Tests/MultiplayerCheckpointsSmoke.csproj -c Release -o build/client-checks
+          dotnet build ClientConfig/Tests/MultiplayerTransportSmoke.csproj -c Release -o build/client-checks
+          dotnet build ClientConfig/Tests/LegacyDiscoverySmoke.csproj -c Release -o build/client-checks
       - name: Fetch checksum-pinned compiler
         run: python packaging/fetch_release_tools.py --asset zig.tar.xz --directory "$RUNNER_TEMP/release-tools"
       - name: Build client independently
@@ -113,6 +122,10 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 10
     steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
       - uses: actions/download-artifact@v4
         with:
           name: client-checks-${{ github.sha }}
@@ -120,7 +133,15 @@ jobs:
       - name: Run native regressions on Windows
         shell: pwsh
         run: |
+          & ./component/MultiplayerCheckpointsSmoke.exe
+          if ($LASTEXITCODE -ne 0) { throw "Multiplayer checkpoint regression failed" }
           Get-ChildItem component/test_*.exe | ForEach-Object {
             & $_.FullName
             if ($LASTEXITCODE -ne 0) { throw "Native regression failed: $($_.Name) ($LASTEXITCODE)" }
           }
+      - name: Test client/server multiplayer progression protocol
+        run: |
+          python -m pip install -r packaging/requirements.txt
+          python scripts/test_multiplayer_transport.py --client-command component/MultiplayerTransportSmoke.exe
+      - name: Test legacy server discovery compatibility
+        run: python scripts/test_progression_discovery.py --client-command component/LegacyDiscoverySmoke.exe

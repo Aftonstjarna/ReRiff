@@ -5,6 +5,10 @@
 !LICENSE
 !ServerSync/
 !ServerSync/**
+!Progression/
+!Progression/balance.py
+!Progression/multiplayer.py
+!Progression/balance.json
 !docker/
 !docker/**
 !packaging/

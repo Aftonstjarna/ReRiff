@@ -70,3 +70,30 @@ within750ms can form one step; paste and cursor/selection changes break groups.
 Tests passed for Ctrl+Z, Ctrl+Y, Ctrl+Shift+Z, Unicode paste reversal, selection
 replacement, history branching and reset when opening another field. These
 are new ReRiff behaviors, not recovered original editing functionality.
+
+## Address viewport and caret follow-up (2026-11-15)
+
+Consulted the recovery project's `Decomp/RERIFF-EVIDENCE.md` confirmation
+lifecycle evidence, then dumped the original methods with dnlib from the
+hash-verified depot executable above. Local inspection artifact:
+`build/text-entry-layout-probe/original-confirm.il` (original IL, not a patch).
+
+`gaQuitConfirmMenu.enter`, token `06001589`, RVA `00360BC8`, stores panel
+height at menu+256: resolution height times 0.7 (IL+001C..0028,
++031C..0325). It stores width at menu+252: that height times
+1.3272727272727274 (IL+0326..033B). `initScreens`, token `0600158B`,
+RVA `003610AC`, passes menu+252 as the message text's width to the native
+`elUIItemText.create` call (IL+0315..0333), then stores the message at
+menu+264 (IL+0338..0345). The editor retains this original text item, its
+width constraint, fonts and native dialog controls. These are original IL
+observations, not matching-byte reconstruction credit.
+
+Intentional ReRiff changes: routine tips are hidden; the address viewport now
+allows 48 UTF-16 units instead of scrolling after 22 characters. The sample
+`https://official-na-east.reriff.online` stays complete at either caret end.
+Longer strings retain a bounded viewport without cutting surrogate pairs.
+The caret alternates with a blank using GetCaretBlinkTime, honors disabled
+blinking, and resets on field opening, typing, paste and key navigation.
+New regression cases cover full-address rendering, blink timing, navigation
+reset, disabled blinking and longer-address scrolling. Final appearance across
+resolutions/UI scales remains a live test; no panel or button geometry changed.

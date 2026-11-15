@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Collections.Generic;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Runtime.InteropServices;
@@ -53,8 +54,8 @@ namespace ReRiff {
                 Singleton(game,0x0400126f,"?ms_instance@gaSaveGame@@0PAV1@A"),
                 Singleton(game,0x04000db1,"?ms_pInstance@gaAchievements@@0PAV1@A"),
                 Singleton(game,0x0400147d,"?ms_pInstance@gaVehiclePaintManager@@0PAV1@A"));
-            if(ProgressionDomain.Enabled(Path.GetDirectoryName(typeof(ClientConfig).Assembly.Location)))ProgressionPrestige.Register();
-            NativeReelBridge.Log("Original progression reset/ownership methods bound; isolated Singleplayer prestige requires eligible manual Credits confirmation.");
+            if(ProgressionDomain.Enabled(Path.GetDirectoryName(typeof(ClientConfig).Assembly.Location))||ProgressionRemote.Enabled(Path.GetDirectoryName(typeof(ClientConfig).Assembly.Location)))ProgressionPrestige.Register();
+            NativeReelBridge.Log("Original progression reset/ownership methods bound; isolated progression requires eligible manual Credits confirmation.");
         }
         internal ProgressionNative(Func<int,string,MethodInfo> resolve,Func<IntPtr> getSave,Func<IntPtr> getAchievements,Func<IntPtr> getPaint){
             if(IntPtr.Size!=4)throw new PlatformNotSupportedException("Original progression requires the 32-bit game ABI");
@@ -113,6 +114,23 @@ namespace ReRiff {
             byte[] root=Read(getSave(),36);
             if(root[12]!=1||root[13]!=0||root[14]!=0)throw new IOException("Native save not ready for reward quote");
             return BitConverter.ToInt32(Read(IntPtr.Add(Pointer(root,32),284),4),0);
+        }
+        internal Dictionary<string,object> ObserveCheckpoint(){
+            byte[] root=Read(getSave(),36);
+            if(root[12]!=1||root[14]!=0)throw new IOException("Native save not ready for server checkpoint");
+            IntPtr progression=Pointer(root,32);byte[] fields=Read(progression,296),settings=Read(Pointer(root,16),328);
+            int car=BitConverter.ToInt32(settings,324);
+            if(car<0||car>=22)throw new IOException("Invalid equipped car");
+            int pack=BitConverter.ToInt32(settings,236+4*car);
+            if(pack<0||pack>=9)throw new IOException("Invalid equipped paint");
+            var achieved=new List<int>();var cars=new List<int>();var packs=new List<int>();
+            for(int i=0;i<39;i++){if(fields[12+i]>1)throw new IOException("Invalid native achievement byte");if(fields[12+i]==1)achieved.Add(i);}
+            for(int i=0;i<22;i++){
+                if(hasCar(progression,i))cars.Add(i);
+                for(int j=0;j<9;j++)if(hasPack(progression,i,j))packs.Add(i*9+j);
+            }
+            return new Dictionary<string,object>{{"cycleXp",BitConverter.ToInt32(fields,280)},{"coins",BitConverter.ToInt32(fields,284)},
+                {"equippedCar",car},{"equippedPack",pack},{"achievements",achieved.ToArray()},{"ownedCars",cars.ToArray()},{"ownedPacks",packs.ToArray()}};
         }
         internal void SaveCurrent(){
             IntPtr current=getSave();byte[] root=Read(current,15);
@@ -182,11 +200,11 @@ namespace ReRiff {
         internal static int Dispatch(int action){
             if(action!=0&&action!=1)return 0;
             var native=ProgressionNative.Bound;
-            if(native==null||!ProgressionCheckpoints.Ready||!native.Eligible())return 0;
+            if(native==null||!ProgressionCheckpoints.CanPrestige||!native.Eligible())return 0;
             if(action==0)return 1;
             try {
                 native.CommitConfirmed();
-                NativeReelBridge.Log("Confirmed Singleplayer prestige committed; permanent XP, equipped car/paint and race records retained.");return 1;
+                NativeReelBridge.Log("Confirmed prestige committed; permanent XP, equipped car/paint and race records retained.");return 1;
             }catch(Exception error){
                 NativeReelBridge.Log("Confirmed prestige transaction failed; stop and recover the last complete checkpoint: "+error);return -1;
             }

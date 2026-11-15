@@ -14,6 +14,8 @@ cp -a "$project_dir/LinuxRuntime" "$project_dir/ServerSync" "$project_dir/LICENS
 cp -a "$project_dir/packaging/appimage" "$project_dir/packaging/requirements.txt" "$staging/packaging/"
 cp "$project_dir/scripts/trace-server.py" "$staging/scripts/"
 cp "$project_dir/docker/server.py" "$project_dir/docker/requirements.txt" "$staging/docker/"
+mkdir -p "$staging/Progression"
+cp "$project_dir/Progression/balance.py" "$project_dir/Progression/balance.json" "$project_dir/Progression/multiplayer.py" "$staging/Progression/"
 cp -a "$project_dir/vendor/riffapi-local-extended" "$staging/vendor/"
 find "$staging" -type d -name __pycache__ -prune -exec rm -rf -- {} +
 "$engine" build -t localhost/reriff-appimage-builder -f "$project_dir/packaging/appimage/Containerfile" "$project_dir/packaging/appimage"

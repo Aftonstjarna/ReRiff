@@ -42,13 +42,22 @@ def main():
     engine('volume','create',volume)
     try:
         engine('run','-d','--name',name,'--read-only','--tmpfs','/tmp','--cap-drop=all',
-               '--security-opt=no-new-privileges','-p','127.0.0.1::5144','-v',volume+':/data',args.image)
+               '--security-opt=no-new-privileges','-p','127.0.0.1::5144','-v',volume+':/data',
+               '-e','RERIFF_BALANCE_CREATOR_REWARD_RATE=2',args.image)
         port=engine('port',name,'5144/tcp').splitlines()[0].rsplit(':',1)[1]
         base='http://127.0.0.1:'+port
         ready()
         identity=json.loads(request('/')[1])['serverId']
         assert str(uuid.UUID(identity))==identity
         assert json.loads(request('/classes/Version')[1])['results'][0]['ServerID']==identity
+        policy=json.loads(request('/reriff/balance')[1])
+        assert policy['serverId']==identity
+        assert policy['balance']['coins']['creator_rate']=='2'
+        assert policy['balance']['discounts']['mode']=='interval'
+        assert policy['balance']['discounts']['start']=='0.2'
+        assert policy['balance']['discounts']['maximum']=='0.5'
+        assert policy['balance']['discounts']['diminishing_interval']==5
+        assert not policy['capabilities']['progressionEnforced']
         assert engine('exec',name,'id','-u')=='10001'
         assert request('/admin')[0]==200
         request('/classes/News','POST',{'ID':17,'Status':'Active','enTitle':'Normal news','en':'Announcement survives'})
@@ -88,6 +97,7 @@ def main():
         base='http://127.0.0.1:'+port
         ready()
         assert json.loads(request('/')[1])['serverId']==identity
+        assert json.loads(request('/reriff/balance')[1])['balanceRevision']==policy['balanceRevision']
         assert json.loads(request('/classes/Version')[1])['results'][0]['ServerID']==identity
         assert json.loads(request('/classes/Score/'+oid)[1])['Score']==12345
         shared_scores()

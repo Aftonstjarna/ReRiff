@@ -35,5 +35,16 @@ int main(void){
     keyboard[VK_CONTROL]=0x80;CHECK(SetKeyboardState(keyboard));text_entry_message(NULL,WM_KEYDOWN,'Z',0);CHECK(!wcscmp(text_entry_model.value,L"くちづけ"));
     memset(keyboard,0,sizeof(keyboard));CHECK(SetKeyboardState(keyboard));
     text_entry_message(NULL,WM_KEYDOWN,VK_ESCAPE,0);text_entry_overlay_tick(dialog);save_prompt_tick(owner);CHECK(results==2&&pushes==4&&pops==4);
+    CHECK(text_entry_begin(owner,L"PRIMARY SERVER",L"https://official-na-east.reriff.online",done,server_text_valid));
+    text_entry_blink_ms=500;text_entry_blink_at=1000;
+    text_entry_caption_at(dialog,1000);CHECK(!wcscmp(drawn,L"https://official-na-east.reriff.online|"));
+    text_entry_caption_at(dialog,1499);CHECK(wcschr(drawn,L'|'));
+    text_entry_caption_at(dialog,1500);CHECK(!wcschr(drawn,L'|')&&!wcsstr(drawn,L"…")&&wcsstr(drawn,L"https://official-na-east.reriff.online"));
+    text_entry_caption_at(dialog,2000);CHECK(wcschr(drawn,L'|'));
+    text_entry_message(NULL,WM_KEYDOWN,VK_HOME,0);text_entry_caption_at(dialog,text_entry_blink_at);CHECK(!wcscmp(drawn,L"|https://official-na-east.reriff.online"));
+    text_entry_blink_ms=INFINITE;text_entry_caption_at(dialog,text_entry_blink_at+50000);CHECK(wcschr(drawn,L'|'));
+    text_model_init(&text_entry_model,L"https://example.com/abcdefghijklmnopqrstuvwxyz/abcdefghijklmnopqrstuvwxyz",2047);
+    text_entry_caption_at(dialog,text_entry_blink_at);CHECK(drawn[0]==0x2026&&drawn[wcslen(drawn)-1]==L'|'&&wcslen(drawn)<=50);
+    text_entry_message(NULL,WM_KEYDOWN,VK_ESCAPE,0);text_entry_overlay_tick(dialog);save_prompt_tick(owner);CHECK(results==2);
     puts("PASS: native overlay ownership, Unicode typing and clipboard, deferred accept/cancel, URL validation, duplicate refusal, Ctrl+Z/Y/Shift+Z and existing confirmation lifecycle");return 0;
 }

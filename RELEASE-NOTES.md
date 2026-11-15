@@ -1,3 +1,78 @@
+# ReRiff 1.4.0-beta.5 — Server editing and multiplayer prestige
+
+## In-game summary
+
+- Edit server addresses in-game with undo, redo and a blinking caret.
+- Keep prestige progress on compatible experimental multiplayer servers.
+- Get Re:Start artwork automatically with updated launcher branding.
+
+## Full release notes
+
+### Native server-address editing
+
+- Edit Primary Server and Secondary Server through the original confirmation
+  dialog, retaining its buttons, input handling and menu lifecycle. Accepting
+  updates pending settings; the existing Save action persists them. Cancel
+  discards the edit.
+- Support Unicode typing and paste, caret movement, selection, Home/End,
+  deletion, Ctrl+A, Ctrl+Z, Ctrl+Y and Ctrl+Shift+Z. Consecutive typing groups
+  into undo steps; opening a field starts a separate bounded history.
+- Display up to 48 UTF-16 units before horizontal scrolling is needed, keeping
+  ordinary server addresses visible. Blink the caret using system timing and
+  reset it after editing/navigation. Hide routine tips beneath the input line.
+- Preserve native row spacing and reel scrolling for the additional server
+  rows. Correct native toggle construction and saving Skip Launcher to its
+  owning client configuration, including rollback after a partial save failure.
+
+### Experimental multiplayer prestige
+
+- Include the tested multiplayer client and matching server implementation.
+  Compatible servers opt in with `RERIFF_PROGRESSION_MODE=trusted`; ordinary
+  legacy servers retain their existing behavior. The experimental server image
+  already carries this protocol; bundled server packages now carry it too.
+- Discover server identity and create an account automatically, with optional
+  server-password admission. Store private account credentials locally and
+  separate native saves by immutable server/account UUIDs.
+- Save progression in server checkpoints, recover acknowledged progress on
+  reconnect, and preserve the native Credits confirmation/reset flow for
+  prestige. Handle interrupted resets and lost acknowledgements without
+  duplicate resets. Initialize fresh profiles through native save allocation.
+- Keep original and singleplayer saves separate. An explicit one-time import
+  into an empty test account remains available; no automatic import occurs.
+- Include policy, protocol, account-cache and server-setup documentation in
+  `docs/MULTIPLAYER-PRESTIGE.md`. This is trusted-client progression, not
+  anticheat verification. Losing private account credentials can lose account
+  access; gameplay since the last acknowledged save may be lost on disconnect.
+
+### Reward messages, artwork and installer
+
+- Make the level-up coin popup use the same configured prestige multiplier as
+  its reward. Preserve the native message, localization and reward calculation;
+  unrelated legacy or purchased-currency messages retain their native amounts.
+- Bundle Re:Start artwork independently of optional fonts, ready on first
+  launch. Install it in a separate owned VFS pair, adopt identical prototypes,
+  and refuse to overwrite unrelated archives or modified owned artwork.
+- Add supplied icons and branding to the launcher and setup. The launcher logo
+  uses a native button that opens the repository, with transparent outlined
+  lettering and normal keyboard/focus behavior.
+
+### Validation and known limitations
+
+- Live Proton testing confirmed server editing and the wider blinking-caret
+  field. Automated checks cover undo/redo, clipboard, UTF-16 boundaries, native
+  overlay ownership, save rollback and menu/reel behavior.
+- Validate the integrated native/managed client with multiplayer checkpoint,
+  server/account isolation, reconnect and level-up callback regressions. Release
+  publication is gated by native Windows, managed client and installer CI.
+- Kana/romaji matching is included and tested, but music-picker search UI and
+  filtering are not connected yet. Kanji readings remain deferred. Picker
+  wraparound remains abandoned; existing LT/RT alphabet jumps are retained.
+- Full multiplayer earning/prestige/reconnect playthroughs and visual checks
+  across all resolutions, UI scales and IME configurations remain beta testing
+  work. Server observations are trusted, not independently verified gameplay.
+- This release is an opt-in prerelease. Stable 1.3.2 remains GitHub Latest and
+  the default download/update channel.
+
 # ReRiff 1.4.0-beta.4 — Alphabet navigation and balance tuning
 
 ## In-game summary

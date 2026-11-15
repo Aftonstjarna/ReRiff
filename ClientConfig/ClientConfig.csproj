@@ -11,6 +11,7 @@
     <Compile Include="ClientConfig.cs" />
     <Compile Include="CachedGhost.cs" /><Compile Include="Singleplayer.cs" />
     <Compile Include="ProgressionDomain.cs" />
+    <Compile Include="ProgressionRemote.cs" />
     <Compile Include="ProgressionStore.cs" />
     <Compile Include="ProgressionCheckpoints.cs" />
     <Compile Include="ProgressionNative.cs" />

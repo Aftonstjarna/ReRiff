@@ -79,6 +79,7 @@ class ServerIdentityTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             shutil.copytree(SERVER, root / 'server')
+            shutil.copytree(ROOT / 'Progression', root / 'Progression', ignore=shutil.ignore_patterns('__pycache__'))
             shutil.copy2(ROOT / 'scripts/trace-server.py', root / 'trace-server.py')
             spec = importlib.util.spec_from_file_location('container_alias_logging', ROOT / 'docker/server.py')
             wrapper = importlib.util.module_from_spec(spec)

@@ -9,6 +9,7 @@
     <Compile Include="ProgressionRankSmoke.cs" />
     <Compile Include="../Progression*.cs" Exclude="../ProgressionDomain.cs" />
     <Compile Include="../NativeReelBridge.cs" /><Compile Include="../../Shared/ConfigFiles.cs" />
+    <Reference Include="System.Web.Extensions" />
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net45" Version="1.0.3" PrivateAssets="all" />
   </ItemGroup>
 </Project>

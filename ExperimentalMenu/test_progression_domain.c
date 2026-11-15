@@ -3,13 +3,19 @@
 static BYTE local_device[64],cloud_device[64];
 static WCHAR directory[MAX_PATH];static HANDLE destination=INVALID_HANDLE_VALUE;
 static const BYTE payload[]={1,2,3,4,5,0,7,8,9};
-static BOOL source_opens=TRUE,short_read,forwarding;
+static BOOL source_opens=TRUE,short_read,forwarding,initial_creation;
+static int creates;
 static int opens,closes,cloud_calls;static BYTE last_enabled;
 static const char *last_name;static void *last_self;static DWORD last_mode;
 static void full_path(const char *name,WCHAR *path){WCHAR wide[128];MultiByteToWideChar(CP_UTF8,0,name,-1,wide,128);_snwprintf(path,MAX_PATH,L"%ls%ls",directory,wide);path[MAX_PATH-1]=0;}
 static BYTE __thiscall exists_mock(void *self,const char *name){last_self=self;last_name=name;return TRUE;}
 static BYTE __thiscall create_mock(void *self,const char *name,DWORD size){
-    last_self=self;last_name=name;last_mode=size;
+    last_self=self;last_name=name;last_mode=size;creates++;
+    if(initial_creation){
+        WCHAR path[MAX_PATH];full_path(name,path);HANDLE f=CreateFileW(path,GENERIC_WRITE,0,NULL,CREATE_NEW,FILE_ATTRIBUTE_NORMAL,NULL);
+        if(f==INVALID_HANDLE_VALUE)return FALSE;
+        SetFilePointer(f,(LONG)size,NULL,FILE_BEGIN);BOOL ok=SetEndOfFile(f);CloseHandle(f);return ok;
+    }
     if(!forwarding&&(!strcmp(name,"save.bin")||size!=sizeof(payload)))abort();return TRUE;
 }
 static BYTE __thiscall open_mock(void *self,const char *name,DWORD mode){
@@ -59,6 +65,11 @@ int main(void){
     CHECK(progression_domain_open(local_device,original,1)&&last_name==original);
     char first[65]={0},again[65]={0},second[65]={0};CHECK(progression_domain_hash(1,first));CHECK(progression_domain_hash(1,again));CHECK(progression_domain_hash(2,second));
     CHECK(strlen(first)==64&&!strcmp(first,again)&&strcmp(first,second));
+    progression_domain_multiplayer=TRUE;strcpy(progression_account_id,"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");strcpy(progression_server_id,"12345678-1234-1234-1234-123456789abc");
+    char multiplayer[65]={0},another[65]={0};CHECK(progression_domain_hash(1,multiplayer));CHECK(strcmp(first,multiplayer));CHECK(progression_domain_hash(0,again));CHECK(!strcmp(again,multiplayer));
+    strcpy(progression_server_id,"12345678-1234-1234-1234-123456789abd");CHECK(progression_domain_hash(1,another));CHECK(strcmp(multiplayer,another));
+    char account_changed[65]={0};strcpy(progression_account_id,"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");CHECK(progression_domain_hash(1,account_changed));CHECK(strcmp(account_changed,another));
+    progression_domain_multiplayer=FALSE;
     WCHAR temp[MAX_PATH],path[MAX_PATH];CHECK(GetTempPathW(MAX_PATH,temp));CHECK(GetTempFileNameW(temp,L"rrd",0,path));CHECK(DeleteFileW(path));CHECK(CreateDirectoryW(path,NULL));
     wcscpy(directory,path);wcscat(directory,L"\\");
     void *methods[]={(void *)exists_mock,(void *)create_mock,(void *)open_mock,(void *)close_mock,(void *)size_mock,(void *)exists_mock,(void *)read_mock,(void *)write_mock};
@@ -81,6 +92,19 @@ int main(void){
     methods[2]=(void *)progression_domain_open;progression_domain_active=TRUE;
     CHECK(progression_domain_seed(local_device,cloud_device,FALSE,directory,path));
     CHECK(bytes_match(path,payload,sizeof(payload))&&cloud_calls==0);CHECK(DeleteFileW(path));
+    /* A fresh native save opens mode 3 only after original device allocation. */
+    BYTE save[176]={0};save[12]=1;strcpy((char *)save+64,"save.bin");DWORD capacity=4096,count=1;
+    memcpy(save+160,&capacity,4);memcpy(save+172,&count,4);
+    full_path("isolated.bin",progression_domain_path);progression_local_device=local_device;
+    progression_domain_multiplayer=TRUE;progression_initializing=TRUE;initial_creation=TRUE;
+    int before=creates;CHECK(progression_domain_create_initial(save));CHECK(creates==before+1&&last_mode==capacity);
+    HANDLE created=CreateFileW(path,GENERIC_READ,FILE_SHARE_READ,NULL,OPEN_EXISTING,0,NULL);CHECK(created!=INVALID_HANDLE_VALUE);CHECK(GetFileSize(created,NULL)==capacity);CloseHandle(created);
+    CHECK(!progression_domain_create_initial(save)&&creates==before+1);CHECK(DeleteFileW(path));
+    save[13]=1;CHECK(!progression_domain_create_initial(save));save[13]=0;
+    count=2;memcpy(save+172,&count,4);CHECK(!progression_domain_create_initial(save));count=1;memcpy(save+172,&count,4);
+    strcpy((char *)save+64,"other.bin");CHECK(!progression_domain_create_initial(save));strcpy((char *)save+64,"save.bin");
+    progression_load_observed=TRUE;CHECK(!progression_domain_create_initial(save));progression_load_observed=FALSE;
+    CHECK(creates==before+1&&GetFileAttributesW(path)==INVALID_FILE_ATTRIBUTES);
     directory[wcslen(directory)-1]=0;CHECK(RemoveDirectoryW(directory));
     puts("PASS: native save-name routing, unchanged arguments, account separation, exact one-time copy, no overwrite and failed-read cleanup");return 0;
 }

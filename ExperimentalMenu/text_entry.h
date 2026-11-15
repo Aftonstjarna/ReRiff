@@ -4,7 +4,7 @@
 typedef void (*TextEntryResult)(void *,const WCHAR *);
 static CRITICAL_SECTION text_entry_lock;static INIT_ONCE text_entry_once=INIT_ONCE_STATIC_INIT;
 static TextEntryModel text_entry_model;static TextEntryHistory text_entry_history;
-static BOOL text_entry_typing;static DWORD text_entry_typed_at;static volatile LONG text_entry_active,text_entry_action;
+static BOOL text_entry_typing;static DWORD text_entry_typed_at,text_entry_blink_at,text_entry_blink_ms;static volatile LONG text_entry_active,text_entry_action;
 typedef BOOL (*TextEntryValidator)(const WCHAR *);
 static TextEntryValidator text_entry_validator;static BOOL text_entry_error;
 static TextEntryResult text_entry_result;static DWORD text_entry_release_until;static WCHAR text_entry_surrogate;
@@ -18,29 +18,37 @@ static void text_entry_complete(void *owner,int choice){
 static BOOL text_entry_begin(void *owner,const WCHAR *title,const WCHAR *initial,TextEntryResult result,TextEntryValidator validator){
     if(text_entry_active||!initial||!result)return FALSE;
     InitOnceExecuteOnce(&text_entry_once,text_entry_initialize,NULL,NULL);
-    EnterCriticalSection(&text_entry_lock);text_model_init(&text_entry_model,initial,2047);text_history_init(&text_entry_history,&text_entry_model);text_entry_typing=FALSE;text_entry_surrogate=0;LeaveCriticalSection(&text_entry_lock);
+    EnterCriticalSection(&text_entry_lock);text_model_init(&text_entry_model,initial,2047);text_history_init(&text_entry_history,&text_entry_model);text_entry_typing=FALSE;text_entry_surrogate=0;text_entry_blink_at=GetTickCount();text_entry_blink_ms=GetCaretBlinkTime();if(!text_entry_blink_ms)text_entry_blink_ms=500;LeaveCriticalSection(&text_entry_lock);
     text_entry_result=result;text_entry_validator=validator;text_entry_error=FALSE;InterlockedExchange(&text_entry_action,0);InterlockedExchange(&text_entry_active,1);
-    if(!save_prompt_begin_caption(owner,text_entry_complete,title,L"Type or paste an address.\nEnter accepts; Esc cancels.")){InterlockedExchange(&text_entry_active,0);text_entry_result=NULL;return FALSE;}
+    if(!save_prompt_begin_caption(owner,text_entry_complete,title,L"")){InterlockedExchange(&text_entry_active,0);text_entry_result=NULL;return FALSE;}
     return TRUE;
 }
-static void text_entry_caption(void *dialog){
+static void text_entry_caption_at(void *dialog,DWORD now){
     if(!text_entry_active)return;WCHAR line[128];unsigned out=0;
     EnterCriticalSection(&text_entry_lock);
-    unsigned length=(unsigned)wcslen(text_entry_model.value),cursor=text_entry_model.cursor,start=cursor>22?cursor-22:0;
+    /* Keep ordinary addresses whole; only longer values need a viewport.
+     * The original message item retains its native panel-width wrapping. */
+    const unsigned visible=48;
+    unsigned length=(unsigned)wcslen(text_entry_model.value),cursor=text_entry_model.cursor,start=0;
+    if(length>visible&&cursor>visible-12){start=cursor-(visible-12);if(start>length-visible)start=length-visible;}
     if(start&&text_low(text_entry_model.value[start]))start--;
+    unsigned end=start+visible;if(end>length)end=length;
+    if(end<length&&end&&text_high(text_entry_model.value[end-1]))end--;
+    BOOL caret=text_entry_blink_ms==INFINITE||((now-text_entry_blink_at)/text_entry_blink_ms)%2==0;
     if(start)line[out++]=0x2026;
-    for(unsigned i=start;i<=length&&i<start+34&&out<100;i++){
-        if(i==cursor)line[out++]=L'|';if(i<length)line[out++]=text_entry_model.value[i];
+    for(unsigned i=start;i<=end;i++){
+        if(i==cursor)line[out++]=caret?L'|':L' ';if(i<end)line[out++]=text_entry_model.value[i];
     }
-    if(start+34<length)line[out++]=0x2026;line[out]=0;
+    if(end<length)line[out++]=0x2026;line[out]=0;
     LeaveCriticalSection(&text_entry_lock);
-    WCHAR message[256];_snwprintf(message,256,L"%ls\n\n%ls\nEnter accepts; Esc cancels.",line,text_entry_error?L"Use http:// or https:// with a host.":L"Ctrl+A: select all; Ctrl+Z: undo.");
+    WCHAR message[256];_snwprintf(message,256,L"%ls%ls",line,text_entry_error?L"\n\nUse http:// or https:// with a host.":L"");
     void *item=((void **)dialog)[66];if(readable(item,484))raw_text(item,message);
 }
+static void text_entry_caption(void *dialog){text_entry_caption_at(dialog,GetTickCount());}
 static void text_entry_paste(HWND window){
     if(!OpenClipboard(window))return;HANDLE h=GetClipboardData(CF_UNICODETEXT);
     if(h){const WCHAR *p=GlobalLock(h);if(p){SIZE_T size=GlobalSize(h)/2;unsigned count=0;while(count<size&&count<2047&&p[count])count++;
-        EnterCriticalSection(&text_entry_lock);TextEntryModel before=text_entry_model;text_model_insert(&text_entry_model,p,count);text_history_record(&text_entry_history,&before,&text_entry_model,FALSE);text_entry_typing=FALSE;LeaveCriticalSection(&text_entry_lock);GlobalUnlock(h);}}
+        EnterCriticalSection(&text_entry_lock);TextEntryModel before=text_entry_model;text_model_insert(&text_entry_model,p,count);text_history_record(&text_entry_history,&before,&text_entry_model,FALSE);text_entry_typing=FALSE;text_entry_blink_at=GetTickCount();LeaveCriticalSection(&text_entry_lock);GlobalUnlock(h);}}
     CloseClipboard();
 }
 static BOOL text_entry_message(HWND window,UINT message,WPARAM key,LPARAM flags){
@@ -51,7 +59,7 @@ static BOOL text_entry_message(HWND window,UINT message,WPARAM key,LPARAM flags)
         if(key==VK_ESCAPE){InterlockedExchange(&text_entry_action,-1);return TRUE;}
         if(ctrl&&key=='V'){text_entry_paste(window);return TRUE;}
         EnterCriticalSection(&text_entry_lock);
-        TextEntryModel before=text_entry_model;
+        text_entry_blink_at=GetTickCount();TextEntryModel before=text_entry_model;
         if(ctrl&&(key=='Z'||key=='Y'))text_history_step(&text_entry_history,&text_entry_model,key=='Y'||shift);
         else if(ctrl&&key=='A'){text_entry_model.anchor=0;text_entry_model.cursor=(unsigned)wcslen(text_entry_model.value);}
         else text_model_key(&text_entry_model,(unsigned)key,shift);
@@ -66,7 +74,7 @@ static BOOL text_entry_message(HWND window,UINT message,WPARAM key,LPARAM flags)
             TextEntryModel before=text_entry_model;DWORD now=GetTickCount();
             text_model_insert(&text_entry_model,text,count);
             text_history_record(&text_entry_history,&before,&text_entry_model,text_entry_typing&&now-text_entry_typed_at<750&&before.anchor==before.cursor);
-            if(wcscmp(before.value,text_entry_model.value)){text_entry_typing=TRUE;text_entry_typed_at=now;}
+            if(wcscmp(before.value,text_entry_model.value)){text_entry_typing=TRUE;text_entry_typed_at=now;text_entry_blink_at=now;}
             text_entry_surrogate=0;}
         LeaveCriticalSection(&text_entry_lock);return TRUE;
     }

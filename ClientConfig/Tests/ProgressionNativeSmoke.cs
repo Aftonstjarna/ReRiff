@@ -51,6 +51,10 @@ class ProgressionNativeSmoke {
                 Check(Bytes(scores,256).All(b=>b==0x73),"High-score/race-record sentinel preserved");
                 Check(Bytes(allocation,16).All(b=>b==0xa5)&&Bytes(IntPtr.Add(progression,296),16).All(b=>b==0xa5),"Original reset remains within the native chunk bounds");
                 Check(!native.Eligible(),"A wiped profile is ineligible for a second wipe");
+                var observed=native.ObserveCheckpoint();
+                Check((int)observed["cycleXp"]==0&&(int)observed["coins"]==0,"Server observation matches original reset counters");
+                Check(((int[])observed["achievements"]).SequenceEqual(new[]{18}),"Server observation matches First Prestige");
+                Check(((int[])observed["ownedCars"]).SequenceEqual(new[]{car})&&((int[])observed["ownedPacks"]).SequenceEqual(new[]{car*9+pack}),"Server observation matches original retained ownership");
                 Check(Marshal.ReadByte(progression,12+18)==1&&Marshal.ReadByte(achievements,18)==1,"First Prestige flag is retained through each reset without platform award calls");
                 Check(Marshal.ReadByte(progression,4)==1,"Original setters mark progression dirty");
             }

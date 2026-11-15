@@ -26,6 +26,8 @@ static EnableFn progression_cloud_enable;
 static char progression_domain_name[96];
 static HANDLE progression_domain_lock;
 static BOOL progression_domain_active;
+static BOOL progression_domain_multiplayer,progression_initializing,progression_import_original;
+static char progression_server_id[37],progression_account_id[37];
 static WCHAR progression_seed_root[MAX_PATH];
 static LONG progression_io_events;
 static LONG progression_domain_pending;
@@ -66,14 +68,39 @@ static BYTE __thiscall progression_domain_close(void *self){
         if(phase>=0&&(phase!=1||!progression_load_observed)){
             if(!progression_domain_native_xp(&xp)||progression_checkpoint(progression_domain_path,phase,xp)!=1)
                 progression_domain_stop("Progression checkpoint failed after native file close; committed checkpoint retained.");
-            if(phase==1)progression_load_observed=TRUE;
+            if(phase==1||(phase==2&&progression_domain_multiplayer))progression_load_observed=TRUE;
         }
     }
     return result;
 }
 static BYTE __thiscall progression_domain_delete(void *self,const char *name){BYTE result=progression_delete(self,progression_domain_route(name));progression_domain_io(self,name,"delete",0,result);return result;}
+/* Match createSaveFiles2's native file-size table and device create call,
+ * restricted to the one absent, isolated save. Never delete/recreate a file. */
+static BOOL progression_domain_create_initial(void *save){
+    BYTE state[176];DWORD count=0,size=0;
+    if(!progression_domain_active||!progression_domain_multiplayer||!progression_initializing
+        ||progression_domain_pending||progression_load_observed||!progression_create
+        ||!progression_probe_read(save,state,sizeof(state))||state[12]!=1||state[13]||state[14])return FALSE;
+    memcpy(&count,state+172,4);memcpy(&size,state+160,4);
+    if(count!=1||memcmp(state+64,"save.bin",9)||!size||size>1024*1024||!*progression_domain_path)return FALSE;
+    if(GetFileAttributesW(progression_domain_path)!=INVALID_FILE_ATTRIBUTES||GetLastError()!=ERROR_FILE_NOT_FOUND)return FALSE;
+    return progression_create(progression_local_device,progression_domain_name,size)!=FALSE;
+}
 static void __thiscall progression_domain_cloud_enable(void *self,BYTE enabled){
     progression_cloud_enable(self,progression_domain_active?FALSE:enabled);
+    /* gaSaveGame.load disables its save device after load2 returns. Use that
+     * existing lifecycle boundary to serialize a fresh server profile before
+     * gameplay, never an imported local/Steam save. Nested save disables are
+     * guarded while the original save method runs. */
+    if(progression_domain_active&&progression_domain_multiplayer&&!enabled
+        &&!progression_domain_pending&&!progression_load_observed&&!progression_initializing&&progression_checkpoint){
+        int xp=0;void *save=NULL;progression_initializing=TRUE;
+        if(!progression_domain_native_xp(&xp)||xp!=0
+            ||!progression_probe_read((BYTE *)GetModuleHandleW(NULL)+0x7ed7b8,&save,sizeof(save))
+            ||!progression_domain_create_initial(save)||progression_checkpoint(progression_domain_path,3,xp)!=1)
+            progression_domain_stop("Fresh server profile checkpoint failed after native load.");
+        progression_initializing=FALSE;
+    }
 }
 static BOOL progression_domain_slot(void **slot,void *expected,void *replacement){
     DWORD protect;
@@ -83,7 +110,9 @@ static BOOL progression_domain_slot(void **slot,void *expected,void *replacement
 }
 static BOOL progression_domain_hash(DWORD account,char *hex){
     HCRYPTPROV provider=0;HCRYPTHASH hash=0;BYTE digest[32];DWORD size=sizeof(digest);
-    char input[128];snprintf(input,sizeof(input),"ReRiff progression v1|singleplayer|%lu",(unsigned long)account);
+    char input[128];
+    if(progression_domain_multiplayer)snprintf(input,sizeof(input),"ReRiff progression v1|server|%s|account|%s",progression_server_id,progression_account_id);
+    else snprintf(input,sizeof(input),"ReRiff progression v1|singleplayer|%lu",(unsigned long)account);
     BOOL ok=CryptAcquireContextW(&provider,NULL,NULL,PROV_RSA_AES,CRYPT_VERIFYCONTEXT)
         &&CryptCreateHash(provider,CALG_SHA_256,0,0,&hash)
         &&CryptHashData(hash,(const BYTE *)input,(DWORD)strlen(input),0)
@@ -176,11 +205,11 @@ static BOOL progression_domain_begin(void){
     if(progression_checkpoint&&progression_checkpoint(target,0,0)!=1){
         CloseHandle(progression_domain_lock);progression_domain_lock=NULL;return FALSE;
     }
-    if(!progression_exists(progression_local_device,progression_domain_name)
+    if((!progression_domain_multiplayer||progression_import_original)&&!progression_exists(progression_local_device,progression_domain_name)
         &&!progression_domain_seed(progression_local_device,progression_cloud_device,use_cloud,root,target)){
         CloseHandle(progression_domain_lock);progression_domain_lock=NULL;return FALSE;
     }
-    log_line("Singleplayer progression import prepared at first native save-file access.");
+    log_line(progression_domain_multiplayer?"Server checkpoint loaded before native save-file access; original save is not imported.":"Singleplayer progression import prepared at first native save-file access.");
     return TRUE;
 }
 static BOOL progression_domain_native_xp(int *xp){
@@ -205,8 +234,7 @@ static void progression_domain_ensure(void){
     }
     progression_domain_stop("Progression isolation refused at native save access; original save retained, empty-profile fallback blocked.");
 }
-__declspec(dllexport) int __cdecl ReRiffPrepareProgressionDomain(int singleplayer){
-    if(!singleplayer||!GetPrivateProfileIntW(L"progression",L"isolate_singleplayer",0,config_path))return 0;
+static int progression_domain_prepare(void){
     if(progression_domain_active)return 1;
     BYTE *base=(BYTE *)GetModuleHandleW(NULL);void *save=NULL,*local=NULL,*cloud=NULL,*current=NULL;
     DWORD account=0;WCHAR root[MAX_PATH];char digest[65]={0};
@@ -226,7 +254,7 @@ __declspec(dllexport) int __cdecl ReRiffPrepareProgressionDomain(int singleplaye
         ||cloud_files[0]!=(void *)(base+0x16ca60)||cloud_files[1]!=(void *)(base+0x16ca70)
         ||cloud_files[2]!=(void *)(base+0x16cb30)||cloud_files[3]!=(void *)(base+0x16cbe0)
         ||cloud_files[4]!=(void *)(base+0x16cca0)||cloud_files[6]!=(void *)(base+0x16ccc0)
-        ||!progression_domain_account(base,&account)||!progression_domain_hash(account,digest)
+        ||(!progression_domain_multiplayer&&!progression_domain_account(base,&account))||!progression_domain_hash(account,digest)
         ||!progression_domain_root(local,root)){
         log_line("Progression isolation refused: native startup, account or save-device guards differ.");return -1;
     }
@@ -235,7 +263,7 @@ __declspec(dllexport) int __cdecl ReRiffPrepareProgressionDomain(int singleplaye
     progression_open=(ProgressOpenFn)local_table[2];progression_delete=(ProgressExistsFn)local_table[5];
     progression_cloud_enable=(EnableFn)cloud_table[0];
     progression_local_device=local;progression_cloud_device=cloud;
-    snprintf(progression_domain_name,sizeof(progression_domain_name),"reriff-sp-%s.bin",digest);
+    snprintf(progression_domain_name,sizeof(progression_domain_name),"reriff-%s-%s.bin",progression_domain_multiplayer?"mp":"sp",digest);
     BOOL patched[7]={FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE};
     void **slots[]={local_table,local_table+1,local_table+2,local_table+5,cloud_table,local_table+3,local_table+7};
     void *originals[]={(void *)progression_exists,(void *)progression_create,(void *)progression_open,(void *)progression_delete,(void *)progression_cloud_enable,(void *)progression_close,(void *)progression_write};
@@ -251,6 +279,26 @@ __declspec(dllexport) int __cdecl ReRiffPrepareProgressionDomain(int singleplaye
     InterlockedExchange(&progression_domain_pending,1);
     progression_domain_active=TRUE;
     if(!first_prestige_entry_install(base))log_line("First Prestige list extension unavailable; original achievement list retained.");
-    log_line("Singleplayer isolation armed; import waits for first native save-file access; reset requires eligible Credits confirmation.");
+    log_line("Progression isolation armed; load waits for first native save-file access; reset requires eligible Credits confirmation.");
     return 1;
+}
+
+__declspec(dllexport) int __cdecl ReRiffPrepareProgressionDomain(int singleplayer){
+    if(!singleplayer||progression_domain_multiplayer||!GetPrivateProfileIntW(L"progression",L"isolate_singleplayer",0,config_path))return 0;
+    return progression_domain_prepare();
+}
+__declspec(dllexport) int __cdecl ReRiffPrepareMultiplayerProgression(const char *server_id,const char *account_id,int import_original){
+    if(progression_domain_active||!server_id||!readable(server_id,37)||server_id[36]
+        ||!account_id||!readable(account_id,37)||account_id[36]
+        ||!GetPrivateProfileIntW(L"multiplayer_progression",L"multiplayer_enabled",1,config_path))return 0;
+    for(unsigned i=0;i<36;i++){
+        if(i==8||i==13||i==18||i==23){if(server_id[i]!='-'||account_id[i]!='-')return 0;}
+        else if(!((server_id[i]>='0'&&server_id[i]<='9')||(server_id[i]>='a'&&server_id[i]<='f'))||!((account_id[i]>='0'&&account_id[i]<='9')||(account_id[i]>='a'&&account_id[i]<='f')))return 0;
+    }
+    if(import_original!=0&&import_original!=1)return 0;
+    progression_import_original=import_original!=0;
+    memcpy(progression_server_id,server_id,37);memcpy(progression_account_id,account_id,37);progression_domain_multiplayer=TRUE;
+    int result=progression_domain_prepare();
+    if(result!=1){progression_domain_multiplayer=FALSE;memset(progression_server_id,0,sizeof(progression_server_id));}
+    return result;
 }

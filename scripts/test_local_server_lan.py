@@ -24,6 +24,7 @@ class LocalServerLanTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.stage = Path(self.temp.name)
+        (self.stage/'Progression').symlink_to(ROOT/'Progression', target_is_directory=True)
         (self.stage/'server').symlink_to(ROOT/'vendor/riffapi-local-extended', target_is_directory=True)
         (self.stage/'trace-server.py').symlink_to(ROOT/'scripts/trace-server.py')
         spec = importlib.util.spec_from_file_location('quick_deploy_backend', ROOT/'docker/server.py')

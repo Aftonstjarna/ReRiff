@@ -5,6 +5,7 @@ on:
     paths:
       - Dockerfile
       - .dockerignore
+      - compose.yaml
       - VERSION
       - docker/**
       - vendor/riffapi-local-extended/**
@@ -20,6 +21,7 @@ on:
     paths:
       - Dockerfile
       - .dockerignore
+      - compose.yaml
       - VERSION
       - docker/**
       - vendor/riffapi-local-extended/**
@@ -67,8 +69,9 @@ jobs:
           fi
           echo "publish=$publish" >> "$GITHUB_OUTPUT"
 
-      - name: Validate standalone host Compose file
+      - name: Validate image-only and standalone host Compose files
         run: |
+          docker compose --env-file docker/server.env.example config --quiet
           cp docker/server.env.example docker/server.env
           docker compose -f docker/compose.host.yaml config --quiet
           rm docker/server.env
@@ -94,9 +97,15 @@ jobs:
             --env RERIFF_NEWS_LIBRARY=/app/server/libreriff-news.so \
             reriff-server:ci python -m unittest \
             scripts.test_server_identity scripts.test_song_aliases
+          docker run --rm --network none \
+            --mount "type=bind,source=$PWD,target=/src,readonly" \
+            --workdir /src reriff-server:ci python -m unittest discover -s Progression -v
 
       - name: Test the running server and persistent storage
         run: python3 docker/smoke_test.py --image reriff-server:ci
+
+      - name: Test authenticated multiplayer progression and restart recovery
+        run: python3 docker/multiplayer_smoke_test.py --image reriff-server:ci
 
       - name: Run inherited API suites and container recreation checks
         run: python3 docs/tests/test_container.py --image reriff-server:ci

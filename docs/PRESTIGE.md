@@ -1,5 +1,8 @@
 # Singleplayer prestige beta
 
+For the local multiplayer candidate, platform-independent accounts and test
+setup, see [MULTIPLAYER-PRESTIGE.md](MULTIPLAYER-PRESTIGE.md).
+
 Available in **1.4.0-beta.1**, disabled by default. This beta adds isolated
 singleplayer progression, permanent level tracking and a manual prestige reset.
 Multiplayer prestige and configurable server balance are not included.

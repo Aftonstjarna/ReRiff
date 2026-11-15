@@ -20,10 +20,11 @@ class ProgressionDomainSmoke {
             File.WriteAllText(ini,"[graphics]\nisolate_singleplayer=1\n");Check(!read());
             File.WriteAllText(ini,"[progression]\ntrace_enabled=1\nisolate_singleplayer=0\n");Check(!read());
             File.WriteAllText(ini,"[PROGRESSION]\n; isolate_singleplayer=0\nisolate_singleplayer = 1\n");Check(read());
-            // Multiplayer must return without calling the native export even when opted in.
+            // Explicit multiplayer opt-out must bypass discovery and native exports.
+            File.AppendAllText(ini,"[multiplayer_progression]\nmultiplayer_enabled=0\n");
             prepare.Invoke(null,new object[]{folder,"https://server.example"});
             Check(!(bool)ghostMode.GetValue(null));
-            File.WriteAllText(ini,"[progression]\nisolate_singleplayer=0\n");
+            File.WriteAllText(ini,"[progression]\nisolate_singleplayer=0\n[multiplayer_progression]\nmultiplayer_enabled=0\n");
             string endpoint=ReRiff.Singleplayer.Start(folder);
             Check(ReRiff.Singleplayer.IsEndpoint(endpoint));
             try {

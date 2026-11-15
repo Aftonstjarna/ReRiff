@@ -76,7 +76,8 @@ def instrument(server, output):
         g.trace_start = time.monotonic()
         g.trace_id = uuid.uuid4().hex
         g.trace_error = None
-        request.get_data(cache=True)
+        if not request.path.startswith('/reriff/progression'):
+            request.get_data(cache=True)
 
     def exception(sender, exception, **extra):
         # Stack frames identify failing code without exposing exception values.
@@ -96,12 +97,14 @@ def instrument(server, output):
                     parsed[k] = values
             else:
                 parsed[k] = values
-        payload = request.get_json(silent=True)
+        progression = request.path.startswith('/reriff/progression')
+        payload = None if progression else request.get_json(silent=True)
         external = getattr(g, 'backend', 'local') == 'external'
         flags = [] if external else operators(parsed) + operators(payload)
         streamed = response.direct_passthrough or response.is_streamed
         result = response.get_json(silent=True) if not streamed else None
-        response_body = ({'bytes': response.content_length, 'streamed': True,
+        response_body = ({'body_omitted': 'private_progression'} if progression else
+                         {'bytes': response.content_length, 'streamed': True,
                           'body_omitted': 'preserve_stream'} if streamed else
                          body_info(response.get_data(), response.content_type or ''))
         if request.url_rule is None and not external:
@@ -128,7 +131,7 @@ def instrument(server, output):
             'request_id': g.trace_id, 'method': request.method, 'path': request.path,
             'route': str(request.url_rule) if request.url_rule else None,
             'query': redact(parsed), 'request_headers': redact(dict(request.headers)),
-            'request_body': body_info(request.get_data(cache=True), request.content_type or ''),
+            'request_body': {'body_omitted': 'private_progression'} if progression else body_info(request.get_data(cache=True), request.content_type or ''),
             'status': response.status_code, 'duration_ms': round((time.monotonic()-g.trace_start)*1000, 2),
             'response_headers': redact(dict(response.headers)),
             'response_body': response_body,
