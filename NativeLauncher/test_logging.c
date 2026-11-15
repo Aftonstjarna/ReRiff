@@ -24,7 +24,7 @@ int main(void){
  SendMessageW(logging_checkbox,BM_SETCHECK,BST_CHECKED,0);SendMessageW(hwnd,WM_COMMAND,LOGGING,0);
  assert(SendMessageW(log_checkboxes[0],BM_GETCHECK,0,0)==BST_UNCHECKED);
  assert(LOG_CATEGORY_COUNT==9&&diagnostic_count==LOG_CATEGORY_COUNT+2);
- TOOLINFOW tool={0};tool.cbSize=sizeof(tool);tool.hwnd=hwnd;tool.uId=(UINT_PTR)logging_checkbox;
+ TOOLINFOW tool={0};tool.cbSize=TTTOOLINFOW_V2_SIZE;tool.hwnd=hwnd;tool.uId=(UINT_PTR)logging_checkbox;
  assert(SendMessageW(checkbox_tooltips,TTM_GETTOOLINFOW,0,(LPARAM)&tool));
  assert((tool.uFlags&(TTF_IDISHWND|TTF_SUBCLASS))==(TTF_IDISHWND|TTF_SUBCLASS));
  assert(wcsstr(tool.lpszText,L"Existing logs")||wcsstr(tool.lpszText,L"existing logs"));

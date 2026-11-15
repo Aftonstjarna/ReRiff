@@ -459,7 +459,7 @@ static void language_controls(void){
 /* Standard Win32 tooltips preserve native checkbox input and tab navigation.
  * Text is backed by static literals for the lifetime of the launcher. */
 static void checkbox_help(HWND checkbox,const WCHAR *text) {
-    TOOLINFOW tool={0};tool.cbSize=sizeof(tool);
+    TOOLINFOW tool={0};tool.cbSize=TTTOOLINFOW_V2_SIZE;
     tool.uFlags=TTF_IDISHWND|TTF_SUBCLASS;tool.hwnd=window;
     tool.uId=(UINT_PTR)checkbox;tool.lpszText=(LPWSTR)text;
     SendMessageW(checkbox_tooltips,TTM_ADDTOOLW,0,(LPARAM)&tool);
