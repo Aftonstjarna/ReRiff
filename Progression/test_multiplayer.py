@@ -223,3 +223,25 @@ class MultiplayerTests(unittest.TestCase):
         for _ in range(598):
             self.assertEqual(client.post('/reriff/progression/connect',headers=headers,json={'create':True}).status_code,200)
         self.assertEqual(client.post('/reriff/progression/connect',headers=headers,json={'create':True}).status_code,429)
+
+    def test_explicit_initial_import_is_atomic_and_cannot_replace_progress(self):
+        request=self.request(0,61338574,True)
+        imported=self.store.commit(self.account,request,self.policy,importing=True)
+        self.assertEqual((imported['generation'],imported['mainXp'],imported['cycleXp'],imported['prestigeCount']),(1,61338574,61338574,0))
+        self.assertEqual(imported['nativeSave'],request['nativeSave'])
+        self.assertEqual(self.store.commit(self.account,request,self.policy,importing=True),imported)
+        with self.assertRaises(Refused):self.store.commit(self.account,request,self.policy)
+        with self.assertRaises(Refused):self.store.commit(self.account,self.request(1,100,True),self.policy,importing=True)
+        self.assertEqual(self.store.read(self.account),imported)
+        reset=self.store.commit(self.account,self.reset_request(1),self.policy,True)
+        self.assertEqual((reset['mainXp'],reset['cycleXp'],reset['prestigeCount']),(61338574,0,1))
+
+    def test_import_api_requires_credentials_and_empty_account(self):
+        client=self.app(RERIFF_PROGRESSION_MODE='trusted')
+        path='/reriff/progression/import';payload=self.request(0,61338574,True)
+        self.assertEqual(client.post(path,json=payload).status_code,401)
+        headers={'Authorization':'Bearer '+self.token}
+        first=client.post(path,headers=headers,json=payload)
+        self.assertEqual(first.status_code,200)
+        self.assertEqual(client.post(path,headers=headers,json=payload).json,first.json)
+        self.assertEqual(client.post(path,headers=headers,json=self.request(1,100,True)).status_code,409)

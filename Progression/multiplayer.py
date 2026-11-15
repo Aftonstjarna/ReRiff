@@ -138,7 +138,7 @@ class Store:
             raise Refused('Unknown progression account', 401)
         return json.loads(row['checkpoint']) if row['checkpoint'] else None
 
-    def commit(self, account, request, policy, prestige=False):
+    def commit(self, account, request, policy, prestige=False, importing=False):
         exact(request, 'operationId expectedGeneration balanceRevision nativeSave snapshot')
         try:
             if str(uuid.UUID(request['operationId'])) != request['operationId']:
@@ -158,7 +158,7 @@ class Store:
         if not 1 <= len(native) <= MAX_SAVE:
             raise Refused('Invalid native save size', 413)
         observed = snapshot(request['snapshot'])
-        digest = hashlib.sha256((str(prestige)+canonical(request)).encode()).hexdigest()
+        digest = hashlib.sha256((('import' if importing else str(prestige))+canonical(request)).encode()).hexdigest()
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
             row = db.execute('SELECT * FROM accounts WHERE account_id=?', (account,)).fetchone()
@@ -172,7 +172,11 @@ class Store:
             generation = previous['generation'] if previous else 0
             if request['expectedGeneration'] != generation:
                 raise Refused('Progress changed on another session; reconnect', 409)
-            if previous is None:
+            if importing:
+                if previous is not None or prestige:
+                    raise Refused('Import requires an empty server account', 409)
+                main, count = observed['cycleXp'], 0
+            elif previous is None:
                 if prestige or observed['cycleXp'] != 0 or observed['achievements']:
                     raise Refused('New server profiles must start with zero XP and no achievements')
                 main, count = 0, 0
@@ -264,7 +268,7 @@ def register(app, data, server_id, balance_module):
     def capability():
         try:
             policy()
-            return {'serverCheckpoints': True, 'prestigeReset': True, 'trustedClientProgression': True}
+            return {'serverCheckpoints': True, 'prestigeReset': True, 'trustedClientProgression': True, 'initialSaveImport': True}
         except Refused:
             return {'serverCheckpoints': False, 'prestigeReset': False, 'trustedClientProgression': False}
 
@@ -302,7 +306,7 @@ def register(app, data, server_id, balance_module):
         response.headers['Cache-Control'] = 'no-store'
         return response
 
-    def handle(prestige=False):
+    def handle(prestige=False, importing=False):
         try:
             current = policy()
             check_password()
@@ -319,7 +323,7 @@ def register(app, data, server_id, balance_module):
                     payload = json.loads(raw, object_pairs_hook=balance_module.unique_object)
                 except (ValueError, RecursionError):
                     raise Refused('Invalid progression JSON') from None
-                checkpoint = store.commit(account, payload, current, prestige)
+                checkpoint = store.commit(account, payload, current, prestige, importing)
             response = jsonify(protocol=1, serverId=server_id, **store.identity(account),
                                balance=current.config, balanceRevision=current.revision, checkpoint=checkpoint,
                                capabilities=capability())
@@ -335,6 +339,7 @@ def register(app, data, server_id, balance_module):
     app.add_url_rule('/reriff/progression/connect', 'progression_connect', connect_account, methods=['POST'])
     app.add_url_rule('/reriff/progression', 'progression_load', handle, methods=['GET'])
     app.add_url_rule('/reriff/progression/checkpoint', 'progression_save', handle, methods=['POST'])
+    app.add_url_rule('/reriff/progression/import', 'progression_import', lambda: handle(importing=True), methods=['POST'])
     app.add_url_rule('/reriff/progression/prestige', 'progression_prestige', lambda: handle(True), methods=['POST'])
     return capability
 

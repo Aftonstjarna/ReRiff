@@ -163,3 +163,24 @@ secrets. `/reriff/progression/connect` accepts a 4 KiB request and a client-crea
 known-account reconnects never recreate a revoked account. Each process allows
 600 connect attempts per minute, including wrong passwords, with HTTP 429 on
 excess attempts. Client-side retries never change the pending credential.
+
+## Explicit original-save import for a test account
+
+Automatic new accounts normally start empty. To migrate a completed original
+save for testing, close the game and back up its original save and the private
+account cache. Set `importOriginalOnce` to JSON `true` in that specific account's
+`localserver/accounts/<endpoint-hash>.json`. The account must have no server
+checkpoint. The client copies the same original local/cloud save the native game
+selects into the isolated multiplayer filename, loads it through the original
+serializer, and sends its native observations to `/reriff/progression/import`.
+The server preserves the opaque bytes, XP, achievements, ownership and coins,
+initializes permanent XP to the imported cycle XP, and starts at prestige zero.
+It rejects imports over any existing checkpoint. Identical lost-response retries
+return the same committed import. Successful import clears the local one-time
+request; reconnect after a lost response loads the committed save. It never
+resets or overwrites the source save. This is a trusted-client test facility,
+not verification that the imported progress was earned.
+
+Fresh empty profiles allocate the isolated file using the original save-device
+create function and native computed file size before invoking the original save
+serializer. Existing files are never recreated by that initialization path.
