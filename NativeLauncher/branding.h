@@ -4,7 +4,7 @@
 #define RERIFF_LOGO 102
 #define RERIFF_BUTTON_LOGO 103
 #define RERIFF_BRAND_CONTROL 1099
-static HBITMAP rr_brand_bitmap,rr_brand_outline_bitmap,rr_brand_button_bitmap;
+static HBITMAP rr_brand_outline_bitmap,rr_brand_button_bitmap;
 static void rr_brand_icon(HWND window){
     HINSTANCE module=GetModuleHandleW(NULL);
     HICON large=(HICON)LoadImageW(module,MAKEINTRESOURCEW(RERIFF_ICON),IMAGE_ICON,GetSystemMetrics(SM_CXICON),GetSystemMetrics(SM_CYICON),LR_SHARED);
@@ -14,11 +14,10 @@ static void rr_brand_icon(HWND window){
 }
 static BOOL rr_brand_draw(const DRAWITEMSTRUCT *draw){
     if(!draw||draw->CtlID!=RERIFF_BRAND_CONTROL)return FALSE;
-    BOOL button=draw->CtlType==ODT_BUTTON;
-    HBRUSH background=CreateSolidBrush(button?GetSysColor(COLOR_BTNFACE):RGB(26,26,26));
+    HBRUSH background=CreateSolidBrush(GetSysColor(COLOR_BTNFACE));
     FillRect(draw->hDC,&draw->rcItem,background);DeleteObject(background);
-    HBITMAP *asset=button?&rr_brand_outline_bitmap:&rr_brand_bitmap;
-    if(!*asset)*asset=LoadImageW(GetModuleHandleW(NULL),MAKEINTRESOURCEW(button?RERIFF_BUTTON_LOGO:RERIFF_LOGO),IMAGE_BITMAP,0,0,LR_CREATEDIBSECTION);
+    HBITMAP *asset=&rr_brand_outline_bitmap;
+    if(!*asset)*asset=LoadImageW(GetModuleHandleW(NULL),MAKEINTRESOURCEW(RERIFF_BUTTON_LOGO),IMAGE_BITMAP,0,0,LR_CREATEDIBSECTION);
     if(*asset){
         BITMAP bitmap;GetObjectW(*asset,sizeof(bitmap),&bitmap);HDC memory=CreateCompatibleDC(draw->hDC);
         HGDIOBJ old=SelectObject(memory,*asset);
@@ -47,7 +46,6 @@ static inline void rr_brand_button(HWND button){
     if(memory)DeleteDC(memory);ReleaseDC(button,screen);
 }
 static void rr_brand_cleanup(void){
-    if(rr_brand_bitmap){DeleteObject(rr_brand_bitmap);rr_brand_bitmap=NULL;}
     if(rr_brand_outline_bitmap){DeleteObject(rr_brand_outline_bitmap);rr_brand_outline_bitmap=NULL;}
     if(rr_brand_button_bitmap){DeleteObject(rr_brand_button_bitmap);rr_brand_button_bitmap=NULL;}
 }

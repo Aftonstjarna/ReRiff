@@ -29,7 +29,7 @@
  X(gtk_progress_bar_new) X(gtk_progress_bar_pulse) X(gtk_progress_bar_set_fraction) \
  X(gtk_scrolled_window_new) X(gtk_text_view_new) X(gtk_text_view_set_editable) \
  X(gtk_text_view_set_cursor_visible) X(gtk_text_view_get_buffer) X(gtk_text_buffer_set_text) \
- X(gtk_widget_show_all) X(gtk_widget_destroy) X(gtk_main) X(gtk_main_quit) \
+ X(gtk_widget_set_tooltip_text) X(gtk_widget_show_all) X(gtk_widget_destroy) X(gtk_main) X(gtk_main_quit) \
  X(g_signal_connect_data) X(g_timeout_add) X(g_free) X(g_error_free) X(g_build_filename) \
  X(g_spawn_sync) X(g_mkdir_with_parents) X(g_get_home_dir) X(g_utf8_make_valid) X(g_file_get_contents) X(g_convert)
 struct GtkApi {
@@ -212,17 +212,21 @@ static void create_window(Setup *s) {
     char *logo=ui.g_build_filename(s->bundle,"branding","reriff-logo.png",NULL);
     if(!access(logo,R_OK))ui.gtk_box_pack_start((GtkBox *)box,ui.gtk_image_new_from_file(logo),FALSE,FALSE,0);ui.g_free(logo);
     ui.gtk_box_pack_start((GtkBox *)box,label("Install ReRiff for Linux / Proton"),FALSE,FALSE,0);
-    ui.gtk_box_pack_start((GtkBox *)box,label("Close Riff Racer and its launcher, then choose the game folder containing Game.exe. Settings, scores, and server data are kept. Original DLL backups are verified and stored in the game's .bak folder."),FALSE,FALSE,0);
+    ui.gtk_box_pack_start((GtkBox *)box,label("Choose the folder the Game.exe is in. Backups of original files will be made."),FALSE,FALSE,0);
     s->folder=ui.gtk_file_chooser_button_new("Choose the Riff Racer game folder",GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER);
     ui.gtk_box_pack_start((GtkBox *)box,s->folder,FALSE,FALSE,0);
-    s->cjk_check=ui.gtk_check_button_new_with_label("Install and enable CJK fonts (Chinese, Japanese, Korean; about 105 MiB)");
+    s->cjk_check=ui.gtk_check_button_new_with_label("Install and enable CJK fonts");
+    ui.gtk_widget_set_tooltip_text(s->cjk_check,"Adds Chinese, Japanese and Korean characters. Downloads about 105 MiB. Fonts do not translate menus.");
     ui.gtk_box_pack_start((GtkBox *)box,s->cjk_check,FALSE,FALSE,0);
-    s->latin_check=ui.gtk_check_button_new_with_label("Install and enable Latin/European fonts (including Polish)");
+    s->latin_check=ui.gtk_check_button_new_with_label("Install and enable Latin/European fonts");
+    ui.gtk_widget_set_tooltip_text(s->latin_check,"Adds Latin and European characters, including Polish. A small download; fonts do not translate menus.");
     ui.gtk_box_pack_start((GtkBox *)box,s->latin_check,FALSE,FALSE,0);
-    s->logging_check=ui.gtk_check_button_new_with_label("Enable diagnostic logging (defaults on for beta/development builds)");
+    s->logging_check=ui.gtk_check_button_new_with_label("Enable diagnostic logging");
+    ui.gtk_widget_set_tooltip_text(s->logging_check,"Saves reports in the game's logs folder. Defaults on for beta/development builds. Disabling keeps existing logs.");
     ui.gtk_toggle_button_set_active((GtkToggleButton *)s->logging_check,strchr(RERIFF_VERSION,'-')!=NULL||!strcmp(RERIFF_VERSION,"development"));
     ui.gtk_box_pack_start((GtkBox *)box,s->logging_check,FALSE,FALSE,0);
-    s->music_check=ui.gtk_check_button_new_with_label("Link Linux music folder into the Proton prefix");
+    s->music_check=ui.gtk_check_button_new_with_label("Link music folder");
+    ui.gtk_widget_set_tooltip_text(s->music_check,"Makes the selected Linux music folder available inside the Proton prefix. Choose the folder below.");
     ui.gtk_toggle_button_set_active((GtkToggleButton *)s->music_check,TRUE);
     ui.gtk_box_pack_start((GtkBox *)box,s->music_check,FALSE,FALSE,0);
     s->music_path=ui.gtk_entry_new();
@@ -235,7 +239,7 @@ static void create_window(Setup *s) {
     GtkWidget *scroll=ui.gtk_scrolled_window_new(NULL,NULL);s->details=ui.gtk_text_view_new();
     ui.gtk_text_view_set_editable((GtkTextView *)s->details,FALSE);ui.gtk_text_view_set_cursor_visible((GtkTextView *)s->details,FALSE);
     ui.gtk_container_add((GtkContainer *)scroll,s->details);ui.gtk_box_pack_start((GtkBox *)box,scroll,TRUE,TRUE,0);
-    s->log_label=label("Enabled logging saves reports in the game's logs folder. Existing logs are kept when disabled.");ui.gtk_box_pack_start((GtkBox *)box,s->log_label,FALSE,FALSE,0);
+    s->log_label=label("");ui.gtk_box_pack_start((GtkBox *)box,s->log_label,FALSE,FALSE,0);
     GtkWidget *buttons=ui.gtk_box_new(GTK_ORIENTATION_HORIZONTAL,12);
     s->button=ui.gtk_button_new_with_label("Install");s->close=ui.gtk_button_new_with_label("Close");
     ui.gtk_box_pack_start((GtkBox *)buttons,s->button,TRUE,TRUE,0);ui.gtk_box_pack_start((GtkBox *)buttons,s->close,FALSE,FALSE,0);

@@ -86,7 +86,7 @@ def build(args):
         print(name, 'delta:',len(encoded),'bytes')
     core_artwork=bundle_core_artwork(ROOT,common,stage)
     subprocess.run([os.sys.executable,str(ROOT/'scripts/build-ui-assets.py')],check=True)
-    copy(ROOT/'build/ui-assets/reriff-logo.png',common/'branding/reriff-logo.png')
+    copy(ROOT/'build/ui-assets/reriff-logo-button.png',common/'branding/reriff-logo.png')
     copy(ROOT/'images/reriff-icon-64x64.png',common/'branding/reriff-icon.png')
     font_pack=ROOT/'build/cjk-component/ReRiff-CJK.zip'
     font_pin = load_pin()
