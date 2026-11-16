@@ -4,12 +4,30 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Web.Script.Serialization;
 
 namespace ReRiff {
     internal sealed class LastFmConfig {
+        [StructLayout(LayoutKind.Sequential)] private struct Blob {internal int Size;internal IntPtr Data;}
+        [DllImport("crypt32.dll",SetLastError=true)] private static extern bool CryptUnprotectData(ref Blob input,IntPtr description,IntPtr entropy,IntPtr reserved,IntPtr prompt,int flags,out Blob output);
+        [DllImport("kernel32.dll")] private static extern IntPtr LocalFree(IntPtr memory);
+        internal static string ReadCredential(string value){
+            if(!value.StartsWith("dpapi:",StringComparison.Ordinal))return value;
+            Blob input=new Blob(),output=new Blob();
+            try{
+                string hex=value.Substring(6);if(hex.Length==0||hex.Length%2!=0||hex.Length>4000)return "";
+                byte[] bytes=new byte[hex.Length/2];for(int i=0;i<bytes.Length;i++)bytes[i]=Convert.ToByte(hex.Substring(i*2,2),16);
+                input.Size=bytes.Length;input.Data=Marshal.AllocHGlobal(bytes.Length);Marshal.Copy(bytes,0,input.Data,bytes.Length);
+                if(!CryptUnprotectData(ref input,IntPtr.Zero,IntPtr.Zero,IntPtr.Zero,IntPtr.Zero,1,out output)||output.Size<=0||output.Size>=64)return "";
+                bytes=new byte[output.Size];Marshal.Copy(output.Data,bytes,0,bytes.Length);string result=Encoding.UTF8.GetString(bytes);Array.Clear(bytes,0,bytes.Length);return result;
+            }catch{return "";}finally{
+                if(input.Data!=IntPtr.Zero)Marshal.FreeHGlobal(input.Data);
+                if(output.Data!=IntPtr.Zero){for(int i=0;i<output.Size;i++)Marshal.WriteByte(output.Data,i,0);LocalFree(output.Data);}
+            }
+        }
         internal string Key, Secret, Session, User;
         internal bool Enabled;
         internal int Percent=80;
@@ -22,6 +40,7 @@ namespace ReRiff {
             var d=ConfigFiles.Read(folder,"lastfm");string v;var c=new LastFmConfig();
             c.Key=d.TryGetValue("api_key",out v)?v:"";c.Secret=d.TryGetValue("shared_secret",out v)?v:"";
             c.Session=d.TryGetValue("session_key",out v)?v:"";c.User=d.TryGetValue("username",out v)?v:"";
+            c.Key=ReadCredential(c.Key);c.Secret=ReadCredential(c.Secret);c.Session=ReadCredential(c.Session);
             c.Enabled=d.TryGetValue("enabled",out v)&&(v=="1"||v.Equals("true",StringComparison.OrdinalIgnoreCase));
             int p;if(d.TryGetValue("scrobble_percent",out v)&&Int32.TryParse(v,out p)&&p>=1&&p<=100)c.Percent=p;
             return c;

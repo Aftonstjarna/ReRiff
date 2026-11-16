@@ -20,7 +20,15 @@ static void progress_set_bar(HWND bar,int percent){
         if(percent>=0)SendMessageW(bar,PBM_SETMARQUEE,FALSE,0);
         SetWindowLongPtrW(bar,GWL_STYLE,percent<0?style|PBS_MARQUEE:style&~PBS_MARQUEE);
         if(percent<0)SendMessageW(bar,PBM_SETMARQUEE,TRUE,40);
-        if(percent>=0)SendMessageW(bar,PBM_SETPOS,percent,0);
+        if(percent>=0){
+            /* Wine may retain the last marquee chunk when the stored position
+             * was already zero. Force a position change and repaint after
+             * leaving marquee mode, including the control's background. */
+            if(percent==0)SendMessageW(bar,PBM_SETPOS,1,0);
+            SendMessageW(bar,PBM_SETPOS,percent,0);
+            if((style&PBS_MARQUEE)||percent==0)
+                RedrawWindow(bar,NULL,NULL,RDW_INVALIDATE|RDW_ERASE|RDW_UPDATENOW);
+        }
 }
 static LRESULT CALLBACK progress_procedure(HWND self,UINT event,WPARAM wp,LPARAM lp){
     if((event==WM_COMMAND&&LOWORD(wp)==IDCANCEL)||event==WM_CLOSE){

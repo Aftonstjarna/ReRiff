@@ -8,6 +8,10 @@ static DWORD WINAPI cancel_later(LPVOID unused){
 int main(void){
     CHECK(progress_open(TRUE)&&IsWindowVisible(progress_window));progress_report(PROGRESS_DOWNLOAD,35);progress_pump();
     CHECK(SendMessageW(progress_bar,PBM_GETPOS,0,0)==35&&IsWindowEnabled(progress_cancel));
+    progress_set_bar(progress_bar,-1);Sleep(160);progress_pump();
+    progress_set_bar(progress_bar,0);
+    CHECK(!(GetWindowLongPtrW(progress_bar,GWL_STYLE)&PBS_MARQUEE));
+    CHECK(SendMessageW(progress_bar,PBM_GETPOS,0,0)==0);
     HANDLE wake=CreateEventW(NULL,TRUE,FALSE,NULL),thread=CreateThread(NULL,0,cancel_later,NULL,0,NULL);CHECK(wake&&thread);
     CHECK(progress_wait(wake,1000)==WAIT_TIMEOUT&&progress_cancelled());
     CHECK(!IsWindowEnabled(progress_cancel)&&!progress_commit());

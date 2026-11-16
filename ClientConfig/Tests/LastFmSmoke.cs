@@ -7,7 +7,10 @@ class LastFmSmoke {
     static void Check(bool value,string name){if(!value)throw new Exception(name);checks++;}
     static LastFmTrack Track(double duration){return new LastFmTrack{Artist="Artist",Title="Song",Duration=duration,Started=123};}
     static LastFmPlayback Play(int percent,double duration,int seconds){var p=new LastFmPlayback(percent);p.Start(Track(duration),0,0);p.Observe(0,0,true,false);for(int i=1;i<=seconds;i++)p.Observe(i,i,true,false);return p;}
-    static int Main(){
+    static int Main(string[] commandLine){
+        Check(LastFmConfig.ReadCredential("dpapi:00")=="","invalid protected credential fails closed");
+        Check(LastFmConfig.ReadCredential("dpapi:zz")=="","malformed protected credential fails closed");
+        if(commandLine.Length==1){var native=LastFmConfig.Load(commandLine[0]);Check(native.Ready&&native.Key==new string('a',32)&&native.Secret==new string('b',32)&&native.Session==new string('Z',32),"native DPAPI credentials readable by game");}
         Check(LastFmConfig.ValidToken("ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ-_"),"opaque URL-safe auth tokens");
         Check(!LastFmConfig.ValidToken("bad&token"),"malformed token rejected");
         Check(new LastFmConfig{Enabled=true,Key=new string('a',32),Secret=new string('b',32),Session=new string('Z',32),User="user"}.Ready,"opaque session accepted");

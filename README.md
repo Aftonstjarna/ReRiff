@@ -4,7 +4,7 @@ Play Riff Racer on Windows or Linux/Proton with singleplayer, shared
 leaderboards and ghosts.
 
 [Download stable](https://github.com/Aftonstjarna/ReRiff/releases/latest)
-· [Beta 1.4.0-beta.9](https://github.com/Aftonstjarna/ReRiff/releases/tag/v1.4.0-beta.9)
+· [Beta 1.4.0-beta.10](https://github.com/Aftonstjarna/ReRiff/releases/tag/v1.4.0-beta.10)
 · [Install and update](#install-or-update)
 · [Steam launch options](#launch-through-steam)
 · [Server settings](#server-settings)
@@ -37,7 +37,7 @@ Linux play requires Proton and the game's Windows .NET Framework setup.
 ## Current beta
 
 Stable is the default download and update channel. The opt-in
-[1.4.0-beta.9 release](https://github.com/Aftonstjarna/ReRiff/releases/tag/v1.4.0-beta.9)
+[1.4.0-beta.10 release](https://github.com/Aftonstjarna/ReRiff/releases/tag/v1.4.0-beta.10)
 adds whole-library music search, editable server addresses, experimental prestige
 progression and grouped diagnostics. See its release notes for validation and
 remaining limitations.
@@ -149,18 +149,12 @@ used across CJK text; regional typography selection is not yet available.
 
 ### Last.fm scrobbling (beta)
 
-Open the **Last.fm** tab in the launcher. Add your own application's
-`api_key` and `shared_secret` to `[lastfm]` in `client.ini`, click **Link account**,
-approve access in your browser, then click **Finish linking**. Enable scrobbling,
-save, and restart the game. ReRiff never asks for your Last.fm password.
-
-```ini
-[lastfm]
-enabled = false
-api_key =
-shared_secret =
-scrobble_percent = 80
-```
+Open the **Last.fm** tab and enter your application's **API key** and
+**Shared secret** (both fields are masked). If you need an application, click
+**Get API key** to open Last.fm registration. Click **Save settings**, then
+**Link account** and approve access in your browser. Keep the Last.fm tab open:
+linking finishes automatically. Enable scrobbling, save, and restart the game.
+ReRiff never asks for your Last.fm password.
 
 A completed race or the configured listening percentage qualifies a tagged song.
 Pauses and playback jumps do not count. Last.fm additionally requires a track
@@ -177,6 +171,23 @@ keep it private. The queue contains listening history, but no credentials.
 Account linking and a race scrobble have been verified in the tested Proton
 setup. An abrupt game termination can lose a newly qualified track before it reaches the queue;
 a lost API acknowledgement can cause a retry of the same timestamp.
+
+**Link account** becomes **Reopen authorization** while waiting. Waiting times
+out after ten minutes, and temporary failures retry.
+
+**Save settings** encrypts the key, secret and existing linked session
+in `client.ini` using user-scoped Windows DPAPI. Existing plaintext credentials
+remain readable for compatibility and are migrated when you save settings.
+Changing the application credentials clears the old link and disables scrobbling
+until you link again. The launcher never falls back to plaintext if protection
+fails. Install the matching client helper alongside the launcher; beta.9 cannot
+read protected credentials.
+
+Protection is tied to your Windows profile or Proton/Wine environment. Copying
+only the INI to another machine or prefix may require entering credentials and
+linking again. Keep that profile/prefix private: this does not protect against
+programs running as your user, and Proton is not guaranteed to provide Windows'
+security boundary. Existing backups containing plaintext are not rewritten.
 
 ### Automatic client updates
 

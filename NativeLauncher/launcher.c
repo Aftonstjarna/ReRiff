@@ -28,7 +28,7 @@
 #include "logging.h"
 #define WM_COMPLETE (WM_APP + 1)
 #define WM_GAME_RUNNING (WM_APP + 2)
-enum { EXTERNAL=101, FALLBACK, TIMEOUT, POPUP, SAVE, PLAY, LOCAL, EXTERNAL_ONLY, STOP, UPDATE, EXPERIMENTAL, NETWORKING, SKIP_LAUNCHER, AUTO_UPDATE_SKIP, CJK_INSTALL, LOGGING, LATIN_INSTALL, UPDATE_DETAILS, LASTFM_ENABLED, LASTFM_PERCENT, LASTFM_LINK, LASTFM_FINISH, LASTFM_DISCONNECT, LASTFM_SAVE, LASTFM_OPEN, LOG_CATEGORY_BASE=500 };
+enum { EXTERNAL=101, FALLBACK, TIMEOUT, POPUP, SAVE, PLAY, LOCAL, EXTERNAL_ONLY, STOP, UPDATE, EXPERIMENTAL, NETWORKING, SKIP_LAUNCHER, AUTO_UPDATE_SKIP, CJK_INSTALL, LOGGING, LATIN_INSTALL, UPDATE_DETAILS, LASTFM_ENABLED, LASTFM_PERCENT, LASTFM_LINK, LASTFM_DISCONNECT, LASTFM_SAVE, LASTFM_KEY, LASTFM_SECRET, LOG_CATEGORY_BASE=500 };
 #include "branding.h"
 
 static WCHAR folder[CAP], ini[CAP], message[1024];
@@ -37,7 +37,7 @@ static BOOL force_show_launcher, suppress_auto_update, automatic_update, force_a
 static DWORD restart_parent_pid;
 #include "restart_protocol.h"
 static HWND window, status, external, fallback, timeout_edit, popup, play_button, save_button;
-static HWND only_checkbox, stop_button, update_button, launcher_progress;
+static HWND only_checkbox, stop_button, update_button, launcher_progress, status_separator, footer_separator;
 static BOOL busy = FALSE, playing = FALSE, checking_update = FALSE;
 static HWND experimental_checkbox;
 static HWND networking_checkbox, skip_checkbox, auto_update_checkbox;
@@ -473,7 +473,7 @@ static void select_launcher_page(void){
     SendMessageW(checkbox_tooltips,TTM_POP,0,0);
     for(unsigned i=0;i<server_page_count;i++){
         HWND item=server_page_controls[i];
-        if(item!=status&&item!=play_button&&item!=update_button&&item!=experimental_checkbox&&item!=launcher_progress)ShowWindow(item,page!=0?SW_HIDE:SW_SHOW);
+        if(item!=status&&item!=play_button&&item!=update_button&&item!=experimental_checkbox&&item!=launcher_progress&&item!=status_separator&&item!=footer_separator)ShowWindow(item,page!=0?SW_HIDE:SW_SHOW);
     }
     for(unsigned i=0;i<language_page_count;i++)ShowWindow(language_page_controls[i],languages?SW_SHOW:SW_HIDE);
     for(unsigned i=0;i<diagnostic_count;i++)ShowWindow(diagnostic_controls[i],page==2?SW_SHOW:SW_HIDE);
@@ -482,8 +482,11 @@ static void select_launcher_page(void){
     SetFocus(page==2?logging_checkbox:languages?language_checkbox:external);
 }
 static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
+    if(event==WM_ERASEBKGND){RECT area;GetClientRect(hwnd,&area);FillRect((HDC)wp,&area,GetSysColorBrush(COLOR_BTNFACE));return TRUE;}
+    if(event==WM_CTLCOLORSTATIC||event==WM_CTLCOLORBTN){SetBkColor((HDC)wp,GetSysColor(COLOR_BTNFACE));return (LRESULT)GetSysColorBrush(COLOR_BTNFACE);}
     if(event==WM_DRAWITEM&&rr_brand_draw((const DRAWITEMSTRUCT *)lp))return TRUE;
     if (event==WM_CREATE) {
+        SetWindowLongPtrW(hwnd,GWL_STYLE,GetWindowLongPtrW(hwnd,GWL_STYLE)|WS_CLIPCHILDREN);
         rr_brand_icon(hwnd);
         window=hwnd;font=CreateFontW(-16,0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,0,0,CLEARTYPE_QUALITY,0,L"Segoe UI");
         INITCOMMONCONTROLSEX common={sizeof(common),ICC_TAB_CLASSES|ICC_WIN95_CLASSES|ICC_PROGRESS_CLASS};InitCommonControlsEx(&common);
@@ -492,13 +495,14 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
             CW_USEDEFAULT,CW_USEDEFAULT,hwnd,NULL,GetModuleHandleW(NULL),NULL);
         SendMessageW(checkbox_tooltips,TTM_SETMAXTIPWIDTH,0,440);
         SendMessageW(checkbox_tooltips,TTM_SETDELAYTIME,TTDT_AUTOPOP,20000);
-        launcher_tabs=CreateWindowExW(0,WC_TABCONTROLW,L"",WS_CHILD|WS_VISIBLE|WS_TABSTOP,10,6,630,548,hwnd,NULL,GetModuleHandleW(NULL),NULL);
+        launcher_tabs=CreateWindowExW(0,WC_TABCONTROLW,L"",WS_CHILD|WS_VISIBLE|WS_TABSTOP|WS_CLIPSIBLINGS,10,6,630,28,hwnd,NULL,GetModuleHandleW(NULL),NULL);
         SendMessageW(launcher_tabs,WM_SETFONT,(WPARAM)font,TRUE);
         TCITEMW tab={0};tab.mask=TCIF_TEXT;tab.pszText=L"Servers";SendMessageW(launcher_tabs,TCM_INSERTITEMW,0,(LPARAM)&tab);
         tab.pszText=L"Languages";SendMessageW(launcher_tabs,TCM_INSERTITEMW,1,(LPARAM)&tab);
         tab.pszText=L"Diagnostics";SendMessageW(launcher_tabs,TCM_INSERTITEMW,2,(LPARAM)&tab);
         tab.pszText=L"Last.fm";SendMessageW(launcher_tabs,TCM_INSERTITEMW,3,(LPARAM)&tab);
         control(L"STATIC",L"Riff Racer — Server settings",0,22,18,600,30,0);
+        control(L"STATIC",L"",SS_ETCHEDHORZ,10,52,630,2,0);
         control(L"STATIC",L"Primary server",0,22,66,145,24,0);
         external=control(L"EDIT",L"",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,172,62,448,28,EXTERNAL);
         control(L"STATIC",L"Secondary server",0,22,108,145,24,0);
@@ -510,18 +514,20 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
         networking_checkbox=control(L"BUTTON",L"Force singleplayer",BS_AUTOCHECKBOX|WS_TABSTOP,22,259,600,28,NETWORKING);
         skip_checkbox=control(L"BUTTON",L"Skip launcher",BS_AUTOCHECKBOX|WS_TABSTOP,22,293,165,28,SKIP_LAUNCHER);
         auto_update_checkbox=control(L"BUTTON",L"Auto-update when skipping launcher",BS_AUTOCHECKBOX|WS_TABSTOP,195,293,425,28,AUTO_UPDATE_SKIP);
+        status_separator=control(L"STATIC",L"",SS_ETCHEDHORZ,10,333,630,2,0);
         status=control(L"STATIC",L"Checking server settings...",0,22,347,600,38,0);
         launcher_progress=control(PROGRESS_CLASSW,L"",0,22,389,600,22,0);
         SendMessageW(launcher_progress,PBM_SETRANGE32,0,100);
         progress_sink=hwnd;
-        local_server_hint=control(L"STATIC",L"Local server: http://127.0.0.1:5144 — enter in Secondary server",0,22,417,600,22,0);
-        HWND github_button=control(L"BUTTON",L"ReRiff on GitHub",WS_TABSTOP|BS_BITMAP|BS_CENTER|BS_VCENTER,22,445,150,34,RERIFF_BRAND_CONTROL);
+        footer_separator=control(L"STATIC",L"",SS_ETCHEDHORZ,10,435,630,2,0);
+        local_server_hint=control(L"STATIC",L"Local server: http://127.0.0.1:5144 — enter in Secondary server",SS_CENTER|SS_CENTERIMAGE,22,437,600,24,0);
+        HWND github_button=control(L"BUTTON",L"ReRiff on GitHub",WS_TABSTOP|BS_BITMAP|BS_CENTER|BS_VCENTER,22,461,150,34,RERIFF_BRAND_CONTROL);
         rr_brand_button(github_button);
-        stop_button=control(L"BUTTON",L"Install local server",WS_TABSTOP,180,445,150,34,STOP);
-        save_button=control(L"BUTTON",L"Save settings",WS_TABSTOP,345,445,130,34,SAVE);
-        play_button=control(L"BUTTON",L"Play",WS_TABSTOP|BS_DEFPUSHBUTTON,490,445,130,34,PLAY);
-        update_button=control(L"BUTTON",L"Update from GitHub",WS_TABSTOP,22,489,155,30,UPDATE);
-        experimental_checkbox=control(L"BUTTON",L"Use experimental releases",BS_AUTOCHECKBOX|WS_TABSTOP,195,489,420,30,EXPERIMENTAL);
+        stop_button=control(L"BUTTON",L"Install local server",WS_TABSTOP,180,461,150,34,STOP);
+        save_button=control(L"BUTTON",L"Save settings",WS_TABSTOP,345,461,130,34,SAVE);
+        play_button=control(L"BUTTON",L"Play",WS_TABSTOP|BS_DEFPUSHBUTTON,490,461,130,34,PLAY);
+        update_button=control(L"BUTTON",L"Update from GitHub",WS_TABSTOP,22,505,155,30,UPDATE);
+        experimental_checkbox=control(L"BUTTON",L"Use experimental releases",BS_AUTOCHECKBOX|WS_TABSTOP,195,505,420,30,EXPERIMENTAL);
         SendMessageW(experimental_checkbox,BM_SETCHECK,installed_experimental?BST_CHECKED:BST_UNCHECKED,0);
         creating_languages=TRUE;
         language_checkbox=control(L"BUTTON",L"CJK fonts",BS_AUTOCHECKBOX|WS_TABSTOP,22,26,590,32,CJK_INSTALL);
@@ -531,22 +537,26 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
         logging_checkbox=control(L"BUTTON",L"Enable diagnostic logging",BS_AUTOCHECKBOX|WS_TABSTOP,22,26,590,32,LOGGING);
         for(unsigned i=0;i<LOG_CATEGORY_COUNT;i++)
             log_checkboxes[i]=control(L"BUTTON",log_labels[i],BS_AUTOCHECKBOX|WS_TABSTOP,22+(i%2)*300,78+(i/2)*32,290,28,LOG_CATEGORY_BASE+i);
-        control(L"BUTTON",L"View update details",WS_TABSTOP,22,405,200,32,UPDATE_DETAILS);
+        control(L"BUTTON",L"View update details",WS_TABSTOP,22,278,200,32,UPDATE_DETAILS);
         creating_diagnostics=FALSE;
         creating_lastfm=TRUE;
         lfm_account=control(L"STATIC",L"No Last.fm account linked",0,22,26,590,28,0);
-        lfm_enabled=control(L"BUTTON",L"Enable Last.fm scrobbling",BS_AUTOCHECKBOX|WS_TABSTOP,22,68,590,28,LASTFM_ENABLED);
-        control(L"STATIC",L"Scrobble after listening to (%)",0,22,116,280,28,0);
-        lfm_percent=control(L"EDIT",L"80",WS_BORDER|WS_TABSTOP|ES_NUMBER,310,112,80,28,LASTFM_PERCENT);
+        control(L"STATIC",L"API key",0,22,64,140,28,0);
+        lfm_key_field=control(L"EDIT",L"",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL|ES_PASSWORD,170,60,390,28,LASTFM_KEY);
+        control(L"STATIC",L"Shared secret",0,22,102,140,28,0);
+        lfm_secret_field=control(L"EDIT",L"",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL|ES_PASSWORD,170,98,390,28,LASTFM_SECRET);
+        SendMessageW(lfm_key_field,EM_SETLIMITTEXT,32,0);SendMessageW(lfm_secret_field,EM_SETLIMITTEXT,32,0);
+        lfm_enabled=control(L"BUTTON",L"Enable Last.fm scrobbling",BS_AUTOCHECKBOX|WS_TABSTOP,22,140,590,28,LASTFM_ENABLED);
+        control(L"STATIC",L"Scrobble after listening to (%)",0,22,182,280,28,0);
+        lfm_percent=control(L"EDIT",L"80",WS_BORDER|WS_TABSTOP|ES_NUMBER,310,178,80,28,LASTFM_PERCENT);
         SendMessageW(lfm_percent,EM_SETLIMITTEXT,3,0);
-        lfm_link=control(L"BUTTON",L"Link account",WS_TABSTOP,22,166,170,32,LASTFM_LINK);
-        lfm_finish=control(L"BUTTON",L"Finish linking",WS_TABSTOP,206,166,170,32,LASTFM_FINISH);
-        lfm_disconnect=control(L"BUTTON",L"Disconnect",WS_TABSTOP,390,166,170,32,LASTFM_DISCONNECT);
-        lfm_browser=control(L"BUTTON",L"Open authorization",WS_TABSTOP,22,212,220,32,LASTFM_OPEN);
-        lfm_save=control(L"BUTTON",L"Save Last.fm settings",WS_TABSTOP,22,268,220,32,LASTFM_SAVE);
+        lfm_link=control(L"BUTTON",L"Link account",WS_TABSTOP,22,222,220,32,LASTFM_LINK);
+        lfm_disconnect=control(L"BUTTON",L"Disconnect",WS_TABSTOP,260,222,170,32,LASTFM_DISCONNECT);
+        lfm_save=control(L"BUTTON",L"Save settings",WS_TABSTOP,22,266,220,32,LASTFM_SAVE);
         checkbox_help(lfm_enabled,L"Scrobble tagged songs after a completed race or the configured listening percentage. Pauses and skips do not count. Last.fm requires songs longer than 30 seconds and half the song or four minutes of listening, whichever is shorter. Restart the game after changing settings.");
         checkbox_help(lfm_percent,L"Default 80%. A completed race can qualify earlier, subject to Last.fm's minimum listening requirement.");
-        checkbox_help(lfm_link,L"Uses api_key and shared_secret from [lastfm] in client.ini. Approve access in your browser, then click Finish linking. No password is entered here.");
+        checkbox_help(lfm_link,L"Without an API key, opens Last.fm application registration. Enter the key and secret here and save settings. Approve access in your browser; linking finishes automatically while this tab is open. No password is entered here.");
+        checkbox_help(lfm_secret_field,L"Masked while typing. Save settings encrypts the key, secret and existing session with user-scoped DPAPI. Keep your Windows profile or Proton prefix private.");
         lfm_reload();
         creating_lastfm=FALSE;
         SendMessageW(logging_checkbox,BM_SETCHECK,rr_logging_enabled(folder,installed_experimental)?BST_CHECKED:BST_UNCHECKED,0);
@@ -580,11 +590,9 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
                 if(HIWORD(wp)==BN_CLICKED)ShellExecuteW(hwnd,L"open",L"https://github.com/Aftonstjarna/ReRiff",NULL,NULL,SW_SHOWNORMAL);
                 break;
             case UPDATE_DETAILS:show_update_details();break;
-            case LASTFM_LINK:if(!busy){*lfm_token=0;*lfm_url=0;begin(8);}break;
-            case LASTFM_FINISH:if(!busy)begin(9);break;
+            case LASTFM_LINK:if(!busy){if(!lfm_has_api_key())lfm_register_application();else if(*lfm_url)lfm_open_browser();else {*lfm_token=0;begin(8);}}break;
             case LASTFM_DISCONNECT:if(!busy)lfm_unlink();break;
             case LASTFM_SAVE:if(!busy)lfm_save_settings();break;
-            case LASTFM_OPEN:if(!busy)lfm_open_browser();break;
             case LOGGING: {
                 BOOL enabled=SendMessageW(logging_checkbox,BM_GETCHECK,0,0)==BST_CHECKED;
                 if(WritePrivateProfileStringW(L"diagnostics",L"logging_enabled",enabled?L"true":L"false",ini)) {
@@ -618,7 +626,7 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
             case PLAY:begin(TRUE);break;
         }return 0;
     }
-    if(event==WM_TIMER&&wp==1){refresh_changed_settings();return 0;}
+    if(event==WM_TIMER&&wp==1){refresh_changed_settings();if(SendMessageW(launcher_tabs,TCM_GETCURSEL,0,0)==3&&lfm_poll_due(GetTickCount()))begin(9);return 0;}
     if(event==WM_ACTIVATE&&LOWORD(wp)!=WA_INACTIVE)refresh_changed_settings();
     if(event==RERIFF_PROGRESS_EVENT){if(busy)progress_set_bar(launcher_progress,(int)(INT_PTR)lp);return 0;}
     if (event==WM_GAME_RUNNING) { progress_set_bar(launcher_progress,0); SetWindowTextW(status,L"Game running. Keep the launcher open until the game closes.");ShowWindow(window,SW_MINIMIZE);return 0; }
@@ -629,7 +637,7 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
         requested_experimental=installed_experimental;
         SendMessageW(experimental_checkbox,BM_SETCHECK,installed_experimental?BST_CHECKED:BST_UNCHECKED,0);
         progress_set_bar(launcher_progress,0);busy=FALSE;playing=FALSE;EnableWindow(play_button,TRUE);EnableWindow(save_button,TRUE);EnableWindow(stop_button,TRUE);EnableWindow(update_button,TRUE);EnableWindow(experimental_checkbox,TRUE);SetWindowTextW(status,message);
-        local_server_controls();language_controls();if(lfm_action==9&&wp)lfm_reload();lfm_controls();if(lfm_action==8&&wp)lfm_open_browser();lfm_action=0;EnableWindow(language_checkbox,TRUE);EnableWindow(latin_checkbox,TRUE);EnableWindow(logging_checkbox,TRUE);
+        lfm_link_completed(lfm_action,(BOOL)wp,GetTickCount());local_server_controls();language_controls();if(lfm_action==9&&wp)lfm_reload();lfm_controls();if(lfm_action==8&&wp)lfm_open_browser();lfm_action=0;EnableWindow(language_checkbox,TRUE);EnableWindow(latin_checkbox,TRUE);EnableWindow(logging_checkbox,TRUE);
         if(!wp&&checking_update&&*update_failure)show_update_details();checking_update=FALSE;
         if (lp) ShowWindow(window,SW_RESTORE);return 0;
     }
@@ -681,10 +689,10 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE previous,LPWSTR command,int sho
         return 0;
     }
     WNDCLASSW cls;ZeroMemory(&cls,sizeof(cls));cls.lpfnWndProc=procedure;cls.hInstance=instance;cls.lpszClassName=L"ReRiffNativeLauncher";
-    cls.hCursor=LoadCursorW(NULL,IDC_ARROW);cls.hbrBackground=(HBRUSH)(COLOR_WINDOW+1);
+    cls.hCursor=LoadCursorW(NULL,IDC_ARROW);cls.hbrBackground=(HBRUSH)(COLOR_BTNFACE+1);
     RegisterClassW(&cls);
     HWND handle=CreateWindowExW(0,cls.lpszClassName,launcher_title(),WS_OVERLAPPED|WS_CAPTION|WS_SYSMENU|WS_MINIMIZEBOX,
-        CW_USEDEFAULT,CW_USEDEFAULT,660,615,NULL,NULL,instance,NULL);
+        CW_USEDEFAULT,CW_USEDEFAULT,660,631,NULL,NULL,instance,NULL);
     if (!handle) return 1;
     ShowWindow(handle,show);UpdateWindow(handle);
     MSG msg;while (GetMessageW(&msg,NULL,0,0)>0) {if (!IsDialogMessageW(handle,&msg)) {TranslateMessage(&msg);DispatchMessageW(&msg);}}

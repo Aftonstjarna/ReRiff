@@ -1,3 +1,61 @@
+# ReRiff 1.4.0-beta.10 — Protected credentials and launcher cleanup
+
+## In-game summary
+
+- Save Last.fm credentials securely from the launcher.
+- Link Last.fm automatically after approving access in your browser.
+- Enjoy a cleaner launcher with clearer sections and fixed redraws.
+
+## Full release notes
+
+### Last.fm
+
+- Add masked API key and shared secret fields. When no key is configured,
+  Get API key opens Last.fm application registration in the browser.
+- Replace separate save buttons with one Save settings action for credentials,
+  scrobbling enabled state and listening percentage. Validate before replacing
+  the config and preserve unrelated settings.
+- Protect the API key, shared secret and linked session with user-scoped Windows
+  DPAPI. Saving migrates existing plaintext credentials; failed protection does
+  not fall back to writing plaintext. Changing credentials clears the old account
+  link and disables scrobbling until linked again.
+- Remove Finish linking and Open authorization buttons. While the Last.fm tab is
+  open, check approval automatically every five seconds; Link account becomes
+  Reopen authorization while waiting. Temporary failures retry after 30 seconds,
+  fatal errors reset the attempt, and waiting times out after ten minutes.
+
+### Launcher
+
+- Match the window background to native label backgrounds and add thin section
+  separators. Center the footer separator and local-server address, retaining
+  readable spacing with a slightly taller window.
+- Fix tab-switch redraws that could hide controls: retain native tab headers and
+  let the parent window paint the page without overwriting child controls.
+- Move View update details above the shared status area to avoid overlapping the
+  progress bar. Clear the leftover marquee segment when progress returns to idle.
+
+### Validation and known limitations
+
+- Native regressions cover encrypted storage, invalid-save preservation, changed
+  credentials, tab visibility, automatic-link timing/retries/timeouts, repeated
+  tab switches, progress reset and update cancellation. Isolated Proton previews
+  were inspected for the launcher layout and empty idle progress bar.
+- 41 managed checks passed including native-launcher to managed-client DPAPI
+  interoperability with dummy credentials. The matching launcher and client
+  helper were built and locally installed without changing user configuration.
+- Existing Last.fm linking/scrobbling was verified in beta.9; the new automatic
+  browser-approval flow still needs a live end-to-end retest.
+- Keep client.ini and the Windows profile or Proton prefix private. DPAPI does
+  not protect against programs running as the same user; Proton is not guaranteed
+  to provide Windows' security boundary. Moving to another profile or prefix may
+  require re-entering credentials and linking again. Old plaintext backups are
+  not rewritten. Beta.9 cannot read the new protected values, so install the
+  launcher and matching client helper together.
+- Each installation still needs its own Last.fm application credentials. Restart
+  the game after settings changes. The existing scrobble queue and abrupt-exit
+  limitations remain; Steam keyboard work is paused and M4A playback unrestored.
+- This is an opt-in prerelease; stable remains the default update channel.
+
 # ReRiff 1.4.0-beta.9 — Last.fm scrobbling
 
 ## In-game summary
