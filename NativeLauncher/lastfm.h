@@ -97,7 +97,12 @@ static BOOL lfm_save_settings(void){
     GetWindowTextW(lfm_key_field,key,64);GetWindowTextW(lfm_secret_field,secret,64);
     if((*key||*secret)&&(!lfm_hex(key)||!lfm_hex(secret))){SecureZeroMemory(secret,sizeof(secret));SetWindowTextW(status,L"Enter a 32-character API key and shared secret, then save settings.");return FALSE;}
     BOOL readable=lfm_read_credential(L"api_key",oldkey)&&lfm_read_credential(L"shared_secret",oldsecret)&&lfm_read_credential(L"session_key",session);
-    BOOL changed=!readable||wcscmp(key,oldkey)||wcscmp(secret,oldsecret);
+    if(!readable){
+        SecureZeroMemory(secret,sizeof(secret));SecureZeroMemory(oldsecret,sizeof(oldsecret));SecureZeroMemory(session,sizeof(session));
+        SetWindowTextW(status,L"Could not read protected Last.fm credentials. Settings were kept; use the original Windows profile or Proton prefix.");
+        log_message(L"Last.fm settings not saved: protected credentials could not be read; existing settings retained.");return FALSE;
+    }
+    BOOL changed=wcscmp(key,oldkey)||wcscmp(secret,oldsecret);
     BOOL enabled=SendMessageW(lfm_enabled,BM_GETCHECK,0,0)==BST_CHECKED;
     GetPrivateProfileStringW(L"lastfm",L"username",L"",user,128,ini);
     if(changed){*session=0;*user=0;enabled=FALSE;}
@@ -108,6 +113,7 @@ static BOOL lfm_save_settings(void){
     BOOL ok=lfm_store_credentials(key,secret,session,user,enabled,value);
     SecureZeroMemory(secret,sizeof(secret));SecureZeroMemory(oldsecret,sizeof(oldsecret));SecureZeroMemory(session,sizeof(session));
     if(ok){if(changed){SecureZeroMemory(lfm_token,sizeof(lfm_token));*lfm_url=0;}lfm_reload();}
+    log_message(!ok?L"Last.fm settings save failed; existing settings retained.":changed?L"Last.fm settings saved: application credentials changed; account link cleared and scrobbling disabled.":enabled?L"Last.fm settings saved: account link retained; scrobbling enabled.":L"Last.fm settings saved: account link retained; scrobbling disabled by selection.");
     SetWindowTextW(status,ok?(changed?L"Settings saved. Link your Last.fm account before enabling scrobbling.":L"Last.fm settings saved and credentials protected. Restart the game."):L"Could not protect or save settings. Existing settings were kept.");return ok;
 }
 static void lfm_unlink(void){

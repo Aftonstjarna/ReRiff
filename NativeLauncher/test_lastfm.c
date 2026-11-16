@@ -38,12 +38,32 @@ int wmain(int argc,WCHAR **argv){
     GetPrivateProfileStringW(L"launcher",L"skip_launcher",L"",value,64,ini);CHECK(!wcscmp(value,L"true"));
     SetWindowTextW(lfm_secret_field,L"invalid");CHECK(!lfm_save_settings());CHECK(lfm_read_credential(L"shared_secret",value)&&!wcscmp(value,L"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"));lfm_reload();
     GetPrivateProfileStringW(L"lastfm",L"scrobble_percent",L"",value,64,ini);CHECK(!wcscmp(value,L"85"));
+    /* Exercise the real Save button repeatedly without re-ticking Enable. */
+    for(int percent=81;percent<=84;percent++){
+        _snwprintf(value,64,L"%d",percent);SetWindowTextW(lfm_percent,value);
+        SendMessageW(host,WM_COMMAND,MAKEWPARAM(LASTFM_SAVE,BN_CLICKED),(LPARAM)lfm_save);
+        CHECK(SendMessageW(lfm_enabled,BM_GETCHECK,0,0)==BST_CHECKED);
+        GetPrivateProfileStringW(L"lastfm",L"enabled",L"",value,64,ini);CHECK(!wcscmp(value,L"true"));
+        CHECK(lfm_read_credential(L"session_key",value)&&!wcscmp(value,L"ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ"));
+        CHECK(GetPrivateProfileIntW(L"lastfm",L"scrobble_percent",0,ini)==(UINT)percent);
+        SendMessageW(host,WM_TIMER,1,0);SendMessageW(host,WM_ACTIVATE,WA_ACTIVE,0);
+        lfm_reload();CHECK(SendMessageW(lfm_enabled,BM_GETCHECK,0,0)==BST_CHECKED);
+    }
+    SendMessageW(lfm_enabled,BM_SETCHECK,BST_UNCHECKED,0);CHECK(lfm_save_settings());lfm_reload();
+    CHECK(SendMessageW(lfm_enabled,BM_GETCHECK,0,0)==BST_UNCHECKED);
+    CHECK(lfm_read_credential(L"session_key",value)&&lfm_token_valid(value));
+    SendMessageW(lfm_enabled,BM_SETCHECK,BST_CHECKED,0);SetWindowTextW(lfm_percent,L"85");CHECK(lfm_save_settings());
     WCHAR protected_value[4096];GetPrivateProfileStringW(L"lastfm",L"shared_secret",L"",protected_value,4096,ini);CHECK(!wcsncmp(protected_value,L"dpapi:",6));CHECK(!wcsstr(protected_value,L"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"));
     CHECK(lfm_read_credential(L"shared_secret",value)&&!wcscmp(value,L"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"));
     CHECK(lfm_read_credential(L"session_key",value)&&lfm_token_valid(value));
     CHECK((GetWindowLongPtrW(lfm_secret_field,GWL_STYLE)&ES_PASSWORD)!=0);
     if(argc==3&&!wcscmp(argv[1],L"--storage-test")){path(file,L"client.ini");CHECK(CopyFileW(file,argv[2],FALSE));}
     CHECK(WritePrivateProfileStringW(L"lastfm",L"session_key",L"dpapi:00",ini));CHECK(!lfm_read_credential(L"session_key",value));
+    SetWindowTextW(lfm_percent,L"90");CHECK(!lfm_save_settings());
+    GetPrivateProfileStringW(L"lastfm",L"session_key",L"",value,64,ini);CHECK(!wcscmp(value,L"dpapi:00"));
+    GetPrivateProfileStringW(L"lastfm",L"enabled",L"",value,64,ini);CHECK(!wcscmp(value,L"true"));
+    GetPrivateProfileStringW(L"lastfm",L"scrobble_percent",L"",value,64,ini);CHECK(!wcscmp(value,L"85"));
+    SetWindowTextW(lfm_percent,L"85");
     CHECK(WritePrivateProfileStringW(L"lastfm",L"session_key",L"ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ",ini));
     /* Tab repaint must never cover page controls or the shared footer. */
     RECT tabs,field;GetWindowRect(launcher_tabs,&tabs);GetWindowRect(lfm_key_field,&field);CHECK(tabs.bottom<=field.top);
