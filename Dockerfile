@@ -29,6 +29,7 @@ COPY Progression/balance.py Progression/balance.json Progression/multiplayer.py 
 COPY --from=catalog-build /out/libreriff-catalog.so /app/server/libreriff-catalog.so
 COPY --from=catalog-build /out/libreriff-news.so /app/server/libreriff-news.so
 COPY scripts/trace-server.py /app/trace-server.py
+COPY packaging/logging_policy.py /app/packaging/logging_policy.py
 COPY docker/server.py docker/healthcheck.py /app/docker/
 COPY LICENSE /app/LICENSE
 COPY ServerSync/third_party/LICENSE.MIT /app/licenses/nlohmann-json.txt

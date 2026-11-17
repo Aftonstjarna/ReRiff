@@ -4,6 +4,9 @@ import logging
 import os
 from pathlib import Path
 import signal
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'packaging'))
+from logging_policy import TimestampWriter
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -47,6 +50,8 @@ def create_app(data_dir=None, public_url=None, lan_url=None, log_dir=None, trace
 
 
 def main():
+    sys.stdout = TimestampWriter(sys.stdout)
+    sys.stderr = TimestampWriter(sys.stderr)
     from waitress import create_server
     logging.basicConfig(level=logging.INFO)
     app = create_app()
