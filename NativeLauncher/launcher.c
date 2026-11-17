@@ -84,14 +84,12 @@ static void channel_title(void) {
 
 static void log_message(const WCHAR *text) {
     if(!rr_log_enabled(folder,L"launcher",strstr(RERIFF_VERSION,"-")!=NULL))return;
-    WCHAR name[CAP]; char utf8[4096]; DWORD written;
+    WCHAR name[CAP]; char utf8[4096];
     path(name,L"logs");CreateDirectoryW(name,NULL);
     path(name, L"logs\\ReRiff-launcher.log");
     int bytes = WideCharToMultiByte(CP_UTF8, 0, text, -1, utf8, sizeof(utf8)-3, NULL, NULL);
     if (!bytes) return;
-    utf8[bytes-1]='\r'; utf8[bytes]='\n';
-    HANDLE file=CreateFileW(name, FILE_APPEND_DATA, FILE_SHARE_READ|FILE_SHARE_WRITE, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (file != INVALID_HANDLE_VALUE) { WriteFile(file, utf8, bytes+1, &written, NULL); CloseHandle(file); }
+    rr_log_append(name,"launcher",utf8);
 }
 
 static BOOL spawn(WCHAR *command, BOOL hidden, PROCESS_INFORMATION *process) {
@@ -279,6 +277,7 @@ static void finish_local_session(BOOL started){
 }
 
 static BOOL launch_game(void) {
+    ULONGLONG launch_started=GetTickCount64();
     BOOL started_local=FALSE;
     if(!external_only()){
         WCHAR config[CAP],enabled[16],primary[2048],secondary[2048];
@@ -296,11 +295,13 @@ static BOOL launch_game(void) {
             }
         }
     }
+    update_timing(L"local-server readiness",launch_started);
     for(;;){
     sync_cached_songs(ini);
     WCHAR command[CAP]; PROCESS_INFORMATION process;
     if(!game_command(command)){wcscpy(message,L"The forwarded game command is too long.");finish_local_session(started_local);return FALSE;}
     if (!spawn(command,FALSE,&process)) { wcscpy(message,L"Could not start Game.exe beside the launcher."); finish_local_session(started_local);return FALSE; }
+    update_timing(L"launch to Game.exe spawn",launch_started);
     WCHAR event_name[96];restart_event_name(event_name,96,process.dwProcessId,FALSE);
     HANDLE restart=CreateEventW(NULL,TRUE,FALSE,event_name);
     if (window) PostMessageW(window,WM_GAME_RUNNING,0,0);
@@ -316,6 +317,7 @@ static BOOL launch_game(void) {
     sync_cached_songs(ini);
     if(!closed){wcscpy(message,L"Could not wait for Game.exe to close.");finish_local_session(started_local);return FALSE;}
     if(!again){finish_local_session(started_local);return TRUE;}
+    launch_started=GetTickCount64();
     log_message(L"Game closed for Save and restart; applying saved server settings.");
     }
 }
@@ -564,7 +566,7 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
         checkbox_help(only_checkbox,L"Skip the secondary server. If the primary server is absent or unavailable, use singleplayer automatically.");
         checkbox_help(networking_checkbox,L"Skip server connections and force singleplayer on the next start. When unchecked, singleplayer is still chosen automatically if servers are absent or unavailable. Saved server addresses are retained.");
         checkbox_help(skip_checkbox,L"Start the game without showing the launcher. Applies on the next start; use --show-launcher to open settings again.");
-        checkbox_help(auto_update_checkbox,L"Check the selected release channel for updates before starting when the launcher is skipped. A failed check starts the installed version.");
+        checkbox_help(auto_update_checkbox,L"Check the selected release channel for updates before starting when the launcher is skipped. Successful checks are reused for 15 minutes. Update from GitHub always checks immediately. A failed check starts the installed version.");
         checkbox_help(experimental_checkbox,L"Use opt-in beta releases for updates. Uncheck to use stable releases.");
         checkbox_help(language_checkbox,L"Install and enable Chinese, Japanese and Korean characters in filenames, song metadata, leaderboards and pause screens. Downloads about 105 MiB. Restart the game after changing this option. Unchecking retains the fonts. Each font option has its own folder in mods; menus are not translated. High-resolution text is selected automatically.");
         checkbox_help(latin_checkbox,L"Install and enable missing Latin/European letters, including Polish, throughout the game. A separate small download installs in its own folder in mods. Restart the game after changing this option. Unchecking retains the fonts; menus are not translated. High-resolution text is selected automatically.");

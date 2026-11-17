@@ -49,8 +49,7 @@ static void python_runtime_log(const WCHAR *game,const char *text){
     if(!(python_logging_override>=0?python_logging_override:rr_logging_enabled(game,FALSE)))return;
     WCHAR path[CAP];if(_snwprintf(path,CAP,L"%ls\\logs",game)<0)return;CreateDirectoryW(path,NULL);
     if(_snwprintf(path,CAP,L"%ls\\logs\\ReRiff-python-setup.log",game)<0)return;
-    HANDLE file=CreateFileW(path,FILE_APPEND_DATA,FILE_SHARE_READ,NULL,OPEN_ALWAYS,FILE_ATTRIBUTE_NORMAL,NULL);DWORD written;
-    if(file!=INVALID_HANDLE_VALUE){WriteFile(file,text,(DWORD)strlen(text),&written,NULL);WriteFile(file,"\r\n",2,&written,NULL);CloseHandle(file);}
+    rr_log_append(path,"python",text);
 }
 static BOOL ensure_private_python(HWND owner,const WCHAR *game,BOOL prompt){
     WCHAR local[CAP],runtime[CAP],stage[CAP],archive[CAP],expanded[CAP],script[CAP],system[CAP],command[CAP],a[CAP],b[CAP],old[CAP]=L"";

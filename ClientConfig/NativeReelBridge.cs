@@ -54,7 +54,7 @@ namespace ReRiff {
         }
 
         internal static void Log(string message) {
-            try {Logging.Append(Path.GetDirectoryName(typeof(ClientConfig).Assembly.Location),"ReRiff-engine-menu.log",DateTime.UtcNow.ToString("o")+" "+message+Environment.NewLine);}catch(Exception) { }
+            try {Logging.Append(Path.GetDirectoryName(typeof(ClientConfig).Assembly.Location),"ReRiff-engine-menu.log",message+Environment.NewLine);}catch(Exception) { }
         }
         internal static void Configure() {
             if(attempted)return;attempted=true;

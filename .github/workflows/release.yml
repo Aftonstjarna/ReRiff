@@ -5,6 +5,11 @@ on:
     branches: [main, launcher, codex/experimental-client]
     paths: [VERSION]
   workflow_dispatch:
+    inputs:
+      draft:
+        description: Create a draft for review without updating public channels
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -88,6 +93,7 @@ jobs:
     timeout-minutes: 30
     env:
       RERIFF_RELEASE_CHANNEL: ${{ github.ref_name == 'codex/experimental-client' && 'experimental' || 'stable' }}
+      RERIFF_RELEASE_DRAFT: ${{ inputs.draft || false }}
     permissions:
       contents: write
     steps:
@@ -115,6 +121,10 @@ jobs:
             exit 1
           fi
           if gh release view "v$version" >/dev/null 2>&1; then
+            if [ "$RERIFF_RELEASE_DRAFT" = true ]; then
+              echo 'A release already exists for this version; draft builds never overwrite it.'
+              exit 1
+            fi
             prerelease=$(gh release view "v$version" --json isPrerelease --jq .isPrerelease)
             if [[ "$RERIFF_RELEASE_CHANNEL" != stable || "$prerelease" != true ]]; then
               echo "An existing stable release cannot be overwritten; bump VERSION."
@@ -252,10 +262,14 @@ jobs:
           version=$(cat VERSION)
           python packaging/release_notes.py --version "$version" --output "$RUNNER_TEMP/RELEASE-NOTES.md"
           flags=()
+          if [ "$RERIFF_RELEASE_DRAFT" = true ]; then
+            flags+=(--draft --latest=false)
+          fi
           if [ "$RERIFF_RELEASE_CHANNEL" = experimental ]; then
             flags+=(--prerelease --latest=false)
           fi
           if gh release view "v$version" >/dev/null 2>&1; then
+            test "$RERIFF_RELEASE_DRAFT" != true
             test "$RERIFF_RELEASE_CHANNEL" = stable
             test "$(gh release view "v$version" --json isPrerelease --jq .isPrerelease)" = true
             gh release upload "v$version" "dist/v$version/"* --clobber
@@ -269,7 +283,7 @@ jobs:
               --target "$GITHUB_SHA" --title "ReRiff $version" \
               --notes-file "$RUNNER_TEMP/RELEASE-NOTES.md" "dist/v$version/"*
           fi
-          if [ "$RERIFF_RELEASE_CHANNEL" = experimental ]; then
+          if [ "$RERIFF_RELEASE_CHANNEL" = experimental ] && [ "$RERIFF_RELEASE_DRAFT" != true ]; then
             # Compatibility alias for the channel picker shipped in v0.1.10.
             alias_dir="$RUNNER_TEMP/experimental-assets"
             mkdir -p "$alias_dir"

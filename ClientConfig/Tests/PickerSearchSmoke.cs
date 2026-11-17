@@ -25,7 +25,7 @@ class PickerSearchSmoke {
         bool rejected=false;try{LibrarySearchCache.Read(bytes);}catch(InvalidDataException){rejected=true;}
         Check(rejected,label);
     }
-    static void Main() {
+    static void Main(string[] args) {
         string[] source={"つき.mp3","ツキ.flac","ﾂｷ.ogg","Moon.wav","つき.mp3","月下麗人.m4a",null,"odd\ud800.wav"};
         var index=new PickerSearchIndex(source);source[0]="changed";
         Check(index.Count==8&&index.Name(0)=="つき.mp3","Snapshot preserves original identity");
@@ -39,6 +39,15 @@ class PickerSearchSmoke {
         string[] many=new string[100000];for(int i=0;i<many.Length;i++)many[i]="Track "+i+" つき.flac";
         var large=new PickerSearchIndex(many);Check(large.Find("tsuki").Length==many.Length,"Large directory");
         Results(large,"Track 99999",99999);
+        var reused=new PickerSearchIndex(new[]{"Moon.wav","つき.mp3","つき.mp3",null,"updated.flac","odd\ud800.wav"},index,null);
+        Results(reused,"tsuki",1,2);Results(reused,"Moon",0);Results(reused,"updated",4);Results(reused,"odd\ud800",5);
+        Results(index,"tsuki",0,1,2,4); // The old snapshot remains immutable.
+        bool stopped=false;int polls=0;
+        try{large.Find("missing",()=>++polls==2);}catch(OperationCanceledException){stopped=true;}
+        Check(stopped&&polls==2,"Obsolete query stops during scan");
+        stopped=false;
+        try{new PickerSearchIndex(many,large,()=>true);}catch(OperationCanceledException){stopped=true;}
+        Check(stopped,"Cancelled publication stops index rebuild");
         byte[] cache=Cache(),before=(byte[])cache.Clone();var songs=LibrarySearchCache.Read(cache);
         Check(songs.Length==2&&songs[0].SongId=="original-id"&&songs[1].Filename=="hst:D:/Music/two/song.flac","Cross-folder identities preserved");
         Results(new PickerSearchIndex(new[]{songs[0].SearchText,songs[1].SearchText}),"tsuki",0,1);
@@ -64,6 +73,12 @@ class PickerSearchSmoke {
             Check(Array.Exists(scan.Songs,s=>s.SongId=="retained-id"&&s.Title=="Cached title"),"Imported metadata retained");
             Check(Array.Exists(scan.Songs,s=>s.SongId==""&&s.Title=="つき"),"Unimported M4A indexed without decoding or invented ID");
             Check(File.ReadAllBytes(imported).Length==3,"Audio untouched");
+            Check(StringComparer.OrdinalIgnoreCase.Compare(scan.Songs[0].Filename,scan.Songs[1].Filename)<0,"Complete scan sorted deterministically");
+            using(var during=new CancellationTokenSource()) {
+                bool stoppedDuring=false;
+                try{LibrarySearchScan.Run(new[]{folder},known,during.Token,100,snapshot=>during.Cancel());}catch(OperationCanceledException){stoppedDuring=true;}
+                Check(stoppedDuring,"Cancellation after first publication interrupts traversal");
+            }
             scan=LibrarySearchScan.Run(new[]{folder},known,CancellationToken.None,1);
             Check(scan.Songs.Length==1&&scan.LimitReached,"Bounded scan reports partial results");
             scan=LibrarySearchScan.Run(new[]{Path.Combine(folder,"missing")},known,CancellationToken.None,100);
@@ -74,6 +89,13 @@ class PickerSearchSmoke {
                 Check(cancelled,"Scan cancellation");
             }
         }finally{if(Directory.Exists(folder))Directory.Delete(folder,true);}
+        if(args.Length>0) {
+            string fixture=args[0];
+            var scan=LibrarySearchScan.Run(new[]{Path.Combine(fixture,"tree")},new LibrarySearchSong[0],CancellationToken.None,100);
+            Check(scan.Songs.Length==1,"Nested directory link and cycle excluded");
+            scan=LibrarySearchScan.Run(new[]{Path.Combine(fixture,"root-link")},new LibrarySearchSong[0],CancellationToken.None,100);
+            Check(scan.Songs.Length==1,"Explicit linked root remains searchable");
+        }
         Console.WriteLine("PASS: {0} picker search snapshot, Unicode, identity and large-directory checks",checks);
     }
 }

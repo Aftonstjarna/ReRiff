@@ -87,6 +87,7 @@ class LocalServerLanTests(unittest.TestCase):
         import shutil
         for name in ['serve.py', 'local_server.py', 'host_process.py']:
             shutil.copy2(ROOT/'LinuxRuntime'/name, self.stage/name)
+        shutil.copy2(ROOT/'packaging/logging_policy.py', self.stage/'logging_policy.py')
         (self.stage/'docker').mkdir()
         shutil.copy2(ROOT/'docker/server.py', self.stage/'docker/server.py')
         with socket.socket() as reservation:

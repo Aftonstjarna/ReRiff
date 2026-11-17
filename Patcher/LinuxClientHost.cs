@@ -89,10 +89,16 @@ internal static class LinuxClientHost {
     internal static int Run(string[] args) {
         if(!OperatingSystem.IsLinux())throw new PlatformNotSupportedException("This client helper is for Linux.");
         Console.OutputEncoding=new UTF8Encoding(false);
+        var originalOut=Console.Out;var originalError=Console.Error;
+        bool diagnostic=args.Length>0&&(args[0]=="install"||args[0]=="server-control"||args[0]=="stop-servers");
+        using var stampedOut=new ReRiff.Logging.TimestampWriter(originalOut);
+        using var stampedError=new ReRiff.Logging.TimestampWriter(originalError);
+        if(diagnostic){Console.SetOut(stampedOut);Console.SetError(stampedError);}
         try {
             if(args.Length>0 && args[0]=="language-component") return LanguageComponent.Run(args.Skip(1).ToArray());
             if(args.Length==0)throw new ArgumentException("Use install, update, server-control, stop-servers, print-game-dir or print-music-dir.");
             string command=args[0];int offset=command=="server-control"?2:1;var options=new Options(args.Skip(offset).ToArray());
+            if(diagnostic){string context=options.Get("--game-dir",options.Get("--root"));if(context!="")Console.WriteLine(ReRiff.Logging.Header(context));}
             switch(command) {
                 case "config-migrate": {string game=options.Need("--root");if(!File.Exists(Path.Combine(game,"Game.exe")))throw new IOException("Game.exe not found.");ReRiff.ConfigFiles.Migrate(game);return 0;}
                 case "logging-status":return ReRiff.Logging.Enabled(options.Need("--root"),options.Get("--log",""))?0:1;
@@ -110,6 +116,7 @@ internal static class LinuxClientHost {
             }
             return 0;
         } catch(Exception error){Console.Error.WriteLine(error.GetType().Name+": "+error.Message);return 1;}
+        finally {stampedOut.Flush();stampedError.Flush();Console.SetOut(originalOut);Console.SetError(originalError);}
     }
     static string AutoGame() {
         string home=Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
@@ -284,7 +291,8 @@ internal static class LinuxClientHost {
         bool logging=game!=""&&ReRiff.Logging.Enabled(game,"update.log");
         string log=game!=""?Path.Combine(game,"logs/update.log"):work+"/update.log";if(logging)Directory.CreateDirectory(Path.GetDirectoryName(log)!);
         var stdout=Console.Out;var stderr=Console.Error;
-        using var writer=logging?new StreamWriter(log,append:true){AutoFlush=true}:new StreamWriter(Stream.Null){AutoFlush=true};Console.SetOut(writer);Console.SetError(writer);
+        using var writer=logging?new StreamWriter(log,append:true){AutoFlush=true}:new StreamWriter(Stream.Null){AutoFlush=true};using var timestamped=new ReRiff.Logging.TimestampWriter(writer);Console.SetOut(timestamped);Console.SetError(timestamped);
+        if(logging)Console.WriteLine(ReRiff.Logging.Header(game));
         try {
             if(options.Has("--prepare")) {
                 string archive=options.Need("--archive"),expected=options.Get("--sha256");if(HashFile(archive)!=expected.ToLowerInvariant())throw new IOException("Release checksum mismatch.");
@@ -307,7 +315,7 @@ internal static class LinuxClientHost {
                 var plan=ReadJson(work+"/prepared.json");game=Text(plan,"game");StopServers(game+"/localserver");
                 Install(Text(plan,"bundle"),game,new Options(new[]{"--work",work}));Atomic(work+"/success",Encoding.UTF8.GetBytes("success\n"));
             }
-        } catch(Exception error) {writer.WriteLine(error.ToString());Atomic(work+"/failure",Encoding.UTF8.GetBytes(error.GetType().Name+": "+error.Message+"\n"));throw;}
+        } catch(Exception error) {timestamped.WriteLine(error.ToString());Atomic(work+"/failure",Encoding.UTF8.GetBytes(error.GetType().Name+": "+error.Message+"\n"));throw;}
         finally {Console.SetOut(stdout);Console.SetError(stderr);}
     }
     static int Server(string action,Options options) {

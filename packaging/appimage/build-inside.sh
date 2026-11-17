@@ -24,6 +24,7 @@ pythonlib=$(python -c 'import sysconfig; print(sysconfig.get_path("stdlib"))')
 /opt/quick-sharun /usr/bin/python3 "$pythonlib"/lib-dynload/*.so
 mkdir -p "$APPDIR/lib/reriff" "$APPDIR/share/reriff/licenses"
 cp LinuxRuntime/entry.py LinuxRuntime/local_server.py LinuxRuntime/serve.py LinuxRuntime/host_process.py "$APPDIR/lib/reriff/"
+cp packaging/logging_policy.py "$APPDIR/lib/reriff/logging_policy.py"
 cp LICENSE "$APPDIR/share/reriff/licenses/ReRiff.txt"
 cp /etc/ssl/certs/ca-certificates.crt "$APPDIR/share/reriff/ca-certificates.crt"
 cp -a /usr/share/licenses/. "$APPDIR/share/reriff/licenses/"

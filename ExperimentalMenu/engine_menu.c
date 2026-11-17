@@ -94,6 +94,13 @@ static void log_line(const char *line) {
     rr_log_append(log_path,"engine_menu",line);
 }
 
+/* Refresh the readable label only after the managed side authenticated the
+ * ReRiff UUID. Optional diagnostics must not initialize Steam or change login. */
+__declspec(dllexport) void __cdecl ReRiffRefreshDiagnosticIdentity(void) {
+    if(!*log_path||!rr_logging_ini(config_path))return;
+    char header[3072];rr_diagnostic_header(log_path,header,sizeof(header));log_line(header);
+}
+
 static void load_settings(void) {
     WCHAR value[32];
     GetPrivateProfileStringW(L"server",L"external_url",L"",pending.external,2048,config_path);

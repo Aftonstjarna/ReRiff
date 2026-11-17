@@ -31,12 +31,18 @@ static void song_json(SongBuffer *b,const char *s) {
     song_append(b,"\"");
 }
 
+#include "song_hash_cache.h"
+
 static BOOL song_hash(const char *filename,char hex[65]) {
     WCHAR name[CAP];
     if(strncmp(filename,"hst:",4))return FALSE;
     if(!MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,filename+4,-1,name,CAP))return FALSE;
     HANDLE file=CreateFileW(name,GENERIC_READ,FILE_SHARE_READ,NULL,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL|FILE_FLAG_SEQUENTIAL_SCAN,NULL);
     if(file==INVALID_HANDLE_VALUE)return FALSE;
+    BY_HANDLE_FILE_INFORMATION identity;BYTE key[32];
+    BOOL cacheable=GetFileInformationByHandle(file,&identity)&&song_path_key(name,key);
+    if(cacheable&&song_hash_cached(key,&identity,hex)){CloseHandle(file);return TRUE;}
+    song_hash_reads++;
     HCRYPTPROV provider=0;HCRYPTHASH hash=0;BOOL ok=FALSE;
     BYTE digest[32],block[65536];DWORD count=0,size=sizeof(digest);
     LARGE_INTEGER before_size,after_size;FILETIME before_time,after_time;
@@ -57,22 +63,19 @@ static BOOL song_hash(const char *filename,char hex[65]) {
         }
     }
     if(hash)CryptDestroyHash(hash);if(provider)CryptReleaseContext(provider,0);
+    if(ok&&cacheable)song_hash_store(key,&identity,hex);
     CloseHandle(file);return ok;
 }
 
-static BOOL song_request(const WCHAR *base,const char *body) {
+static BOOL song_request(HINTERNET session,const WCHAR *base,const char *body) {
+    if(!session)return FALSE;
     WCHAR url[CAP];URL_COMPONENTSW parts;WCHAR host[1024],urlpath[CAP];
     _snwprintf(url,CAP,L"%ls%ls",base,body?L"/reriff/songs/register":L"/classes/Version");url[CAP-1]=0;
     ZeroMemory(&parts,sizeof(parts));parts.dwStructSize=sizeof(parts);
     parts.lpszHostName=host;parts.dwHostNameLength=1024;parts.lpszUrlPath=urlpath;parts.dwUrlPathLength=CAP;
     if(!InternetCrackUrlW(url,0,0,&parts)||(parts.nScheme!=INTERNET_SCHEME_HTTP&&parts.nScheme!=INTERNET_SCHEME_HTTPS))return FALSE;
-    HINTERNET session=InternetOpenW(L"ReRiffSongSync/1",INTERNET_OPEN_TYPE_DIRECT,NULL,NULL,0);
-    if(!session)return FALSE;
-    DWORD timeout=song_timeout;InternetSetOptionW(session,INTERNET_OPTION_CONNECT_TIMEOUT,&timeout,sizeof(timeout));
-    InternetSetOptionW(session,INTERNET_OPTION_RECEIVE_TIMEOUT,&timeout,sizeof(timeout));
-    InternetSetOptionW(session,INTERNET_OPTION_SEND_TIMEOUT,&timeout,sizeof(timeout));
     HINTERNET connection=InternetConnectW(session,host,parts.nPort,NULL,NULL,INTERNET_SERVICE_HTTP,0,0);
-    DWORD flags=INTERNET_FLAG_RELOAD|INTERNET_FLAG_NO_CACHE_WRITE|INTERNET_FLAG_NO_UI|INTERNET_FLAG_NO_AUTO_REDIRECT;
+    DWORD flags=INTERNET_FLAG_RELOAD|INTERNET_FLAG_NO_CACHE_WRITE|INTERNET_FLAG_NO_UI|INTERNET_FLAG_NO_AUTO_REDIRECT|INTERNET_FLAG_KEEP_CONNECTION;
     if(parts.nScheme==INTERNET_SCHEME_HTTPS)flags|=INTERNET_FLAG_SECURE;
     HINTERNET req=connection?HttpOpenRequestW(connection,body?L"POST":L"GET",urlpath,NULL,NULL,NULL,flags,0):NULL;
     BOOL ok=FALSE;DWORD code=0,size=sizeof(code);
@@ -88,7 +91,7 @@ static BOOL song_request(const WCHAR *base,const char *body) {
         response[used]=0;char *first=response;while(*first==' '||*first=='\t'||*first=='\r'||*first=='\n')first++;
         ok=reading&&*first=='{'&&strstr(response,"\"results\"")!=NULL;
     }
-    if(req)InternetCloseHandle(req);if(connection)InternetCloseHandle(connection);InternetCloseHandle(session);
+    if(req)InternetCloseHandle(req);if(connection)InternetCloseHandle(connection);
     return ok;
 }
 
@@ -114,6 +117,9 @@ static void sync_cached_songs(const WCHAR *config) {
     BOOL loaded=ReadFile(file,cache,size,&read,NULL)&&read==size;CloseHandle(file);
     DWORD header[4];if(loaded)memcpy(header,cache,16);
     if(!loaded||header[0]!=1128350512||header[1]!=19||header[3]!=18||header[2]>10000){free(cache);return;}
+    ULONGLONG sync_started=GetTickCount64();
+    WCHAR sidecar[CAP];_snwprintf(sidecar,CAP,L"%ls\\Octane\\DAT\\ReRiff-song-hashes.bin",appdata);sidecar[CAP-1]=0;
+    song_hash_load(sidecar);
     SongBuffer body={0};song_append(&body,"{\"songs\":[");
     char *cursor=cache+16,*end=cache+size;unsigned registered=0,skipped=0;BOOL valid=TRUE;
     for(DWORD i=0;i<header[2]&&valid;i++){
@@ -134,20 +140,32 @@ static void sync_cached_songs(const WCHAR *config) {
     }
     song_append(&body,"]}");valid=valid&&cursor==end&&!body.failed;
     free(cache);
+    song_hash_save();
+    WCHAR timing[256];_snwprintf(timing,256,L"Timing: song hashing %llu ms; reused=%u read=%u",(unsigned long long)(GetTickCount64()-sync_started),song_hash_hits,song_hash_reads);log_message(timing);
     if(valid&&registered){
+        /* Keep one WinINet session through probe and registration, allowing
+         * connection/TLS reuse without caching server health or skipping the
+         * identity handshake that must finish before the game starts. */
+        HINTERNET session=InternetOpenW(L"ReRiffSongSync/1",INTERNET_OPEN_TYPE_DIRECT,NULL,NULL,0);
+        DWORD timeout=song_timeout;if(session)InternetSetOptionW(session,INTERNET_OPTION_CONNECT_TIMEOUT,&timeout,sizeof(timeout));
+        if(session)InternetSetOptionW(session,INTERNET_OPTION_RECEIVE_TIMEOUT,&timeout,sizeof(timeout));
+        if(session)InternetSetOptionW(session,INTERNET_OPTION_SEND_TIMEOUT,&timeout,sizeof(timeout));
         WCHAR base[CAP],only[32];
         GetPrivateProfileStringW(L"server",L"external_url",L"",base,CAP,config);
         GetPrivateProfileStringW(L"server",L"external_only",L"false",only,32,config);
         BOOL externalOnly=!_wcsicmp(only,L"true")||!wcscmp(only,L"1")||!_wcsicmp(only,L"yes");
         size_t n=wcslen(base);while(n&&base[n-1]=='/')base[--n]=0;
-        if(!n||!song_request(base,NULL)){
+        if(!n||!song_request(session,base,NULL)){
             if(externalOnly)base[0]=0;
             else GetPrivateProfileStringW(L"server",L"fallback_url",L"",base,CAP,config);
         }
         n=wcslen(base);while(n&&base[n-1]=='/')base[--n]=0;
-        BOOL ok=n&&song_request(base,body.data);
+        BOOL ok=n&&song_request(session,base,body.data);
         WCHAR note[256];_snwprintf(note,256,L"Song identity sync: %ls; files=%u unavailable=%u",ok?L"registered":L"unavailable",registered,skipped);
         log_message(note);
+        if(session)InternetCloseHandle(session);
     }else if(!valid)log_message(L"Song identity sync: unsupported or malformed cache; no registration sent.");
     free(body.data);
+    _snwprintf(timing,256,L"Timing: song sync total %llu ms",(unsigned long long)(GetTickCount64()-sync_started));log_message(timing);
+    free(song_hash_entries);song_hash_entries=NULL;song_hash_count=0;
 }

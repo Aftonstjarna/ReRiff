@@ -10,6 +10,8 @@ namespace ReRiff {
         private static extern int ReRiffConfigureProgressionCheckpoint(IntPtr callback);
         [DllImport("ReRiff.Notify.dll", CallingConvention=CallingConvention.Cdecl, ExactSpelling=true, CharSet=CharSet.Ansi)]
         private static extern int ReRiffPrepareMultiplayerProgression(string serverId,string accountId,int importOriginal);
+        [DllImport("ReRiff.Notify.dll", CallingConvention=CallingConvention.Cdecl, ExactSpelling=true)]
+        private static extern void ReRiffRefreshDiagnosticIdentity();
         [DllImport("user32.dll", CharSet=CharSet.Unicode, ExactSpelling=true)]
         private static extern int MessageBoxW(IntPtr window,string message,string title,uint flags);
 
@@ -31,6 +33,9 @@ namespace ReRiff {
                 else {
                     var remote=ProgressionRemote.Connect(folder,endpoint,()=>ProgressionNative.Bound.ObserveCheckpoint(),ProgressionRemote.PromptPassword);
                     if(remote==null)return;
+                    Logging.SetAccountIdentity(folder,remote.ServerId,remote.AccountId);
+                    try{ReRiffRefreshDiagnosticIdentity();}catch(DllNotFoundException){}catch(EntryPointNotFoundException){}
+
                     if(ReRiffConfigureProgressionCheckpoint(ProgressionCheckpoints.CallbackPointer)!=1)throw new InvalidOperationException("Native checkpoint registration failed.");
                     ProgressionCheckpoints.Remote=remote;
                     ProgressionCheckpoints.SaveInitial=()=>ProgressionNative.Bound.SaveCurrent();
@@ -40,7 +45,7 @@ namespace ReRiff {
             } catch(OperationCanceledException) {
                 Environment.Exit(0);
             } catch(Exception error) {
-                Logging.Append(folder,"ReRiff-engine-menu.log",DateTime.UtcNow.ToString("o")+" Progression domain preparation failed: "+error+Environment.NewLine);
+                Logging.Append(folder,"ReRiff-engine-menu.log","Progression domain preparation failed: "+error+Environment.NewLine);
                 MessageBoxW(IntPtr.Zero,"The isolated progression save could not be prepared. The game will close to avoid using the shared original save.\n\nYour original save has not been reset.\n\n"+error.Message+"\n\nSee logs/ReRiff-game.log when logging is enabled.","ReRiff experimental progression",0x10);
                 Environment.Exit(1);
             }

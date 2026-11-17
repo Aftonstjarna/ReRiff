@@ -44,6 +44,19 @@ class PickerSearchBridgeSmoke {
             Check(Dispatch(2,menu,null,0)==0&&Count(IntPtr.Add(menu,276))==0,"Zero results have no fake selectable file");
             Check(Dispatch(4,menu,null,0)==0,"Empty selection refused");
             Check(Dispatch(1,menu,"",0)==-3&&Marshal.ReadIntPtr(menu,276)==original,"Clear restores exact original vector");
+            // Hold the bridge gate while issuing revisions so the worker must
+            // consume the latest query, with no timing-dependent sleep race.
+            object sync=bridge.GetField("gate",fields).GetValue(null);
+            lock(sync){for(int revision=0;revision<100;revision++)Dispatch(1,menu,revision==99?"Second":"obsolete",0);}
+            bool finished=false;
+            for(int retry=0;retry<500;retry++){
+                lock(sync){finished=!(bool)session.GetType().GetField("Searching",instance).GetValue(session);}
+                if(finished)break;System.Threading.Thread.Sleep(10);
+            }
+            Check(finished,"Coalesced worker completes");
+            Check(Dispatch(2,menu,null,0)==1,"Latest query wins after rapid revisions");
+            Check(((int[])session.GetType().GetField("Matches",instance).GetValue(session))[0]==1,"Latest result retains source identity");
+            Dispatch(1,menu,"",0);
             Set(session,"Failed",true);Set(session,"Index",null);
             Check(Dispatch(1,menu,"new query",0)==-2,"Query cannot hide a failed worker behind endless Searching");
             Check(Dispatch(3,menu,null,0)==1&&bridge.GetField("current",fields).GetValue(null)==null,"Close releases session");

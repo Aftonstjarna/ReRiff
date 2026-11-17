@@ -15,6 +15,9 @@ def main():
         raise SystemExit('Use --server-control ACTION or --serve.')
     mode, *args = args
     if mode == '--server-control':
+        from logging_policy import TimestampWriter
+        sys.stdout = TimestampWriter(sys.stdout)
+        sys.stderr = TimestampWriter(sys.stderr)
         sys.argv = [str(ROOT/'local_server.py'), *args]
         runpy.run_path(sys.argv[0], run_name='__main__')
     elif mode == '--serve':

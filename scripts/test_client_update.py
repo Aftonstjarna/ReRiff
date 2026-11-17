@@ -36,6 +36,67 @@ class ClientUpdateTest(unittest.TestCase):
         self.work = self.root/'work'
         self.work.mkdir()
 
+    def test_streaming_payload_marker_boundaries_and_missing_marker(self):
+        marker = b'\n__RERIFF_PAYLOAD__\n'
+        for offset in (0, 65520, 65535, 65536, 131070):
+            source = io.BytesIO(b'x' * offset + marker + b'payload')
+            update.seek_linux_payload(source)
+            self.assertEqual(source.read(), b'payload')
+        with self.assertRaisesRegex(ValueError, 'Invalid Linux'):
+            update.seek_linux_payload(io.BytesIO(b'x' * 200000))
+
+    def test_member_copy_is_bounded_and_checks_length(self):
+        class Bounded(io.BytesIO):
+            def read(self, size=-1):
+                self_test.assertGreaterEqual(size, 0)
+                self_test.assertLessEqual(size, 1024 * 1024)
+                return super().read(size)
+        self_test = self
+        data = b'abc' * 900000
+        output = self.root/'member'
+        update.copy_archive_member(Bounded(data), output, len(data))
+        self.assertEqual(output.read_bytes(), data)
+        for actual, declared in ((b'abc', 4), (b'abc', 2)):
+            with self.assertRaises(ValueError):
+                update.copy_archive_member(Bounded(actual), output, declared)
+
+    def test_streaming_prepare_does_not_read_whole_package_or_zip_member(self):
+        original = Path.read_bytes
+        for platform in ('linux', 'windows'):
+            archive, digest = self.package(platform, launcher=b'fixture' * 400000)
+            work = self.root/('stream-' + platform)
+            work.mkdir()
+            def guarded(path):
+                if path == archive:
+                    raise AssertionError('Whole-package read')
+                return original(path)
+            with mock.patch.object(Path, 'read_bytes', guarded), mock.patch.object(zipfile.ZipFile, 'read', side_effect=AssertionError('Whole-member read')):
+                update.prepare(archive, digest, work, self.game, platform)
+            self.assertTrue((work/'prepared.json').is_file())
+
+    def test_archive_links_limits_and_truncation_stop_before_installer(self):
+        for kind in ('link', 'oversize', 'truncated'):
+            archive = self.root/(kind + '.run')
+            stream = io.BytesIO()
+            # Build raw headers so malformed/oversized members need no huge data.
+            info = tarfile.TarInfo('member')
+            if kind == 'link':
+                info.type = tarfile.SYMTYPE
+                info.linkname = '../escape'
+            else:
+                info.size = 513 * 1024 * 1024 if kind == 'oversize' else 4096
+            import gzip
+            archive.write_bytes(b'#!/bin/sh\n__RERIFF_PAYLOAD__\n' + gzip.compress(info.tobuf()))
+            work = self.root/kind
+            work.mkdir()
+            digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+            with mock.patch.object(update, 'load_installer') as loader:
+                with self.assertRaises((ValueError, tarfile.ReadError)):
+                    update.prepare(archive, digest, work, self.game, 'linux')
+                loader.assert_not_called()
+            self.assertFalse((work/'prepared.json').exists())
+            self.assertEqual((self.game/'ReRiff-Launcher.exe').read_bytes(), b'old launcher')
+
     def test_linux_update_uses_private_runtime_and_preserves_mode(self):
         runtime=self.game/'localserver/ReRiff-Runtime-x86_64.AppImage'
         runtime.write_bytes(b'fixture AppImage');runtime.chmod(0o755)
@@ -55,6 +116,8 @@ class ClientUpdateTest(unittest.TestCase):
         self.assertTrue((self.game/'logs/update.log').is_file())
         self.assertFalse((self.work/'update.log').exists())
         self.assertIn('FileNotFoundError',(self.game/'logs/update.log').read_text())
+        for line in (self.game/'logs/update.log').read_text().splitlines():
+            self.assertRegex(line,r'^\[\d{4}-.*\.\d{3}Z\] ')
 
     def package(self, platform, bad_member=None, launcher=b'new launcher', version='9.0.0-2'):
         files = {name: (ROOT/'packaging'/name).read_bytes() for name in ['installer.py', 'shared_patch.py', 'logging_policy.py', 'vanilla-reference.json']}

@@ -84,6 +84,7 @@ def main():
     if not tracer.is_file():
         raise ValueError('trace-server.py must be beside this setup script.')
     shutil.copy2(tracer, dest / 'trace-server.py')
+    shutil.copy2(Path(__file__).resolve().parents[1]/'packaging/logging_policy.py', dest/'logging_policy.py')
     routing = Path(__file__).with_name('server_routing.py')
     shutil.copy2(routing, dest / 'server_routing.py')
     config = game / 'server.ini'

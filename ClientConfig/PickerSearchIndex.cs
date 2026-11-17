@@ -9,13 +9,26 @@ namespace ReRiff {
         private readonly string[] names, literals, keys;
         internal int Count { get { return names.Length; } }
 
-        internal PickerSearchIndex(string[] source) {
+        internal PickerSearchIndex(string[] source) : this(source,null,null) {}
+
+        internal PickerSearchIndex(string[] source,PickerSearchIndex previous,Func<bool> cancelled) {
             if(source==null)throw new ArgumentNullException("source");
             names=(string[])source.Clone();
             literals=new string[names.Length];keys=new string[names.Length];
+            // Reuse only exact text matches; source indices and song identities
+            // always belong to the new snapshot, including reordered duplicates.
+            var reusable=new Dictionary<string,int>(StringComparer.Ordinal);
+            if(previous!=null)for(int i=0;i<previous.names.Length;i++) {
+                CheckCancellation(cancelled,i);
+                if(previous.names[i]!=null)reusable[previous.names[i]]=i;
+            }
             for(int i=0;i<names.Length;i++) {
+                CheckCancellation(cancelled,i);
                 if(names[i]==null)continue;
-                literals[i]=Normalize(names[i]);keys[i]=SearchKey(literals[i]);
+                int old;
+                if(previous!=null&&reusable.TryGetValue(names[i],out old)) {
+                    literals[i]=previous.literals[old];keys[i]=previous.keys[old];
+                }else{literals[i]=Normalize(names[i]);keys[i]=SearchKey(literals[i]);}
             }
         }
 
@@ -31,11 +44,16 @@ namespace ReRiff {
         }
         internal string Name(int sourceIndex) { return names[sourceIndex]; }
 
-        internal int[] Find(string query) {
+        private static void CheckCancellation(Func<bool> cancelled,int index) {
+            if((index&255)==0&&cancelled!=null&&cancelled())throw new OperationCanceledException();
+        }
+        internal int[] Find(string query) { return Find(query,null); }
+        internal int[] Find(string query,Func<bool> cancelled) {
             if(query==null)throw new ArgumentNullException("query");
             string literal=Normalize(query),key=SearchKey(literal);
             var matches=new List<int>();
             for(int i=0;i<names.Length;i++) {
+                CheckCancellation(cancelled,i);
                 if(names[i]!=null&&(query.Length==0
                     ||literals[i].IndexOf(literal,StringComparison.OrdinalIgnoreCase)>=0
                     ||keys[i].IndexOf(key,StringComparison.OrdinalIgnoreCase)>=0))matches.Add(i);

@@ -5,7 +5,7 @@ unset LD_PRELOAD LD_LIBRARY_PATH PYTHONHOME PYTHONPATH
 if { [ "${1-}" = server-control ] || [ "${1-}" = stop-servers ]; } && "$client_root/ReRiff-ClientHost" --client-host logging-status --root "$client_root/.." --log ReRiff-localserver-helper.log; then
     mkdir -p "$client_root/../logs"
     exec >> "$client_root/../logs/ReRiff-localserver-helper.log" 2>&1
-    printf 'Linux server helper: %s\n' "${2-status}"
+    printf '[%s] Linux server helper: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)" "${2-status}"
     export APPIMAGE_EXTRACT_AND_RUN=1
 fi
 exec "$client_root/ReRiff-ClientHost" --client-host "$@"

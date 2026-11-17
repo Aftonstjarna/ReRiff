@@ -70,7 +70,7 @@ class OptionalServerTests(unittest.TestCase):
         self.assertEqual(self.local.perform('status')[0],'running')
         self.assertEqual(self.local.perform('stop')[0],'stopped')
         self.assertEqual(stored.read_text(),'scores')
-        self.assertEqual((self.local.logs/'ReRiff-localserver.log').read_text(),'local server diagnostics\n')
+        self.assertRegex((self.local.logs/'ReRiff-localserver.log').read_text().splitlines()[-1],r'^\[\d{4}-.*Z\] local server diagnostics$')
         self.assertFalse(any(c[0] in ('rm','rmi','machine') for c in self.engine.calls))
         self.assertFalse(any('--privileged' in c for c in self.engine.calls))
 

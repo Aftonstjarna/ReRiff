@@ -1,3 +1,65 @@
+# ReRiff 1.4.0-beta.13 — Faster library search and clearer diagnostics
+
+## In-game summary
+
+- Search large music libraries with less repeated work.
+- Speed up repeat launches and reduce update memory use.
+- Identify clients and ReRiff accounts in timestamped logs.
+
+## Full release notes
+
+### Startup, search and updates
+
+- Cache unchanged audio-file hashes for repeat launcher song registration.
+  Validate opened-file identity, size and timestamps; expire entries after
+  24 hours. Keep registration before game startup and preserve server fallback.
+- Reuse successful automatic no-update checks for 15 minutes. Manual update
+  checks still contact GitHub; failed checks are never cached as successful.
+  Defer Windows Python setup until an update actually requires installation.
+- Reuse HTTP connections where supported for song probing and registration.
+- Reuse normalized search text across partial library snapshots, cancel obsolete
+  queries and coalesce rapid typing into one worker per search session.
+- Enumerate folders once using cached entry attributes. Preserve linked-root
+  support, nested-link exclusion, cancellation, scan limits and song identity.
+- Stream archive verification and extraction in bounded chunks. Preserve archive
+  path/link checks, expanded-size limits, preflight validation and rollback.
+
+### Diagnostics and mod loading
+
+- Add UTC millisecond timestamps to new human-readable diagnostic lines,
+  including multiline errors. Retain existing logs and machine-readable formats.
+- Add client diagnostic headers with a persistent installation ID, ReRiff account
+  UUID and server UUID, player name when available, installed version, platform
+  and process. Distinguish current identity from last-known identity; omit tokens,
+  passwords and API keys. Existing logs receive new session headers without
+  deleting earlier history.
+- Add startup/update stage timings and hash-cache hit/read counts to diagnostics.
+- Refresh the native archive manager before reserving mod volume slots. Document
+  verified original precedence: named mod archives can already override stock
+  assets, and later ordinal mod folder names take priority. Stock archives remain
+  unchanged; no replacement resource lookup is introduced.
+
+### Validation and known limitations
+
+- Offline validation includes 228 picker checks, 24 mocked-native bridge checks,
+  19 updater regressions, native timestamp/cache/mod-loader tests and isolated
+  server registration checks. Diagnostic validation covers 58 Python tests
+  (seven optional fixture skips), 25 Linux-helper tests (two optional fixture
+  skips), and native/managed logging smoke tests. Release CI builds and validates
+  the final packages before attaching them to this draft.
+- Synthetic 100,000-entry partial-index rebuilding fell from 1,217 ms to 554 ms
+  on the test machine. Chunked extraction substantially reduced Python allocation
+  peaks. These are offline measurements, not guaranteed startup or FPS gains.
+- Latest combined changes have not received a live in-game retest. Rendering and
+  Steam-provided display-name capture still need live confirmation.
+- Player names may be unavailable before login or without a supported name
+  provider. ReRiff UUIDs, not names or SteamIDs, identify accounts in diagnostics.
+- Automatic Steam account linking is not implemented: no trusted server-side
+  ticket verifier is configured. Existing account ownership remains unchanged.
+- Steam virtual-keyboard input remains unresolved; M4A playback is unsupported.
+- This beta is prepared as a draft for review. Stable and public experimental
+  download aliases remain unchanged until a separately requested publication.
+
 # ReRiff 1.4.0-beta.12 — Reinstall missing mod folders
 
 ## In-game summary

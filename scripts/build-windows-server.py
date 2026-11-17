@@ -34,6 +34,7 @@ def build(wheels, download=True):
     (target/'Progression').mkdir()
     for name in ('balance.py', 'balance.json', 'multiplayer.py'):
         shutil.copy2(ROOT/'Progression'/name, target/'Progression'/name)
+    shutil.copy2(ROOT/'packaging/logging_policy.py', target/'logging_policy.py')
     shutil.copy2(ROOT/'scripts/trace-server.py', target/'trace-server.py')
     shutil.copy2(ROOT/'LICENSE', target/'LICENSE')
     for name in ('reriff-catalog.dll','reriff-news.dll'):

@@ -32,7 +32,7 @@ namespace ReRiff {
             internal string Query="";
             internal int Revision,Published=-1,Applied=-1,Total;
             internal int[] Matches;
-            internal bool Failed,Partial;
+            internal bool Failed,Partial,Searching;
         }
         private static Session current;
         [DllImport("kernel32.dll",CharSet=CharSet.Unicode,ExactSpelling=true)]
@@ -113,20 +113,34 @@ namespace ReRiff {
         private static void Publish(Session session,LibrarySearchSong[] songs,bool partial) {
             session.Cancel.Token.ThrowIfCancellationRequested();
             string[] names=new string[songs.Length];for(int i=0;i<names.Length;i++)names[i]=songs[i].SearchText;
-            var index=new PickerSearchIndex(names);
+            PickerSearchIndex previous;
+            lock(gate){if(current!=session)return;previous=session.Index;}
+            var index=new PickerSearchIndex(names,previous,()=>session.Cancel.IsCancellationRequested);
             lock(gate){if(current!=session)return;session.Songs=songs;session.Index=index;session.Partial=partial;session.Revision++;}
             Search(session);
         }
         private static void Search(Session session) {
-            string query;int revision;PickerSearchIndex index;LibrarySearchSong[] songs;
-            lock(gate){if(current!=session||session.Index==null)return;query=session.Query;revision=session.Revision;index=session.Index;songs=session.Songs;}
+            lock(gate){if(current!=session||session.Index==null||session.Searching||session.Query.Length==0)return;session.Searching=true;}
             ThreadPool.QueueUserWorkItem(_=>{
-                try {
-                    session.Cancel.Token.ThrowIfCancellationRequested();int[] matches=index.Find(query);
-                    lock(gate){if(current!=session||session.Revision!=revision)return;session.Matches=matches;session.MatchedSongs=songs;session.Published=revision;}
-                }catch(OperationCanceledException){}catch(Exception error){lock(gate){if(current==session)session.Failed=true;}NativeReelBridge.Log("Picker worker failed: "+error.GetType().Name);}
+                // One worker per session: new revisions replace pending work,
+                // rather than filling the pool with obsolete full-library scans.
+                for(;;) {
+                    string query;int revision;PickerSearchIndex index;LibrarySearchSong[] songs;
+                    lock(gate){
+                        if(current!=session||session.Cancel.IsCancellationRequested||session.Query.Length==0||session.Published==session.Revision){session.Searching=false;return;}
+                        query=session.Query;revision=session.Revision;index=session.Index;songs=session.Songs;
+                    }
+                    try {
+                        int[] matches=index.Find(query,()=>{lock(gate)return current!=session||session.Cancel.IsCancellationRequested||session.Revision!=revision;});
+                        lock(gate){if(current==session&&session.Revision==revision){session.Matches=matches;session.MatchedSongs=songs;session.Published=revision;}}
+                    }catch(OperationCanceledException){}catch(Exception error){
+                        lock(gate){session.Searching=false;if(current==session)session.Failed=true;}
+                        NativeReelBridge.Log("Picker worker failed: "+error.GetType().Name);return;
+                    }
+                }
             });
         }
+
         private static void Restore(Session session,bool layout) {
             if(session.Saved==IntPtr.Zero)return;
             IntPtr saved=session.Saved;session.Saved=IntPtr.Zero;

@@ -121,7 +121,7 @@ namespace ReRiff {
         private void TraceGhost(string message) {
             // Observation only; never let optional diagnostics affect storage replies.
             try { Logging.Append(Path.GetDirectoryName(root), "ReRiff-singleplayer.log",
-                Stamp() + " " + message + Environment.NewLine); }
+                message + Environment.NewLine); }
             catch (IOException) { } catch (UnauthorizedAccessException) { }
         }
         private static Dictionary<string, object> Obj(params object[] pairs) {

@@ -16,6 +16,13 @@ import urllib.error
 import urllib.request
 
 from host_process import file_lock, stamp, windows_identity
+try:
+    from logging_policy import TimestampWriter, timestamp_text, diagnostic_header
+except ModuleNotFoundError:
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'packaging'))
+    from logging_policy import TimestampWriter, timestamp_text, diagnostic_header
+
 
 
 def lan_addresses(port):
@@ -201,6 +208,7 @@ class LocalServer:
         for key in ('LD_PRELOAD', 'LD_LIBRARY_PATH', 'PYTHONHOME', 'PYTHONPATH'):
             env.pop(key, None)
         with ((self.logs/'ReRiff-localserver.log').open('ab') if self.logging else open(os.devnull,'ab')) as log:
+            if self.logging:log.write(timestamp_text(diagnostic_header(self.root)).encode('utf-8'));log.flush()
             command = ([str(self.python), '-I', str(self.image)] if self.windows else [str(self.image)]) + ['--serve', '--root', str(self.root)]
             options = {'creationflags': subprocess.CREATE_NO_WINDOW} if self.windows else {'start_new_session': True}
             child = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=log, stderr=log, env=env, **options)
@@ -284,7 +292,7 @@ def main():
             logs = args.root.resolve().parent/'logs'
             logs.mkdir(parents=True, exist_ok=True)
             with (logs/'ReRiff-localserver.log').open('a', encoding='utf-8') as log:
-                log.write(type(error).__name__+': '+str(error)+'\n')
+                writer=TimestampWriter(log);writer.write(type(error).__name__+': '+str(error)+'\n');writer.flush()
         except OSError:
             pass
     # Windows GetPrivateProfileString reads Unicode INI reliably with a BOM.

@@ -55,7 +55,7 @@ namespace ReRiff {
                 string folder = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
                 if(!Logging.Enabled(folder)||System.Threading.Interlocked.Increment(ref networkEvents)>32)return;
                 Logging.Append(folder,"ReRiff-network.log",
-                    DateTime.UtcNow.ToString("o") + Environment.NewLine + error.ToString() + Environment.NewLine);
+                    error.ToString() + Environment.NewLine);
             } catch (Exception) {
                 // Diagnostics must never change exception propagation or fail startup.
             } finally { recordingException = false; }
@@ -201,8 +201,8 @@ namespace ReRiff {
                     if(line.StartsWith(identity+"\t",StringComparison.Ordinal)&&line!=entry)alias=true;
                 }
                 if(!known)File.AppendAllText(file,entry+Environment.NewLine);
-                Logging.Append(folder,"ReRiff-client.log",DateTime.UtcNow.ToString("o")+
-                    " server_id="+identity+" endpoint="+endpoint+" known_alias="+alias.ToString().ToLowerInvariant()+Environment.NewLine);
+                Logging.Append(folder,"ReRiff-client.log",
+                    "server_id="+identity+" endpoint="+endpoint+" known_alias="+alias.ToString().ToLowerInvariant()+Environment.NewLine);
             } catch(IOException) { } catch(UnauthorizedAccessException) { }
         }
 
@@ -213,7 +213,7 @@ namespace ReRiff {
         private static void Log(string folder, string endpoint, string reason) {
             try {
                 Logging.Append(folder,"ReRiff-client.log",
-                    DateTime.UtcNow.ToString("o") + " endpoint=" + endpoint + " reason=" + reason + Environment.NewLine);
+                    "endpoint=" + endpoint + " reason=" + reason + Environment.NewLine);
             } catch (IOException) { }
               catch (UnauthorizedAccessException) { }
         }

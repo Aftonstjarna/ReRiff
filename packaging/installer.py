@@ -15,7 +15,7 @@ import shutil
 import subprocess
 
 from shared_patch import apply_patch, digest
-from logging_policy import logging_enabled, logging_config, client_config, client_settings, archive_grouped_logs
+from logging_policy import logging_enabled, logging_config, client_config, client_settings, archive_grouped_logs, TimestampWriter, diagnostic_header
 
 
 def auto_game():
@@ -629,6 +629,7 @@ def main():
             print(found)
         return
     game = args.game_dir or auto_game()
+    if game is not None:print(diagnostic_header(game),flush=True)
     if game is None:
         parser.error('Steam installation not found. Pass --game-dir pointing to the folder containing Game.exe.')
     if args.platform == 'linux' and sys.version_info < (3, 10):
@@ -642,4 +643,8 @@ def main():
 
 
 if __name__ == '__main__':
+    # Installer stdout/stderr are captured by both graphical setup programs.
+    if not any(option in sys.argv for option in ('--print-game-dir', '--print-music-dir')):
+        sys.stdout = TimestampWriter(sys.stdout)
+        sys.stderr = TimestampWriter(sys.stderr)
     main()

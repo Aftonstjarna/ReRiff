@@ -69,3 +69,34 @@ folders; retain the migration backup when reverting. Native mount tests do not
 replace a live rendering check in the game.
 
 Native evidence and test scope: [mods VFS research](../reports/MODS-VFS-DIRECTORY.md).
+
+## Replacing original assets
+
+Named mods already override duplicate stock resource paths in beta.11 and
+beta.12. Put a valid native index/archive pair in `mods/<your-mod>/vfs.dat` and
+`vfs.zip`, containing the original resource path. No extra override flag or
+manifest is needed. For example, ALF livery 1 uses
+`graphics/vehicles/decals/alf_01/batchtextures.brres` in the native lookup.
+Use the existing archive writer's lowercase resource names; its native index
+must agree with the ZIP. An archive pair is required, not just loose textures.
+
+The original secondary loader inserts archives by descending volume ID, and
+lookup returns the first match. Named folders receive increasing free IDs in
+ordinal folder-name order, so the **later folder wins** when named mods contain
+the same path. Numbered archives retain their native ID priority; a higher-ID
+legacy archive can beat a named mod. Paths absent from higher-priority archives
+fall back to lower-priority archives, including stock volume 0.
+
+Fully restart after adding, changing or removing an asset mod. Already loaded
+textures are not hot-reloaded. Stock archives remain untouched. Native read
+regressions verify the actual original ALF resource is replaced and original
+bytes remain available without the test mods; garage/race rendering and decal
+shader semantics still require visual validation.
+
+Development fix: discovery now refreshes the file-manager pointer at scan time,
+so hooks installed before manager creation reserve already mounted IDs correctly.
+This startup timing fix is not yet included in beta.12.
+
+See [override validation](../reports/MODS-VFS-OVERRIDES.md) for evidence and
+reproduction instructions. Earlier research described the secondary loader as
+appending records; that description was incorrect.

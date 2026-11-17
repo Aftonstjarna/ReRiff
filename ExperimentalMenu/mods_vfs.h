@@ -9,6 +9,7 @@ static ModsScanFn mods_scan_original;
 static WCHAR mods_directory[MAX_PATH];
 static BOOL mods_scanned,mods_only;
 static BYTE *mods_manager;
+static BYTE **mods_manager_global;
 typedef struct { BYTE *begin,*end,*capacity; } ModsVector;
 static void mods_scan_path(const WCHAR *folder,void *entries){
     ModsNativeString path={0};path.data.text=folder;
@@ -23,6 +24,7 @@ static void __fastcall mods_scan(const ModsNativeString *original,void *entries)
     mods_scan_path(mods_directory,entries);
     ModsVector *vector=entries;DWORD used=1;
     for(BYTE *p=vector->begin;p<vector->end;p+=28)if(*(unsigned *)p<32)used|=1u<<*(unsigned *)p;
+    if(mods_manager_global)mods_manager=*mods_manager_global;
     if(mods_manager&&readable(mods_manager,0x54)){
         BYTE *start=*(BYTE **)(mods_manager+0x48),*end=*(BYTE **)(mods_manager+0x4c);
         for(BYTE *p=start;p<end;p+=20)if(*(unsigned *)(p+12)<32)used|=1u<<*(unsigned *)(p+12);
@@ -72,11 +74,13 @@ static BOOL install_mods_vfs(BYTE *base,const WCHAR *executable){
     const BYTE scanner[]={0x55,0x8b,0xec,0x6a,0xff};
     if(memcmp(site,call,5)||memcmp(base+0x15e130,scanner,5))return FALSE;
     DWORD old,ignored;if(!VirtualProtect(site,5,PAGE_EXECUTE_READWRITE,&old))return FALSE;
+    mods_manager_global=(BYTE **)(base+0x7fcd2c);
     mods_scan_original=(ModsScanFn)(base+0x15e130);
     *(int32_t *)(site+1)=(int32_t)((BYTE *)(uintptr_t)mods_scan-(site+5));
     FlushInstructionCache(GetCurrentProcess(),site,5);VirtualProtect(site,5,old,&ignored);
-    /* Network initialization can follow the initial mount pass. Append mods
-       through the game's existing secondary loader in that case. */
+    /* Network initialization can follow the initial mount pass. Load mods
+       through the game's existing secondary loader in that case. It inserts
+       records by descending volume ID, enabling native asset overrides. */
     BYTE *manager=*(BYTE **)(base+0x7fcd2c);mods_manager=manager;
     if(manager&&readable(manager,0x54)&&*(void **)(manager+0x48)){
         mods_only=TRUE;((void(__thiscall *)(void *))(base+0x15ed80))(manager);mods_only=FALSE;

@@ -1,5 +1,10 @@
 # Loading additional VFS pairs from mods
 
+**Correction (2026-11-16):** the secondary loader inserts by descending volume
+ID; it does not append. Named mods already override stock resources. See
+[the original-byte/native-read evidence](MODS-VFS-OVERRIDES.md). Historical
+append wording below is superseded by that finding.
+
 ## Original reference and evidence
 
 Original Windows depot 351991, build 1687655, Game.exe SHA-256

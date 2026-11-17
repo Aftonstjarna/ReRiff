@@ -271,6 +271,8 @@ class NativeClientTests(unittest.TestCase):
         archive=self.root/'oversize.run';archive.write_bytes(b'#!/bin/sh\n__RERIFF_PAYLOAD__\n'+gzip.compress(member.tobuf()+b'\0'*1024))
         work=self.root/'oversize';work.mkdir();self.prepare(archive,digest(archive.read_bytes()),work,False)
         self.assertIn('Release is too large',(self.game/'logs/update.log').read_text())
+        for line in (self.game/'logs/update.log').read_text().splitlines():
+            self.assertRegex(line,r'^\[\d{4}-.*\.\d{3}Z\] ')
         self.assertFalse((self.root/'escape').exists());self.retained()
     @unittest.skipUnless(args.installer and args.original_dir,'Complete .run fixture is optional')
     def test_self_extractor_without_python(self):

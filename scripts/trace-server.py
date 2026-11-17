@@ -151,6 +151,14 @@ def instrument(server, output):
 
 
 def main():
+    import sys
+    try:
+        from logging_policy import TimestampWriter
+    except ModuleNotFoundError:
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'packaging'))
+        from logging_policy import TimestampWriter
+    sys.stdout = TimestampWriter(sys.stdout)
+    sys.stderr = TimestampWriter(sys.stderr)
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--server-dir', type=Path, default=Path(__file__).resolve().parent/'server')
     parser.add_argument('--report', type=Path, help='Summarize a JSONL session instead of starting server')

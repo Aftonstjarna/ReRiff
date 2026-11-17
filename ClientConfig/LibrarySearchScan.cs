@@ -50,8 +50,21 @@ namespace ReRiff {
                 cancellation.ThrowIfCancellationRequested();
                 string folder=pending.Pop();if(!visited.Add(folder))continue;
                 try {
-                    foreach(string file in Directory.EnumerateFiles(folder)) {
+                    // FileSystemInfo retains attributes from enumeration: one pass,
+                    // without a separate attribute lookup for every directory.
+                    foreach(var entry in new DirectoryInfo(folder).EnumerateFileSystemInfos()) {
                         cancellation.ThrowIfCancellationRequested();
+                        string file=entry.FullName;
+                        FileAttributes attributes;
+                        try{attributes=entry.Attributes;}
+                        catch(IOException){unreadable.Add(file);continue;}
+                        catch(UnauthorizedAccessException){unreadable.Add(file);continue;}
+                        if((attributes&FileAttributes.Directory)!=0) {
+                            // Explicit roots may be links; nested links/junctions
+                            // remain excluded to prevent cycles and tree escapes.
+                            if((attributes&FileAttributes.ReparsePoint)==0)pending.Push(file);
+                            continue;
+                        }
                         if(!Audio(file)||!seen.Add(file))continue;
                         if(songs.Count==limit)return new LibrarySearchScanResult(songs,unreadable,true);
                         LibrarySearchSong song;
@@ -60,14 +73,6 @@ namespace ReRiff {
                         if(progress!=null&&songs.Count!=publishedCount&&clock.ElapsedMilliseconds-publishedAt>=500){
                             progress(songs.ToArray());publishedAt=clock.ElapsedMilliseconds;publishedCount=songs.Count;
                         }
-                    }
-                    foreach(string child in Directory.EnumerateDirectories(folder)) {
-                        cancellation.ThrowIfCancellationRequested();
-                        // A selected root may itself be the Linux music link.
-                        // Do not follow nested links/junctions into cycles or
-                        // unrelated trees. They can be supplied as roots.
-                        try {if((File.GetAttributes(child)&FileAttributes.ReparsePoint)==0)pending.Push(child);}
-                        catch(IOException){unreadable.Add(child);}catch(UnauthorizedAccessException){unreadable.Add(child);}
                     }
                 }catch(IOException){unreadable.Add(folder);}catch(UnauthorizedAccessException){unreadable.Add(folder);}
             }
