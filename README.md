@@ -16,7 +16,7 @@ leaderboards and ghosts.
 
 ![ReRiff launcher with server settings](docs/images/reriff-launcher.png)
 
-Development launcher shown. Hover over checkboxes for explanations.
+Beta.12 launcher shown. Hover over checkboxes for explanations.
 
 ## Install
 
