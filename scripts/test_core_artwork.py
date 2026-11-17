@@ -70,6 +70,9 @@ with tempfile.TemporaryDirectory(prefix='reriff artwork ü ') as temp:
     plan(root/'conflict',False,reserved=stem+'.dat')
     (game/(stem+'.dat')).write_bytes(b'user modification');plan(root/'modified',False)
     (game/(stem+'.dat')).unlink();plan(root/'missing',False)
+    import shutil
+    shutil.rmtree(game/'mods')
+    assert plan(root/'removed-tree')['schema']==2
     assert (game/'VFS0002.DAT').read_bytes()==b'unrelated mod'
     assert (game/'vfs.dat').read_bytes()==b'original' and (game/'vfs.zip').read_bytes()==b'original zip'
 print('Core artwork planner: named mod, legacy migration, repeat, upgrade, integrity, conflicts and stock preservation passed.')

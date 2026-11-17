@@ -444,7 +444,7 @@ def install(bundle, game, backups, platform, dry_run=False, restore=False, music
                 removals = Path(scratch)/'.reriff-language-removals.json'
                 if removals.is_file():
                     for name, expected in json.loads(removals.read_text()).items():
-                        if not re.fullmatch(r'(?:mods/)?vfs[1-9a-f][0-9a-f]?\.(?:dat|zip)|(?:fonts|mods/noto-cjk-font)/noto-cjk/(?:jp|kr|sc|tc|hk)(?:64|96)?\.rrcf|(?:fonts|mods/noto-latin-font)/noto-latin/latin(?:32|64|96)\.rrcf|(?:fonts|mods/noto-(?:cjk|latin)-font)/noto-(?:cjk|latin)/OFL\.txt|mods/noto-(?:cjk|latin)-font/vfs\.(?:dat|zip)', name) or name in plan or (game/name).is_symlink() or digest((game/('mods/'+name if name.startswith('vfs') and (game/'mods/.reriff-vfs').is_file() else name)).read_bytes()) != expected:
+                        if not re.fullmatch(r'(?:mods/)?vfs[1-9a-f][0-9a-f]?\.(?:dat|zip)|(?:fonts|mods/noto-cjk-font)/noto-cjk/(?:jp|kr|sc|tc|hk)(?:64|96)?\.rrcf|(?:fonts|mods/noto-latin-font)/noto-latin/latin(?:32|64|96)\.rrcf|(?:fonts|mods/noto-(?:cjk|latin)-font)/noto-(?:cjk|latin)/OFL\.txt|mods/noto-(?:cjk|latin)-font/vfs\.(?:dat|zip)|localserver/languages/(?:cjk|latin)\.json', name) or name in plan or (game/name).is_symlink() or digest((game/('mods/'+name if name.startswith('vfs') and (game/'mods/.reriff-vfs').is_file() else name)).read_bytes()) != expected:
                             raise ValueError('Unsafe or changed obsolete CJK archive: '+name)
                         plan[name] = None
         artwork = manifest.get('core_artwork')
@@ -495,7 +495,7 @@ def install(bundle, game, backups, platform, dry_run=False, restore=False, music
                 raise ValueError(result.stdout+result.stderr)
             plan = {path.relative_to(stage).as_posix():path.read_bytes() for path in stage.rglob('*') if path.is_file() and path.name != '.reriff-mods-removals.json'}
             for name in json.loads((stage/'.reriff-mods-removals.json').read_text()):
-                if not re.fullmatch(r'(?:mods/)?vfs[0-9a-fA-F]+\.(?:dat|zip)|(?:fonts|mods/noto-(?:cjk|latin)-font)/noto-(?:cjk|latin)/(?:[a-z0-9]+\.rrcf|OFL\.txt)|mods/noto-(?:cjk|latin)-font/vfs\.(?:dat|zip)', name):
+                if not re.fullmatch(r'(?:mods/)?vfs[0-9a-fA-F]+\.(?:dat|zip)|(?:fonts|mods/noto-(?:cjk|latin)-font)/noto-(?:cjk|latin)/(?:[a-z0-9]+\.rrcf|OFL\.txt)|mods/noto-(?:cjk|latin)-font/vfs\.(?:dat|zip)|localserver/languages/(?:cjk|latin)\.json', name):
                     raise ValueError('Unsafe mod archive removal: '+name)
                 plan[name] = None
     if restore and state:

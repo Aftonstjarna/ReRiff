@@ -1,3 +1,45 @@
+# ReRiff 1.4.0-beta.12 — Reinstall missing mod folders
+
+## In-game summary
+
+- Recreate a removed mods folder when reinstalling ReRiff.
+- Restore selected fonts using the existing installer checkboxes.
+- Restore bundled artwork without touching the stock archives.
+
+## Full release notes
+
+### Installer repair
+
+- Treat a completely removed mods directory as a reinstall when named-mod
+  ownership records remain. Restore checked CJK and Latin font packs using
+  their existing installer controls and clear stale records for unchecked packs.
+- Restore bundled ReRiff artwork when its named-mod directory tree was removed.
+  Keep settings, saves and original game archives unchanged.
+- Retain strict checks for partial installations, modified files, unsafe paths
+  and links. This recovery applies to a completely absent mods directory, not
+  arbitrary damaged or edited archives.
+- Support stale font-record removal in both the native Linux installer and
+  Windows installer staging. No manual receipt cleanup is needed for this case.
+
+### Build dependency security
+
+- Update build-only Pillow to 13.0.0 and fontTools to 4.60.2, including the
+  experimental image-build workflows. These address the dependency advisories
+  recorded in docs/SECURITY-TRIAGE-2026-11-16.md; they are not client runtime
+  Python dependencies.
+
+### Validation and known limitations
+
+- Local checks cover removed-tree reinstalls with one or both font packs,
+  unchecked-pack cleanup, staging without writes, artwork restoration and
+  existing conflict/rollback protections. Native installer checks passed
+  (25 tests, two optional full-package/original fixtures skipped locally).
+- UI artwork, prestige artwork, CJK atlases and Latin glyph/metrics tests passed
+  with the updated build dependencies. Release CI validates Windows helpers,
+  native clients and final installer packages before publication.
+- Steam virtual-keyboard input remains unresolved; M4A playback is unsupported.
+- This is an opt-in prerelease; stable remains the default update channel.
+
 # ReRiff 1.4.0-beta.11 — Named mod folders and independent fonts
 
 ## In-game summary

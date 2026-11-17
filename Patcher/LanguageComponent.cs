@@ -98,7 +98,17 @@ internal static class LanguageComponent
     }
     static string Under(string game, string name) { name=ModsVfs.Resolve(game,name); if (name.Length == 0 || name.Contains('\\') || name.Contains(':') || name.Split('/').Any(p => p == "" || p == "." || p == "..") || Path.IsPathRooted(name)) throw new IOException("Unsafe language component path."); string target = Path.GetFullPath(game); foreach (string part in name.Split('/')) { target = Path.Combine(target, part); if ((File.Exists(target) || Directory.Exists(target)) && (File.GetAttributes(target) & FileAttributes.ReparsePoint) != 0) throw new IOException("Language component paths must not be links."); } return target; }
     static bool FontPath(string name) => Regex.IsMatch(name,@"^mods/noto-(cjk|latin)-font/vfs\.(dat|zip)$") || (name.StartsWith("mods/noto-cjk-font/noto-cjk/") && FontPath("fonts/"+name.Substring("mods/noto-cjk-font/".Length))) || (name.StartsWith("mods/noto-latin-font/noto-latin/") && FontPath("fonts/"+name.Substring("mods/noto-latin-font/".Length))) || Regex.IsMatch(name, @"^vfs[1-9a-f][0-9a-f]?\.(dat|zip)$") || Regex.IsMatch(name, @"^fonts/noto-cjk/(jp|kr|sc|tc|hk)(64|96)?\.rrcf$") || name == "fonts/noto-cjk/OFL.txt" || Regex.IsMatch(name,@"^fonts/noto-latin/(latin(32|64|96)\.rrcf|OFL\.txt)$");
-    internal static bool Present(string game,string pack="cjk") => File.Exists(Under(game, StateFor(pack)));
+    // A deliberately removed mods tree must not leave installed-component flags behind.
+    // Restrict recovery to named-mod records; partial or modified installs stay strict.
+    internal static bool RemovedModTree(string game,string pack) {
+        string record=Under(game,StateFor(pack)),mods=Under(game,"mods");
+        if(!File.Exists(record)||Directory.Exists(mods)||File.Exists(mods))return false;
+        var old=Read<Installed>(File.ReadAllBytes(record));
+        return old.schema==2&&old.files!=null&&old.files.Count>0&&old.archives!=null&&
+            old.archives.Count==1&&old.archives.Values.Single()==ModRoot(pack)+"vfs"&&
+            old.files.Keys.All(name=>name.StartsWith(ModRoot(pack),StringComparison.Ordinal)&&FontPath(name));
+    }
+    internal static bool Present(string game,string pack="cjk") => File.Exists(Under(game, StateFor(pack)))&&!RemovedModTree(game,pack);
     internal static bool Enabled(string game,string pack="cjk")
     {
         string path = ReRiff.ConfigFiles.ReadPath(game,"languages"); if (!File.Exists(path)) return false;
@@ -176,6 +186,7 @@ internal static class LanguageComponent
     }
     internal static Dictionary<string, byte[]> Plan(string game,string asset,string expected,bool enable,string pack="cjk") {
         StateFor(pack);var plan=MigrateFonts(game);
+        foreach(string removed in new[]{"cjk","latin"})if(RemovedModTree(game,removed))plan[StateFor(removed)]=null;
         if(enable&&asset!="") {
             if(!Regex.IsMatch(expected,@"^[0-9a-fA-F]{64}$")||Hash(File.ReadAllBytes(asset))!=expected.ToLowerInvariant())throw new IOException("Font download checksum mismatch.");
             using(var zip=ZipFile.OpenRead(asset)) {
@@ -264,6 +275,7 @@ internal static class LanguageComponent
     internal static Dictionary<string,byte[]> Selections(string game,string cjkAsset,string cjkHash,bool? cjk,string latinAsset,string latinHash,bool? latin) {
         var result=new Dictionary<string,byte[]>(StringComparer.OrdinalIgnoreCase);
         if(latin==null)return cjk.HasValue?Plan(game,cjkAsset,cjkHash,cjk.Value):result;
+        foreach(string removed in new[]{"cjk","latin"})if(RemovedModTree(game,removed))result[StateFor(removed)]=null;
         string shadow=Path.Combine(Path.GetTempPath(),"reriff-fonts-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(shadow);
         try {
             if(File.Exists(Under(game,ModsVfs.Marker)))Atomic(Under(shadow,ModsVfs.Marker),File.ReadAllBytes(Under(game,ModsVfs.Marker)));

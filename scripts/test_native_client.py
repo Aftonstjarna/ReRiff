@@ -41,6 +41,18 @@ class NativeClientTests(unittest.TestCase):
                        'files':{},'patches':{},'required_existing':{},'vanilla_originals':{}}
         self.env=dict(os.environ,PATH='/no-system-tools')
         for name in ('PYTHONHOME','PYTHONPATH','LD_LIBRARY_PATH','LD_PRELOAD'):self.env.pop(name,None)
+    def test_removed_mods_clears_unselected_font_records(self):
+        for pack in ('cjk','latin'):
+            stem='mods/noto-'+pack+'-font/vfs'
+            record=self.game/('localserver/languages/'+pack+'.json');record.parent.mkdir(parents=True,exist_ok=True)
+            record.write_text(json.dumps({'schema':2,'version':'old','archives':{'combined':stem},'files':{stem+'.zip':'0'*64,stem+'.dat':'0'*64}}))
+        self.manifest['mods_vfs']=True
+        self.package();self.install('--no-music-link');self.retained()
+        self.assertTrue((self.game/'mods').is_dir())
+        for pack in ('cjk','latin'):
+            self.assertFalse((self.game/('localserver/languages/'+pack+'.json')).exists())
+            self.assertFalse((self.game/('mods/noto-'+pack+'-font')).exists())
+
     def package(self,files=None):
         for name,data in (files or {'payload/a.txt':b'new value'}).items():
             p=self.bundle/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes(data)

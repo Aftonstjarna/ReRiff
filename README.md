@@ -4,7 +4,7 @@ Play Riff Racer on Windows or Linux/Proton with singleplayer, shared
 leaderboards and ghosts.
 
 [Download stable](https://github.com/Aftonstjarna/ReRiff/releases/latest)
-· [Try the beta](https://github.com/Aftonstjarna/ReRiff/releases/tag/v1.4.0-beta.11)
+· [Try the beta](https://github.com/Aftonstjarna/ReRiff/releases/tag/v1.4.0-beta.12)
 · [Wiki and guides](https://github.com/Aftonstjarna/ReRiff/wiki)
 · [Get help](https://github.com/Aftonstjarna/ReRiff/issues)
 
@@ -61,7 +61,7 @@ check **Use experimental releases** to try betas.
 
 ## Current beta
 
-[1.4.0-beta.11](https://github.com/Aftonstjarna/ReRiff/releases/tag/v1.4.0-beta.11)
+[1.4.0-beta.12](https://github.com/Aftonstjarna/ReRiff/releases/tag/v1.4.0-beta.12)
 adds named mod folders and separate CJK/Latin font packs. It also includes
 whole-library music search, experimental prestige progression and Last.fm
 scrobbling with protected credentials.

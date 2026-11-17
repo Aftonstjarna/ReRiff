@@ -35,6 +35,12 @@ Bundled ReRiff artwork installs in `mods/reriff-assets/`. Updates reuse that
 folder and migrate hash-verified older numbered artwork pairs. The stock
 `vfs.dat` and `vfs.zip` remain untouched.
 
+Starting with beta.12: if the entire `mods/` folder was removed,
+setup recreates it and reinstalls the font packs selected by the existing
+checkboxes. Stale named-font records for unselected packs are cleared; bundled
+artwork is restored. Partial or modified installations still require integrity
+checks and are not silently overwritten.
+
 CJK and Latin install independently. Each has its own textures, metrics, license
 and ownership record. Disabling a language retains its files. Updating a font
 pack leaves the other pack's archive unchanged. The installer splits older

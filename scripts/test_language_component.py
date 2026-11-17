@@ -72,3 +72,22 @@ with tempfile.TemporaryDirectory(prefix='reriff fonts ü ') as temp:
     game=root/'together';game.mkdir();call(game,extra=(*assets['cjk'],'--latin-enable','true','--latin-asset',assets['latin'][1],'--latin-sha256',assets['latin'][3]))
     assert (game/'mods/noto-cjk-font/vfs.zip').exists() and (game/'mods/noto-latin-font/vfs.zip').exists()
     print('PASS: failed-write rollback and simultaneous selections',flush=True)
+
+    # Near-fresh install: deleting mods leaves receipts, but checkboxes reinstall
+    # selected packs and clear the absent, unselected pack without resurrecting it.
+    import shutil
+    shutil.rmtree(game/'mods')
+    before=snapshot(game);stage=root/'removed-stage'
+    call(game,action='stage',extra=(*assets['cjk'],'--stage',path(stage),'--latin-enable','false'))
+    assert snapshot(game)==before
+    assert (stage/'mods/noto-cjk-font/vfs.zip').is_file()
+    assert not (stage/'mods/noto-latin-font').exists()
+    assert 'localserver/languages/latin.json' in json.loads((stage/'.reriff-language-removals.json').read_text())
+    call(game,extra=(*assets['cjk'],'--latin-enable','false'))
+    assert (game/'mods/noto-cjk-font/vfs.zip').is_file()
+    assert not (game/'localserver/languages/latin.json').exists()
+    call(game,'latin',extra=assets['latin'])
+    shutil.rmtree(game/'mods')
+    call(game,extra=(*assets['cjk'],'--latin-enable','true','--latin-asset',assets['latin'][1],'--latin-sha256',assets['latin'][3]))
+    assert (game/'mods/noto-cjk-font/vfs.zip').is_file() and (game/'mods/noto-latin-font/vfs.zip').is_file()
+    print('PASS: removed mods tree, dry staging, selected packs and stale receipt cleanup',flush=True)
