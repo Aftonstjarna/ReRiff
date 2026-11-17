@@ -36,8 +36,10 @@ sh ReRiff-<version>-linux.run
 
 Choose the folder containing **Game.exe**, then click **Install**. Leave
 **Link music folder** enabled to make your Linux music folder available in-game.
-Keep your working Proton configuration; the game still needs its Windows .NET
-Framework setup. Do not run the installer with `sudo`.
+Keep your working Proton configuration. Stock Proton Experimental passed our
+song-generation test without a manual .NET install; see the
+[Proton test findings](https://github.com/Aftonstjarna/ReRiff/wiki/Proton-runtime-tests).
+Do not run the installer with `sudo`.
 
 [Detailed installation guide](https://github.com/Aftonstjarna/ReRiff/wiki/Installation)
 · [Launch through Steam](https://github.com/Aftonstjarna/ReRiff/wiki/Steam-launch-options)
