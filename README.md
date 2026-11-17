@@ -28,18 +28,27 @@ original files.
 **ReRiff-Setup.exe**, and choose the game's **Game.exe**. Keep the extracted files
 together until setup finishes. You do not need to install Python manually.
 
-**Linux/Proton:** download `ReRiff-<version>-linux.run` and run:
+**Linux/Proton:** download `ReRiff-<version>-linux.run`.
 
-```sh
-sh ReRiff-<version>-linux.run
+1. Right-click the downloaded file and open **Properties**.
+2. Under **Permissions**, enable **Allow executing file as program** (the wording
+   varies by desktop), then close Properties.
+3. Double-click the file and choose **Run** if prompted.
+4. Choose the folder containing **Game.exe**, then click **Install**. Leave
+   **Link music folder** enabled to make your Linux music folder available in-game.
+
+In Steam, right-click **Riff Racer → Properties → General → Launch Options** and enter:
+
+```text
+"/path/to/Riff Racer/ReRiff-Launcher.sh" -- %command%
 ```
 
-Choose the folder containing **Game.exe**, then click **Install**. Leave
-**Link music folder** enabled to make your Linux music folder available in-game.
+Replace `/path/to/Riff Racer` with your actual game folder, keeping the quotes
+and `-- %command%`.
+
 Keep your working Proton configuration. Stock Proton Experimental passed our
 song-generation test without a manual .NET install; see the
 [Proton test findings](https://github.com/Aftonstjarna/ReRiff/wiki/Proton-runtime-tests).
-Do not run the installer with `sudo`.
 
 [Detailed installation guide](https://github.com/Aftonstjarna/ReRiff/wiki/Installation)
 · [Launch through Steam](https://github.com/Aftonstjarna/ReRiff/wiki/Steam-launch-options)
