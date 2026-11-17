@@ -11,7 +11,7 @@ trap 'rm -rf -- "$staging"' EXIT
 # Explicit inputs exclude local game data, Git metadata and household env files.
 mkdir -p "$staging/packaging" "$staging/scripts" "$staging/docker" "$staging/vendor"
 cp -a "$project_dir/LinuxRuntime" "$project_dir/ServerSync" "$project_dir/LICENSE" "$project_dir/VERSION" "$staging/"
-cp -a "$project_dir/packaging/appimage" "$project_dir/packaging/requirements.txt" "$staging/packaging/"
+cp -a "$project_dir/packaging/appimage" "$project_dir/packaging/requirements.txt" "$project_dir/packaging/logging_policy.py" "$staging/packaging/"
 cp "$project_dir/scripts/trace-server.py" "$staging/scripts/"
 cp "$project_dir/docker/server.py" "$project_dir/docker/requirements.txt" "$staging/docker/"
 mkdir -p "$staging/Progression"
