@@ -34,6 +34,11 @@ on:
       - docs/tests/**
       - .github/workflows/container.yml
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish the tested container image (disable for draft review)
+        type: boolean
+        default: true
 
 concurrency:
   group: container-${{ github.ref }}
@@ -60,10 +65,12 @@ jobs:
         id: image
         env:
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          DISPATCH_PUBLISH: ${{ inputs.publish }}
         run: |
           echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
           publish=false
           if [[ "$GITHUB_EVENT_NAME" != pull_request ]] && \
+             { [[ "$GITHUB_EVENT_NAME" != workflow_dispatch ]] || [[ "$DISPATCH_PUBLISH" == true ]]; } && \
              { [[ "$GITHUB_REF" == "refs/heads/$DEFAULT_BRANCH" ]] || [[ "$GITHUB_REF" == refs/heads/codex/experimental-server ]] || [[ "$GITHUB_REF" == refs/tags/v* ]]; }; then
             publish=true
           fi

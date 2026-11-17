@@ -33,6 +33,16 @@ class ServerIdentityTests(unittest.TestCase):
         self.original = json.dumps(self.record).encode()
         self.file.write_bytes(self.original)
 
+    def test_request_log_timestamps_every_line(self):
+        module_spec = importlib.util.spec_from_file_location('timestamp_backend', SERVER / 'riffapi-local.py')
+        backend = importlib.util.module_from_spec(module_spec)
+        module_spec.loader.exec_module(backend)
+        backend.LOG_FILE = str(self.data / 'timestamps.log')
+        backend.log_line('first\n  continuation\n日本語')
+        lines=Path(backend.LOG_FILE).read_text().splitlines()
+        self.assertEqual([line[27:] for line in lines],['first','  continuation','日本語'])
+        for line in lines:self.assertRegex(line,r'^\[\d{4}-.*\.\d{3}Z\] ')
+
     def test_identity_survives_restart_and_concurrent_initialization(self):
         with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
             values = list(pool.map(lambda _: identity.server_id(self.data), range(32)))

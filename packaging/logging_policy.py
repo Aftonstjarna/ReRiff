@@ -75,3 +75,94 @@ def archive_grouped_logs(game):
         source.rename(target)
         moved[str(source)]=str(target)
     return moved
+
+# UTC and milliseconds match native/managed diagnostics. Wrap only human logs,
+# never machine-readable stdout, INI completion records or JSONL traces.
+def timestamp_text(text):
+    from datetime import datetime, timezone
+    import re
+    stamp = '['+datetime.now(timezone.utc).isoformat(timespec='milliseconds').replace('+00:00', 'Z')+'] '
+    return ''.join((line if re.match(r'^\[\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z\] ', line) else stamp+line)+'\n'
+                   for line in str(text).splitlines())
+
+
+def diagnostic_header(game, create_client_id=False):
+    import os, platform, uuid
+    def clean(value):
+        return ''.join(' ' if ord(c)<32 or 127<=ord(c)<160 or c in '[]\u2028\u2029' else c for c in str(value))[:256] or 'unavailable'
+    values={};version='unavailable';client='unavailable'
+    if game is not None:
+        game=Path(game)
+        try:
+            path=game/'localserver/diagnostic-client-id.txt'
+            if create_client_id:
+                path.parent.mkdir(parents=True,exist_ok=True)
+                try:
+                    with path.open('x',encoding='ascii') as output:output.write(str(uuid.uuid4()))
+                except FileExistsError:pass
+            if path.stat().st_size==36:client=str(uuid.UUID(path.read_text(encoding='ascii')))
+        except (OSError,ValueError,UnicodeError):pass
+        try:
+            path=game/'localserver/diagnostic-context.ini'
+            if path.stat().st_size<=8192:
+                raw=path.read_bytes();ini=configparser.ConfigParser(interpolation=None)
+                ini.read_string(raw.decode('utf-16' if raw.startswith((b'\xff\xfe',b'\xfe\xff')) else 'utf-8-sig'))
+                values=dict(ini['diagnostic']) if ini.has_section('diagnostic') else {}
+        except (OSError,UnicodeError,configparser.Error):pass
+        try:
+            path=game/'localserver/client-version.txt'
+            if path.stat().st_size<256:version=clean(path.read_text().strip())
+        except (OSError,UnicodeError):pass
+    def identity(key):
+        try:return str(uuid.UUID(values.get(key,'')))
+        except ValueError:return 'unavailable'
+    return ('[diagnostic] client_id='+client+'; player='+clean(values.get('player','unavailable'))+
+            '; account_id='+identity('account_id')+'; server_id='+identity('server_id')+
+            '; identity=last-known; installed_client='+version+'; platform='+platform.system()+
+            '; process=python; pid='+str(os.getpid()))
+
+
+class TimestampWriter:
+    """Line-aware diagnostic sink; preserves print fragments and tracebacks."""
+    def __init__(self, stream, game=None):
+        import threading
+        self.stream = stream
+        if game is None:
+            name=getattr(stream,'name',None)
+            if isinstance(name,str) and Path(name).parent.name=='logs':game=Path(name).parent.parent
+        self.game=game
+        self.header_pending=game is not None
+        self.pending = ''
+        self.continuation = False
+        self.lock = threading.RLock()
+
+    def _emit(self, newline):
+        if self.header_pending:
+            self.stream.write(timestamp_text(diagnostic_header(self.game,create_client_id=True)))
+            self.header_pending=False
+        text = self.pending.rstrip('\r')
+        self.pending = ''
+        stamped = text if self.continuation else timestamp_text(text or '\n').rstrip('\n')
+        self.stream.write(stamped+('\n' if newline else ''))
+        if newline:
+            self.stream.flush()
+        self.continuation = not newline
+
+    def write(self, text):
+        with self.lock:
+            for part in text.splitlines(keepends=True):
+                self.pending += part.rstrip('\n')
+                if part.endswith('\n'):
+                    self._emit(True)
+                elif len(self.pending) >= 65536:
+                    self._emit(False)
+        return len(text)
+
+    def flush(self):
+        with self.lock:
+            if self.pending:
+                self._emit(False)
+            self.stream.flush()
+
+    def __getattr__(self, name):
+        return getattr(self.stream, name)

@@ -71,7 +71,7 @@ def ensure_dirs():
 
 
 def log_line(text):
-    line = str(text)
+    line = "\n".join("["+now_iso()+"] "+part for part in str(text).split("\n"))
     with LOG_LOCK:
         try:
             print(line)
@@ -440,7 +440,7 @@ def _log_request():
         body_text = body_text[:4000] + "...(truncated)"
     qs = request.query_string.decode("utf-8", "replace")
     log_line("")
-    log_line("[%s] %s %s%s" % (now_iso(), request.method, request.path, ("?" + qs) if qs else ""))
+    log_line("%s %s%s" % (request.method, request.path, ("?" + qs) if qs else ""))
     log_line("  from %s | AppId=%r WindowsKey=%r SessionToken=%r" % (
         request.remote_addr,
         request.headers.get("X-Parse-Application-Id"),
