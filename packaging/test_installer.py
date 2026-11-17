@@ -69,6 +69,9 @@ class InstallerTests(unittest.TestCase):
             # Legacy delta bundles predate the native artwork planner. Its real
             # helper/ownership integration is exercised by test_core_artwork.py.
             manifest.pop('core_artwork',None)
+            # Legacy delta packages also predate native mod migration. Exercise
+            # that helper separately in test_mods_migration/test_native_client.
+            manifest.pop('mods_vfs',None)
             (legacy/'manifest.json').write_text(json.dumps(manifest))
         names=('ParseOctane.dll','Parse.NetFx45.dll')
         update_only=json.loads((self.bundle/'manifest.json').read_text()).get('update_only',False)
