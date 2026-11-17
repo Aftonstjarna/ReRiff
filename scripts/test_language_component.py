@@ -1,105 +1,74 @@
-"""Exercise language install ownership, enable/disable and transactional safety."""
-import argparse
-import os
-import configparser
-import hashlib
-import json
+"""Font mod packages, legacy migration, ownership and rollback regressions."""
+import argparse, configparser, hashlib, io, json, os
 from pathlib import Path
-import subprocess
-import tempfile
-import zipfile
-
+import subprocess, tempfile, zipfile
 p=argparse.ArgumentParser(description=__doc__);p.add_argument('--host',type=Path,required=True);p.add_argument('--wine');a=p.parse_args()
-hash_bytes=lambda b:hashlib.sha256(b).hexdigest()
-with tempfile.TemporaryDirectory(prefix='reriff languages ü ') as temporary:
-    root=Path(temporary);game=root/'Game with spaces';game.mkdir();(game/'Game.exe').write_bytes(b'fixture')
-    (game/'localserver').mkdir();(game/'localserver/client-channel.ini').write_text('[client]\nchannel=experimental\n')
-    config=b'[server]\nexternal_url = https://example.invalid\n[languages]\nother = keep\n';(game/'server.ini').write_bytes(config)
-    files={'archives/base.dat':b'base dat','archives/base.zip':b'base zip','archives/hd.dat':b'hd dat','archives/hd.zip':b'hd zip',
-           **{'fonts/noto-cjk/'+n:b'metrics '+n.encode() for n in ('jp.rrcf','jp64.rrcf','jp96.rrcf')},'fonts/noto-cjk/OFL.txt':b'license fixture'}
-    asset=root/'fonts.zip'
-    with zipfile.ZipFile(asset,'w') as z:
-        for name,data in files.items():z.writestr(name,data)
-        z.writestr('component.json',json.dumps({'schema':1,'version':'test','files':{n:hash_bytes(b) for n,b in files.items()},'legacy':{}}))
-    sha=hash_bytes(asset.read_bytes())
-    def path(value):return 'Z:'+str(value.resolve()).replace('/','\\') if a.wine else str(value.resolve())
-    def call(action,*extra,success=True,target=game):
+sha=lambda b:hashlib.sha256(b).hexdigest()
+def archive(packs):
+    out=io.BytesIO()
+    with zipfile.ZipFile(out,'w',zipfile.ZIP_DEFLATED) as z:
+        for pack in packs:z.writestr(f'graphics/fonts/reriff/{pack}/test/batchtextures.brres',b'texture '+pack.encode())
+    return out.getvalue()
+def snapshot(game):return {str(p.relative_to(game)):sha(p.read_bytes()) for p in game.rglob('*') if p.is_file() and '.bak' not in p.parts}
+with tempfile.TemporaryDirectory(prefix='reriff fonts ü ') as temp:
+    root=Path(temp)
+    def path(p):return 'Z:'+str(p.resolve()).replace('/','\\') if a.wine else str(p.resolve())
+    def call(game,pack='cjk',action='install',extra=(),success=True):
         result=root/'result.ini';result.unlink(missing_ok=True)
-        command=([a.wine] if a.wine else [])+[str(a.host.resolve()),'--language-component',action,'--game-dir',path(target),'--result',path(result),*extra]
-        run=subprocess.run(command,capture_output=True,text=True,timeout=90)
+        cmd=([a.wine] if a.wine else [])+[str(a.host.resolve()),'--language-component',action,'--game-dir',path(game),'--pack',pack,'--result',path(result),*extra]
+        run=subprocess.run(cmd,capture_output=True,text=True,timeout=90)
         assert result.exists(),run.stdout+run.stderr
-        state=configparser.ConfigParser(interpolation=None);state.read(result,encoding='utf-16');values=dict(state['result'])
-        assert (run.returncode==0)==success,(run.returncode,values,run.stderr)
-        assert (values['ok']=='true')==success,values
-        return values
-    assert call('status')['installed']=='false'
-    call('install','--asset',path(asset),'--sha256','0'*64,success=False)
-    assert (game/'server.ini').read_bytes()==config
-    (game/'VFS0001.DAT').write_bytes(b'another mod');(game/'VFS0001.ZIP').write_bytes(b'other mod zip')
-    (game/'bak/versions').mkdir(parents=True);(game/'bak/versions/retained').write_bytes(b'old backup')
-    assert call('install','--asset',path(asset),'--sha256',sha)['enabled']=='true'
-    assert not (game/'bak').exists() and (game/'.bak/versions/retained').read_bytes()==b'old backup'
-    owned=json.loads((game/'localserver/languages/cjk.json').read_text())
-    assert owned['archives']=={'base':'vfs2','hd':'vfs3'},owned
-    assert (game/'VFS0001.DAT').read_bytes()==b'another mod'
-    cfg=(game/'server.ini').read_text();assert cfg.count('[languages]')==1 and 'other = keep' in cfg
-    assert call('disable')['enabled']=='false'
-    assert (game/'vfs2.zip').read_bytes()==b'base zip'
-    assert call('install')['enabled']=='true' # Re-enable entirely offline.
-    call('install','--asset',path(asset),'--sha256',sha)
-    # Merge both owned volumes without touching the colliding third-party pair.
-    combined=root/'combined.zip'
-    merged={n:b for n,b in files.items() if not n.startswith('archives/')}
-    merged.update({'archives/combined.dat':b'combined dat','archives/combined.zip':b'combined zip'})
-    with zipfile.ZipFile(combined,'w') as z:
-        for name,data in merged.items():z.writestr(name,data)
-        z.writestr('component.json',json.dumps({'schema':2,'version':'merged','files':{n:hash_bytes(b) for n,b in merged.items()},'legacy':{}}))
-    merged_sha=hash_bytes(combined.read_bytes())
-    call('stage','--asset',path(combined),'--sha256',merged_sha,'--stage',path(root/'staged-upgrade'))
-    removals=json.loads((root/'staged-upgrade/.reriff-language-removals.json').read_text())
-    assert removals=={'vfs3.dat':hash_bytes(b'hd dat'),'vfs3.zip':hash_bytes(b'hd zip')},removals
-    assert (game/'vfs3.zip').read_bytes()==b'hd zip' # Staging is read-only.
-    # A failed state write after retiring vfs3 must restore both old pairs.
-    if os.name == 'posix' and not a.wine:
-        state_folder=game/'localserver/languages';state_folder.chmod(0o555)
-        try:call('install','--asset',path(combined),'--sha256',merged_sha,success=False)
-        finally:state_folder.chmod(0o755)
-        assert (game/'vfs2.zip').read_bytes()==b'base zip'
-        assert (game/'vfs3.zip').read_bytes()==b'hd zip'
-        assert json.loads((state_folder/'cjk.json').read_text())['archives']=={'base':'vfs2','hd':'vfs3'}
-    call('install','--asset',path(combined),'--sha256',merged_sha)
-    owned=json.loads((game/'localserver/languages/cjk.json').read_text())
-    assert owned['archives']=={'combined':'vfs2'},owned
-    assert not (game/'vfs3.dat').exists() and not (game/'vfs3.zip').exists()
-    assert (game/'VFS0001.DAT').read_bytes()==b'another mod'
-    assert (game/'.bak/versions'/(hash_bytes(b'hd zip')+'-vfs3.zip')).read_bytes()==b'hd zip'
-    call('install','--asset',path(combined),'--sha256',merged_sha)
-    assert call('disable')['enabled']=='false'
-    assert call('install')['enabled']=='true'
-    call('stage','--asset',path(asset),'--sha256',sha,'--stage',path(root/'staged-split'))
-    call('stage','--asset',path(combined),'--sha256',merged_sha,'--stage',path(root/'staged-combined'))
-    (game/'vfs2.dat').write_bytes(b'edited by user')
-    call('install','--asset',path(combined),'--sha256',merged_sha,success=False)
-    assert (game/'vfs2.dat').read_bytes()==b'edited by user'
-    # A component write failure must undo all earlier font writes.
-    broken=root/'Broken game';broken.mkdir();(broken/'Game.exe').write_bytes(b'fixture');(broken/'server.ini').write_bytes(config)
-    (broken/'fonts/noto-cjk/OFL.txt').mkdir(parents=True)
-    call('install','--asset',path(asset),'--sha256',sha,success=False,target=broken)
-    assert not list(broken.glob('vfs*'))
-    assert (broken/'server.ini').read_bytes()==config
-    assert not (broken/'localserver/languages/cjk.json').exists()
-    stable=root/'Stable game';stable.mkdir();(stable/'Game.exe').write_bytes(b'fixture')
-    (stable/'server.ini').write_bytes(config)
-    call('install','--asset',path(combined),'--sha256',merged_sha,target=stable)
-    assert not (stable/'.bak/versions').exists()
-    assert (stable/'server.ini').read_bytes()==config
-    assert (stable/'client.ini').is_file()
-    call('disable',target=stable)
-    assert not (stable/'.bak/versions').exists()
-    client_config=(stable/'client.ini').read_bytes()
-    for i in range(4):
-        (stable/'client.ini').write_bytes(client_config+b'\n# revision '+str(i).encode()+b'\n')
-        call('disable',target=stable)
-    assert {p.read_bytes() for p in (stable/'.bak/configs').glob('*-client.ini')}=={
-        client_config+b'\n# revision 2\n',client_config+b'\n# revision 3\n'}
-    print('PASS: verified font packages, two-to-one volume migration, retired-file backups, unowned archive collision, config preservation, offline enable/disable, modified-file refusal and rollback.')
+        ini=configparser.ConfigParser(interpolation=None);ini.read(result,encoding='utf-16')
+        assert (run.returncode==0)==success and (ini['result']['ok']=='true')==success,(run.returncode,dict(ini['result']),run.stderr)
+        return dict(ini['result'])
+    assets={};metrics={}
+    for pack in ('cjk','latin'):
+        names=('jp.rrcf','jp64.rrcf','jp96.rrcf','OFL.txt') if pack=='cjk' else ('latin32.rrcf','latin64.rrcf','latin96.rrcf','OFL.txt')
+        metrics[pack]={f'fonts/noto-{pack}/{n}':b'metrics '+n.encode() for n in names}
+        files={'archives/combined.dat':b'package index','archives/combined.zip':archive([pack]),**metrics[pack]}
+        asset=root/f'{pack}.zip'
+        with zipfile.ZipFile(asset,'w') as z:
+            for name,data in files.items():z.writestr(name,data)
+            z.writestr('component.json',json.dumps({'schema':2,'version':'test','files':{n:sha(b) for n,b in files.items()},'legacy':{}}))
+        assets[pack]=('--asset',path(asset),'--sha256',sha(asset.read_bytes()))
+    for mode in ('fresh','root','flat','moved'):
+        game=root/mode;game.mkdir();(game/'vfs.dat').write_bytes(b'stock');(game/'vfs.zip').write_bytes(b'stock zip')
+        (game/'client.ini').write_text('[languages]\ncjk_enabled = true\nlatin_enabled = false\n')
+        if mode!='fresh':
+            shared={'vfs1.dat':b'old index','vfs1.zip':archive(['cjk','latin'])}
+            if mode in ('flat','moved'):(game/'mods').mkdir();(game/'mods/.reriff-vfs').write_text('ReRiff VFS directory version 1\n')
+            for name,data in shared.items():
+                dest=game/(f'mods/noto-cjk-font/vfs{Path(name).suffix}' if mode=='moved' else f'mods/{name}' if mode=='flat' else name)
+                dest.parent.mkdir(parents=True,exist_ok=True);dest.write_bytes(data)
+            for pack in metrics:
+                state={'schema':1,'version':'legacy','archives':{'combined':'vfs1'},'files':{n:sha(b) for n,b in {**shared,**metrics[pack]}.items()}}
+                for n,b in metrics[pack].items():
+                    dest=game/n;dest.parent.mkdir(parents=True,exist_ok=True);dest.write_bytes(b)
+                dest=game/f'localserver/languages/{pack}.json';dest.parent.mkdir(parents=True,exist_ok=True);dest.write_text(json.dumps(state))
+            before=snapshot(game);stage=root/f'{mode}-stage'
+            call(game,action='stage',extra=('--stage',path(stage),'--latin-enable','false'))
+            assert snapshot(game)==before
+            assert json.loads((stage/'.reriff-language-removals.json').read_text())
+            # Destination conflicts stop migration before modifying anything.
+            conflict=game/'mods/noto-latin-font/noto-latin/OFL.txt';conflict.parent.mkdir(parents=True,exist_ok=True);conflict.write_bytes(b'user-owned')
+            before=snapshot(game);call(game,success=False);assert snapshot(game)==before;conflict.unlink()
+            call(game)
+        else:
+            for pack in metrics:call(game,pack,extra=assets[pack])
+        for pack in metrics:
+            state=json.loads((game/f'localserver/languages/{pack}.json').read_text());stem=f'mods/noto-{pack}-font/vfs'
+            assert state['schema']==2 and state['archives']=={'combined':stem}
+            for n,digest in state['files'].items():assert sha((game/n).read_bytes())==digest
+            with zipfile.ZipFile(game/(stem+'.zip')) as z:assert all(f'/reriff/{pack}/' in n for n in z.namelist())
+        assert (game/'vfs.dat').read_bytes()==b'stock' and (game/'vfs.zip').read_bytes()==b'stock zip'
+        assert not (game/'vfs1.zip').exists() and not (game/'mods/vfs1.zip').exists()
+        latin=snapshot(game/'mods/noto-latin-font');call(game,extra=assets['cjk']);assert snapshot(game/'mods/noto-latin-font')==latin
+        assert call(game,action='disable')['enabled']=='false';assert call(game)['enabled']=='true'
+        damaged=game/'mods/noto-cjk-font/vfs.dat';saved=damaged.read_bytes();damaged.write_bytes(b'damaged')
+        before=snapshot(game);call(game,extra=assets['cjk'],success=False);assert snapshot(game)==before;damaged.write_bytes(saved)
+        print('PASS:',mode,'migration, isolated packs, ownership, staging and enable/disable',flush=True)
+    game=root/'broken';game.mkdir();(game/'mods/noto-cjk-font/noto-cjk/OFL.txt').mkdir(parents=True)
+    call(game,extra=assets['cjk'],success=False);assert not (game/'mods/noto-cjk-font/vfs.zip').exists();assert not (game/'localserver/languages/cjk.json').exists()
+    game=root/'together';game.mkdir();call(game,extra=(*assets['cjk'],'--latin-enable','true','--latin-asset',assets['latin'][1],'--latin-sha256',assets['latin'][3]))
+    assert (game/'mods/noto-cjk-font/vfs.zip').exists() and (game/'mods/noto-latin-font/vfs.zip').exists()
+    print('PASS: failed-write rollback and simultaneous selections',flush=True)

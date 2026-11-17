@@ -1,3 +1,48 @@
+# ReRiff 1.4.0-beta.11 — Named mod folders and independent fonts
+
+## In-game summary
+
+- Load extra game assets from named folders inside mods.
+- Install CJK and Latin fonts as separate, independent mods.
+- Keep bundled ReRiff artwork separate from the stock archives.
+
+## Full release notes
+
+### Mod archives and fonts
+
+- Discover unnumbered vfs.dat/vfs.zip pairs in immediate mods subfolders,
+  reusing the game's native archive loading and resource lookup. Existing
+  numbered archives retain their native volume slots.
+- Install bundled artwork into mods/reriff-assets, CJK fonts into
+  mods/noto-cjk-font and Latin fonts into mods/noto-latin-font. Keep stock
+  vfs.dat/vfs.zip untouched. Font updates and disabling remain independent.
+- Migrate verified legacy artwork and shared font archives with ownership/hash
+  checks, backups and rollback. Retain conflicting or modified files for review
+  rather than silently replacing them. Preserve settings and saved progress.
+- Update Windows and Linux installer staging/removal handling and launcher
+  font explanations for the new layout. See docs/MODS.md for the mod format.
+
+### Documentation
+
+- Document successful stock Proton Experimental song generation using bundled
+  Wine Mono without a manual Microsoft .NET install. Record the tested builds,
+  prerequisite reproduction and limitations alongside the Proton 10 stall.
+
+### Validation and known limitations
+
+- Focused checks cover mod migration, repeat installs, conflicts, symlinks,
+  rollback, independent font packs, artwork ownership and stock preservation.
+  Release CI also checks native launcher/client builds and Windows helpers.
+- The native engine has 31 extra volume slots; numbered archives reserve slots
+  first. Only immediate mod folders are discovered, and linked files/folders
+  are skipped. See docs/MODS.md for overflow behavior.
+- Beta.10 and older loaders cannot discover the new named folders. Keep the
+  migration backups when reverting. Native mount tests do not establish that
+  arbitrary third-party mods render correctly.
+- Steam virtual-keyboard work remains paused; use a physical keyboard with
+  Steam's keyboard closed. M4A playback remains unsupported.
+- This is an opt-in prerelease; stable remains the default update channel.
+
 # ReRiff 1.4.0-beta.10 — Protected credentials and launcher cleanup
 
 ## In-game summary

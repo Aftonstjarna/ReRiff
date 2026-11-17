@@ -96,8 +96,8 @@ internal static class LanguageComponent
         }
         Directory.Delete(old);
     }
-    static string Under(string game, string name) { if (name.Length == 0 || name.Contains('\\') || name.Contains(':') || name.Split('/').Any(p => p == "" || p == "." || p == "..") || Path.IsPathRooted(name)) throw new IOException("Unsafe language component path."); string target = Path.GetFullPath(game); foreach (string part in name.Split('/')) { target = Path.Combine(target, part); if ((File.Exists(target) || Directory.Exists(target)) && (File.GetAttributes(target) & FileAttributes.ReparsePoint) != 0) throw new IOException("Language component paths must not be links."); } return target; }
-    static bool FontPath(string name) => Regex.IsMatch(name, @"^vfs[1-9a-f][0-9a-f]?\.(dat|zip)$") || Regex.IsMatch(name, @"^fonts/noto-cjk/(jp|kr|sc|tc|hk)(64|96)?\.rrcf$") || name == "fonts/noto-cjk/OFL.txt" || Regex.IsMatch(name,@"^fonts/noto-latin/(latin(32|64|96)\.rrcf|OFL\.txt)$");
+    static string Under(string game, string name) { name=ModsVfs.Resolve(game,name); if (name.Length == 0 || name.Contains('\\') || name.Contains(':') || name.Split('/').Any(p => p == "" || p == "." || p == "..") || Path.IsPathRooted(name)) throw new IOException("Unsafe language component path."); string target = Path.GetFullPath(game); foreach (string part in name.Split('/')) { target = Path.Combine(target, part); if ((File.Exists(target) || Directory.Exists(target)) && (File.GetAttributes(target) & FileAttributes.ReparsePoint) != 0) throw new IOException("Language component paths must not be links."); } return target; }
+    static bool FontPath(string name) => Regex.IsMatch(name,@"^mods/noto-(cjk|latin)-font/vfs\.(dat|zip)$") || (name.StartsWith("mods/noto-cjk-font/noto-cjk/") && FontPath("fonts/"+name.Substring("mods/noto-cjk-font/".Length))) || (name.StartsWith("mods/noto-latin-font/noto-latin/") && FontPath("fonts/"+name.Substring("mods/noto-latin-font/".Length))) || Regex.IsMatch(name, @"^vfs[1-9a-f][0-9a-f]?\.(dat|zip)$") || Regex.IsMatch(name, @"^fonts/noto-cjk/(jp|kr|sc|tc|hk)(64|96)?\.rrcf$") || name == "fonts/noto-cjk/OFL.txt" || Regex.IsMatch(name,@"^fonts/noto-latin/(latin(32|64|96)\.rrcf|OFL\.txt)$");
     internal static bool Present(string game,string pack="cjk") => File.Exists(Under(game, StateFor(pack)));
     internal static bool Enabled(string game,string pack="cjk")
     {
@@ -113,71 +113,116 @@ internal static class LanguageComponent
         return saved ?? (pack=="cjk"&&legacy);
     }
     static byte[] Config(string game, bool enabled,string pack="cjk") { var lines = ReRiff.ConfigFiles.Document(game,"client.ini").Replace("\r\n","\n").Split('\n').ToList(); bool section = false, found = false; int languageAt = -1; for (int i = 0; i < lines.Count; i++) { string line = lines[i].Trim(); if (line.StartsWith("[")) section = line.Equals("[languages]", StringComparison.OrdinalIgnoreCase); if (section && line.StartsWith("[")) languageAt = i; int eq = line.IndexOf('='); if (section && eq > 0 && line.Substring(0, eq).Trim().Equals(pack+"_enabled", StringComparison.OrdinalIgnoreCase)) { lines[i] = pack+"_enabled = " + (enabled ? "true" : "false"); found = true; } } if (!found) { if (languageAt >= 0) lines.Insert(languageAt + 1, pack+"_enabled = " + (enabled ? "true" : "false")); else lines.AddRange(new[] { "", "[languages]", pack+"_enabled = " + (enabled ? "true" : "false") }); } return new UTF8Encoding(false).GetBytes(string.Join("\n", lines) + "\n"); }
-    static Installed Existing(string game,string pack="cjk") { var old = Read<Installed>(File.ReadAllBytes(Under(game, StateFor(pack)))); if (old.schema != 1 || old.files == null || old.archives == null) throw new IOException("Unsupported CJK component state."); foreach (var entry in old.files) { if (!FontPath(entry.Key)) throw new IOException("Unexpected owned font path."); string path = Under(game, entry.Key); if (!File.Exists(path) || Hash(File.ReadAllBytes(path)) != entry.Value) throw new IOException("Installed CJK file changed or is missing; retained: " + entry.Key); } return old; }
-    internal static Dictionary<string, byte[]> Plan(string game, string asset, string expected, bool enable,string pack="cjk")
-    {
-        var plan = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
-        if (!enable) { plan["client.ini"] = Config(game, false,pack); return plan; }
-        if (asset == "") { if (!Present(game,pack)) throw new IOException("Install the CJK font component first."); Existing(game,pack); plan["client.ini"] = Config(game, true,pack); return plan; }
-        if (!Regex.IsMatch(expected, @"^[0-9a-fA-F]{64}$") || Hash(File.ReadAllBytes(asset)) != expected.ToLowerInvariant()) throw new IOException("CJK download checksum mismatch.");
-        using (var zip = ZipFile.OpenRead(asset))
-        {
-            if (zip.Entries.Count > 64 || zip.Entries.Sum(e => e.Length) > 256L * 1024 * 1024) throw new IOException("CJK package is too large.");
-            var entries = new Dictionary<string, ZipArchiveEntry>(StringComparer.OrdinalIgnoreCase);
-            foreach (var entry in zip.Entries) { Under(game, entry.FullName); if (entries.ContainsKey(entry.FullName)) throw new IOException("Duplicate CJK package entry."); entries.Add(entry.FullName, entry); }
-            ZipArchiveEntry metadata; if (!entries.TryGetValue("component.json", out metadata) || metadata.Length > 65536) throw new IOException("Missing CJK component manifest.");
-            Func<ZipArchiveEntry, byte[]> bytes = e => { using (var input = e.Open()) using (var output = new MemoryStream()) { input.CopyTo(output); return output.ToArray(); } };
-            var package = Read<Package>(bytes(metadata)); if ((package.schema != 1 && package.schema != 2) || package.files == null || package.legacy == null || package.files.Count + 1 != entries.Count) throw new IOException("Invalid CJK component manifest.");
-            var other=Present(game,pack=="latin"?"cjk":"latin")?Existing(game,pack=="latin"?"cjk":"latin"):null;
-            var old = Present(game,pack) ? Existing(game,pack) : other; var state = new Installed { version = package.version }; var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            string[] labels = package.schema == 2 ? new[] { "combined" } : new[] { "base", "hd" };
-            var retired = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            if (old != null) foreach (var file in old.files) if (file.Key.StartsWith("vfs")) retired.Add(file.Key);
-            // Prototype pairs are owned only when both exact published hashes match.
-            foreach (var prior in package.legacy) {
-                if (prior.Value.Length != 2 || !Regex.IsMatch(prior.Key, @"^vfs[1-9a-f][0-9a-f]?$")) continue;
-                string dat = Under(game, prior.Key + ".dat"), archive = Under(game, prior.Key + ".zip");
-                if (File.Exists(dat) && File.Exists(archive) && Hash(File.ReadAllBytes(dat)) == prior.Value[0] && Hash(File.ReadAllBytes(archive)) == prior.Value[1]) { retired.Add(prior.Key + ".dat"); retired.Add(prior.Key + ".zip"); }
-            }
-            // Windows mounts volume numbers case-insensitively, including padded hex suffixes.
-            var occupied = new HashSet<int>();
-            foreach(string path in Directory.GetFiles(game)){
-                var number=Regex.Match(Path.GetFileName(path),@"^vfs([0-9a-f]{1,7})\.(dat|zip)$",RegexOptions.IgnoreCase);
-                int id;if(number.Success&&int.TryParse(number.Groups[1].Value,System.Globalization.NumberStyles.HexNumber,System.Globalization.CultureInfo.InvariantCulture,out id))occupied.Add(id);
-            }
-            foreach (string label in labels)
-            {
-                string stem = "";
-                if (old != null) {
-                    old.archives.TryGetValue(label, out stem);
-                    if (string.IsNullOrEmpty(stem) && label == "combined") old.archives.TryGetValue("base", out stem);
-                    if (string.IsNullOrEmpty(stem) && label == "base") old.archives.TryGetValue("combined", out stem);
-                    if (!string.IsNullOrEmpty(stem) && (!old.files.ContainsKey(stem + ".dat") || !old.files.ContainsKey(stem + ".zip"))) throw new IOException("Incomplete CJK archive ownership record.");
-                }
-                if (string.IsNullOrEmpty(stem)) foreach (var previous in package.legacy)
-                    {
-                        if (previous.Value.Length != 2 || !Regex.IsMatch(previous.Key, @"^vfs[1-9a-f][0-9a-f]?$")) continue; string dat = Under(game, previous.Key + ".dat"), archive = Under(game, previous.Key + ".zip"); if (!used.Contains(previous.Key) && File.Exists(dat) && File.Exists(archive) && Hash(File.ReadAllBytes(dat)) == previous.Value[0] && Hash(File.ReadAllBytes(archive)) == previous.Value[1])
-                        { // Identify the old volume by its resource group.
-                            using (var prior = ZipFile.OpenRead(archive)) if (prior.Entries.Any(e => e.FullName.Contains(label == "hd" ? "/jp64/" : "/jp/"))) { stem = previous.Key; break; }
-                        }
+    static string ModRoot(string pack) => "mods/noto-"+pack+"-font/";
+    static string OwnedPath(string game,string name,string hash) {
+        string path=Under(game,name);
+        if(File.Exists(path))return path;
+        // Adopt the user's earlier manually arranged folder only with exact ownership hashes.
+        string candidate=name.StartsWith("vfs")?ModRoot("cjk")+"vfs"+Path.GetExtension(name):
+            name.StartsWith("fonts/noto-")?"mods/noto-"+(name.Contains("noto-latin/")?"latin":"cjk")+"-font/"+name.Substring(6):name;
+        string moved=Under(game,candidate);
+        return File.Exists(moved)&&Hash(File.ReadAllBytes(moved))==hash?moved:path;
+    }
+    static Installed Existing(string game,string pack="cjk") {
+        var old=Read<Installed>(File.ReadAllBytes(Under(game,StateFor(pack))));
+        if((old.schema!=1&&old.schema!=2)||old.files==null||old.archives==null)throw new IOException("Unsupported font component state.");
+        foreach(var entry in old.files) {
+            if(!FontPath(entry.Key))throw new IOException("Unexpected owned font path.");
+            string path=OwnedPath(game,entry.Key,entry.Value);
+            if(!File.Exists(path)||Hash(File.ReadAllBytes(path))!=entry.Value)throw new IOException("Installed font file changed or is missing; retained: "+entry.Key);
+        }return old;
+    }
+    static byte[] TextureZip(IEnumerable<byte[]> sources,string pack) {
+        using(var output=new MemoryStream()) {
+            var seen=new HashSet<string>(StringComparer.Ordinal);
+            using(var target=new ZipArchive(output,ZipArchiveMode.Create,true))foreach(byte[] source in sources)
+                using(var input=new MemoryStream(source))using(var zip=new ZipArchive(input,ZipArchiveMode.Read))
+                    foreach(var file in FontTextures(zip).OrderBy(f=>f.Key,StringComparer.Ordinal)) {
+                        if(!file.Key.StartsWith("graphics/fonts/reriff/"+pack+"/",StringComparison.Ordinal))continue;
+                        if(!seen.Add(file.Key))throw new IOException("Duplicate font texture.");
+                        var entry=target.CreateEntry(file.Key,CompressionLevel.Optimal);entry.LastWriteTime=new DateTimeOffset(1980,1,1,0,0,0,TimeSpan.Zero);
+                        using(var from=file.Value.Open())using(var to=entry.Open())from.CopyTo(to);
                     }
-                if (string.IsNullOrEmpty(stem)) for (int id = 1; id <= 31; id++) { string candidate = "vfs" + id.ToString("x"); if (!occupied.Contains(id) && !used.Contains(candidate) && !File.Exists(Under(game, candidate + ".dat")) && !File.Exists(Under(game, candidate + ".zip"))) { stem = candidate; break; } }
-                if (string.IsNullOrEmpty(stem) || !Regex.IsMatch(stem, @"^vfs[1-9a-f][0-9a-f]?$") || used.Contains(stem)) throw new IOException("No unused native archive slot for CJK fonts."); used.Add(stem); state.archives[label] = stem;
-            }
-            foreach (var file in package.files)
-            {
-                ZipArchiveEntry entry; if (!entries.TryGetValue(file.Key, out entry)) throw new IOException("Missing CJK component file."); byte[] data = bytes(entry); if (Hash(data) != file.Value) throw new IOException("CJK component file checksum mismatch: " + file.Key); string target = file.Key;
-                if (file.Key.StartsWith("archives/")) { var match = Regex.Match(file.Key, @"^archives/(base|hd|combined)\.(dat|zip)$"); if (!match.Success || !state.archives.ContainsKey(match.Groups[1].Value)) throw new IOException("Unexpected font archive."); target = state.archives[match.Groups[1].Value] + "." + match.Groups[2].Value; }
-                if (!FontPath(target)) throw new IOException("Unexpected CJK package path."); string existing = Under(game, target);
-                if (File.Exists(existing) && !target.StartsWith("vfs") && (old == null || !old.files.ContainsKey(target)) && Hash(File.ReadAllBytes(existing)) != file.Value) throw new IOException("Unowned font file retained: " + target);
-                plan[target] = data; state.files[target] = file.Value;
-            }
-            foreach (string label in labels) foreach (string ext in new[] { "dat", "zip" }) if (!plan.ContainsKey(state.archives[label] + "." + ext)) throw new IOException("Incomplete font archive pair.");
-            foreach (string file in pack=="latin"?new[]{"latin32.rrcf","latin64.rrcf","latin96.rrcf","OFL.txt"}:new[]{"jp.rrcf","jp64.rrcf","jp96.rrcf","OFL.txt"}) if (!plan.ContainsKey("fonts/noto-"+pack+"/" + file)) throw new IOException("Incomplete CJK metrics/license.");
-            foreach (string file in retired) if (!plan.ContainsKey(file)) plan[file] = null;
-            if(other!=null){if(package.schema!=2)throw new IOException("Upgrade to the combined CJK package first.");MergeFontVolume(plan,game,other,pack,state);}
-            plan[StateFor(pack)] = Json(state); plan["client.ini"] = Config(game, true,pack); return plan;
+            if(seen.Count==0)throw new IOException("Font archive contains no "+pack+" textures.");
+            return output.ToArray();
         }
+    }
+    static void StoreMod(Dictionary<string,byte[]> plan,string pack,string version,byte[] archive,Dictionary<string,byte[]> metrics) {
+        string root=ModRoot(pack);var state=new Installed{schema=2,version=version};state.archives["combined"]=root+"vfs";
+        plan[root+"vfs.zip"]=archive;plan[root+"vfs.dat"]=FontIndex(archive);
+        foreach(var file in metrics)plan[root+"noto-"+pack+"/"+file.Key]=file.Value;
+        foreach(var file in plan.Where(f=>f.Key.StartsWith(root,StringComparison.Ordinal)&&f.Value!=null))state.files[file.Key]=Hash(file.Value);
+        plan[StateFor(pack)]=Json(state);
+    }
+    static Dictionary<string,byte[]> MigrateFonts(string game) {
+        var plan=new Dictionary<string,byte[]>(StringComparer.OrdinalIgnoreCase);
+        var migrated=new Dictionary<string,byte[]>(StringComparer.OrdinalIgnoreCase);
+        foreach(string pack in new[]{"cjk","latin"})if(Present(game,pack)) {
+            var old=Existing(game,pack);if(old.schema==2)continue;
+            var archives=old.archives.Values.Distinct().Select(stem=>File.ReadAllBytes(OwnedPath(game,stem+".zip",old.files[stem+".zip"]))).ToArray();
+            var metrics=new Dictionary<string,byte[]>();
+            foreach(var file in old.files.Where(f=>f.Key.StartsWith("fonts/noto-"+pack+"/",StringComparison.Ordinal)))metrics[Path.GetFileName(file.Key)]=File.ReadAllBytes(OwnedPath(game,file.Key,file.Value));
+            foreach(var file in old.files) {
+                string actual=OwnedPath(game,file.Key,file.Value).Substring(Path.GetFullPath(game).Length+1).Replace('\\','/');
+                plan[actual]=null;
+                // Retire exact duplicate loose metrics, but retain unrelated or changed files.
+                string ordinary=Under(game,file.Key);
+                if(File.Exists(ordinary)&&Hash(File.ReadAllBytes(ordinary))==file.Value)plan[ordinary.Substring(Path.GetFullPath(game).Length+1).Replace('\\','/')]=null;
+            }
+            StoreMod(migrated,pack,old.version,TextureZip(archives,pack),metrics);
+        }
+        foreach(var file in migrated)plan[file.Key]=file.Value;
+        return plan;
+    }
+    internal static Dictionary<string, byte[]> Plan(string game,string asset,string expected,bool enable,string pack="cjk") {
+        StateFor(pack);var plan=MigrateFonts(game);
+        if(enable&&asset!="") {
+            if(!Regex.IsMatch(expected,@"^[0-9a-fA-F]{64}$")||Hash(File.ReadAllBytes(asset))!=expected.ToLowerInvariant())throw new IOException("Font download checksum mismatch.");
+            using(var zip=ZipFile.OpenRead(asset)) {
+                if(zip.Entries.Count>64||zip.Entries.Sum(e=>e.Length)>256L*1024*1024)throw new IOException("Font package is too large.");
+                var files=new Dictionary<string,byte[]>(StringComparer.OrdinalIgnoreCase);
+                foreach(var entry in zip.Entries) {
+                    Under(game,entry.FullName);
+                    using(var input=entry.Open())using(var output=new MemoryStream()){input.CopyTo(output);files.Add(entry.FullName,output.ToArray());}
+                }
+                byte[] metadata;if(!files.TryGetValue("component.json",out metadata)||metadata.Length>65536)throw new IOException("Missing font manifest.");
+                var package=Read<Package>(metadata);
+                if((package.schema!=1&&package.schema!=2)||package.files==null||package.files.Count+1!=files.Count)throw new IOException("Invalid font manifest.");
+                var archives=new List<byte[]>();var metrics=new Dictionary<string,byte[]>();
+                foreach(var file in package.files) {
+                    byte[] data;if(!files.TryGetValue(file.Key,out data)||Hash(data)!=file.Value)throw new IOException("Font checksum mismatch: "+file.Key);
+                    if(Regex.IsMatch(file.Key,@"^archives/(combined|base|hd)\.(zip|dat)$")) {
+                        if(file.Key.EndsWith(".zip")) {
+                            if(!files.ContainsKey(Path.ChangeExtension(file.Key,"dat")))throw new IOException("Incomplete font archive pair.");
+                            archives.Add(data);
+                        }
+                    }else if(file.Key.StartsWith("fonts/noto-"+pack+"/",StringComparison.Ordinal)&&FontPath(file.Key))metrics.Add(Path.GetFileName(file.Key),data);
+                    else throw new IOException("Unexpected font package path.");
+                }
+                foreach(string name in pack=="latin"?new[]{"latin32.rrcf","latin64.rrcf","latin96.rrcf","OFL.txt"}:new[]{"jp.rrcf","jp64.rrcf","jp96.rrcf","OFL.txt"})if(!metrics.ContainsKey(name))throw new IOException("Incomplete font metrics/license.");
+                var updated=new Dictionary<string,byte[]>(StringComparer.OrdinalIgnoreCase);StoreMod(updated,pack,package.version,TextureZip(archives,pack),metrics);
+                var old=Present(game,pack)?Existing(game,pack):null;
+                foreach(var file in updated.Where(f=>f.Key.StartsWith(ModRoot(pack),StringComparison.Ordinal))) {
+                    string path=Under(game,file.Key);
+                    if(File.Exists(path)&&!plan.ContainsKey(file.Key)&&(old==null||!old.files.ContainsKey(file.Key))&&Hash(File.ReadAllBytes(path))!=Hash(file.Value))throw new IOException("Unowned font file retained: "+file.Key);
+                }
+                if(old!=null&&old.schema==2)foreach(string name in old.files.Keys)if(!updated.ContainsKey(name))plan[name]=null;
+                foreach(var file in updated)plan[file.Key]=file.Value;
+            }
+        }else if(enable&&!Present(game,pack))throw new IOException("Install the font component first.");
+        // Check every destination, including migration-only operations, before any writes.
+        foreach(var file in plan.Where(f=>f.Value!=null&&f.Key.StartsWith("mods/",StringComparison.Ordinal))) {
+            string path=Under(game,file.Key);
+            if(!File.Exists(path))continue;
+            bool owned=false;
+            foreach(string owner in new[]{"cjk","latin"})if(Present(game,owner)) {
+                var state=Read<Installed>(File.ReadAllBytes(Under(game,StateFor(owner))));
+                if(state.files.Any(f=>OwnedPath(game,f.Key,f.Value)==path&&Hash(File.ReadAllBytes(path))==f.Value))owned=true;
+            }
+            if(!owned&&Hash(File.ReadAllBytes(path))!=Hash(file.Value))throw new IOException("Unowned mod file retained: "+file.Key);
+        }
+        plan["client.ini"]=Config(game,enable,pack);
+        return plan;
     }
     // Rebuild only an owned font volume; original/mod volumes are never edited.
     static Dictionary<string, ZipArchiveEntry> FontTextures(ZipArchive zip) {
@@ -187,30 +232,6 @@ internal static class LanguageComponent
             if(!Regex.IsMatch(entry.FullName,@"^graphics/fonts/reriff/(cjk|latin)/[a-z0-9/]+/batchtextures\.brres$")||files.ContainsKey(entry.FullName))throw new IOException("Unexpected font texture path.");
             files.Add(entry.FullName,entry);
         }return files;
-    }
-    static void MergeFontVolume(Dictionary<string,byte[]> plan,string game,Installed other,string pack,Installed state) {
-        string stem=state.archives["combined"],zipName=stem+".zip",datName=stem+".dat";byte[] data;
-        // Stream textures: expanding every CJK page simultaneously can exhaust
-        // the 32-bit Windows helper's address space.
-        using(var input=new MemoryStream(plan[zipName]))using(var incomingZip=new ZipArchive(input,ZipArchiveMode.Read))
-        using(var existingZip=ZipFile.OpenRead(Under(game,other.archives["combined"]+".zip"))) {
-            var incoming=FontTextures(incomingZip);var files=FontTextures(existingZip);
-            string prefix="graphics/fonts/reriff/"+(pack=="latin"?"latin":"cjk")+"/";
-            foreach(string name in files.Keys.Where(n=>n.StartsWith(prefix,StringComparison.Ordinal)).ToArray())files.Remove(name);
-            foreach(var entry in incoming)files.Add(entry.Key,entry.Value);
-            using(var output=new MemoryStream()){
-                using(var zip=new ZipArchive(output,ZipArchiveMode.Create,true))foreach(var file in files.OrderBy(f=>f.Key,StringComparer.Ordinal)){
-                    var entry=zip.CreateEntry(file.Key,CompressionLevel.Optimal);entry.LastWriteTime=new DateTimeOffset(1980,1,1,0,0,0,TimeSpan.Zero);
-                    using(var source=file.Value.Open())using(var target=entry.Open())source.CopyTo(target);
-                }data=output.ToArray();
-            }
-        }
-        byte[] index=FontIndex(data);plan[zipName]=data;plan[datName]=index;
-        state.files[zipName]=Hash(data);state.files[datName]=Hash(index);
-        other.archives["combined"]=stem;
-        foreach(string name in other.files.Keys.Where(n=>n.StartsWith("vfs",StringComparison.Ordinal)).ToArray())other.files.Remove(name);
-        other.files[zipName]=Hash(data);other.files[datName]=Hash(index);
-        plan[StateFor(pack=="latin"?"cjk":"latin")]=Json(other);
     }
     static byte[] FontIndex(byte[] zip) {
         Func<int,uint> u32=p=>BitConverter.ToUInt32(zip,p);Func<int,ushort> u16=p=>BitConverter.ToUInt16(zip,p);
@@ -245,13 +266,23 @@ internal static class LanguageComponent
         if(latin==null)return cjk.HasValue?Plan(game,cjkAsset,cjkHash,cjk.Value):result;
         string shadow=Path.Combine(Path.GetTempPath(),"reriff-fonts-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(shadow);
         try {
+            if(File.Exists(Under(game,ModsVfs.Marker)))Atomic(Under(shadow,ModsVfs.Marker),File.ReadAllBytes(Under(game,ModsVfs.Marker)));
             foreach(string pack in new[]{"cjk","latin"})if(Present(game,pack)) {
                 var state=Existing(game,pack);
-                foreach(string name in state.files.Keys.Concat(new[]{StateFor(pack)}).Distinct())Atomic(Under(shadow,name),File.ReadAllBytes(Under(game,name)));
+                foreach(string name in state.files.Keys.Concat(new[]{StateFor(pack)}).Distinct()) {
+                    string source=state.files.ContainsKey(name)?OwnedPath(game,name,state.files[name]):Under(game,name);
+                    string relative=source.Substring(Path.GetFullPath(game).Length+1).Replace('\\','/');
+                    Atomic(Under(shadow,relative),File.ReadAllBytes(source));
+                }
+            }
+            foreach(string pack in new[]{"cjk","latin"}) {
+                string folder=Under(game,ModRoot(pack).TrimEnd('/'));
+                if(Directory.Exists(folder))foreach(string file in Directory.GetFiles(folder,"*",SearchOption.AllDirectories)) {
+                    string name=file.Substring(Path.GetFullPath(game).Length+1).Replace('\\','/');
+                    Atomic(Under(shadow,name),File.ReadAllBytes(Under(game,name)));
+                }
             }
             foreach(string config in new[]{"server.ini","client.ini"})if(File.Exists(Under(game,config)))Atomic(Under(shadow,config),File.ReadAllBytes(Under(game,config)));
-            // Preserve occupied mod slots in the shadow without reading their contents.
-            foreach(string file in Directory.GetFiles(game,"*"))if(Regex.IsMatch(Path.GetFileName(file),@"(?i)^vfs[0-9a-f]+\.(dat|zip)$")&&!File.Exists(Path.Combine(shadow,Path.GetFileName(file))))File.WriteAllBytes(Path.Combine(shadow,Path.GetFileName(file)),new byte[0]);
             if(cjk.HasValue)foreach(var item in Plan(shadow,cjkAsset,cjkHash,cjk.Value)) {result[item.Key]=item.Value;if(item.Value==null)File.Delete(Under(shadow,item.Key));else Atomic(Under(shadow,item.Key),item.Value);}
             foreach(var item in Plan(shadow,latinAsset,latinHash,latin.Value,"latin"))result[item.Key]=item.Value;
             return result;
@@ -261,14 +292,15 @@ internal static class LanguageComponent
     internal static void Apply(string game, Dictionary<string, byte[]> plan) {
         MigrateBackups(game); bool development=Development(game);
         var before=new Dictionary<string,byte[]>();var changed=new List<string>();
+        var paths=plan.Keys.ToDictionary(name=>name,name=>Under(game,name));
         try {
             foreach(var entry in plan) {
-                string path=Under(game,entry.Key);before[entry.Key]=File.Exists(path)?File.ReadAllBytes(path):null;
+                string path=paths[entry.Key];before[entry.Key]=File.Exists(path)?File.ReadAllBytes(path):null;
                 if(before[entry.Key]!=null&&(entry.Value==null||Hash(before[entry.Key])!=Hash(entry.Value))) BackupPrevious(Under(game,".bak"),entry.Key,before[entry.Key],development);
                 if(entry.Value==null)File.Delete(path);else Atomic(path,entry.Value);changed.Add(entry.Key);
             }
         } catch {
-            foreach(string name in changed.AsEnumerable().Reverse()) {string path=Under(game,name);if(before[name]==null)File.Delete(path);else Atomic(path,before[name]);}
+            foreach(string name in changed.AsEnumerable().Reverse()) {string path=paths[name];if(before[name]==null)File.Delete(path);else Atomic(path,before[name]);}
             throw;
         }
         MigrateConfigHistory(Under(game,".bak"));

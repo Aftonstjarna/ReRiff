@@ -196,7 +196,7 @@ internal static class LinuxClientHost {
                 if(!File.Exists(game+"/server.ini"))plan["server.ini"]=Encoding.UTF8.GetBytes("[server]\nexternal_url =\nfallback_url =\ntimeout_seconds = 5\nnetworking_enabled = true\nshow_server_popup = true\n\n[launcher]\nskip_launcher = false\nauto_update_on_skip = false\n");
                 bool cjk=options.Has("--cjk")||(!options.Has("--no-cjk")&&LanguageComponent.Enabled(game));
                 bool latin=options.Has("--latin")||(!options.Has("--no-latin")&&LanguageComponent.Enabled(game,"latin"));
-                if(cjk||latin||options.Has("--no-cjk")||options.Has("--no-latin")) {
+                if(cjk||latin||options.Has("--no-cjk")||options.Has("--no-latin")||LanguageComponent.Present(game)||LanguageComponent.Present(game,"latin")) {
                     var component=Map(manifest,"language_component");var european=Map(manifest,"latin_component");
                     foreach(var item in LanguageComponent.Selections(game,cjk?Under(bundle,Text(component,"file")):"",Text(component,"sha256"),cjk,latin?Under(bundle,Text(european,"file")):"",Text(european,"sha256"),latin))plan[item.Key]=item.Value;
                 }
@@ -213,6 +213,7 @@ internal static class LinuxClientHost {
                 if(!logging)foreach(string name in plan.Keys.Where(n=>n.StartsWith("logs/",StringComparison.Ordinal)).ToArray())plan.Remove(name);
                 if(options.Get("--work")!=""&&File.Exists(Path.Combine(options.Get("--work"),"resume-command.txt")))plan["localserver/update-notification.ini"]=Encoding.UTF8.GetBytes("[update]\nversion="+Text(manifest,"version")+"\n");
             }
+            if(!restore&&manifest["mods_vfs"]?.GetValue<bool>()==true)plan=ModsVfs.Plan(game,plan);
             if(restore&&state.Count!=0) { state["backup_dir"]=backups;plan["localserver/install-state.json"]=Encoding.UTF8.GetBytes(state.ToJsonString()+"\n"); }
             foreach(var pair in plan)Under(game,pair.Key);
             Console.WriteLine("Validated ReRiff "+Text(manifest,"version")+": "+plan.Count+" files; backups: "+backups);

@@ -126,6 +126,39 @@ class NativeClientTests(unittest.TestCase):
     def test_symlink_destination_cannot_escape_game(self):
         outside=self.root/'outside';outside.mkdir();(self.game/'linked').symlink_to(outside,target_is_directory=True)
         self.package({'payload/linked/escape':b'blocked'});self.install(success=False);self.assertFalse((outside/'escape').exists());self.retained()
+    def test_mods_migration_repeat_conflict_and_rollback(self):
+        self.manifest['mods_vfs']=True
+        for name,data in {'vfs.dat':b'stock index','vfs.zip':b'stock zip','vfs1.dat':b'mod index','vfs1.zip':b'mod zip'}.items():
+            (self.game/name).write_bytes(data)
+        self.package();self.install('--dry-run','--no-music-link')
+        self.assertTrue((self.game/'vfs1.dat').exists());self.assertFalse((self.game/'mods/.reriff-vfs').exists())
+        # Failure after archive writes rolls back the entire migration.
+        (self.game/'mods').mkdir();(self.game/'mods/.reriff-vfs').mkdir()
+        self.install('--no-music-link',success=False)
+        self.assertEqual((self.game/'vfs1.zip').read_bytes(),b'mod zip')
+        self.assertFalse((self.game/'mods/vfs1.zip').exists())
+        (self.game/'mods/.reriff-vfs').rmdir()
+        self.install('--no-music-link');self.install('--no-music-link')
+        self.assertFalse((self.game/'vfs1.dat').exists())
+        self.assertEqual((self.game/'mods/vfs1.dat').read_bytes(),b'mod index')
+        self.assertEqual((self.game/'vfs.dat').read_bytes(),b'stock index')
+        self.assertEqual((self.game/'vfs.zip').read_bytes(),b'stock zip')
+        (self.game/'vfs1.dat').write_bytes(b'conflicting index')
+        self.install('--no-music-link',success=False)
+        self.assertEqual((self.game/'vfs1.dat').read_bytes(),b'conflicting index')
+        self.assertEqual((self.game/'mods/vfs1.dat').read_bytes(),b'mod index')
+        self.retained()
+    def test_mods_incomplete_alias_and_symlink_refused(self):
+        self.manifest['mods_vfs']=True;self.package()
+        (self.game/'vfs1.dat').write_bytes(b'index')
+        self.install('--no-music-link',success=False)
+        self.assertFalse((self.game/'mods').exists())
+        (self.game/'vfs1.zip').write_bytes(b'zip')
+        (self.game/'vfs01.dat').write_bytes(b'alias')
+        self.install('--no-music-link',success=False);(self.game/'vfs01.dat').unlink()
+        outside=self.root/'outside';outside.mkdir();(self.game/'mods').symlink_to(outside,target_is_directory=True)
+        self.install('--no-music-link',success=False)
+        self.assertEqual(list(outside.iterdir()),[]);self.retained()
     def test_old_client_python_runtime_is_archived(self):
         local=self.game/'localserver';local.mkdir();(local/'install-state.json').write_text('{"version":"old"}')
         (local/'ReRiff-Runtime-x86_64.AppImage').write_bytes(b'old owned runtime');self.package();self.install('--no-music-link')

@@ -702,6 +702,7 @@ static BOOL validate_image_at(BYTE *base,uintptr_t address_base) {
 static BOOL validate_image(BYTE *base) { return validate_image_at(base,(uintptr_t)base); }
 
 #include "flac_sample_rate.h"
+#include "mods_vfs.h"
 static BOOL latin_pack_enabled(void){WCHAR value[16];GetPrivateProfileStringW(L"languages",L"latin_enabled",L"0",value,16,config_path);return !wcscmp(value,L"1")||!_wcsicmp(value,L"true");}
 static BOOL cjk_pack_enabled(void){
     WCHAR value[16];GetPrivateProfileStringW(L"languages",L"cjk_enabled",L"",value,16,config_path);
@@ -786,6 +787,7 @@ __declspec(dllexport) BOOL __cdecl ReRiffStartEngineMenu(void) {
     HMODULE pinned;
     if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_PIN,
         (const WCHAR *)(uintptr_t)&ReRiffStartEngineMenu,&pinned)) return FALSE;
+    if(!install_mods_vfs(base,path))log_line("Mods VFS hook refused: native archive loader differs.");
     if(!install_scrobbler(base))log_line("Last.fm playback hook refused: original race differs.");
     if(!install_lastfm_utf8(base))log_line("Last.fm UTF-8 correction refused: original CIL bytes differ.");
     if(!install_progression_economy(base))log_line("Economy trace wrappers refused: original CIL differs.");

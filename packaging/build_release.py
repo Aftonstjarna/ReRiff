@@ -134,7 +134,7 @@ def build(args):
             copy(ROOT/'scripts/windows-server-control.py',folder/'payload/localserver/windows-server-control.py')
             for name in ('local_server.py','host_process.py','windows_package.py'):
                 copy(ROOT/'LinuxRuntime'/name,folder/'payload/localserver'/name)
-        manifest = {'core_artwork':core_artwork, 'singleplayer': True, 'channel':channel,'version':version,'commit':commit,'platform':platform,'patches':patches,
+        manifest = {'mods_vfs':True, 'core_artwork':core_artwork, 'singleplayer': True, 'channel':channel,'version':version,'commit':commit,'platform':platform,'patches':patches,
                     'update_only':update_only, 'native_linux':platform == 'linux', 'latin_component':{'file':'components/ReRiff-Latin.zip','sha256':digest(latin_pack.read_bytes())}, 'language_component':{'file':'components/ReRiff-CJK.zip','sha256':digest(font_pack.read_bytes())}, 'python_runtime':'download' if platform == 'windows' else 'server-only',
                     'vanilla_originals':json.loads((ROOT/'packaging/original-client.json').read_text()) if args.local_patching else {},
                     'compatible_existing':json.loads((ROOT/'packaging/compatible-client.json').read_text()) if args.local_patching else {},

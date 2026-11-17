@@ -142,11 +142,17 @@ __attribute__((naked,noinline)) static void cjk_pen_entry(void){
 static CjkAtlas *cjk_read_atlas(CjkAtlas *atlas,unsigned tier,BOOL latin){
     atlas->attempted=TRUE;atlas->pixels=tier==0?32:tier==1?64:96;
     WCHAR path[MAX_PATH],suffix[64];wcscpy(path,config_path);WCHAR *slash=wcsrchr(path,L'\\');
-    if(latin)_snwprintf(suffix,64,L"\\fonts\\noto-latin\\latin%u.rrcf",(unsigned)atlas->pixels);
-    else if(tier)_snwprintf(suffix,64,L"\\fonts\\noto-cjk\\jp%u.rrcf",(unsigned)atlas->pixels);
-    else wcscpy(suffix,L"\\fonts\\noto-cjk\\jp.rrcf");
+    if(latin)_snwprintf(suffix,64,L"\\mods\\noto-latin-font\\noto-latin\\latin%u.rrcf",(unsigned)atlas->pixels);
+    else if(tier)_snwprintf(suffix,64,L"\\mods\\noto-cjk-font\\noto-cjk\\jp%u.rrcf",(unsigned)atlas->pixels);
+    else wcscpy(suffix,L"\\mods\\noto-cjk-font\\noto-cjk\\jp.rrcf");
     if(!slash||(size_t)(slash-path)+wcslen(suffix)>=MAX_PATH)return NULL;wcscpy(slash,suffix);
     HANDLE file=CreateFileW(path,GENERIC_READ,FILE_SHARE_READ,NULL,OPEN_EXISTING,0,NULL);
+    if(file==INVALID_HANDLE_VALUE){
+        if(latin)_snwprintf(suffix,64,L"\\fonts\\noto-latin\\latin%u.rrcf",(unsigned)atlas->pixels);
+        else if(tier)_snwprintf(suffix,64,L"\\fonts\\noto-cjk\\jp%u.rrcf",(unsigned)atlas->pixels);
+        else wcscpy(suffix,L"\\fonts\\noto-cjk\\jp.rrcf");
+        wcscpy(slash,suffix);file=CreateFileW(path,GENERIC_READ,FILE_SHARE_READ,NULL,OPEN_EXISTING,0,NULL);
+    }
     if(file==INVALID_HANDLE_VALUE)return NULL;
     DWORD header[12]={0},count,size=GetFileSize(file,NULL),header_size=tier?48:32,record_size=tier?44:32;
     BOOL ok=ReadFile(file,header,header_size,&count,NULL)&&count==header_size;

@@ -37,6 +37,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python scripts/test_language_component.py --host build/installer-patcher/ReRiff-Patcher.exe
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python scripts/test_mods_migration.py --host build/installer-patcher/ReRiff-Patcher.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python scripts/test_core_artwork.py --host build/installer-patcher/ReRiff-Patcher.exe
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           dotnet build NewsHeaders/NewsHeaders.csproj -c Release -o build
@@ -171,6 +173,7 @@ jobs:
           python -m unittest discover -s packaging -p test_font_assets.py -v
           python scripts/fetch-font-components.py
           python scripts/test_language_component.py --host build/linux-patcher/Patcher
+          python scripts/test_mods_migration.py --host build/linux-patcher/Patcher
           python scripts/test_core_artwork.py --host build/linux-patcher/Patcher
           python scripts/test_font_packs.py --host build/linux-patcher/Patcher --cjk build/cjk-component/ReRiff-CJK.zip --latin build/latin-component/ReRiff-Latin.zip
       - name: Package Windows and Linux installers

@@ -12,6 +12,7 @@
     <Compile Include="Program.cs" />
     <Compile Include="LanguageComponent.cs" />
     <Compile Include="CoreArtwork.cs" />
+    <Compile Include="ModsVfs.cs" />
     <Reference Include="System.IO.Compression" />
     <Reference Include="System.IO.Compression.FileSystem" />
     <Reference Include="System.Runtime.Serialization" />
