@@ -1,10 +1,10 @@
-# Multiplayer prestige candidate
+# Multiplayer prestige
 
-This candidate adds opt-in progression for trusted test servers. It reuses the
+ReRiff 1.4.0 includes opt-in progression for trusted servers. It reuses the
 native isolated-save hooks, original save serializer, and manual Credits
-confirmation/reset flow. It needs **ReRiff 1.4.0-beta.5 or later** and the
-`ghcr.io/aftonstjarna/reriff:experimental` server image. The published
-1.4.0-beta.4 client does not enable multiplayer prestige.
+confirmation/reset flow. Use matching **ReRiff 1.4.0** client and server
+packages, or `ghcr.io/aftonstjarna/reriff:latest`. The protocol first shipped
+in client 1.4.0-beta.5; older clients do not support it.
 
 Each server account has an immutable, randomly generated UUID. The server UUID
 and account UUID determine its save domain. Username, display name, Steam ID,
@@ -21,7 +21,7 @@ file. Its named volume is project-scoped; do not reuse a production data volume.
 Put these settings in `.env` beside that Compose file:
 
 ```dotenv
-RERIFF_IMAGE=ghcr.io/aftonstjarna/reriff:experimental
+RERIFF_IMAGE=ghcr.io/aftonstjarna/reriff:latest
 RERIFF_PORT=5145
 RERIFF_PROGRESSION_MODE=trusted
 ```
