@@ -115,12 +115,25 @@ in the launcher. In `singleplayer.ini` beside `Game.exe`, set
 existing progress into a separate profile and preserves the original save.
 Set it back to `0` to return to the original save; progress is not merged back.
 
-**Change the balance:** edit the existing `[balance]` values in that same file,
-then restart. For example, `coin_reward_rate = 2` doubles race coin awards before
-prestige multipliers, and `paint_price_scale = 0.5` halves base paint prices before
-discounts. Existing custom values are preserved during updates. See the
+**Change the balance:** edit `[balance]` in that same file, then restart.
+For example, this custom discount setup comes from the maintainer's local INI
+and differs from the defaults above:
+
+```ini
+[balance]
+discount_mode = interval
+discount_start_level = 10
+discount_start = 0.20
+discount_interval = 5
+discount_increase = 0.05
+discount_maximum = 0.50
+```
+
+It gives 20% off at level 10, then another five percentage points every five
+levels, reaching 50% at level 40. Edit the existing section rather than adding a
+duplicate. Updates preserve custom values. See the
 [progression and balance guide](https://github.com/Aftonstjarna/ReRiff/wiki/Progression-and-balance)
-for all settings, discount examples and save precautions.
+for reward rates, prices, level settings and save precautions.
 
 Multiplayer progression is enabled by the **server operator**, with its own
 balance settings; your `singleplayer.ini` does not change server rules.
