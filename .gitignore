@@ -17,3 +17,7 @@ server.ini
 # Local deployment settings.
 .env
 server.env
+
+# Local Last.fm application/account credentials and listening queue.
+client.ini
+lastfm-queue.json

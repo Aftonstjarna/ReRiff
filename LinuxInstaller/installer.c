@@ -19,7 +19,7 @@
 #endif
 /* Only APIs available on GTK 3.10 / GLib 2.52 or earlier. No GTK link dependency. */
 #define GTK_API(X) \
- X(gtk_init_check) X(gtk_window_new) X(gtk_window_set_title) X(gtk_window_set_default_size) \
+ X(gtk_window_set_icon_from_file) X(gtk_image_new_from_file) X(gtk_init_check) X(gtk_window_new) X(gtk_window_set_title) X(gtk_window_set_default_size) \
  X(gtk_container_set_border_width) X(gtk_box_new) X(gtk_container_add) X(gtk_box_pack_start) \
  X(gtk_label_new) X(gtk_label_set_text) X(gtk_label_set_line_wrap) X(gtk_misc_set_alignment) \
  X(gtk_file_chooser_button_new) X(gtk_file_chooser_set_filename) X(gtk_file_chooser_get_filename) \
@@ -29,7 +29,7 @@
  X(gtk_progress_bar_new) X(gtk_progress_bar_pulse) X(gtk_progress_bar_set_fraction) \
  X(gtk_scrolled_window_new) X(gtk_text_view_new) X(gtk_text_view_set_editable) \
  X(gtk_text_view_set_cursor_visible) X(gtk_text_view_get_buffer) X(gtk_text_buffer_set_text) \
- X(gtk_widget_show_all) X(gtk_widget_destroy) X(gtk_main) X(gtk_main_quit) \
+ X(gtk_widget_set_tooltip_text) X(gtk_widget_show_all) X(gtk_widget_destroy) X(gtk_main) X(gtk_main_quit) \
  X(g_signal_connect_data) X(g_timeout_add) X(g_free) X(g_error_free) X(g_build_filename) \
  X(g_spawn_sync) X(g_mkdir_with_parents) X(g_get_home_dir) X(g_utf8_make_valid) X(g_file_get_contents) X(g_convert)
 struct GtkApi {
@@ -52,6 +52,27 @@ typedef struct Setup {
     pid_t child;
     int finished,exit_code,temporary_log;
 } Setup;
+static int installer_log_selected(const char *game) {
+    char path[32768],line[1024];snprintf(path,sizeof(path),"%s/client.ini",game);if(access(path,F_OK))snprintf(path,sizeof(path),"%s/server.ini",game);
+    char *contents=NULL;gsize length=0;
+    if(!ui.g_file_get_contents(path,&contents,&length,NULL))return 1;
+    if(length>=2&&((unsigned char)contents[0]==255||(unsigned char)contents[0]==254)) {
+        gsize written=0;char *utf8=ui.g_convert(contents,(gssize)length,"UTF-8","UTF-16",NULL,&written,NULL);ui.g_free(contents);contents=utf8;length=written;
+    }
+    if(!contents)return 1;
+    unsigned skip=length>=3&&!memcmp(contents,"\xef\xbb\xbf",3)?3:0;
+    FILE *file=fmemopen(contents+skip,length-skip,"r");if(!file){ui.g_free(contents);return 1;}int section=0,enabled=1;
+    while(fgets(line,sizeof(line),file)) {
+        char *p=line;while(*p==' '||*p=='\t')p++;
+        if(*p=='[')section=!strncasecmp(p,"[diagnostics]",13);
+        if(section&&!strncasecmp(p,"log_installer",13)) {
+            p+=13;while(*p==' '||*p=='\t')p++;if(*p++!='=')continue;
+            while(*p==' '||*p=='\t')p++;enabled=!strncasecmp(p,"true",4)||!strncasecmp(p,"yes",3)||*p=='1';
+        }
+    }
+    fclose(file);ui.g_free(contents);return enabled;
+}
+
 static void set_status(Setup *s,const char *text){ui.gtk_label_set_text((GtkLabel *)s->status,text);}
 static void refresh_log(Setup *s) {
     if(!s->log_path)return;
@@ -101,12 +122,13 @@ static void install_clicked(GtkWidget *widget,gpointer data) {
     }
     ui.g_free(exe);
     gboolean logging=ui.gtk_toggle_button_get_active((GtkToggleButton *)s->logging_check);
-    char *logs=logging?ui.g_build_filename(game,"logs",NULL):ui.g_build_filename("/tmp",NULL);
-    if(logging&&ui.g_mkdir_with_parents(logs,0700)){
+    gboolean save_log=logging&&installer_log_selected(game);
+    char *logs=save_log?ui.g_build_filename(game,"logs",NULL):ui.g_build_filename("/tmp",NULL);
+    if(save_log&&ui.g_mkdir_with_parents(logs,0700)){
         set_status(s,"Could not create the installer log folder. Check the game-folder permissions.");
         ui.g_free(logs);ui.g_free(game);return;
     }
-    if(s->temporary_log&&s->log_path)unlink(s->log_path);s->temporary_log=!logging;
+    if(s->temporary_log&&s->log_path)unlink(s->log_path);s->temporary_log=!save_log;
     ui.g_free(s->log_path);s->log_path=ui.g_build_filename(logs,"installer-XXXXXX.log",NULL);ui.g_free(logs);
     int fd=mkstemps(s->log_path,4);
     if(fd<0){set_status(s,"Could not create the installer log. No game files were changed.");ui.g_free(game);return;}
@@ -129,7 +151,7 @@ static void install_clicked(GtkWidget *widget,gpointer data) {
         posix_spawn_file_actions_destroy(&actions);
     }
     close(fd);ui.g_free(runtime);ui.g_free(game);
-    ui.gtk_label_set_text((GtkLabel *)s->log_label,logging?s->log_path:"Setup details are temporary while logging is disabled.");
+    ui.gtk_label_set_text((GtkLabel *)s->log_label,save_log?s->log_path:"Setup details are temporary while logging is disabled.");
     if(error){s->child=0;set_status(s,"Could not start the bundled Linux runtime. No game files were changed.");return;}
     s->finished=0;s->exit_code=0;
     ui.gtk_widget_set_sensitive(s->cjk_check,FALSE);ui.gtk_widget_set_sensitive(s->latin_check,FALSE);ui.gtk_widget_set_sensitive(s->logging_check,FALSE);
@@ -157,7 +179,8 @@ static void music_toggled(GtkWidget *widget,gpointer data){
 static void language_folder_changed(GtkWidget *widget,gpointer data){
     (void)widget;Setup *s=data;if(s->child)return;
     char *game=ui.gtk_file_chooser_get_filename((GtkFileChooser *)s->folder);if(!game)return;
-    char *path=ui.g_build_filename(game,"server.ini",NULL),*contents=NULL;gsize length=0;GError *error=NULL;
+    char *path=ui.g_build_filename(game,"client.ini",NULL),*contents=NULL;
+    if(access(path,F_OK)){ui.g_free(path);path=ui.g_build_filename(game,"server.ini",NULL);}gsize length=0;GError *error=NULL;
     FILE *file=NULL;
     if(ui.g_file_get_contents(path,&contents,&length,&error)) {
         if(length>=2&&((unsigned char)contents[0]==255||(unsigned char)contents[0]==254)) {
@@ -184,18 +207,26 @@ static void create_window(Setup *s) {
     ui.gtk_container_set_border_width((GtkContainer *)s->window,20);
     GtkWidget *outer=ui.gtk_scrolled_window_new(NULL,NULL);ui.gtk_container_add((GtkContainer *)s->window,outer);
     GtkWidget *box=ui.gtk_box_new(GTK_ORIENTATION_VERTICAL,12);ui.gtk_container_add((GtkContainer *)outer,box);
+    char *icon=ui.g_build_filename(s->bundle,"branding","reriff-icon.png",NULL);
+    if(!access(icon,R_OK))ui.gtk_window_set_icon_from_file((GtkWindow *)s->window,icon,NULL);ui.g_free(icon);
+    char *logo=ui.g_build_filename(s->bundle,"branding","reriff-logo.png",NULL);
+    if(!access(logo,R_OK))ui.gtk_box_pack_start((GtkBox *)box,ui.gtk_image_new_from_file(logo),FALSE,FALSE,0);ui.g_free(logo);
     ui.gtk_box_pack_start((GtkBox *)box,label("Install ReRiff for Linux / Proton"),FALSE,FALSE,0);
-    ui.gtk_box_pack_start((GtkBox *)box,label("Close Riff Racer and its launcher, then choose the game folder containing Game.exe. Settings, scores, and server data are kept. Original DLL backups are verified and stored in the game's .bak folder."),FALSE,FALSE,0);
+    ui.gtk_box_pack_start((GtkBox *)box,label("Choose the folder the Game.exe is in. Backups of original files will be made."),FALSE,FALSE,0);
     s->folder=ui.gtk_file_chooser_button_new("Choose the Riff Racer game folder",GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER);
     ui.gtk_box_pack_start((GtkBox *)box,s->folder,FALSE,FALSE,0);
-    s->cjk_check=ui.gtk_check_button_new_with_label("Install and enable CJK fonts (Chinese, Japanese, Korean; about 105 MiB)");
+    s->cjk_check=ui.gtk_check_button_new_with_label("Install and enable CJK fonts");
+    ui.gtk_widget_set_tooltip_text(s->cjk_check,"Adds Chinese, Japanese and Korean characters. Downloads about 105 MiB. Fonts do not translate menus.");
     ui.gtk_box_pack_start((GtkBox *)box,s->cjk_check,FALSE,FALSE,0);
-    s->latin_check=ui.gtk_check_button_new_with_label("Install and enable Latin/European fonts (including Polish)");
+    s->latin_check=ui.gtk_check_button_new_with_label("Install and enable Latin/European fonts");
+    ui.gtk_widget_set_tooltip_text(s->latin_check,"Adds Latin and European characters, including Polish. A small download; fonts do not translate menus.");
     ui.gtk_box_pack_start((GtkBox *)box,s->latin_check,FALSE,FALSE,0);
-    s->logging_check=ui.gtk_check_button_new_with_label("Enable diagnostic logging (defaults on for beta/development builds)");
+    s->logging_check=ui.gtk_check_button_new_with_label("Enable diagnostic logging");
+    ui.gtk_widget_set_tooltip_text(s->logging_check,"Saves reports in the game's logs folder. Defaults on for beta/development builds. Disabling keeps existing logs.");
     ui.gtk_toggle_button_set_active((GtkToggleButton *)s->logging_check,strchr(RERIFF_VERSION,'-')!=NULL||!strcmp(RERIFF_VERSION,"development"));
     ui.gtk_box_pack_start((GtkBox *)box,s->logging_check,FALSE,FALSE,0);
-    s->music_check=ui.gtk_check_button_new_with_label("Link Linux music folder into the Proton prefix");
+    s->music_check=ui.gtk_check_button_new_with_label("Link music folder");
+    ui.gtk_widget_set_tooltip_text(s->music_check,"Makes the selected Linux music folder available inside the Proton prefix. Choose the folder below.");
     ui.gtk_toggle_button_set_active((GtkToggleButton *)s->music_check,TRUE);
     ui.gtk_box_pack_start((GtkBox *)box,s->music_check,FALSE,FALSE,0);
     s->music_path=ui.gtk_entry_new();
@@ -208,7 +239,7 @@ static void create_window(Setup *s) {
     GtkWidget *scroll=ui.gtk_scrolled_window_new(NULL,NULL);s->details=ui.gtk_text_view_new();
     ui.gtk_text_view_set_editable((GtkTextView *)s->details,FALSE);ui.gtk_text_view_set_cursor_visible((GtkTextView *)s->details,FALSE);
     ui.gtk_container_add((GtkContainer *)scroll,s->details);ui.gtk_box_pack_start((GtkBox *)box,scroll,TRUE,TRUE,0);
-    s->log_label=label("Enabled logging saves reports in the game's logs folder. Existing logs are kept when disabled.");ui.gtk_box_pack_start((GtkBox *)box,s->log_label,FALSE,FALSE,0);
+    s->log_label=label("");ui.gtk_box_pack_start((GtkBox *)box,s->log_label,FALSE,FALSE,0);
     GtkWidget *buttons=ui.gtk_box_new(GTK_ORIENTATION_HORIZONTAL,12);
     s->button=ui.gtk_button_new_with_label("Install");s->close=ui.gtk_button_new_with_label("Close");
     ui.gtk_box_pack_start((GtkBox *)buttons,s->button,TRUE,TRUE,0);ui.gtk_box_pack_start((GtkBox *)buttons,s->close,FALSE,FALSE,0);

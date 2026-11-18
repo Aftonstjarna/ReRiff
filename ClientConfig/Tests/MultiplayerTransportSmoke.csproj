@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net45</TargetFramework><EnableDefaultCompileItems>false</EnableDefaultCompileItems></PropertyGroup>
+  <ItemGroup>
+    <Compile Include="MultiplayerTransportSmoke.cs" /><Compile Include="../ProgressionRemote.cs" /><Compile Include="../ProgressionCheckpoints.cs" /><Compile Include="../ProgressionStore.cs" /><Compile Include="../ProgressionBalance.cs" /><Compile Include="../ProgressionRewards.cs" /><Compile Include="../../Shared/ConfigFiles.cs" />
+    <Reference Include="System.Web.Extensions" />
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net45" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+</Project>

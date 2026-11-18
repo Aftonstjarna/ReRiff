@@ -24,6 +24,7 @@ pythonlib=$(python -c 'import sysconfig; print(sysconfig.get_path("stdlib"))')
 /opt/quick-sharun /usr/bin/python3 "$pythonlib"/lib-dynload/*.so
 mkdir -p "$APPDIR/lib/reriff" "$APPDIR/share/reriff/licenses"
 cp LinuxRuntime/entry.py LinuxRuntime/local_server.py LinuxRuntime/serve.py LinuxRuntime/host_process.py "$APPDIR/lib/reriff/"
+cp packaging/logging_policy.py "$APPDIR/lib/reriff/logging_policy.py"
 cp LICENSE "$APPDIR/share/reriff/licenses/ReRiff.txt"
 cp /etc/ssl/certs/ca-certificates.crt "$APPDIR/share/reriff/ca-certificates.crt"
 cp -a /usr/share/licenses/. "$APPDIR/share/reriff/licenses/"
@@ -38,6 +39,8 @@ cp -a vendor/riffapi-local-extended/. "$APPDIR/lib/reriff/server/"
 cp VERSION "$APPDIR/lib/reriff/server/VERSION"
 cp scripts/trace-server.py "$APPDIR/lib/reriff/trace-server.py"
 cp docker/server.py "$APPDIR/lib/reriff/docker/server.py"
+mkdir -p "$APPDIR/lib/reriff/Progression"
+cp Progression/balance.py Progression/balance.json Progression/multiplayer.py "$APPDIR/lib/reriff/Progression/"
 g++ -std=c++17 -O2 -shared -fPIC -static-libstdc++ -static-libgcc ServerSync/catalog.cpp -o /build/libreriff-catalog.so
 g++ -std=c++17 -O2 -shared -fPIC -static-libstdc++ -static-libgcc ServerSync/news.cpp -o /build/libreriff-news.so
 /opt/quick-sharun /build/libreriff-catalog.so /build/libreriff-news.so

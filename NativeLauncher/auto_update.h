@@ -3,11 +3,16 @@
 #include <wincrypt.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include "update_check_cache.h"
+static void update_timing(const WCHAR *stage,ULONGLONG start){
+    WCHAR line[256];_snwprintf(line,256,L"Timing: %ls %llu ms",stage,(unsigned long long)(GetTickCount64()-start));log_message(line);
+}
 static BOOL update_handoff=FALSE;
 static BOOL stop_server(void);
 static int automatic_progress_stage=PROGRESS_CHECK;
 
 static BOOL update_download(HINTERNET session,const WCHAR *url,const WCHAR *destination,DWORD maximum) {
+    ULONGLONG started=GetTickCount64();
     update_problem[0]=0;if(automatic_update&&progress_cancelled())return FALSE;
     HINTERNET req=InternetOpenUrlW(session,url,L"Accept: application/vnd.github+json\r\n",(DWORD)-1,
         INTERNET_FLAG_RELOAD|INTERNET_FLAG_NO_CACHE_WRITE|INTERNET_FLAG_NO_UI|INTERNET_FLAG_NO_COOKIES,0);
@@ -28,7 +33,7 @@ static BOOL update_download(HINTERNET session,const WCHAR *url,const WCHAR *dest
                     if(read>maximum-total){_snwprintf(update_problem,512,L"The download exceeded this launcher's %.1f MiB limit. Install the newer release manually.",maximum/(1024.0*1024.0));ok=FALSE;break;}
                     if(!WriteFile(file,block,read,&written,NULL)||written!=read){error=GetLastError();_snwprintf(update_problem,512,L"Could not save the download (system error %lu). Check disk space and folder permissions.",(unsigned long)error);ok=FALSE;break;}
                     total+=read;
-                    if(automatic_update)progress_report(automatic_progress_stage,expected_bytes?(int)((ULONGLONG)total*100/expected_bytes):-1);
+                    progress_report(automatic_progress_stage,expected_bytes?(int)((ULONGLONG)total*100/expected_bytes):-1);
                 }
                 CloseHandle(file);
             }
@@ -41,10 +46,12 @@ static BOOL update_download(HINTERNET session,const WCHAR *url,const WCHAR *dest
             else _snwprintf(update_problem,512,L"The download could not complete (HTTP %lu, system error %lu). Check the connection and available disk space.",(unsigned long)code,(unsigned long)error);}
         update_problem[511]=0;log_message(update_problem);if(created)DeleteFileW(destination);
     }
+    update_timing(L"update download request",started);
     return ok;
 }
 
 static BOOL update_digest(const WCHAR *name,const char *expected) {
+    ULONGLONG started=GetTickCount64();
     HANDLE file=CreateFileW(name,GENERIC_READ,FILE_SHARE_READ,NULL,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,NULL);
     if(file==INVALID_HANDLE_VALUE)return FALSE;
     HCRYPTPROV provider=0;HCRYPTHASH hash=0;BOOL ok=FALSE;DWORD count=0,size=32;
@@ -55,7 +62,7 @@ static BOOL update_digest(const WCHAR *name,const char *expected) {
         ok=ok&&CryptGetHashParam(hash,HP_HASHVAL,digest,&size,0);
         if(ok){for(int i=0;i<32;i++)snprintf(hex+2*i,3,"%02x",digest[i]);ok=!_stricmp(hex,expected);}
     }
-    if(hash)CryptDestroyHash(hash);if(provider)CryptReleaseContext(provider,0);CloseHandle(file);return ok;
+    if(hash)CryptDestroyHash(hash);if(provider)CryptReleaseContext(provider,0);CloseHandle(file);update_timing(L"update checksum verification",started);return ok;
 }
 
 static BOOL update_host_path(const WCHAR *source,WCHAR *out) {
@@ -109,8 +116,9 @@ static BOOL save_auto_resume(const WCHAR *work) {
 }
 
 static BOOL check_updates(void) {
+    ULONGLONG started=GetTickCount64(),preflight_started=0;
     update_problem[0]=update_failure[0]=update_work[0]=0;
-    if(!is_wine()&&!ensure_private_python(window,folder,TRUE)){wcscpy(message,L"Python setup was canceled or failed; the installed client was retained.");wcscpy(update_failure,message);return FALSE;}
+    if(update_check_recent()){wcscpy(message,L"Recently checked for updates; starting installed version.");log_message(message);return TRUE;}
     WCHAR temporary[CAP],work[CAP],api[CAP],sums[CAP],archive[CAP],url[CAP],filename[256],hash_w[65],command[CAP],name[CAP],source[CAP];
     BOOL ok=FALSE;PROCESS_INFORMATION process;char expected[65]="",*body=NULL;GithubRelease selected={0};ReleasePackage package;
     const WCHAR *failure=L"Could not read the GitHub release list";
@@ -152,10 +160,10 @@ static BOOL check_updates(void) {
     if(!update_download(session,url,metadata,65535))goto done;
     FILE *file=_wfopen(metadata,L"rb");if(!file)goto done;
     size_t n=fread(body,1,UPDATE_JSON_LIMIT-1,file);body[n]=0;fclose(file);
-    failure=L"The selected release does not list a valid installer for this platform";
+    failure=L"The selected release has invalid or unsupported update metadata, or no compatible client installer";
     if(!release_package(body,is_wine(),&package))goto done;
     if(!release_needs_install(package.version,RERIFF_VERSION,requested_experimental,installed_experimental,force_auto_reinstall)){
-        wcscpy(message,L"You have the latest published release on this channel.");ok=TRUE;goto done;
+        wcscpy(message,L"You have the latest published release on this channel.");update_check_remember();ok=TRUE;goto done;
     }
     if(automatic_update&&force_auto_reinstall&&!strcmp(package.version,RERIFF_VERSION))
         log_message(L"TEST: unattended reinstall of the current published version; resume will skip the update check.");
@@ -171,19 +179,34 @@ static BOOL check_updates(void) {
     while(fgets(line,sizeof(line),file)){
         if(sscanf(line,"%64[0123456789abcdefABCDEF] %511s",sum,listed)==2&&strlen(sum)==64&&!strcmp(listed,filename_u8))strcpy(expected,sum);
     }fclose(file);if(!*expected)goto done;
+    if(package.explicit_metadata&&_stricmp(expected,package.sha256)){
+        failure=L"The package metadata and release checksum disagree";goto done;
+    }
+    if(package.explicit_metadata&&package.size>256ULL*1024*1024){
+        failure=L"This package exceeds the download size supported by this launcher; install the newer release manually";goto done;
+    }
     _snwprintf(archive,CAP,L"%ls\\%ls",work,filename);archive[CAP-1]=0;
     _snwprintf(url,CAP,L"https://github.com/Aftonstjarna/ReRiff/releases/download/%ls/%ls",release_tag,filename);url[CAP-1]=0;
     failure=L"Could not download the release package";
-    if(automatic_update){automatic_progress_stage=PROGRESS_DOWNLOAD;progress_report(PROGRESS_DOWNLOAD,0);}
+    automatic_progress_stage=PROGRESS_DOWNLOAD;progress_report(PROGRESS_DOWNLOAD,0);
     if(!update_download(session,url,archive,256*1024*1024))goto done;
     failure=L"The release checksum did not match";
-    if(automatic_update){if(progress_cancelled())goto done;progress_report(PROGRESS_VERIFY,-1);}
+    if(automatic_update&&progress_cancelled())goto done;progress_report(PROGRESS_VERIFY,-1);
+    if(package.explicit_metadata){
+        WIN32_FILE_ATTRIBUTE_DATA info;
+        if(!GetFileAttributesExW(archive,GetFileExInfoStandard,&info)
+            ||(((ULONGLONG)info.nFileSizeHigh<<32)|info.nFileSizeLow)!=package.size){
+            failure=L"The downloaded package size does not match release metadata";goto done;
+        }
+    }
     if(!update_digest(archive,expected))goto done;
     if(automatic_update&&progress_cancelled())goto done;
     MultiByteToWideChar(CP_UTF8,0,expected,-1,hash_w,65);
+    if(!is_wine()&&!ensure_private_python(window,folder,TRUE)){failure=L"Python setup was canceled or failed";goto done;}
+    preflight_started=GetTickCount64();
     path(source,L"localserver\\apply-client-update.py");
     failure=L"Could not start installer preflight";
-    if(automatic_update)progress_report(PROGRESS_PREPARE,-1);
+    progress_report(PROGRESS_PREPARE,-1);
     _snwprintf(name,CAP,L"%ls\\apply-client-update.py",work);name[CAP-1]=0;
     if(!is_wine()) {
         WCHAR policy[CAP],destination[CAP];path(policy,L"localserver\\logging_policy.py");
@@ -205,6 +228,7 @@ static BOOL check_updates(void) {
         if(GetTickCount64()>deadline){failure=L"Installer preflight timed out after two minutes";goto done;}Sleep(100);
     }
     if(automatic_update&&progress_cancelled())goto done;
+    update_timing(L"installer preflight",preflight_started);
     /* The Linux apply tool confirms owned-server shutdown directly. Wine's
      * start.exe exit status cannot establish native Unix child completion. */
     if(!is_wine()&&!stop_server()){log_message(message);failure=L"Could not stop this installation's local server";goto done;}
@@ -224,6 +248,7 @@ static BOOL check_updates(void) {
     CloseHandle(process.hThread);CloseHandle(process.hProcess);
     update_remember(work);update_handoff=TRUE;wcscpy(message,automatic_update?L"Installing the verified update. The game will start automatically.":L"Installing the verified update. The launcher will reopen automatically.");ok=TRUE;
 done:
+    update_timing(L"update check/preparation total",started);
     if(body)HeapFree(GetProcessHeap(),0,body);
     InternetCloseHandle(session);
     if(automatic_update&&progress_cancelled()){wcscpy(message,L"Update canceled; starting the installed game.");return FALSE;}

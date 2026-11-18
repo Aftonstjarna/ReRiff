@@ -13,7 +13,7 @@ public class MetadataTraceSmoke {
     static void Check(bool value,string name){if(!value)throw new Exception(name);Console.WriteLine("PASS: "+name);}
     static string ReadLog(string path){using(var stream=new FileStream(path,FileMode.Open,FileAccess.Read,FileShare.ReadWrite))using(var reader=new StreamReader(stream))return reader.ReadToEnd();}
     public static void Main(string[] args){
-        string root=AppDomain.CurrentDomain.BaseDirectory,log=Path.Combine(root,"logs/ReRiff-metadata.log");
+        string root=AppDomain.CurrentDomain.BaseDirectory,log=Path.Combine(root,"logs/ReRiff-text.log");
         bool enabled=args.Length==0;
         File.WriteAllText(Path.Combine(root,"server.ini"),"[diagnostics]\nmetadata_trace="+(enabled?"1":"0")+"\n");
         if(File.Exists(log))File.Delete(log);

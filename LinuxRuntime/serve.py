@@ -12,6 +12,13 @@ import secrets
 import threading
 import time
 from host_process import file_lock
+try:
+    from logging_policy import TimestampWriter, timestamp_text
+except ModuleNotFoundError:
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'packaging'))
+    from logging_policy import TimestampWriter, timestamp_text
+
 
 from local_server import LocalServer, atomic, stamp, lan_addresses
 
@@ -41,6 +48,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root', type=Path, required=True)
     args = parser.parse_args()
+    sys.stdout = TimestampWriter(sys.stdout)
+    sys.stderr = TimestampWriter(sys.stderr)
     server = LocalServer(args.root)
     token = os.environ.get('RERIFF_LOCAL_TOKEN', '')
     if len(token) != 64:

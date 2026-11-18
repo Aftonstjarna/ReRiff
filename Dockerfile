@@ -25,9 +25,11 @@ RUN python -m pip install --no-cache-dir -r /app/docker/requirements.txt \
 
 COPY vendor/riffapi-local-extended/ /app/server/
 COPY VERSION /app/server/VERSION
+COPY Progression/balance.py Progression/balance.json Progression/multiplayer.py /app/Progression/
 COPY --from=catalog-build /out/libreriff-catalog.so /app/server/libreriff-catalog.so
 COPY --from=catalog-build /out/libreriff-news.so /app/server/libreriff-news.so
 COPY scripts/trace-server.py /app/trace-server.py
+COPY packaging/logging_policy.py /app/packaging/logging_policy.py
 COPY docker/server.py docker/healthcheck.py /app/docker/
 COPY LICENSE /app/LICENSE
 COPY ServerSync/third_party/LICENSE.MIT /app/licenses/nlohmann-json.txt

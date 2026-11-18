@@ -66,6 +66,12 @@ class InstallerTests(unittest.TestCase):
             legacy=self.root/'legacy-update';shutil.copytree(self.bundle,legacy);self.bundle=legacy
             manifest=json.loads((legacy/'manifest.json').read_text());manifest.pop('vanilla_originals')
             manifest.pop('native_linux',None)  # This fixture deliberately exercises the legacy Python installer.
+            # Legacy delta bundles predate the native artwork planner. Its real
+            # helper/ownership integration is exercised by test_core_artwork.py.
+            manifest.pop('core_artwork',None)
+            # Legacy delta packages also predate native mod migration. Exercise
+            # that helper separately in test_mods_migration/test_native_client.
+            manifest.pop('mods_vfs',None)
             (legacy/'manifest.json').write_text(json.dumps(manifest))
         names=('ParseOctane.dll','Parse.NetFx45.dll')
         update_only=json.loads((self.bundle/'manifest.json').read_text()).get('update_only',False)
@@ -255,8 +261,8 @@ class VanillaInstallerTests(unittest.TestCase):
         (self.game/'logs/ReRiff-client.log').write_bytes(b'current diagnostics')
         self.install()
         self.assertFalse((self.game/'ReRiff-client.log').exists())
-        self.assertEqual((self.game/'logs/ReRiff-client.log').read_bytes(),b'current diagnostics')
-        moved=list((self.game/'logs').glob('legacy-*-ReRiff-client.log'))
+        self.assertEqual(next((self.game/'logs/archive').rglob('ReRiff-client.log')).read_bytes(),b'current diagnostics')
+        moved=list((self.game/'logs/archive').rglob('legacy-*-ReRiff-client.log'))
         self.assertEqual(len(moved),1)
         self.assertEqual(moved[0].read_bytes(),b'older diagnostics')
 

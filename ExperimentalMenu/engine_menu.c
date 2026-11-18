@@ -19,6 +19,12 @@
 
 #ifndef RERIFF_VERSION
 #define RERIFF_VERSION "development"
+#ifndef RERIFF_DEVELOPMENT_BUILD
+#define RERIFF_DEVELOPMENT_BUILD 1
+#endif
+#endif
+#ifndef RERIFF_DEVELOPMENT_BUILD
+#define RERIFF_DEVELOPMENT_BUILD 0
 #endif
 #define MENU_WIDE_(x) L##x
 #define MENU_WIDE(x) MENU_WIDE_(x)
@@ -58,10 +64,12 @@ static PositionFn sprite_position;
 static void **ui_instance;
 static ColourFn original_colour;
 static void *toggles[3][2];
+typedef void *(__thiscall *ServerButtonSpriteFn)(void *,int,int,DWORD,const float *,int);
+static ServerButtonSpriteFn server_button_sprite;
 static const int toggle_actions[3]={1,4,5};
-#define SERVER_ACTION_COUNT 9
+#define SERVER_ACTION_COUNT 11
 #define SERVER_ACTION_MAX 11
-static const int server_action_order[SERVER_ACTION_COUNT]={1,4,5,6,7,9,10,8,11};
+static const int server_action_order[SERVER_ACTION_COUNT]={1,2,3,4,5,6,7,9,10,8,11};
 static int server_action_index(int action){for(int i=0;i<SERVER_ACTION_COUNT;i++)if(server_action_order[i]==action)return i;return -1;}
 static void *server_rows[SERVER_ACTION_MAX+1]; /* borrowed; the original screen owns every row */
 static BYTE settings_visible, audio_visible;
@@ -82,12 +90,15 @@ static DWORD restart_started;
 
 #include "../NativeLauncher/logging.h"
 static void log_line(const char *line) {
-    if(!rr_logging_ini(config_path))return;
-    HANDLE file=CreateFileW(log_path,FILE_APPEND_DATA,FILE_SHARE_READ,NULL,OPEN_ALWAYS,FILE_ATTRIBUTE_NORMAL,NULL);
-    if (file!=INVALID_HANDLE_VALUE) {
-        DWORD written; WriteFile(file,line,(DWORD)strlen(line),&written,NULL);
-        WriteFile(file,"\r\n",2,&written,NULL); CloseHandle(file);
-    }
+    if(!rr_log_ini(config_path,L"engine_menu"))return;
+    rr_log_append(log_path,"engine_menu",line);
+}
+
+/* Refresh the readable label only after the managed side authenticated the
+ * ReRiff UUID. Optional diagnostics must not initialize Steam or change login. */
+__declspec(dllexport) void __cdecl ReRiffRefreshDiagnosticIdentity(void) {
+    if(!*log_path||!rr_logging_ini(config_path))return;
+    char header[3072];rr_diagnostic_header(log_path,header,sizeof(header));log_line(header);
 }
 
 static void load_settings(void) {
@@ -103,7 +114,7 @@ static void load_settings(void) {
     saved_settings=pending;
 }
 
-static BOOL save_settings(void) {
+static BOOL save_legacy_settings(void) {
     WCHAR temp[MAX_PATH];
     if (wcslen(config_path)+5>=MAX_PATH) return FALSE;
     wcscpy(temp,config_path); wcscat(temp,L".tmp");
@@ -125,6 +136,46 @@ static BOOL save_settings(void) {
     }
     if(ok)saved_settings=pending;
     if (!ok) DeleteFileW(temp);
+    return ok;
+}
+
+/* Stage each section in its actual owning INI. Routing server.ini.tmp cannot
+ * find client.ini, so a mixed temporary file leaves the old client value ahead. */
+static BOOL save_settings(void) {
+    WCHAR client[MAX_PATH],routed[32768];const WCHAR *owner=rr_config_path(config_path,L"launcher",routed);
+    if(owner==config_path)return save_legacy_settings();
+    if(wcslen(owner)+12>=MAX_PATH||wcslen(config_path)+5>=MAX_PATH)return FALSE;
+    wcscpy(client,owner);
+    WCHAR server_temp[MAX_PATH],client_temp[MAX_PATH],rollback[MAX_PATH];
+    _snwprintf(server_temp,MAX_PATH,L"%ls.tmp",config_path);
+    _snwprintf(client_temp,MAX_PATH,L"%ls.tmp",client);
+    _snwprintf(rollback,MAX_PATH,L"%ls.rollback",client);
+    BOOL existed=GetFileAttributesW(client)!=INVALID_FILE_ATTRIBUTES,ok=FALSE,committed=FALSE;
+    if(existed&&!CopyFileW(client,rollback,FALSE))return FALSE;
+    const WCHAR *from[2]={config_path,client},*to[2]={server_temp,client_temp};
+    for(int i=0;i<2;i++)if(!CopyFileW(from[i],to[i],FALSE)){
+        if(GetLastError()!=ERROR_FILE_NOT_FOUND)goto done;
+        HANDLE file=CreateFileW(to[i],GENERIC_WRITE,0,NULL,CREATE_ALWAYS,FILE_ATTRIBUTE_NORMAL,NULL);
+        if(file==INVALID_HANDLE_VALUE)goto done;CloseHandle(file);
+    }
+    if(!WritePrivateProfileStringW(L"server",L"external_url",pending.external,server_temp)
+        ||!WritePrivateProfileStringW(L"server",L"fallback_url",pending.fallback,server_temp)
+        ||!WritePrivateProfileStringW(L"server",L"external_only",pending.only?L"true":L"false",server_temp)
+        ||!WritePrivateProfileStringW(L"server",L"networking_enabled",pending.enabled?L"true":L"false",server_temp)
+        ||!WritePrivateProfileStringW(L"launcher",L"skip_launcher",pending.skip_launcher?L"true":L"false",client_temp))goto done;
+    WritePrivateProfileStringW(NULL,NULL,NULL,server_temp);WritePrivateProfileStringW(NULL,NULL,NULL,client_temp);
+    if(!MoveFileExW(client_temp,client,MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH))goto done;
+    committed=TRUE;
+    if(!MoveFileExW(server_temp,config_path,MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH)){
+        if(existed){if(!MoveFileExW(rollback,client,MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH))log_line("Settings rollback failed; previous client INI retained in client.ini.rollback.");}
+        else DeleteFileW(client);
+        goto done;
+    }
+    ok=TRUE;saved_settings=pending;
+done:
+    WritePrivateProfileStringW(NULL,NULL,NULL,client);WritePrivateProfileStringW(NULL,NULL,NULL,config_path);
+    DeleteFileW(server_temp);DeleteFileW(client_temp);
+    if(ok||!committed)DeleteFileW(rollback);
     return ok;
 }
 
@@ -220,9 +271,15 @@ static void update_toggles(void *menu) {
 static BOOL graphics_scroll_wheel(int delta);
 static BOOL main_scroll_wheel(int delta);
 static BOOL menu_overlay_active(void);
+static BOOL picker_search_message(HWND window,UINT message,WPARAM key,LPARAM flags);
+static BOOL text_entry_message(HWND window,UINT message,WPARAM key,LPARAM flags);
+static void text_input_attach_queue(HWND window);
 #include "settings_scroll.h"
 #include "save_prompt.h"
+#include "text_entry.h"
+#include "steam_keyboard.h"
 static void server_save_prompt_result(void *menu,int choice);
+static BOOL prestige_prompt_intercept(void *menu,int selection);
 
 static void __thiscall hook_colour(void *menu,int id,const float *colour) {
     original_colour(menu,id,colour);
@@ -275,7 +332,7 @@ static void leave_server_page(void *menu) {
 
 static void render(void *menu) {
     static const WCHAR *labels[SERVER_ACTION_MAX+1]={L"", L"SKIP LAUNCHER",
-        L"USE SINGLEPLAYER", L"USE CONFIGURED SERVERS", L"PRIMARY SERVER ONLY",
+        L"PRIMARY SERVER", L"SECONDARY SERVER", L"PRIMARY SERVER ONLY",
         L"SINGLEPLAYER", L"SAVE SETTINGS", L"RELOAD SAVED SETTINGS",
         L"SAVE AND RESTART", L"RETURN WITHOUT SAVING", L"SAVE AND RETURN", L"SAVE AND EXIT"};
     for(int id=1;id<=SERVER_ACTION_MAX;id++) {
@@ -314,12 +371,13 @@ static void *make_row(void *parent,BOOL screen,int id,float x,float y,float widt
     return row;
 }
 static BOOL make_toggles(void *menu,void *screen,float x,float width,float height) {
-    if(!readable(ui_instance,sizeof(void *))||!*ui_instance)return FALSE;
+    if(!readable(ui_instance,sizeof(void *))||!*ui_instance||!server_button_sprite)return FALSE;
     for(int i=0;i<3;i++){
         void *text=server_rows[toggle_actions[i]];
         float pos[2]={x+width*0.5f,((float *)text)[9]};
         for(int part=0;part<2;part++){
-            void *item=create_sprite(*ui_instance,part?74:73,pos,part?0:5,-1);
+            /* Vanilla creates a button bar and a separate plain thumb. */
+            void *item=part?create_sprite(*ui_instance,74,pos,0,-1):server_button_sprite(*ui_instance,73,-1,0,pos,5);
             if(!item)return FALSE;
             toggles[i][part]=item;
             if(!part){
@@ -328,7 +386,7 @@ static BOOL make_toggles(void *menu,void *screen,float x,float width,float heigh
                 ((int *)item)[39]=1;((int *)item)[40]=1;
             }
             ((void (__thiscall *)(void *,const float *))(*(void ***)item)[9])(item,(const float *)menu+14);
-            ((int *)item)[15]=100;
+            /* Retain the original constructor defaults for both visuals. */
             static const float normal[4]={1,1,1,0.9f};
             if(!part)((void (__thiscall *)(void *,const float *))(*(void ***)item)[4])(item,normal);
             menu_item(item,FALSE);enable_input(item,FALSE);show_item(item,FALSE);
@@ -388,8 +446,23 @@ static void __thiscall hook_cleanup(void *menu,void *screen,void *lower) {
     original_cleanup(menu,screen,lower);
 }
 
+static int server_text_slot;
+static BOOL server_text_valid(const WCHAR *text){
+    if(!*text)return TRUE;
+    unsigned prefix=!_wcsnicmp(text,L"https://",8)?8:!_wcsnicmp(text,L"http://",7)?7:0;
+    if(!prefix||!text[prefix]||text[prefix]=='/'||text[prefix]=='?'||text[prefix]=='#')return FALSE;
+    for(const WCHAR *p=text;*p;p++)if(*p<=32||*p==127)return FALSE;
+    return TRUE;
+}
+static void server_text_result(void *menu,const WCHAR *text){
+    if(menu!=page_owner||!server_page||!server_text_valid(text))return;
+    WCHAR *target=server_text_slot==2?pending.external:pending.fallback;
+    wcsncpy(target,text,2047);target[2047]=0;wcscpy(heading,L"Address edited — Save to apply");render(menu);
+}
 static void __thiscall hook_input(void *menu,int selection) {
+    if(text_entry_busy())return;
     if(restarting||exiting)return;
+    if(prestige_prompt_intercept(menu,selection))return;
     if(page_owner==menu&&!server_page&&((int *)menu)[62]==0&&selection>=0&&selection<5){
         /* These latches belong only to Audio. The original handler rejects
          * every root selection if either stale latch remains set. */
@@ -427,6 +500,10 @@ static void __thiscall hook_input(void *menu,int selection) {
     case 1:
         pending.skip_launcher=!pending.skip_launcher;
         wcscpy(heading,pending.skip_launcher?L"Skip launcher enabled — Save to apply":L"Show launcher enabled — Save to apply"); break;
+    case 2: case 3:
+        server_text_slot=selection;
+        text_entry_begin(menu,selection==2?L"PRIMARY SERVER":L"SECONDARY SERVER",selection==2?pending.external:pending.fallback,server_text_result,server_text_valid);
+        break;
     case 4: pending.only=!pending.only; break;
     case 5:
         pending.enabled=!pending.enabled;
@@ -524,7 +601,12 @@ static BOOL supported_file(const WCHAR *path) {
 #include "antialiasing.h"
 #include "display_modes.h"
 static void cjk_direct_refresh(void);
+#include "picker_alphabet.h"
+static BOOL picker_search_before(void *menu);
+static void picker_search_after(void *menu);
+static void picker_search_forget(void *menu);
 #include "ui_scale.h"
+#include "picker_search.h"
 #include "ui_scale_slider.h"
 #include "graphics_aa_menu.h"
 #include "main_branding.h"
@@ -627,6 +709,7 @@ static BOOL validate_image_at(BYTE *base,uintptr_t address_base) {
 static BOOL validate_image(BYTE *base) { return validate_image_at(base,(uintptr_t)base); }
 
 #include "flac_sample_rate.h"
+#include "mods_vfs.h"
 static BOOL latin_pack_enabled(void){WCHAR value[16];GetPrivateProfileStringW(L"languages",L"latin_enabled",L"0",value,16,config_path);return !wcscmp(value,L"1")||!_wcsicmp(value,L"true");}
 static BOOL cjk_pack_enabled(void){
     WCHAR value[16];GetPrivateProfileStringW(L"languages",L"cjk_enabled",L"",value,16,config_path);
@@ -635,9 +718,35 @@ static BOOL cjk_pack_enabled(void){
 }
 static BOOL cjk_component_enabled(void){return cjk_pack_enabled()||latin_pack_enabled();}
 #include "lastfm_utf8.h"
+#include "progression_probe.h"
+#include "first_prestige_entry.h"
+#include "progression_domain.h"
+#include "prestige_prompt.h"
+#include "progression_view.h"
+#include "progression_economy.h"
+#include "progression_rank.h"
+#include "progression_ghost.h"
+#include "lastfm_scrobbler.h"
+#include "progression_rewards.h"
+#include "progression_level_reward.h"
 #include "cjk_fonts.h"
 #include "cjk_direct_visuals.h"
 #include "unicode_trace.h"
+/* Steam can retain the original WNDPROC and deliver overlay text directly,
+ * bypassing a later SetWindowLongPtr subclass. Keep both routes equivalent. */
+static WNDPROC text_entry_native_previous;
+static unsigned text_entry_native_messages;
+static LRESULT CALLBACK text_entry_native_proc(HWND window,UINT message,WPARAM key,LPARAM flags){
+    if(picker_search_message(window,message,key,flags)||text_entry_message(window,message,key,flags)){
+        if(text_entry_native_messages++<8)log_line("Text input accepted through original window procedure.");
+        return message==WM_UNICHAR&&key==UNICODE_NOCHAR?TRUE:0;
+    }
+    return text_entry_native_previous(window,message,key,flags);
+}
+static BOOL install_text_entry_native(BYTE *base){
+    static const BYTE expected[]={0x55,0x8b,0xec,0x53,0x8b,0x5d,0x0c};
+    return unicode_detour(base+0x8c6e0,expected,sizeof(expected),text_entry_native_proc,(void **)&text_entry_native_previous);
+}
 
 __declspec(dllexport) BOOL __cdecl ReRiffConfigureNativeReel(void **methods,int count) {
     WCHAR path[MAX_PATH];DWORD length=GetModuleFileNameW(NULL,path,MAX_PATH);
@@ -670,12 +779,12 @@ __declspec(dllexport) BOOL __cdecl ReRiffStartEngineMenu(void) {
     WCHAR path[MAX_PATH]; DWORD length=GetModuleFileNameW(NULL,path,MAX_PATH);
     if (!length || length>=MAX_PATH) return FALSE;
     WCHAR *slash=wcsrchr(path,L'\\');
-    if (!slash || (size_t)(slash-path)+1+wcslen(L"logs\\ReRiff-engine-menu.log")>=MAX_PATH) return FALSE;
+    if (!slash || (size_t)(slash-path)+1+wcslen(L"logs\\ReRiff-game.log")>=MAX_PATH) return FALSE;
     wcscpy(config_path,path); config_path[slash-path+1]=0;
     wcscpy(log_path,config_path);wcscat(log_path,L"logs");
-    wcscpy(log_path,config_path); wcscat(log_path,L"logs\\ReRiff-engine-menu.log");
+    wcscpy(log_path,config_path); wcscat(log_path,L"logs\\ReRiff-game.log");
     wcscat(config_path,L"server.ini");
-    if(rr_logging_ini(config_path)){WCHAR logs[MAX_PATH];wcscpy(logs,log_path);WCHAR *end=wcsrchr(logs,L'\\');if(end){*end=0;CreateDirectoryW(logs,NULL);}}
+    if(rr_log_ini(config_path,L"engine_menu")){WCHAR logs[MAX_PATH];wcscpy(logs,log_path);WCHAR *end=wcsrchr(logs,L'\\');if(end){*end=0;CreateDirectoryW(logs,NULL);}}
     BYTE *base=(BYTE *)GetModuleHandleW(NULL);
     if(!supported_file(path)){log_line("Refused: unsupported Game.exe file hash or size.");return FALSE;}
     if(!validate_image(base)){
@@ -685,7 +794,12 @@ __declspec(dllexport) BOOL __cdecl ReRiffStartEngineMenu(void) {
     HMODULE pinned;
     if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_PIN,
         (const WCHAR *)(uintptr_t)&ReRiffStartEngineMenu,&pinned)) return FALSE;
+    if(!install_mods_vfs(base,path))log_line("Mods VFS hook refused: native archive loader differs.");
+    if(!install_scrobbler(base))log_line("Last.fm playback hook refused: original race differs.");
     if(!install_lastfm_utf8(base))log_line("Last.fm UTF-8 correction refused: original CIL bytes differ.");
+    if(!install_progression_economy(base))log_line("Economy trace wrappers refused: original CIL differs.");
+    if(!install_progression_rank(base))log_line("Permanent Rank hook refused: original checker differs.");
+    start_progression_probe(base);
     if(!install_flac_sample_rate(base))log_line("FLAC sample-rate patch guard refused; original decoder retained.");
     void **table=(void **)(base+0x7a5a7c); DWORD protection;
     if (!VirtualProtect(table,27*sizeof(void *),PAGE_READWRITE,&protection)) return FALSE;
@@ -699,6 +813,7 @@ __declspec(dllexport) BOOL __cdecl ReRiffStartEngineMenu(void) {
     reel_vtable=(void **)(base+0x7a5740);input_manager=(void **)(base+0x80d410);
     create_sprite=(SpriteFn)(base+0x22030);ui_instance=(void **)(base+0x7fbaa4);
     create_blank_button=(BlankButtonFn)(base+0x222f0);
+    server_button_sprite=(ServerButtonSpriteFn)(base+0x222c0);
     sprite_def=(SpriteDefFn)(base+0x48830);sprite_origin=(SpriteDefFn)(base+0x482b0);
     sprite_position=(PositionFn)(base+0x48280);
     add_item=(AddFn)(base+0x43800);add_screen=(AddFn)(base+0x8e8d0);remove_screen=(AddFn)(base+0x8e9d0);
@@ -713,6 +828,11 @@ __declspec(dllexport) BOOL __cdecl ReRiffStartEngineMenu(void) {
     if(!install_graphics_aa_menu(base))log_line("Native antialiasing control could not be installed.");
     if(!install_main_branding(base))log_line("Main-menu branding could not be installed.");
     if(!install_save_prompt(base))log_line("Native save prompt could not be installed.");
+    if(!install_progression_ghost(base))log_line("Singleplayer ghost achievement hook refused: original versus entry differs.");
+    if(!install_progression_rewards(base))log_line("Native reward entry hooks refused; original awards retained.");
+    if(!install_progression_level_quote(base))log_line("Level-up reward message quote refused; original message retained.");
+    if(!install_progression_view(base))log_line("Permanent-level Profile display hook unavailable.");
+    if(!install_text_entry_native(base))log_line("Original text-input entry hook refused: prologue differs.");
     if(!install_ui_scale(base))log_line("Native UI-scale extension could not be installed.");
     install_unicode_trace(base);
     if(borderless_active)aa_attach();

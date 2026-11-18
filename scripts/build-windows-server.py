@@ -31,6 +31,10 @@ def build(wheels, download=True):
     shutil.copy2(ROOT/'VERSION', target/'server/VERSION')
     (target/'docker').mkdir()
     shutil.copy2(ROOT/'docker/server.py', target/'docker/server.py')
+    (target/'Progression').mkdir()
+    for name in ('balance.py', 'balance.json', 'multiplayer.py'):
+        shutil.copy2(ROOT/'Progression'/name, target/'Progression'/name)
+    shutil.copy2(ROOT/'packaging/logging_policy.py', target/'logging_policy.py')
     shutil.copy2(ROOT/'scripts/trace-server.py', target/'trace-server.py')
     shutil.copy2(ROOT/'LICENSE', target/'LICENSE')
     for name in ('reriff-catalog.dll','reriff-news.dll'):
@@ -55,7 +59,7 @@ def build(wheels, download=True):
         if not (libs/name).is_dir():
             raise ValueError('Missing server dependency: '+name)
     (target/'build.json').write_text(json.dumps({'version':(ROOT/'VERSION').read_text().strip(), 'python':'3.13-win_amd64', 'wheels':installed},indent=2)+'\n')
-    archive = target.parent/'ReRiff-Server-windows.zip'
+    archive = target.parent/'ReRiff-Windows-Server.zip'
     with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as bundle:
         for path in sorted(target.rglob('*')):
             if path.is_file():

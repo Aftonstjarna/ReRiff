@@ -12,7 +12,7 @@ namespace ReRiff {
         private static bool ReadEnabled(){
             try{
                 bool diagnostics=false,languages=false,result=false;bool? installed=null;bool latin=false;
-                foreach(string raw in File.ReadAllLines(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"server.ini"))){
+                foreach(string raw in ConfigFiles.Document(AppDomain.CurrentDomain.BaseDirectory,"client.ini").Replace("\r\n","\n").Split('\n')){
                     string line=raw.Trim();
                     if(line.StartsWith("[",StringComparison.Ordinal)){diagnostics=string.Equals(line,"[diagnostics]",StringComparison.OrdinalIgnoreCase);languages=string.Equals(line,"[languages]",StringComparison.OrdinalIgnoreCase);}
                     int equals=line.IndexOf('=');

@@ -1,0 +1,164 @@
+name: Client checks
+
+on:
+  push:
+    paths:
+      - 'ClientConfig/**'
+      - 'ExperimentalMenu/**'
+      - 'NativeLauncher/notification.c'
+      - 'NativeLauncher/restart_protocol.h'
+      - 'NativeLauncher/logging.h'
+      - 'NativeLauncher/config.h'
+      - 'NativeLauncher/launcher.c'
+      - 'NativeLauncher/lastfm.h'
+      - 'NativeLauncher/test_lastfm.c'
+      - 'NewsHeaders/**'
+      - 'Managed/**'
+      - 'Shared/**'
+      - 'Patcher/**'
+      - 'scripts/build-client-config.py'
+      - 'scripts/build-news-headers.py'
+      - 'scripts/build-windows-launcher.py'
+      - 'scripts/build-prestige-artwork.py'
+      - 'scripts/test_prestige_artwork.py'
+      - 'scripts/test_multiplayer_transport.py'
+      - 'scripts/test_progression_discovery.py'
+      - 'Progression/**'
+      - 'images/reriff-prestige-achievement.png'
+      - 'packaging/core/**'
+      - 'VERSION'
+      - 'packaging/fetch_release_tools.py'
+      - '.github/workflows/client-checks.yml'
+  pull_request:
+    paths:
+      - 'ClientConfig/**'
+      - 'ExperimentalMenu/**'
+      - 'NativeLauncher/notification.c'
+      - 'NativeLauncher/restart_protocol.h'
+      - 'NativeLauncher/logging.h'
+      - 'NativeLauncher/config.h'
+      - 'NativeLauncher/launcher.c'
+      - 'NativeLauncher/lastfm.h'
+      - 'NativeLauncher/test_lastfm.c'
+      - 'NewsHeaders/**'
+      - 'Managed/**'
+      - 'Shared/**'
+      - 'Patcher/**'
+      - 'scripts/build-client-config.py'
+      - 'scripts/build-news-headers.py'
+      - 'scripts/build-windows-launcher.py'
+      - 'scripts/build-prestige-artwork.py'
+      - 'scripts/test_prestige_artwork.py'
+      - 'scripts/test_multiplayer_transport.py'
+      - 'scripts/test_progression_discovery.py'
+      - 'Progression/**'
+      - 'images/reriff-prestige-achievement.png'
+      - 'packaging/core/**'
+      - 'VERSION'
+      - 'packaging/fetch_release_tools.py'
+      - '.github/workflows/client-checks.yml'
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: client-checks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '8.0.x'
+      - name: Verify circular prestige artwork
+        run: |
+          python -m pip install Pillow==13.0.0
+          python scripts/test_prestige_artwork.py
+      - name: Build managed client helpers
+        run: |
+          dotnet build Managed/GhostCacheSmoke.csproj -c Release -o build/client-checks
+          dotnet build Managed/ConfigSplitSmoke.csproj -c Release -o build/client-checks
+          dotnet build ClientConfig/ClientConfig.csproj -c Release -o build/client-checks
+          dotnet build ClientConfig/Tests/LastFmSmoke.csproj -c Release -o build/client-checks
+          dotnet build NewsHeaders/NewsHeaders.csproj -c Release -o build/client-checks
+          dotnet build ClientConfig/Tests/ProgressionRankSmoke.csproj -c Release -o build/client-checks
+          dotnet build ClientConfig/Tests/ProgressionLevelQuoteSmoke.csproj -c Release -o build/client-checks
+          dotnet build ClientConfig/Tests/KanaSearchSmoke.csproj -c Release -o build/client-checks
+          dotnet build ClientConfig/Tests/PickerSearchSmoke.csproj -c Release -o build/client-checks
+          dotnet build ClientConfig/Tests/PickerSearchBridgeSmoke.csproj -c Release -o build/client-checks
+          dotnet build ClientConfig/Tests/ProgressionLevelsSmoke.csproj -c Release -o build/client-checks
+          dotnet build ClientConfig/Tests/ProgressionGhostSmoke.csproj -c Release -o build/client-checks
+          dotnet build ClientConfig/Tests/ProgressionDomainSmoke.csproj -c Release -o build/client-checks
+          dotnet build ClientConfig/Tests/MultiplayerCheckpointsSmoke.csproj -c Release -o build/client-checks
+          dotnet build ClientConfig/Tests/MultiplayerTransportSmoke.csproj -c Release -o build/client-checks
+          dotnet build ClientConfig/Tests/LegacyDiscoverySmoke.csproj -c Release -o build/client-checks
+      - name: Fetch checksum-pinned compiler
+        run: python packaging/fetch_release_tools.py --asset zig.tar.xz --directory "$RUNNER_TEMP/release-tools"
+      - name: Build client independently
+        run: >-
+          python scripts/build-windows-launcher.py
+          --zig "$RUNNER_TEMP/release-tools/zig-x86_64-linux-0.14.1/zig"
+          --component client --output-dir build/client-checks
+      - name: Build native regression executables
+        run: |
+          export ZIG_GLOBAL_CACHE_DIR="$RUNNER_TEMP/zig-global"
+          export ZIG_LOCAL_CACHE_DIR="$RUNNER_TEMP/zig-local"
+          for source in ExperimentalMenu/test_lastfm_scrobbler.c ExperimentalMenu/test_main_scale.c ExperimentalMenu/test_display_modes.c ExperimentalMenu/test_ui_scale.c ExperimentalMenu/test_picker_alphabet.c ExperimentalMenu/test_picker_search.c ExperimentalMenu/test_steam_keyboard.c ExperimentalMenu/test_server_config_save.c ExperimentalMenu/test_text_entry.c ExperimentalMenu/test_text_input_queue.c ExperimentalMenu/test_text_entry_overlay.c ExperimentalMenu/test_save_prompt.c ExperimentalMenu/test_prestige_prompt.c ExperimentalMenu/test_progression_domain.c ExperimentalMenu/test_progression_probe.c ExperimentalMenu/test_progression_view.c ExperimentalMenu/test_progression_badge.c ExperimentalMenu/test_progression_achievement_probe.c ExperimentalMenu/test_first_prestige_entry.c ExperimentalMenu/test_progression_rewards.c ExperimentalMenu/test_progression_level_reward.c ExperimentalMenu/test_progression_economy.c ExperimentalMenu/test_progression_rank.c ExperimentalMenu/test_progression_ghost.c; do
+            name=$(basename "$source" .c)
+            "$RUNNER_TEMP/release-tools/zig-x86_64-linux-0.14.1/zig" cc \
+              -target x86-windows-gnu -O2 -Wall -Wextra -Werror \
+              "-DRERIFF_VERSION=\"$(cat VERSION)\"" "$source" \
+              -o "build/client-checks/$name.exe" -Wl,--image-base,0x10000000 \
+              -lcomctl32 -lcomdlg32 -lwininet -lshell32 -luser32 -lgdi32 -ladvapi32 -static
+          done
+      - name: Build native Last.fm tab regression
+        run: >-
+          "$RUNNER_TEMP/release-tools/zig-x86_64-linux-0.14.1/zig" cc
+          -target x86-windows-gnu -municode -O2 -Wall -Wextra -Werror
+          NativeLauncher/test_lastfm.c -o build/client-checks/test_lastfm.exe
+          -lcomctl32 -lwininet -lshell32 -luser32 -lgdi32 -ladvapi32 -static
+      - uses: actions/upload-artifact@v4
+        with:
+          name: client-checks-${{ github.sha }}
+          path: build/client-checks/*
+          retention-days: 7
+
+  native-tests:
+    needs: build
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - uses: actions/download-artifact@v4
+        with:
+          name: client-checks-${{ github.sha }}
+          path: component
+      - name: Run native regressions on Windows
+        shell: pwsh
+        run: |
+          & ./component/LastFmSmoke.exe
+          if ($LASTEXITCODE -ne 0) { throw "Last.fm regression failed" }
+          & ./component/MultiplayerCheckpointsSmoke.exe
+          if ($LASTEXITCODE -ne 0) { throw "Multiplayer checkpoint regression failed" }
+          Get-ChildItem component/test_*.exe | ForEach-Object {
+            & $_.FullName
+            if ($LASTEXITCODE -ne 0) { throw "Native regression failed: $($_.Name) ($LASTEXITCODE)" }
+          }
+      - name: Test client/server multiplayer progression protocol
+        run: |
+          python -m pip install -r packaging/requirements.txt
+          python scripts/test_multiplayer_transport.py --client-command component/MultiplayerTransportSmoke.exe
+      - name: Test legacy server discovery compatibility
+        run: python scripts/test_progression_discovery.py --client-command component/LegacyDiscoverySmoke.exe

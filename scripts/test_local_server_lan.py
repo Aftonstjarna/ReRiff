@@ -24,6 +24,7 @@ class LocalServerLanTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.stage = Path(self.temp.name)
+        (self.stage/'Progression').symlink_to(ROOT/'Progression', target_is_directory=True)
         (self.stage/'server').symlink_to(ROOT/'vendor/riffapi-local-extended', target_is_directory=True)
         (self.stage/'trace-server.py').symlink_to(ROOT/'scripts/trace-server.py')
         spec = importlib.util.spec_from_file_location('quick_deploy_backend', ROOT/'docker/server.py')
@@ -86,6 +87,7 @@ class LocalServerLanTests(unittest.TestCase):
         import shutil
         for name in ['serve.py', 'local_server.py', 'host_process.py']:
             shutil.copy2(ROOT/'LinuxRuntime'/name, self.stage/name)
+        shutil.copy2(ROOT/'packaging/logging_policy.py', self.stage/'logging_policy.py')
         (self.stage/'docker').mkdir()
         shutil.copy2(ROOT/'docker/server.py', self.stage/'docker/server.py')
         with socket.socket() as reservation:

@@ -1,3 +1,473 @@
+# ReRiff 1.4.0-beta.13 — Faster library search and clearer diagnostics
+
+## In-game summary
+
+- Search large music libraries with less repeated work.
+- Speed up repeat launches and reduce update memory use.
+- Identify clients and ReRiff accounts in timestamped logs.
+
+## Full release notes
+
+### Startup, search and updates
+
+- Cache unchanged audio-file hashes for repeat launcher song registration.
+  Validate opened-file identity, size and timestamps; expire entries after
+  24 hours. Keep registration before game startup and preserve server fallback.
+- Reuse successful automatic no-update checks for 15 minutes. Manual update
+  checks still contact GitHub; failed checks are never cached as successful.
+  Defer Windows Python setup until an update actually requires installation.
+- Reuse HTTP connections where supported for song probing and registration.
+- Reuse normalized search text across partial library snapshots, cancel obsolete
+  queries and coalesce rapid typing into one worker per search session.
+- Enumerate folders once using cached entry attributes. Preserve linked-root
+  support, nested-link exclusion, cancellation, scan limits and song identity.
+- Stream archive verification and extraction in bounded chunks. Preserve archive
+  path/link checks, expanded-size limits, preflight validation and rollback.
+
+### Diagnostics and mod loading
+
+- Add UTC millisecond timestamps to new human-readable diagnostic lines,
+  including multiline errors. Retain existing logs and machine-readable formats.
+- Add client diagnostic headers with a persistent installation ID, ReRiff account
+  UUID and server UUID, player name when available, installed version, platform
+  and process. Distinguish current identity from last-known identity; omit tokens,
+  passwords and API keys. Existing logs receive new session headers without
+  deleting earlier history.
+- Add startup/update stage timings and hash-cache hit/read counts to diagnostics.
+- Refresh the native archive manager before reserving mod volume slots. Document
+  verified original precedence: named mod archives can already override stock
+  assets, and later ordinal mod folder names take priority. Stock archives remain
+  unchanged; no replacement resource lookup is introduced.
+
+### Validation and known limitations
+
+- Offline validation includes 228 picker checks, 24 mocked-native bridge checks,
+  19 updater regressions, native timestamp/cache/mod-loader tests and isolated
+  server registration checks. Diagnostic validation covers 58 Python tests
+  (seven optional fixture skips), 25 Linux-helper tests (two optional fixture
+  skips), and native/managed logging smoke tests. Release CI builds and validates
+  the final packages before attaching them to this draft.
+- Synthetic 100,000-entry partial-index rebuilding fell from 1,217 ms to 554 ms
+  on the test machine. Chunked extraction substantially reduced Python allocation
+  peaks. These are offline measurements, not guaranteed startup or FPS gains.
+- Latest combined changes have not received a live in-game retest. Rendering and
+  Steam-provided display-name capture still need live confirmation.
+- Player names may be unavailable before login or without a supported name
+  provider. ReRiff UUIDs, not names or SteamIDs, identify accounts in diagnostics.
+- Automatic Steam account linking is not implemented: no trusted server-side
+  ticket verifier is configured. Existing account ownership remains unchanged.
+- Steam virtual-keyboard input remains unresolved; M4A playback is unsupported.
+- This beta is prepared as a draft for review. Stable and public experimental
+  download aliases remain unchanged until a separately requested publication.
+
+# ReRiff 1.4.0-beta.12 — Reinstall missing mod folders
+
+## In-game summary
+
+- Recreate a removed mods folder when reinstalling ReRiff.
+- Restore selected fonts using the existing installer checkboxes.
+- Restore bundled artwork without touching the stock archives.
+
+## Full release notes
+
+### Installer repair
+
+- Treat a completely removed mods directory as a reinstall when named-mod
+  ownership records remain. Restore checked CJK and Latin font packs using
+  their existing installer controls and clear stale records for unchecked packs.
+- Restore bundled ReRiff artwork when its named-mod directory tree was removed.
+  Keep settings, saves and original game archives unchanged.
+- Retain strict checks for partial installations, modified files, unsafe paths
+  and links. This recovery applies to a completely absent mods directory, not
+  arbitrary damaged or edited archives.
+- Support stale font-record removal in both the native Linux installer and
+  Windows installer staging. No manual receipt cleanup is needed for this case.
+
+### Build dependency security
+
+- Update build-only Pillow to 13.0.0 and fontTools to 4.60.2, including the
+  experimental image-build workflows. These address the dependency advisories
+  recorded in docs/SECURITY-TRIAGE-2026-11-16.md; they are not client runtime
+  Python dependencies.
+
+### Validation and known limitations
+
+- Local checks cover removed-tree reinstalls with one or both font packs,
+  unchecked-pack cleanup, staging without writes, artwork restoration and
+  existing conflict/rollback protections. Native installer checks passed
+  (25 tests, two optional full-package/original fixtures skipped locally).
+- UI artwork, prestige artwork, CJK atlases and Latin glyph/metrics tests passed
+  with the updated build dependencies. Release CI validates Windows helpers,
+  native clients and final installer packages before publication.
+- Steam virtual-keyboard input remains unresolved; M4A playback is unsupported.
+- This is an opt-in prerelease; stable remains the default update channel.
+
+# ReRiff 1.4.0-beta.11 — Named mod folders and independent fonts
+
+## In-game summary
+
+- Load extra game assets from named folders inside mods.
+- Install CJK and Latin fonts as separate, independent mods.
+- Keep bundled ReRiff artwork separate from the stock archives.
+
+## Full release notes
+
+### Mod archives and fonts
+
+- Discover unnumbered vfs.dat/vfs.zip pairs in immediate mods subfolders,
+  reusing the game's native archive loading and resource lookup. Existing
+  numbered archives retain their native volume slots.
+- Install bundled artwork into mods/reriff-assets, CJK fonts into
+  mods/noto-cjk-font and Latin fonts into mods/noto-latin-font. Keep stock
+  vfs.dat/vfs.zip untouched. Font updates and disabling remain independent.
+- Migrate verified legacy artwork and shared font archives with ownership/hash
+  checks, backups and rollback. Retain conflicting or modified files for review
+  rather than silently replacing them. Preserve settings and saved progress.
+- Update Windows and Linux installer staging/removal handling and launcher
+  font explanations for the new layout. See docs/MODS.md for the mod format.
+
+### Documentation
+
+- Document successful stock Proton Experimental song generation using bundled
+  Wine Mono without a manual Microsoft .NET install. Record the tested builds,
+  prerequisite reproduction and limitations alongside the Proton 10 stall.
+
+### Validation and known limitations
+
+- Focused checks cover mod migration, repeat installs, conflicts, symlinks,
+  rollback, independent font packs, artwork ownership and stock preservation.
+  Release CI also checks native launcher/client builds and Windows helpers.
+- The native engine has 31 extra volume slots; numbered archives reserve slots
+  first. Only immediate mod folders are discovered, and linked files/folders
+  are skipped. See docs/MODS.md for overflow behavior.
+- Beta.10 and older loaders cannot discover the new named folders. Keep the
+  migration backups when reverting. Native mount tests do not establish that
+  arbitrary third-party mods render correctly.
+- Steam virtual-keyboard work remains paused; use a physical keyboard with
+  Steam's keyboard closed. M4A playback remains unsupported.
+- This is an opt-in prerelease; stable remains the default update channel.
+
+# ReRiff 1.4.0-beta.10 — Protected credentials and launcher cleanup
+
+## In-game summary
+
+- Save Last.fm credentials securely from the launcher.
+- Link Last.fm automatically after approving access in your browser.
+- Enjoy a cleaner launcher with clearer sections and fixed redraws.
+
+## Full release notes
+
+### Last.fm
+
+- Add masked API key and shared secret fields. When no key is configured,
+  Get API key opens Last.fm application registration in the browser.
+- Replace separate save buttons with one Save settings action for credentials,
+  scrobbling enabled state and listening percentage. Validate before replacing
+  the config and preserve unrelated settings.
+- Protect the API key, shared secret and linked session with user-scoped Windows
+  DPAPI. Saving migrates existing plaintext credentials; failed protection does
+  not fall back to writing plaintext. Changing credentials clears the old account
+  link and disables scrobbling until linked again.
+- Remove Finish linking and Open authorization buttons. While the Last.fm tab is
+  open, check approval automatically every five seconds; Link account becomes
+  Reopen authorization while waiting. Temporary failures retry after 30 seconds,
+  fatal errors reset the attempt, and waiting times out after ten minutes.
+
+### Launcher
+
+- Match the window background to native label backgrounds and add thin section
+  separators. Center the footer separator and local-server address, retaining
+  readable spacing with a slightly taller window.
+- Fix tab-switch redraws that could hide controls: retain native tab headers and
+  let the parent window paint the page without overwriting child controls.
+- Move View update details above the shared status area to avoid overlapping the
+  progress bar. Clear the leftover marquee segment when progress returns to idle.
+
+### Validation and known limitations
+
+- Native regressions cover encrypted storage, invalid-save preservation, changed
+  credentials, tab visibility, automatic-link timing/retries/timeouts, repeated
+  tab switches, progress reset and update cancellation. Isolated Proton previews
+  were inspected for the launcher layout and empty idle progress bar.
+- 41 managed checks passed including native-launcher to managed-client DPAPI
+  interoperability with dummy credentials. The matching launcher and client
+  helper were built and locally installed without changing user configuration.
+- Existing Last.fm linking/scrobbling was verified in beta.9; the new automatic
+  browser-approval flow still needs a live end-to-end retest.
+- Keep client.ini and the Windows profile or Proton prefix private. DPAPI does
+  not protect against programs running as the same user; Proton is not guaranteed
+  to provide Windows' security boundary. Moving to another profile or prefix may
+  require re-entering credentials and linking again. Old plaintext backups are
+  not rewritten. Beta.9 cannot read the new protected values, so install the
+  launcher and matching client helper together.
+- Each installation still needs its own Last.fm application credentials. Restart
+  the game after settings changes. The existing scrobble queue and abrupt-exit
+  limitations remain; Steam keyboard work is paused and M4A playback unrestored.
+- This is an opt-in prerelease; stable remains the default update channel.
+
+# ReRiff 1.4.0-beta.9 — Last.fm scrobbling
+
+## In-game summary
+
+- Link Last.fm directly from the launcher's new tab.
+- Scrobble completed races or a configurable listening percentage.
+- Retry pending scrobbles automatically after temporary failures.
+
+## Full release notes
+
+### Last.fm
+
+- Add opt-in account linking, disconnect and listening settings directly in a
+  native launcher tab. Approve access in your browser; no Last.fm password is
+  entered into ReRiff. Supply your own application API key and shared secret in
+  the local client.ini [lastfm] section before linking.
+- Scrobble tagged songs after a completed race or the configured listening
+  percentage (80% by default). Enforce Last.fm's additional requirements: tracks
+  longer than 30 seconds and listening for half the song or four minutes,
+  whichever is shorter. Pauses, seeks and long stalls do not count as listening.
+- Reuse the original race lifecycle, audio position/duration and song catalogue
+  metadata. Preserve pause/resume progress, detect restarts, and avoid duplicate
+  submission when a track already qualified before the results screen.
+- Send Now Playing at race playback start. Handle network requests on a worker,
+  persist up to 500 pending scrobbles for the linked session, and retry temporary
+  failures with backoff. Disabling or disconnecting stops sending; pending
+  scrobbles are not replayed into a different linked session.
+- Accept Last.fm's URL-safe authorization tokens, including hyphens and
+  underscores. Keep credentials and sessions out of logs and release artifacts;
+  use the existing game diagnostic category rather than adding another log.
+
+### Validation and known limitations
+
+- Live account linking succeeded. The game log confirmed Last.fm accepted a
+  scrobble before the race finished with the 80% setting, leaving no queued tracks.
+- 38 managed checks passed for signing, token validation, listening rules,
+  configuration preservation, queue persistence, account isolation and retries.
+  Native fixtures passed for the inline tab, settings, race hook guards,
+  lifecycle forwarding and existing progression rewards. Original hook addresses
+  were checked against the pinned unmodified game executable.
+- Each installation currently needs its own Last.fm application credentials.
+  Keep client.ini private: it contains the application secret and account session.
+  Tracks without usable artist/title metadata are skipped instead of guessing
+  from filenames. Restart the game after linking or changing listening settings.
+- An abrupt exit can lose a newly qualified track before the worker saves it.
+  A lost API acknowledgement can cause a retry using the original timestamp.
+- Steam virtual-keyboard input remains unresolved in the tested Proton setup;
+  investigation remains paused. M4A playback is not restored.
+- This is an opt-in prerelease; stable remains the default update channel.
+
+# ReRiff 1.4.0-beta.8 — Post-race picker fix and launcher progress
+
+## In-game summary
+
+- Reopen New Track after racing a song selected through search.
+- Follow update progress directly in the launcher.
+
+## Full release notes
+
+### Music picker
+
+- Remember a search result's parent folder using the original game folder setter
+  before selecting the track. This restores the folder handoff used by New Track
+  on the results screen, addressing the blank picker after racing a searched song.
+- Retain the original short-path conversion and native string ownership. Add a
+  regression checking the remembered parent and balanced allocations.
+
+### Launcher
+
+- Add a progress bar between the status message and local-server address using
+  the same native control and styling as automatic updates. Display download
+  progress when available, animate work without a percentage, and reset when
+  work finishes. Keep the indicator visible across launcher tabs.
+- Preserve the Force singleplayer label, hover explanations and grouped logs
+  introduced in earlier betas.
+
+### Validation and known limitations
+
+- The user confirmed the local search-to-race-to-New Track retest works. The
+  managed bridge regression passed 17 checks with native UI calls mocked.
+- Native development builds succeeded and were installed locally. Launcher
+  progress across all operations and display scales still needs live validation.
+- Release publication runs client, launcher, native, installer, update and
+  rollback checks before publishing the packages.
+- Steam virtual-keyboard input remains unresolved in the tested Proton setup;
+  automatic summoning is disabled and investigation remains paused.
+- M4A search results remain supported, but M4A playback is not restored.
+- This is an opt-in prerelease; stable remains the default update channel.
+
+# ReRiff 1.4.0-beta.7 — Cleaner launcher controls
+
+## In-game summary
+
+- Hover over launcher checkboxes to read their explanations.
+- Force singleplayer clearly skips servers without disabling fallback.
+
+## Full release notes
+
+### Launcher
+
+- Rename Enable singleplayer to Force singleplayer. Clarify that unchecking it
+  tries configured servers first, then automatically falls back to singleplayer
+  when servers are absent or unavailable. Saved addresses and behavior remain
+  unchanged; status messages describe what happens on the next game start.
+- Move checkbox explanations into standard Windows hover tooltips across Servers,
+  Languages and Diagnostics. Shorten checkbox labels and remove persistent help
+  blocks while retaining status messages and native checkbox navigation.
+- Keep font download, restart, retention and language details in the font tooltips.
+  Keep logging retention, restart and sharing guidance in diagnostic tooltips.
+- Refresh README screenshots and setup guidance, distinguish stable and beta
+  features, and explain the repeated older commit history.
+
+### Validation and known limitations
+
+- The native development build compiled successfully and was installed locally;
+  the supplied screenshot confirms the simplified Servers layout. Full hover
+  behavior across platforms and display scales still needs live validation.
+- Release publication runs the client, launcher, native and installer regression
+  checks, including update and rollback validation.
+- Library search and grouped diagnostics from beta.6 remain included. Steam
+  virtual-keyboard input remains unresolved in the tested Proton configuration;
+  automatic summoning is disabled and investigation remains paused.
+- M4A files can appear in search, but M4A playback remains unsupported.
+- This is an opt-in prerelease. Stable remains the default update channel.
+
+# ReRiff 1.4.0-beta.6 — Library search and grouped diagnostics
+
+## In-game summary
+
+- Search your music library, including tracks not yet imported.
+- Open music search with Y, Ctrl+F or a click.
+- Find related diagnostics together in fewer log files.
+
+## Full release notes
+
+### Music-library search
+
+- Add an inline search field to the native music picker. Xbox Y, Ctrl+F and
+  clicking the field begin editing; Enter/A finishes editing, and Esc/B clears
+  search before native Back can leave the picker. Retain the editor across
+  keyboard focus changes and wait for Back to be released after cancellation.
+- Recursively search the Music folder, saved favourites, the current folder and
+  cached-track locations, including unimported audio files. Match filenames,
+  paths and available cached title/artist metadata, with case-insensitive,
+  Unicode-width, hiragana/katakana and romaji matching.
+- Publish cached tracks and progressive filesystem snapshots instead of waiting
+  for the entire scan. Ignore an invalid optional song catalogue and continue
+  searching files; retain worker errors rather than displaying Searching forever.
+- Build results through the original picker list and selection routines. Keep
+  native spacing, artwork, clipping and scrolling, and preserve original folder
+  entries for cancellation. Picker wraparound remains excluded.
+
+### Diagnostic logs and launcher
+
+- Reduce the launcher from thirteen diagnostic categories to nine. Combine
+  client/network/news into ReRiff-connections.log, menus/progression/singleplayer
+  into ReRiff-game.log, and Unicode/metadata into ReRiff-text.log. Prefix grouped
+  records with their component and coordinate native/managed appends.
+- Preserve older per-component preferences until a group is explicitly changed.
+  Move superseded logs into logs/archive without changing their contents.
+- Reduce the outline around the ReRiff launcher button logo.
+- Show development build in the game and launcher for unpublished local builds.
+  Official release packages display their beta version; updater version metadata
+  remains separate from the development label.
+- Include scoped text-input diagnostics that count queue/editor messages without
+  recording typed text, plus direct Unicode-character input support.
+
+### Validation and known limitations
+
+- Live Proton testing confirmed working library search. The tested library
+  contained 6,533 tracks and completed enumeration in about 1.5 seconds; timings
+  depend on storage and library size. Automated checks cover cache failure
+  recovery, matching, unimported files, native result ownership, cancellation,
+  shared text editing, grouped log preferences and diagnostic archive retention.
+- Search displays at most 200 result rows and scans at most 100,000 files that
+  match supported audio extensions. Unreadable folders or the limit produce a
+  partial scan; nested links/junctions are not followed. These can be selected as
+  roots. High UI scales and layouts beyond those tested need further live checks.
+- Steam's virtual keyboard remains unable to deliver input in the tested
+  desktop/Proton configuration. Physical typing works when that keyboard is
+  closed. Automatic keyboard summoning is disabled, and investigation is paused.
+  No Steam keyboard fix is claimed by this beta.
+- M4A files can appear in search, but M4A decoding remains unsupported. This
+  release does not restore M4A playback.
+- Existing multiplayer prestige, server/account isolation and coin-message
+  changes remain included. This is an opt-in prerelease; stable remains the
+  default update channel.
+
+# ReRiff 1.4.0-beta.5 — Server editing and multiplayer prestige
+
+## In-game summary
+
+- Edit server addresses in-game with undo, redo and a blinking caret.
+- Keep prestige progress on compatible experimental multiplayer servers.
+- Get Re:Start artwork automatically with updated launcher branding.
+
+## Full release notes
+
+### Native server-address editing
+
+- Edit Primary Server and Secondary Server through the original confirmation
+  dialog, retaining its buttons, input handling and menu lifecycle. Accepting
+  updates pending settings; the existing Save action persists them. Cancel
+  discards the edit.
+- Support Unicode typing and paste, caret movement, selection, Home/End,
+  deletion, Ctrl+A, Ctrl+Z, Ctrl+Y and Ctrl+Shift+Z. Consecutive typing groups
+  into undo steps; opening a field starts a separate bounded history.
+- Display up to 48 UTF-16 units before horizontal scrolling is needed, keeping
+  ordinary server addresses visible. Blink the caret using system timing and
+  reset it after editing/navigation. Hide routine tips beneath the input line.
+- Preserve native row spacing and reel scrolling for the additional server
+  rows. Correct native toggle construction and saving Skip Launcher to its
+  owning client configuration, including rollback after a partial save failure.
+
+### Experimental multiplayer prestige
+
+- Include the tested multiplayer client and matching server implementation.
+  Compatible servers opt in with `RERIFF_PROGRESSION_MODE=trusted`; ordinary
+  legacy servers retain their existing behavior. The experimental server image
+  already carries this protocol; bundled server packages now carry it too.
+- Discover server identity and create an account automatically, with optional
+  server-password admission. Store private account credentials locally and
+  separate native saves by immutable server/account UUIDs.
+- Save progression in server checkpoints, recover acknowledged progress on
+  reconnect, and preserve the native Credits confirmation/reset flow for
+  prestige. Handle interrupted resets and lost acknowledgements without
+  duplicate resets. Initialize fresh profiles through native save allocation.
+- Keep original and singleplayer saves separate. An explicit one-time import
+  into an empty test account remains available; no automatic import occurs.
+- Include policy, protocol, account-cache and server-setup documentation in
+  `docs/MULTIPLAYER-PRESTIGE.md`. This is trusted-client progression, not
+  anticheat verification. Losing private account credentials can lose account
+  access; gameplay since the last acknowledged save may be lost on disconnect.
+
+### Reward messages, artwork and installer
+
+- Make the level-up coin popup use the same configured prestige multiplier as
+  its reward. Preserve the native message, localization and reward calculation;
+  unrelated legacy or purchased-currency messages retain their native amounts.
+- Bundle Re:Start artwork independently of optional fonts, ready on first
+  launch. Install it in a separate owned VFS pair, adopt identical prototypes,
+  and refuse to overwrite unrelated archives or modified owned artwork.
+- Add supplied icons and branding to the launcher and setup. The launcher logo
+  uses a native button that opens the repository, with transparent outlined
+  lettering and normal keyboard/focus behavior.
+
+### Validation and known limitations
+
+- Live Proton testing confirmed server editing and the wider blinking-caret
+  field. Automated checks cover undo/redo, clipboard, UTF-16 boundaries, native
+  overlay ownership, save rollback and menu/reel behavior.
+- Validate the integrated native/managed client with multiplayer checkpoint,
+  server/account isolation, reconnect and level-up callback regressions. Release
+  publication is gated by native Windows, managed client and installer CI.
+- Kana/romaji matching is included and tested, but music-picker search UI and
+  filtering are not connected yet. Kanji readings remain deferred. Picker
+  wraparound remains abandoned; existing LT/RT alphabet jumps are retained.
+- Full multiplayer earning/prestige/reconnect playthroughs and visual checks
+  across all resolutions, UI scales and IME configurations remain beta testing
+  work. Server observations are trusted, not independently verified gameplay.
+- This release is an opt-in prerelease. Stable 1.3.2 remains GitHub Latest and
+  the default download/update channel.
+
 # ReRiff 1.4.0-beta.4 — Alphabet navigation and balance tuning
 
 ## In-game summary
@@ -55,457 +525,3 @@
   GitHub checks gate publication; native Windows and installer checks run there.
 - Prestige remains opt-in, with existing save isolation and confirmation rules.
   Stable users remain on the stable channel unless experimental updates are enabled.
-
-# ReRiff 1.4.0-beta.3 — Explicit update package identities
-
-## In-game summary
-
-- Select client updates using explicit package identities.
-- Check package size and checksum before installing updates.
-- Keep update metadata compatible with older launchers.
-
-## Full release notes
-
-### Client updates
-
-- Publish release metadata schema 2 with a component, platform, architecture,
-  filename, byte size and SHA-256 for each client, optional server, font and
-  source package. Client updates select exactly one matching client record
-  instead of guessing a package's role from its filename suffix.
-- Reject missing or ambiguous client records, unsupported metadata schemas,
-  wrong architectures, unsafe filenames and malformed sizes or checksums.
-  Invalid explicit metadata never falls back to filename matching.
-- Cross-check explicit package checksums against SHA256SUMS and verify the
-  downloaded file's exact byte size before installer preflight. Windows and
-  native Linux preflight bind the archive's identity, size and checksum to the
-  same selected record before loading installer code.
-- Retain the legacy artifacts list and release checksum file so previously
-  released launchers can reach this beta. Preserve support for older releases
-  without explicit package records. The optional Windows server retains its
-  distinct archive name for old updater compatibility.
-
-### Release checks
-
-- Test publisher output against the native updater selector on both platforms.
-  Compile a hash-verified, unchanged copy of the released 1.3.2 parser and check
-  that it selects the new metadata's client packages on Windows and Linux.
-- Add wrong-component, wrong-platform, wrong-architecture, duplicate-record,
-  missing-checksum, malformed-size and unsupported-schema coverage. Exercise
-  filename, size and checksum mismatches in Python and Python-free Linux
-  preflight without changing the existing installation.
-- Build the Windows launcher/setup/updater and run the x86 selector regression
-  under Wine. The release workflow also runs its native Windows checks before
-  publishing. Two optional private/full-installer Linux fixtures are not part
-  of the local helper run.
-
-### Test scope
-
-This beta retains the prestige progression, ghost recovery, split configuration
-and diagnostics from 1.4.0-beta.2. It is focused on updater package selection and
-preflight; the local Re:Start achievement/artwork experiment is not included.
-Prestige isolation remains opt-in. Stable installations remain on the stable
-channel unless experimental releases are explicitly enabled.
-
-# ReRiff 1.4.0-beta.2 — Prestige progression and Windows updates
-
-## In-game summary
-
-- Keep prestige rewards, Rank milestones and ghost wins consistent.
-- Configure main levels beyond 40 and Singleplayer balance.
-- Fix Windows updates and choose individual diagnostic logs.
-
-## Full release notes
-
-### Prestige progression and ghosts
-
-- Recheck the four original Rank achievements after a completed prestige-cycle
-  race using permanent main level. A level-33 player can re-earn the level
-  5/10/15/20 milestones together without waiting for permanent level 34.
-- Earn Friend or Foe in Singleplayer by beating a normal Recommended or Leader
-  ghost. Preserve completion carried over from the original save, and retain
-  the original strict score comparison and achievement award path.
-- Restore a missing own ghost record from a matching native version-18 replay
-  cache when the isolated Singleplayer store lacks it. Preserve replay bytes,
-  existing score records, conflicting files and the original native cache.
-  This fixes the verified case where an older cached personal best prevented
-  a lower new run from uploading a ghost into the new local store.
-- Show the multiplied ghost-win bonus in the native versus message. At prestige
-  1 the default 100-coin bonus displays and credits 200; payment occurs once.
-  Creator and race rewards continue using their scoped original UI/payment paths.
-- Remove the abandoned startup-crashing native ghost-queue experiment; the
-  replacement works through local storage and the original query/download path.
-
-### Permanent main levels and configurable Singleplayer balance
-
-- Continue permanent main levels above 40. By default each later level costs
-  250,000,000 XP, repeating the original 39→40 interval. Existing permanent XP
-  counts immediately, and lowering a cap does not remove any saved XP.
-- Configure `main_level_cap`, `main_level_xp_step` and `main_level_xp_growth` in
-  `[balance]` in `singleplayer.ini`. Defaults are 0, 0 and 1: no configured cap,
-  the original final XP interval, and a constant XP cost. Keep the native curve
-  through level 40 and the original prestige-cycle car unlocks/rewards.
-- Keep the native Profile level text, prestige star and fill bar. With a finite
-  cap the bar shows level relative to that cap; uncapped mode keeps native fill
-  below 40 and shows next-level progress from 40 onward.
-- Configure earned coin rates, prestige multiplier growth/cap, paint price scale
-  and permanent-level discounts in the same balance section. Invalid policies
-  fall back to defaults; saved checkpoints record the effective balance revision.
-
-### Configuration and diagnostics
-
-- Split settings into `server.ini` for connections, `client.ini` for graphics,
-  languages, launcher and logging, and `singleplayer.ini` for isolated
-  progression/balance. Keep launcher-managed LAN settings in
-  `localserver/server.ini`. Existing explicit values win during migration;
-  preserve unknown settings and retain at most two config backups per file.
-- Enable experimental isolation with `[progression] isolate_singleplayer = 1`
-  in `singleplayer.ini`, then restart in Singleplayer. Legacy combined
-  `server.ini` settings migrate automatically. Isolation remains opt-in.
-- Add individual log-category checkboxes to launcher Diagnostics with a master
-  logging switch. Keep category choices when logging is disabled, do not create
-  a logs folder when disabled, and retain any existing logs.
-
-### Windows installer and optional local server
-
-- Distinguish client packages from optional server packages when reading release
-  metadata. Ignore legacy `ReRiff-Server-*` packages rather than treating their
-  `-windows.zip` suffix as a second client installer. Still reject genuinely
-  ambiguous duplicate client packages.
-- Name future Windows local-server downloads `ReRiff-Windows-Server.zip`.
-  Update package generation, verified download/checksum selection and release
-  assembly together, including cleanup of an obsolete generated archive when
-  rebuilding a local release directory.
-- Keep Flask and its dependencies in the optional Windows server package and
-  its private Python runtime; the Windows local server does not require Podman.
-
-### Validation and remaining beta work
-
-- Live Singleplayer tests verified Rank re-awards, Leader replay download and
-  playback, Friend or Foe, retained achievements, doubled ghost-bonus display
-  and payment, and save/restart persistence. The extended-level build retained
-  level 33, the prestige star, fill bar and all saved XP after a restart.
-- Original-method execution fixtures, 3,598 curve/policy checks, native layout,
-  configuration, logging, checkpoint and package-selection regressions pass
-  locally. A real in-game level-41 promotion and native Windows gameplay with
-  this exact beta still need testing; Wine/CLR fixtures are not that retest.
-- Recommended selection may be empty when only one own best replay exists;
-  this release does not add a personal-best recommendation fallback.
-- The First Prestige flag remains stored, but its logo-bearing achievement-list
-  row is still pending. Multiplayer prestige and server-enforced balance remain
-  separate future work. None of these tests reset the user's saved XP.
-
-See `docs/PRESTIGE.md`, `docs/CONFIGURATION.md` and `docs/LOGGING.md` for setup,
-policy details and rollback boundaries. Experimental updates require opt-in.
-
-# ReRiff 1.4.0-beta.1 — Singleplayer prestige base
-
-## In-game summary
-
-- Try opt-in singleplayer prestige with a manual Credits confirmation.
-- Keep your main level and equipped car and paint after prestige.
-- Earn more coins after prestige and see a star beside your level.
-
-## Full release notes
-
-### Opt-in singleplayer prestige
-
-- Select Singleplayer in the launcher and enable the experimental profile with
-  `[progression] isolate_singleplayer = 1` in the game folder's `server.ini`.
-  Restart after changing this setting. It is disabled by default.
-- Import an existing original save once into an account-specific local profile.
-  Native serialization, race records, ghosts, song history and generated tracks
-  are retained; isolated sessions do not replace the original Steam Cloud save.
-- With all 38 original in-game achievements completed, open Settings → Credits
-  and accept the native confirmation to prestige. Loading, saving, reaching
-  completion, Cancel and Back do not trigger a reset.
-- Reset coins, cycle XP, progression unlocks and cycle achievements. Retain the
-  permanent main XP/level, equipped car and equipped paint pack. Steam
-  achievements remain earned. Cycle progression uses the original XP thresholds.
-- Display the native difficulty star beside the permanent Profile level. The
-  first prestige uses a star alone; subsequent counts add xN. The badge follows
-  the level panel and hides on other Profile sections.
-- Track native saves and prestige counters together using checksummed two-slot
-  checkpoints with interrupted-transaction recovery. Retain the original save
-  and back up the complete isolated profile before experimenting or reverting.
-
-### Rewards and discounts
-
-- Multiply creator and race coin awards by prestige count + 1; purchases and
-  unrelated credits keep their original behavior. Match quoted and credited
-  amounts, and bound native signed counters.
-- Discount non-IAP paint packs using permanent level: 10% at 10, 20% at 20,
-  25% at 30, then diminishing increases toward 30%.
-
-### Validation and remaining beta work
-
-- Live tests verified original-save isolation, race/save/restart persistence,
-  discounted purchase persistence, manual prestige, retained equipped items,
-  original achievement reset, and the star's alignment and section visibility.
-- Automated checks cover reset refusal/confirmation, interrupted checkpoint
-  recovery, reward math, original method bindings and native UI lifecycle.
-  Live doubled creator/race payouts after prestige still need validation.
-- First Prestige is stored in the originally hidden achievement slot; its
-  logo-bearing achievement-list entry is not implemented yet.
-- This beta does not add multiplayer prestige, per-server progression authority
-  or configurable server balance. Those remain separate experimental work.
-- The independent launcher/client checks run in parallel with release validation.
-  Release installers retain the latest stable setup and pinned font downloads.
-
-For setup, rollback and test boundaries, see `docs/PRESTIGE.md` in the repository.
-
-# ReRiff 1.3.2 — Simpler setup and singleplayer controls
-
-## In-game summary
-
-- Windows setup now uses one window with options and a progress bar.
-- Enable or disable singleplayer with a launcher checkbox.
-- Launchers share the saved singleplayer setting with the game menu.
-
-## Full release notes
-
-### Windows setup
-
-- Collect the game folder, CJK and Latin font options, diagnostic logging,
-  private Python download consent and optional GitHub visit in one window.
-- Keep setup responsive while installation runs, with an animated progress
-  bar and status messages for Python preparation and game installation.
-- Show completion and failure in the setup window; allow retry after failure.
-- Preserve the command-line setup interface used by automatic updates.
-
-### Singleplayer controls on Windows and Linux/Proton
-
-- Replace the Singleplayer button and inverse Use servers checkbox with one
-  Enable singleplayer checkbox in the shared launcher UI.
-- Save the game's existing server.networking_enabled setting immediately;
-  checking singleplayer disables network server selection on the next start.
-- Preserve primary and secondary server addresses and unrelated unsaved edits.
-  Continue reflecting settings saved from the in-game menu in the launcher.
-- Retain automatic singleplayer fallback when configured servers do not respond.
-
-# ReRiff 1.3.1 — LAN quick deploy
-
-## In-game summary
-
-- Share a launcher-installed server with other PCs on your LAN.
-- Update an existing local server without losing scores or ghosts.
-- Find refreshed setup instructions and screenshots in the README.
-
-## Full release notes
-
-### Launcher-managed LAN server
-
-- Install and start the optional server from the launcher in two clicks.
-  Python, Flask and server dependencies are supplied automatically: a private
-  runtime on Windows and a self-contained server AppImage on Linux/Proton.
-- Accept game connections on IPv4 LAN interfaces as well as localhost. Start
-  reports detected LAN addresses; other PCs use the host's LAN address and
-  port 5144. Allow that port through the host's private-network firewall.
-- Share profiles, scores, tracks and ghosts between LAN and localhost clients.
-  Reuse the backend's address matching to return reachable ghost-file links
-  without rewriting stored records.
-- Keep launcher ownership/status/stop endpoints and the admin page accessible
-  only from localhost. LAN requests cannot read the launcher's control token.
-- Offer **Update local server** for an installed, stopped server from an older
-  client release. Stop it, update it, then start it to enable LAN access.
-  Package downloads are verified; server data and configuration are preserved.
-  Updating the client alone does not replace the optional server application.
-- Keep existing automatic local-server start/stop behavior and unrelated-port
-  protection. The dedicated server's Public/LAN configuration is unchanged.
-
-### Documentation and validation
-
-- Refresh README feature highlights, launcher/language screenshots, Japanese
-  metadata examples, News previews and platform dependency instructions.
-- Keep Podman references in the dedicated Docker server instructions.
-- Check LAN/localhost data identity and file links, non-loopback listening,
-  host-only control boundaries, graceful shutdown and the existing server
-  identity regressions. Release checks cover Windows/Linux packaging and
-  installation as well as the native launcher controls.
-
-# ReRiff 1.3.0 — Language fonts, portable clients and UI improvements
-
-## In-game summary
-
-- Add optional CJK and Latin/European fonts across the game.
-- Run the Linux client without a separate Python installation.
-- Improve UI scaling, display controls and update diagnostics.
-
-## Full release notes
-
-Stable release for Windows and Linux/Proton, including the tested 1.2.4 beta
-series and the subsequent missing-font and Auto-scale regression checks.
-
-### Language fonts and song metadata
-
-- Add optional Chinese, Japanese and Korean fonts, plus a separately selectable
-  Latin/European pack with missing letters such as Polish ł, ą and ę.
-- Install or enable either pack during setup or from the launcher's Languages
-  page. Both packs share one additional VFS pair. Disabling a pack keeps its
-  files available for offline re-enabling; original game archives are preserved.
-- Retain Unicode filenames, song titles and artists across the picker,
-  leaderboards and pause screen, including mixed-script spacing, selection
-  colours and higher-resolution glyphs.
-
-### Graphics, menus and track analysis
-
-- Refresh manual UI scale independently of resolution. Keep 50 at the fixed
-  1080p reference and 0 (Auto) on the game's built-in sizing path.
-- Scale main-menu rows and icon hit areas together; use native scrolling for
-  overflow. Give Graphics the available space below the header and keep its
-  scrollbar clear of Apply. Preserve separator and toggle artwork and keep the
-  scale slider rail visible when rendering above the window resolution.
-- Improve native fullscreen-selector input, initial row focus, Apply highlighting
-  and windowed pointer handling. Retain native menu navigation and key repeat.
-- Remove Servers from settings opened during a race. Music-picker navigation
-  retains its original boundaries; the withdrawn wraparound probe is excluded.
-- Resample higher-rate FLAC PCM to 44.1 kHz before track analysis using the
-  original resampler, correcting the extended-track timing problem. The source
-  file and playback rate are unchanged. No speculative audio-distortion patch
-  is included.
-
-### Installation, local server and updates
-
-- Make the Linux installer and client self-contained without a user-installed
-  Python runtime. The optional Flask server runs in its downloadable AppImage.
-- Run the optional Windows local server with a private Python runtime in the game
-  folder, without Podman. Keep server downloads separate from the client install.
-- Add Diagnostics → View update details in the launcher, including retained
-  temporary failure messages and bounded log excerpts after reopening it.
-  Clarify download limits, missing files, write failures and preflight errors.
-- Add logging controls to setup and the launcher. Fresh stable installs default
-  logging off; existing explicit preferences are retained. Disabling logging
-  keeps an existing logs folder and does not create a new one.
-- Use ~/Music for the Linux music link by default, retaining saved custom paths.
-- Keep verified originals and the last two backups per configuration. Use .bak,
-  reserve binary/font version history for development builds, and keep helper
-  scripts and optional server files out of the game root.
-- Keep experimental updates opt-in and stable as the default update channel.
-
-### Existing server integration
-
-- Retain main's persistent server identity and permanent Public/LAN aliases,
-  including request-matched file URLs and offline LAN access to the same store.
-- Combine that routing with optional local-server logging without replacing
-  stored profiles, scores, ghosts or uploaded files.
-
-### Validation and known limitations
-
-- The 1.2.3 launcher has a 64 MiB download limit, below these installers' size.
-  Download and run the installer manually for this upgrade. Existing settings
-  and saved data are preserved; subsequent updates use the newer launcher.
-- Validate native UI input and lifecycle, Auto/manual sizing, missing font-pack
-  combinations, independent font installation, shared archive ownership,
-  installer rollback, update diagnostics and Python-free Linux operation.
-- A beta.6 startup black-screen report stopped reproducing after installing the
-  Latin pack and remained resolved when it was disabled. An isolated CJK-only
-  launch at scale 55 also succeeded. Its original cause is unconfirmed; this
-  release does not claim a fix for that report. Auto remains available at 0.
-
-# Historical 1.2.4 beta series
-
-These Windows and Linux/Proton test builds were superseded by stable 1.3.0.
-The consolidated stable notes above describe the shipped behavior; the entries
-below retain each beta's main changes and relevant testing limits.
-
-# ReRiff 1.2.4-beta.6 — UI scaling, Latin fonts and update diagnostics
-
-## In-game summary
-
-- Keep manual UI sizing consistent and scroll crowded menus.
-- Add optional Polish and extended Latin font support.
-- Read update errors from the launcher's Diagnostics page.
-
-## Full release notes
-
-Add independent Latin/European fonts, scale-only refreshes, native main-menu
-scrolling, Graphics layout corrections and persistent update-error details.
-Default the Linux music link to `~/Music`, retaining custom paths. Remove
-Servers during races and withdraw the crashing music-picker wraparound probe.
-Independent font installation, rollback and native layout checks were added;
-broader visual testing was still required at this beta.
-
-# ReRiff 1.2.4-beta.5 — Diagnostics and tidier installs
-
-## In-game summary
-
-- Toggle diagnostic logging in setup or the launcher.
-- Font support now uses one extra archive pair.
-- Keep original files and just two backups of each config.
-
-## Full release notes
-
-Add logging controls with explicit preferences retained across updates;
-disabling logging preserves existing logs without creating a fresh logs folder.
-Consolidate CJK support into one extra VFS pair. Migrate backups to `.bak`, keep
-verified originals and two config snapshots, and restrict binary/font history
-to development builds. Remove obsolete example INIs and game-root shortcuts.
-Check logging defaults, backup rotation and font migration.
-
-# ReRiff 1.2.4-beta.4 — Optional CJK fonts and Languages controls
-
-## In-game summary
-
-- Add optional Chinese, Japanese and Korean font support in setup.
-- Install or disable CJK fonts from the launcher's Languages page.
-- Keep UTF-8 song titles and artists readable across game screens.
-
-## Full release notes
-
-Introduce optional CJK installation and native Languages controls, with
-checksum-verified downloads and offline re-enabling. Add size-selected glyph
-textures and field-scoped UTF-8 metadata corrections while preserving original
-archives and unrelated settings. This adds glyphs, not translated menus or
-regional typography selection; existing question-mark metadata is not repaired.
-Check archive ownership, conflicts, rollback and native rendering.
-
-# ReRiff 1.2.4-beta.3 — Local server startup and Windows Flask package
-
-## In-game summary
-
-- Run the Windows local server without Podman or system Python.
-- Install Flask and the backend separately from the launcher.
-- Linux server startup reports failures instead of staying busy.
-
-## Full release notes
-
-Replace Windows launcher-managed Podman with an optional verified Flask/Waitress
-package and private Python runtime. Preserve existing backend data, verify
-process ownership before stopping it, and leave previously running servers
-alone. This beta's local backend was loopback-only; 1.3.1 later added LAN access.
-Run the Linux server AppImage without FUSE and report helper failures. Validate
-Windows package/process behavior under Wine and Windows CI.
-
-# ReRiff 1.2.4-beta.2 — Python-free Linux setup and menu testing
-
-## In-game summary
-
-- Install and update on Linux without a Python runtime.
-- Download and manage an optional Linux server from the launcher.
-- Settings confirmations preserve scrolled graphics-menu rows.
-
-## Full release notes
-
-Make Linux client installation and updates self-contained, with Flask/Python
-kept in the optional server AppImage. Add checksum-verified server management
-and migration of existing launcher-managed data. Windows still used Podman in
-this beta. Add private-runtime download consent, publication-time experimental
-update selection, clearer edit borders and native Graphics focus/confirmation
-fixes. Controller remapping remained research only; real-machine desktop and
-in-game graphics retests were outstanding.
-
-# ReRiff 1.2.4-beta.1 — Display and input testing
-
-## In-game summary
-
-- Test corrected windowed clicks and fullscreen mode selection.
-- Save prompts keep input focus while settings stay inactive.
-- High-rate FLAC analysis uses the original 44.1 kHz resampler.
-
-## Full release notes
-
-Correct windowed dimensions and pointer mapping, fullscreen arrow hitboxes,
-activation/capture handling and overlay input ownership. Resample higher-rate
-FLAC analysis through the original 44.1 kHz resampler without changing playback;
-affected cached tracks need regeneration. Server identity, alternate addresses
-and backed-up LAN-to-public link migration were published separately in the
-experimental container. Display transitions and input still needed game tests.

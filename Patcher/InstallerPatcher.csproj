@@ -11,11 +11,13 @@
   <ItemGroup>
     <Compile Include="Program.cs" />
     <Compile Include="LanguageComponent.cs" />
+    <Compile Include="CoreArtwork.cs" />
+    <Compile Include="ModsVfs.cs" />
     <Reference Include="System.IO.Compression" />
     <Reference Include="System.IO.Compression.FileSystem" />
     <Reference Include="System.Runtime.Serialization" />
     <PackageReference Include="dnlib" Version="4.4.0" />
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net45" Version="1.0.3" PrivateAssets="all" />
   </ItemGroup>
-  <ItemGroup><Compile Include="../Shared/Logging.cs" Link="Logging.cs" /></ItemGroup>
+  <ItemGroup><Compile Include="../Shared/Logging.cs" Link="Logging.cs" /><Compile Include="../Shared/ConfigFiles.cs" Link="ConfigFiles.cs" /></ItemGroup>
 </Project>

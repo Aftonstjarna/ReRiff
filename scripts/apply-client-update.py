@@ -11,11 +11,13 @@ import tarfile
 import tempfile
 import zipfile
 import os
+import re
+import time
 try:
-    from logging_policy import logging_enabled
+    from logging_policy import logging_enabled, TimestampWriter, timestamp_text
 except ModuleNotFoundError:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'packaging'))
-    from logging_policy import logging_enabled
+    from logging_policy import logging_enabled, TimestampWriter, timestamp_text
 
 
 def safe_name(name):
@@ -25,9 +27,85 @@ def safe_name(name):
     return path
 
 
+def validate_release_package(metadata, archive, expected, platform):
+    schema = metadata.get('schema', 1)
+    if type(schema) is not int or schema not in (1, 2):
+        raise ValueError('Unsupported release metadata schema')
+    if schema == 1 and 'packages' not in metadata:
+        if archive.name not in metadata.get('artifacts', []):
+            raise ValueError('Release package is not listed in metadata')
+        return
+    packages = metadata.get('packages')
+    if schema != 2 or not isinstance(packages, list) or len(packages) > 128:
+        raise ValueError('Invalid explicit release package metadata')
+    matches = []
+    for package in packages:
+        if not isinstance(package, dict):
+            raise ValueError('Invalid explicit release package metadata')
+        for key, limit in [('component',63), ('platform',31), ('architecture',31), ('filename',255)]:
+            value = package.get(key)
+            if not isinstance(value,str) or not value or len(value.encode('utf8')) > limit:
+                raise ValueError('Invalid release package identity')
+        if not re.fullmatch(r'[A-Za-z0-9_-][A-Za-z0-9._-]*',package['filename']):
+            raise ValueError('Invalid release package filename')
+        if type(package.get('size')) is not int or not 0 < package['size'] <= 2**64-1:
+            raise ValueError('Invalid release package size')
+        if not isinstance(package.get('sha256'),str) or not re.fullmatch(r'[0-9a-fA-F]{64}',package['sha256']):
+            raise ValueError('Invalid release package checksum')
+        if (package['component'],package['platform'],package['architecture']) == ('client',platform,'x86' if platform=='windows' else 'x86_64'):
+            matches.append(package)
+    if len(matches)!=1:
+        raise ValueError('Expected one client package for this platform and architecture')
+    package=matches[0]
+    if package['filename']!=archive.name or package['size']!=archive.stat().st_size or package['sha256'].lower()!=expected.lower():
+        raise ValueError('Release package metadata mismatch')
+
+
+def seek_linux_payload(source):
+    # Search fixed-size chunks, retaining enough bytes to match a marker that
+    # crosses a boundary. A malformed preamble must not allocate the archive.
+    marker = b'\n__RERIFF_PAYLOAD__\n'
+    tail = b''
+    while True:
+        chunk = source.read(64 * 1024)
+        if not chunk:
+            raise ValueError('Invalid Linux release package')
+        block = tail + chunk
+        position = block.find(marker)
+        if position >= 0:
+            source.seek(source.tell() - len(block) + position + len(marker))
+            return
+        tail = block[-(len(marker) - 1):]
+
+
+def copy_archive_member(source, output, size):
+    # Keep memory bounded and reject truncated members before installer code
+    # is loaded. Reading through EOF also lets ZipExtFile verify its CRC.
+    if size < 0:
+        raise ValueError('Invalid archive member size')
+    remaining = size
+    with output.open('wb') as destination:
+        while remaining:
+            block = source.read(min(remaining, 1024 * 1024))
+            if not block:
+                raise ValueError('Truncated archive member')
+            destination.write(block)
+            remaining -= len(block)
+        if source.read(1):
+            raise ValueError('Archive member exceeds declared size')
+
+
 def prepare(archive, expected, work, game, platform, channel=None):
-    if hashlib.sha256(archive.read_bytes()).hexdigest() != expected.lower():
+    started = time.monotonic()
+    checksum = hashlib.sha256()
+    with archive.open('rb') as source:
+        for block in iter(lambda: source.read(1024 * 1024), b''):
+            checksum.update(block)
+    digest = checksum.hexdigest()
+    if digest != expected.lower():
         raise ValueError('Release checksum mismatch')
+    print(f'Timing: package verification {(time.monotonic()-started)*1000:.0f} ms', flush=True)
+    started = time.monotonic()
     target = work/'extracted'
     target.mkdir()
     total = 0
@@ -45,27 +123,27 @@ def prepare(archive, expected, work, game, platform, channel=None):
                     output.mkdir(parents=True, exist_ok=True)
                 else:
                     output.parent.mkdir(parents=True, exist_ok=True)
-                    output.write_bytes(bundle.read(info))
+                    with bundle.open(info) as source:
+                        copy_archive_member(source, output, info.file_size)
     else:
         # The Linux installer is a shell preamble followed by a gzip tar stream.
-        payload = archive.read_bytes().split(b'\n__RERIFF_PAYLOAD__\n', 1)
-        if len(payload) != 2:
-            raise ValueError('Invalid Linux release package')
-        import io
-        with tarfile.open(fileobj=io.BytesIO(payload[1]), mode='r:gz') as bundle:
-            for info in bundle:
-                relative = safe_name(info.name)
-                if not (info.isfile() or info.isdir()):
-                    raise ValueError('Archive links and special files are not supported')
-                total += info.size
-                if total > 512*1024*1024:
-                    raise ValueError('Release is too large')
-                output = target.joinpath(*relative.parts)
-                if info.isdir():
-                    output.mkdir(parents=True, exist_ok=True)
-                else:
-                    output.parent.mkdir(parents=True, exist_ok=True)
-                    output.write_bytes(bundle.extractfile(info).read())
+        with archive.open('rb') as source:
+            seek_linux_payload(source)
+            with tarfile.open(fileobj=source, mode='r|gz') as bundle:
+                for info in bundle:
+                    relative = safe_name(info.name)
+                    if not (info.isfile() or info.isdir()):
+                        raise ValueError('Archive links and special files are not supported')
+                    total += info.size
+                    if total > 512*1024*1024:
+                        raise ValueError('Release is too large')
+                    output = target.joinpath(*relative.parts)
+                    if info.isdir():
+                        output.mkdir(parents=True, exist_ok=True)
+                    else:
+                        output.parent.mkdir(parents=True, exist_ok=True)
+                        with bundle.extractfile(info) as member:
+                            copy_archive_member(member, output, info.size)
     manifests = list(target.glob('manifest.json')) + list(target.glob('*/manifest.json'))
     if len(manifests) != 1:
         raise ValueError('Expected one release manifest')
@@ -82,8 +160,7 @@ def prepare(archive, expected, work, game, platform, channel=None):
         metadata = json.loads(metadata_path.read_text())
         if manifest.get('version') != metadata.get('version'):
             raise ValueError('Release package version mismatch')
-        if archive.name not in metadata.get('artifacts', []):
-            raise ValueError('Release package is not listed in metadata')
+        validate_release_package(metadata, archive, expected, platform)
     installer = load_installer(root)
     installer.install(root, game, None, platform, dry_run=True)
     if platform == 'windows':
@@ -95,6 +172,7 @@ def prepare(archive, expected, work, game, platform, channel=None):
         for name in ('ReRiff-Runtime-x86_64.AppImage', 'linux-runtime.sh'):
             shutil.copy2(game/'localserver'/name, work/name)
         (work/'ReRiff-Runtime-x86_64.AppImage').chmod(0o755)
+    print(f'Timing: extraction and preparation {(time.monotonic()-started)*1000:.0f} ms', flush=True)
     (work/'prepared.json').write_text(json.dumps({'bundle': str(root), 'game': str(game), 'platform': platform}))
 
 
@@ -167,21 +245,28 @@ def main():
     if game is None:
         try: game=Path(json.loads((args.work/'prepared.json').read_text())['game'])
         except (OSError,ValueError,KeyError): pass
-    enabled=game is not None and logging_enabled(game)
+    enabled=game is not None and logging_enabled(game, category="update")
     log_path=game/'logs/update.log' if enabled else Path(os.devnull)
     try:
         log_path.parent.mkdir(parents=True,exist_ok=True)
     except OSError:
         log_path=args.work/'update.log'
     try:
-        with log_path.open('a', encoding='utf-8') as log, contextlib.redirect_stdout(log), contextlib.redirect_stderr(log):
-            if args.prepare:
-                prepare(args.archive, args.sha256, args.work, args.game_dir, args.platform, args.channel)
-            else:
-                apply(args.work)
+        with log_path.open('a', encoding='utf-8') as log:
+            stamped = TimestampWriter(log)
+            with contextlib.redirect_stdout(stamped), contextlib.redirect_stderr(stamped):
+                try:
+                    started = time.monotonic()
+                    if args.prepare:
+                        prepare(args.archive, args.sha256, args.work, args.game_dir, args.platform, args.channel)
+                    else:
+                        apply(args.work)
+                    print(f"Timing: {'prepare' if args.prepare else 'install'} total {(time.monotonic()-started)*1000:.0f} ms", flush=True)
+                finally:
+                    stamped.flush()
     except Exception as error:
         with log_path.open('a', encoding='utf-8') as log:
-            log.write(type(error).__name__+': '+str(error)+'\n')
+            log.write(timestamp_text(type(error).__name__+': '+str(error)))
         (args.work/'failure').write_text(type(error).__name__+': '+str(error)+'\n', encoding='utf-8')
         return 1
     return 0

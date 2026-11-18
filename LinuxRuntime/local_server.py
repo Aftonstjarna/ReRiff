@@ -16,6 +16,13 @@ import urllib.error
 import urllib.request
 
 from host_process import file_lock, stamp, windows_identity
+try:
+    from logging_policy import TimestampWriter, timestamp_text, diagnostic_header
+except ModuleNotFoundError:
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'packaging'))
+    from logging_policy import TimestampWriter, timestamp_text, diagnostic_header
+
 
 
 def lan_addresses(port):
@@ -40,8 +47,12 @@ def lan_addresses(port):
 def logging_enabled(root):
     root=Path(root);ini=configparser.ConfigParser(interpolation=None)
     try:
-        raw=(root.parent/'server.ini').read_bytes()
-        ini.read_string(raw.decode('utf-16' if raw.startswith((b'\xff\xfe',b'\xfe\xff')) else 'utf-8-sig'))
+        for name in ('server.ini','client.ini'):
+            try:
+                raw=(root.parent/name).read_bytes()
+                ini.read_string(raw.decode('utf-16' if raw.startswith((b'\xff\xfe',b'\xfe\xff')) else 'utf-8-sig'))
+            except FileNotFoundError:pass
+        if not ini.getboolean('diagnostics','log_localserver',fallback=True):return False
         if ini.has_option('diagnostics','logging_enabled'):return ini.getboolean('diagnostics','logging_enabled')
         ini.read(root/'client-channel.ini',encoding='utf-8-sig')
         return ini.get('client','channel',fallback='stable')=='experimental'
@@ -64,7 +75,8 @@ class LocalServer:
     def __init__(self, root):
         self.root = Path(root).resolve()
         self.control = self.root/'native'
-        self.config_path = self.control/'config.json'
+        self.config_path = self.root/'server.ini'
+        self.legacy_config_path = self.control/'config.json'
         self.record_path = self.control/'process.json'
         self.windows = os.name == 'nt'
         self.image = self.root/'windows-server/entry.py' if self.windows else self.root/'ReRiff-Server-x86_64.AppImage'
@@ -73,7 +85,12 @@ class LocalServer:
         self.logging = logging_enabled(self.root)
         if self.logging:self.logs.mkdir(parents=True, exist_ok=True)
         if self.config_path.exists():
-            self.config = json.loads(self.config_path.read_text())
+            ini=configparser.ConfigParser(interpolation=None)
+            raw=self.config_path.read_bytes()
+            ini.read_string(raw.decode('utf-16' if raw.startswith((b'\xff\xfe',b'\xfe\xff')) else 'utf-8-sig'))
+            self.config={'schema':1,'port':ini.getint('server','port',fallback=5144),'data_dir':ini.get('server','data_dir',fallback='data')}
+        elif self.legacy_config_path.exists():
+            self.config=json.loads(self.legacy_config_path.read_text())
         else:
             self.config = {'schema': 1, 'port': 5144, 'data_dir': 'data'}
             legacy = self.root/'podman'
@@ -90,9 +107,19 @@ class LocalServer:
         self.data = self.root/data_dir
         port = self.config.get('port')
         if self.config.get('schema') != 1 or type(port) is not int or not 1024 <= port <= 65535:
-            raise ValueError('Invalid localserver/native/config.json port; use 1024–65535.')
+            raise ValueError('Invalid localserver/server.ini port; use 1024–65535.')
         self.address = 'http://127.0.0.1:'+str(port)
         self.owner = hashlib.sha256(os.fsencode(self.root)).hexdigest()
+
+    def write_config(self):
+        ini=configparser.ConfigParser(interpolation=None)
+        if self.config_path.exists():
+            raw=self.config_path.read_bytes()
+            ini.read_string(raw.decode('utf-16' if raw.startswith((b'\xff\xfe',b'\xfe\xff')) else 'utf-8-sig'))
+        if not ini.has_section('server'):ini.add_section('server')
+        ini.set('server','port',str(self.config['port']));ini.set('server','data_dir',self.config.get('data_dir','data'))
+        import io
+        output=io.StringIO();ini.write(output);atomic(self.config_path,output.getvalue())
 
     @contextmanager
     def lock(self):
@@ -140,7 +167,7 @@ class LocalServer:
             return 'running'
         if self.owned(record):
             raise RuntimeError('The owned server is starting or unresponsive. See logs/ReRiff-localserver.log.')
-        return 'stopped' if self.image.is_file() and self.config_path.is_file() else 'uninstalled'
+        return 'stopped' if self.image.is_file() and (self.config_path.is_file() or self.legacy_config_path.is_file()) else 'uninstalled'
 
     def install(self, asset, expected):
         if not asset or not expected or len(expected) != 64:
@@ -163,7 +190,7 @@ class LocalServer:
             if result.returncode:
                 raise RuntimeError('Downloaded server failed its self-test: '+result.stderr[-1000:])
             os.replace(name, self.image)
-            atomic(self.config_path, json.dumps(self.config, indent=2)+'\n')
+            self.write_config()
         finally:
             Path(name).unlink(missing_ok=True)
         return 'Local server installed. Use '+self.address+' in Secondary server.'
@@ -174,12 +201,14 @@ class LocalServer:
             return 'Local server is already running at '+self.address
         if state == 'uninstalled':
             raise RuntimeError('Install the optional local server first.')
+        if not self.config_path.exists():self.write_config()
         token = secrets.token_hex(32)
         env = dict(os.environ, RERIFF_LOCAL_TOKEN=token)
         # Leave the game's Proton/Steam paths out of the native server loader.
         for key in ('LD_PRELOAD', 'LD_LIBRARY_PATH', 'PYTHONHOME', 'PYTHONPATH'):
             env.pop(key, None)
         with ((self.logs/'ReRiff-localserver.log').open('ab') if self.logging else open(os.devnull,'ab')) as log:
+            if self.logging:log.write(timestamp_text(diagnostic_header(self.root)).encode('utf-8'));log.flush()
             command = ([str(self.python), '-I', str(self.image)] if self.windows else [str(self.image)]) + ['--serve', '--root', str(self.root)]
             options = {'creationflags': subprocess.CREATE_NO_WINDOW} if self.windows else {'start_new_session': True}
             child = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=log, stderr=log, env=env, **options)
@@ -263,7 +292,7 @@ def main():
             logs = args.root.resolve().parent/'logs'
             logs.mkdir(parents=True, exist_ok=True)
             with (logs/'ReRiff-localserver.log').open('a', encoding='utf-8') as log:
-                log.write(type(error).__name__+': '+str(error)+'\n')
+                writer=TimestampWriter(log);writer.write(type(error).__name__+': '+str(error)+'\n');writer.flush()
         except OSError:
             pass
     # Windows GetPrivateProfileString reads Unicode INI reliably with a BOM.

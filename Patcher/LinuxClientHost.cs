@@ -20,6 +20,31 @@ internal static class LinuxClientHost {
     static string Text(JsonObject obj,string key,string fallback="") => obj[key]?.GetValue<string>() ?? fallback;
     static bool Flag(JsonObject obj,string key,bool fallback=false) => obj[key]?.GetValue<bool>() ?? fallback;
     static JsonObject Map(JsonObject obj,string key) => obj[key]?.AsObject() ?? new JsonObject();
+    static void ValidateReleasePackage(JsonObject metadata,string archive,string expected,string platform) {
+        int schema=metadata.ContainsKey("schema")?(metadata["schema"]?.GetValue<int>()??throw new IOException("Invalid release metadata schema.")):1;
+        if(schema==1&&!metadata.ContainsKey("packages")) {
+            if(metadata["artifacts"]?.AsArray().Any(p=>p?.GetValue<string>()==Path.GetFileName(archive))!=true)throw new IOException("Release package is not listed in metadata.");
+            return;
+        }
+        if(schema!=2||metadata["packages"] is not JsonArray packages||packages.Count>128)throw new IOException("Unsupported or invalid release package metadata.");
+        JsonObject? selected=null;
+        foreach(var entry in packages) {
+            if(entry is not JsonObject package)throw new IOException("Invalid release package metadata.");
+            foreach(var field in new[]{("component",63),("platform",31),("architecture",31),("filename",255)}) {
+                string value=Text(package,field.Item1);
+                if(value.Length==0||Encoding.UTF8.GetByteCount(value)>field.Item2)throw new IOException("Invalid release package identity.");
+            }
+            if(!Regex.IsMatch(Text(package,"filename"),@"\A[A-Za-z0-9_-][A-Za-z0-9._-]*\z")
+                ||!Regex.IsMatch(Text(package,"sha256"),@"\A[0-9a-fA-F]{64}\z")
+                ||package["size"] is not JsonValue number||!number.TryGetValue<ulong>(out var size)||size==0)throw new IOException("Invalid release package size, filename or checksum.");
+            if(Text(package,"component")=="client"&&Text(package,"platform")==platform&&Text(package,"architecture")== (platform=="windows"?"x86":"x86_64")) {
+                if(selected!=null)throw new IOException("Ambiguous release package identity.");selected=package;
+            }
+        }
+        if(selected==null||Text(selected,"filename")!=Path.GetFileName(archive)
+            ||selected["size"]!.GetValue<ulong>()!=(ulong)new FileInfo(archive).Length
+            ||!Text(selected,"sha256").Equals(expected,StringComparison.OrdinalIgnoreCase))throw new IOException("Release package metadata mismatch.");
+    }
     static string Under(string root,string relative) {
         if(string.IsNullOrWhiteSpace(relative)||Path.IsPathRooted(relative)||relative.Contains('\\')||relative.Contains(':')||relative.Split('/').Any(p=>p==".."))throw new IOException("Unsafe package path.");
         string full=Path.GetFullPath(Path.Combine(root,relative));
@@ -54,7 +79,7 @@ internal static class LinuxClientHost {
         public readonly Dictionary<string,string> Values=new();public readonly HashSet<string> Flags=new();
         public Options(string[] args) {
             var switches=new HashSet<string>{"--dry-run","--restore","--cjk","--no-cjk","--latin","--no-latin","--logging","--no-logging","--no-music-link","--prepare","--cli","--help"};
-            var values=new HashSet<string>{"--bundle","--game-dir","--backup-dir","--music-dir","--root","--result","--asset","--sha256","--work","--archive","--channel","--platform"};
+            var values=new HashSet<string>{"--bundle","--game-dir","--backup-dir","--music-dir","--root","--log","--result","--asset","--sha256","--work","--archive","--channel","--platform"};
             for(int i=0;i<args.Length;i++) {string key=args[i];if(switches.Contains(key)){if(!Flags.Add(key))throw new ArgumentException("Duplicate option: "+key);}else if(values.Contains(key)&&i+1<args.Length){if(!Values.TryAdd(key,args[++i]))throw new ArgumentException("Duplicate option: "+key);}else throw new ArgumentException("Unknown or incomplete option: "+key);}
         }
         public string Get(string key,string fallback="")=>Values.GetValueOrDefault(key,fallback);
@@ -64,12 +89,19 @@ internal static class LinuxClientHost {
     internal static int Run(string[] args) {
         if(!OperatingSystem.IsLinux())throw new PlatformNotSupportedException("This client helper is for Linux.");
         Console.OutputEncoding=new UTF8Encoding(false);
+        var originalOut=Console.Out;var originalError=Console.Error;
+        bool diagnostic=args.Length>0&&(args[0]=="install"||args[0]=="server-control"||args[0]=="stop-servers");
+        using var stampedOut=new ReRiff.Logging.TimestampWriter(originalOut);
+        using var stampedError=new ReRiff.Logging.TimestampWriter(originalError);
+        if(diagnostic){Console.SetOut(stampedOut);Console.SetError(stampedError);}
         try {
             if(args.Length>0 && args[0]=="language-component") return LanguageComponent.Run(args.Skip(1).ToArray());
             if(args.Length==0)throw new ArgumentException("Use install, update, server-control, stop-servers, print-game-dir or print-music-dir.");
             string command=args[0];int offset=command=="server-control"?2:1;var options=new Options(args.Skip(offset).ToArray());
+            if(diagnostic){string context=options.Get("--game-dir",options.Get("--root"));if(context!="")Console.WriteLine(ReRiff.Logging.Header(context));}
             switch(command) {
-                case "logging-status":return ReRiff.Logging.Enabled(options.Need("--root"))?0:1;
+                case "config-migrate": {string game=options.Need("--root");if(!File.Exists(Path.Combine(game,"Game.exe")))throw new IOException("Game.exe not found.");ReRiff.ConfigFiles.Migrate(game);return 0;}
+                case "logging-status":return ReRiff.Logging.Enabled(options.Need("--root"),options.Get("--log",""))?0:1;
                 case "print-game-dir":Console.WriteLine(AutoGame());break;
                 case "print-music-dir":Console.WriteLine(MusicDir());break;
                 case "install":
@@ -84,6 +116,7 @@ internal static class LinuxClientHost {
             }
             return 0;
         } catch(Exception error){Console.Error.WriteLine(error.GetType().Name+": "+error.Message);return 1;}
+        finally {stampedOut.Flush();stampedError.Flush();Console.SetOut(originalOut);Console.SetError(originalError);}
     }
     static string AutoGame() {
         string home=Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
@@ -170,21 +203,24 @@ internal static class LinuxClientHost {
                 if(!File.Exists(game+"/server.ini"))plan["server.ini"]=Encoding.UTF8.GetBytes("[server]\nexternal_url =\nfallback_url =\ntimeout_seconds = 5\nnetworking_enabled = true\nshow_server_popup = true\n\n[launcher]\nskip_launcher = false\nauto_update_on_skip = false\n");
                 bool cjk=options.Has("--cjk")||(!options.Has("--no-cjk")&&LanguageComponent.Enabled(game));
                 bool latin=options.Has("--latin")||(!options.Has("--no-latin")&&LanguageComponent.Enabled(game,"latin"));
-                if(cjk||latin||options.Has("--no-cjk")||options.Has("--no-latin")) {
+                if(cjk||latin||options.Has("--no-cjk")||options.Has("--no-latin")||LanguageComponent.Present(game)||LanguageComponent.Present(game,"latin")||LanguageComponent.RemovedModTree(game,"cjk")||LanguageComponent.RemovedModTree(game,"latin")) {
                     var component=Map(manifest,"language_component");var european=Map(manifest,"latin_component");
                     foreach(var item in LanguageComponent.Selections(game,cjk?Under(bundle,Text(component,"file")):"",Text(component,"sha256"),cjk,latin?Under(bundle,Text(european,"file")):"",Text(european,"sha256"),latin))plan[item.Key]=item.Value;
                 }
+                var artwork=Map(manifest,"core_artwork");
+                if(artwork.Count!=0)foreach(var item in CoreArtwork.Plan(game,Under(bundle,Text(artwork,"dat")),Text(artwork,"dat_sha256"),Under(bundle,Text(artwork,"zip")),Text(artwork,"zip_sha256"),plan.Keys))plan[item.Key]=item.Value;
                 var patched=new JsonObject();foreach(var pair in required)patched[pair.Key]=Hash(plan.TryGetValue(pair.Key,out var data)?data:File.ReadAllBytes(Under(game,pair.Key)));
                 bool music=!options.Has("--no-music-link")&&(options.Get("--music-dir")!=""||Flag(state,"music_link",true));
                 string musicPath=Path.GetFullPath(options.Get("--music-dir",Text(state,"music_dir",MusicDir())));
                 state=new JsonObject{["version"]=Text(manifest,"version"),["backup_dir"]=backups,["patched"]=patched,["music_link"]=music,["music_dir"]=musicPath};
                 plan["localserver/install-state.json"]=Encoding.UTF8.GetBytes(state.ToJsonString()+"\n");
                 bool logging=options.Has("--logging")||(!options.Has("--no-logging")&&(ReRiff.Logging.Setting(game)??development));
-                plan["server.ini"]=ReRiff.Logging.Config(plan.TryGetValue("server.ini",out var currentIni)?currentIni:File.Exists(game+"/server.ini")?File.ReadAllBytes(game+"/server.ini"):Array.Empty<byte>(),logging);
+                plan["client.ini"]=ReRiff.Logging.Config(plan.TryGetValue("client.ini",out var currentIni)?currentIni:Encoding.UTF8.GetBytes(ReRiff.ConfigFiles.Document(game,"client.ini")),logging);
                 if(logging&&plan.TryGetValue("localserver/diagnostics/Collect-ReRiffStartup.ps1",out var collectorBytes))plan["logs/Collect-ReRiffStartup.ps1"]=collectorBytes;
                 if(!logging)foreach(string name in plan.Keys.Where(n=>n.StartsWith("logs/",StringComparison.Ordinal)).ToArray())plan.Remove(name);
                 if(options.Get("--work")!=""&&File.Exists(Path.Combine(options.Get("--work"),"resume-command.txt")))plan["localserver/update-notification.ini"]=Encoding.UTF8.GetBytes("[update]\nversion="+Text(manifest,"version")+"\n");
             }
+            if(!restore&&manifest["mods_vfs"]?.GetValue<bool>()==true)plan=ModsVfs.Plan(game,plan);
             if(restore&&state.Count!=0) { state["backup_dir"]=backups;plan["localserver/install-state.json"]=Encoding.UTF8.GetBytes(state.ToJsonString()+"\n"); }
             foreach(var pair in plan)Under(game,pair.Key);
             Console.WriteLine("Validated ReRiff "+Text(manifest,"version")+": "+plan.Count+" files; backups: "+backups);
@@ -252,10 +288,11 @@ internal static class LinuxClientHost {
     static void Update(Options options) {
         string work=options.Need("--work"),game=options.Get("--game-dir");
         if(game==""&&File.Exists(work+"/prepared.json"))game=Text(ReadJson(work+"/prepared.json"),"game");
-        bool logging=game!=""&&ReRiff.Logging.Enabled(game);
+        bool logging=game!=""&&ReRiff.Logging.Enabled(game,"update.log");
         string log=game!=""?Path.Combine(game,"logs/update.log"):work+"/update.log";if(logging)Directory.CreateDirectory(Path.GetDirectoryName(log)!);
         var stdout=Console.Out;var stderr=Console.Error;
-        using var writer=logging?new StreamWriter(log,append:true){AutoFlush=true}:new StreamWriter(Stream.Null){AutoFlush=true};Console.SetOut(writer);Console.SetError(writer);
+        using var writer=logging?new StreamWriter(log,append:true){AutoFlush=true}:new StreamWriter(Stream.Null){AutoFlush=true};using var timestamped=new ReRiff.Logging.TimestampWriter(writer);Console.SetOut(timestamped);Console.SetError(timestamped);
+        if(logging)Console.WriteLine(ReRiff.Logging.Header(game));
         try {
             if(options.Has("--prepare")) {
                 string archive=options.Need("--archive"),expected=options.Get("--sha256");if(HashFile(archive)!=expected.ToLowerInvariant())throw new IOException("Release checksum mismatch.");
@@ -264,7 +301,7 @@ internal static class LinuxClientHost {
                 string bundle=Path.GetDirectoryName(manifests[0])!;var manifest=ReadJson(manifests[0]);
                 if(Text(manifest,"platform")!="linux"||!Flag(manifest,"update_only"))throw new IOException("Expected an update-only Linux package.");
                 if(options.Get("--channel")!=""&&options.Get("--channel")!=Text(manifest,"channel","stable"))throw new IOException("Release channel mismatch.");
-                if(File.Exists(work+"/latest-release.json")){var metadata=ReadJson(work+"/latest-release.json");if(Text(metadata,"version")!=Text(manifest,"version")||metadata["artifacts"]?.AsArray().Any(p=>p?.GetValue<string>()==Path.GetFileName(archive))!=true)throw new IOException("Release metadata mismatch.");}
+                if(File.Exists(work+"/latest-release.json")){var metadata=ReadJson(work+"/latest-release.json");if(Text(metadata,"version")!=Text(manifest,"version"))throw new IOException("Release metadata mismatch.");ValidateReleasePackage(metadata,archive,expected,"linux");}
                 string next=Path.Combine(bundle,"payload/localserver/ReRiff-ClientHost");
                 if(File.Exists(next)) {
                     string expectedHost=Text(Map(manifest,"files"),"payload/localserver/ReRiff-ClientHost");if(expectedHost==""||HashFile(next)!=expectedHost)throw new IOException("Native helper checksum mismatch.");
@@ -278,7 +315,7 @@ internal static class LinuxClientHost {
                 var plan=ReadJson(work+"/prepared.json");game=Text(plan,"game");StopServers(game+"/localserver");
                 Install(Text(plan,"bundle"),game,new Options(new[]{"--work",work}));Atomic(work+"/success",Encoding.UTF8.GetBytes("success\n"));
             }
-        } catch(Exception error) {writer.WriteLine(error.ToString());Atomic(work+"/failure",Encoding.UTF8.GetBytes(error.GetType().Name+": "+error.Message+"\n"));throw;}
+        } catch(Exception error) {timestamped.WriteLine(error.ToString());Atomic(work+"/failure",Encoding.UTF8.GetBytes(error.GetType().Name+": "+error.Message+"\n"));throw;}
         finally {Console.SetOut(stdout);Console.SetError(stderr);}
     }
     static int Server(string action,Options options) {
@@ -303,7 +340,7 @@ internal static class LinuxClientHost {
     [DllImport("libc",SetLastError=true)]static extern int kill(int pid,int signal);
     static void StopServers(string root) {
         root=Path.GetFullPath(root);
-        if(File.Exists(root+"/ReRiff-Server-x86_64.AppImage")&&File.Exists(root+"/native/config.json")) {
+        if(File.Exists(root+"/ReRiff-Server-x86_64.AppImage")&&(File.Exists(root+"/server.ini")||File.Exists(root+"/native/config.json"))) {
             string result=Path.GetTempFileName();try{if(Server("stop",new Options(new[]{"--root",root,"--result",result}))!=0)throw new IOException("Owned server shutdown failed.");}finally{File.Delete(result);}
         }
         // Old trace-server processes are matched by both script and server root.

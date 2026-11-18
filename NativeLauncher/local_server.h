@@ -31,9 +31,9 @@ static BOOL windows_server_action(const WCHAR *action){
         DWORD timeout=30000;InternetSetOptionW(session,INTERNET_OPTION_CONNECT_TIMEOUT,&timeout,sizeof(timeout));InternetSetOptionW(session,INTERNET_OPTION_RECEIVE_TIMEOUT,&timeout,sizeof(timeout));
         _snwprintf(url,CAP,L"https://github.com/Aftonstjarna/ReRiff/releases/download/v%ls/SHA256SUMS",RERIFF_WIDE_LITERAL(RERIFF_VERSION));
         BOOL ok=update_download(session,url,sums,65535);FILE *file=ok?_wfopen(sums,L"rb"):NULL;
-        if(file){while(fgets(line,sizeof(line),file))if(sscanf(line,"%64[0123456789abcdefABCDEF] %511s",sum,listed)==2&&strlen(sum)==64&&!strcmp(listed,"ReRiff-Server-windows.zip"))strcpy(expected,sum);fclose(file);}
-        _snwprintf(asset,CAP,L"%ls\\ReRiff-Server-windows.zip",work);
-        _snwprintf(url,CAP,L"https://github.com/Aftonstjarna/ReRiff/releases/download/v%ls/ReRiff-Server-windows.zip",RERIFF_WIDE_LITERAL(RERIFF_VERSION));
+        if(file){while(fgets(line,sizeof(line),file))if(sscanf(line,"%64[0123456789abcdefABCDEF] %511s",sum,listed)==2&&strlen(sum)==64&&!strcmp(listed,"ReRiff-Windows-Server.zip"))strcpy(expected,sum);fclose(file);}
+        _snwprintf(asset,CAP,L"%ls\\ReRiff-Windows-Server.zip",work);
+        _snwprintf(url,CAP,L"https://github.com/Aftonstjarna/ReRiff/releases/download/v%ls/ReRiff-Windows-Server.zip",RERIFF_WIDE_LITERAL(RERIFF_VERSION));
         ok=ok&&*expected&&update_download(session,url,asset,256*1024*1024)&&update_digest(asset,expected);InternetCloseHandle(session);
         if(!ok){python_remove_stage(work);wcscpy(message,L"Could not download a verified Windows local-server package for this client release. See logs/ReRiff-launcher.log.");return FALSE;}
         MultiByteToWideChar(CP_UTF8,0,expected,-1,hash_w,65);

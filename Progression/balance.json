@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "season": "default",
+  "anti_cheat": "disabled",
+  "xp": {"main_rate": "1", "prestige_rate": "1"},
+  "coins": {"base_rate": "1", "creator_rate": "1", "prestige_growth": "1", "multiplier_cap": null},
+  "discounts": {
+    "mode": "interval",
+    "start_level": 10,
+    "start": "0.20",
+    "increase": "0.05",
+    "milestones": [{"level": 10, "fraction": "0.10"}, {"level": 20, "fraction": "0.20"}, {"level": 30, "fraction": "0.25"}],
+    "maximum": "0.50",
+    "diminishing_interval": 5,
+    "remaining_gap_factor": "0.5"
+  },
+  "unlocks": {"car_levels": {}, "paint_price_scale": "1"},
+  "main_levels": {"cap": 0, "xp_step": 0, "xp_growth": "1"},
+  "prestige": {"required_achievements": "native_all", "maximum_count": null}
+}

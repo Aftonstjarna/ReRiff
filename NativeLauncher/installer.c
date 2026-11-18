@@ -15,8 +15,10 @@
 #endif
 #define CAP 32768
 #include "python_runtime.h"
+#include "branding.h"
+
 static HWND setup_window, path_edit, status_text, progress_bar, install_button;
-static HWND options[5];
+static HWND options[5],checkbox_tooltips;
 static BOOL installing=FALSE, completed=FALSE;
 static WCHAR setup_arguments[CAP], selected_game[CAP];
 static int WINAPI setup_prompt(HWND owner,LPCWSTR text,LPCWSTR title,UINT flags){
@@ -47,10 +49,10 @@ static int install(LPWSTR arguments) {
     else while(*arguments&&*arguments!=L' '&&*arguments!=L'\t')arguments++;
     _snwprintf(command,CAP,L"\"%ls\\localserver\\windows-python\\python.exe\" -X utf8 -c \"%ls\" \"%ls\" \"%ls\\installer.py\" --platform windows %ls",game,bootstrap,root,root,arguments);
     command[CAP-1]=0;
-    _snwprintf(log,CAP,L"%ls\\logs",*game?game:root);log[CAP-1]=0;if(logging)CreateDirectoryW(log,NULL);
+    _snwprintf(log,CAP,L"%ls\\logs",*game?game:root);log[CAP-1]=0;BOOL save_log=logging&&rr_log_selected(game,L"installer");if(save_log)CreateDirectoryW(log,NULL);
     _snwprintf(log,CAP,L"%ls\\logs\\installer.log",*game?game:root);log[CAP-1]=0;
     SECURITY_ATTRIBUTES security={sizeof(security),NULL,TRUE};
-    HANDLE output=CreateFileW(logging?log:L"NUL",GENERIC_WRITE,FILE_SHARE_READ,&security,CREATE_ALWAYS,FILE_ATTRIBUTE_NORMAL,NULL);
+    HANDLE output=CreateFileW(save_log?log:L"NUL",GENERIC_WRITE,FILE_SHARE_READ,&security,CREATE_ALWAYS,FILE_ATTRIBUTE_NORMAL,NULL);
     STARTUPINFOW start;PROCESS_INFORMATION process;ZeroMemory(&start,sizeof(start));ZeroMemory(&process,sizeof(process));start.cb=sizeof(start);
     start.dwFlags=STARTF_USESHOWWINDOW|STARTF_USESTDHANDLES;start.wShowWindow=SW_HIDE;
     start.hStdOutput=output;start.hStdError=output;start.hStdInput=GetStdHandle(STD_INPUT_HANDLE);
@@ -74,6 +76,12 @@ static HWND control(HWND parent,LPCWSTR kind,LPCWSTR text,DWORD style,int x,int 
         WS_CHILD|WS_VISIBLE|style,x,y,w,h,parent,(HMENU)(INT_PTR)id,GetModuleHandleW(NULL),NULL);
     SendMessageW(item,WM_SETFONT,(WPARAM)GetStockObject(DEFAULT_GUI_FONT),TRUE);return item;
 }
+static void checkbox_help(HWND checkbox,const WCHAR *text){
+    TOOLINFOW tool={0};tool.cbSize=TTTOOLINFOW_V2_SIZE;
+    tool.uFlags=TTF_IDISHWND|TTF_SUBCLASS;tool.hwnd=setup_window;
+    tool.uId=(UINT_PTR)checkbox;tool.lpszText=(LPWSTR)text;
+    SendMessageW(checkbox_tooltips,TTM_ADDTOOLW,0,(LPARAM)&tool);
+}
 static void load_options(void){
     WCHAR config[CAP],value[16];GetWindowTextW(path_edit,selected_game,CAP);
     _snwprintf(config,CAP,L"%ls\\server.ini",selected_game);
@@ -86,6 +94,8 @@ static void load_options(void){
 static LRESULT CALLBACK setup_proc(HWND window,UINT message,WPARAM wparam,LPARAM lparam){
     switch(message){
     case WM_COMMAND:
+        if(LOWORD(wparam)==13){SendMessageW(window,WM_CLOSE,0,0);break;}
+        if(LOWORD(wparam)==14){ShellExecuteW(window,L"open",L"https://github.com/Aftonstjarna/ReRiff",NULL,NULL,SW_SHOWNORMAL);break;}
         if(LOWORD(wparam)==12&&HIWORD(wparam)==EN_KILLFOCUS&&!installing){load_options();break;}
         if(LOWORD(wparam)==10&&!installing){
             WCHAR file[CAP]=L"";OPENFILENAMEW dialog={0};dialog.lStructSize=sizeof(dialog);dialog.hwndOwner=window;
@@ -124,7 +134,8 @@ static LRESULT CALLBACK setup_proc(HWND window,UINT message,WPARAM wparam,LPARAM
         if(!wparam&&SendMessageW(options[4],BM_GETCHECK,0,0)==BST_CHECKED)ShellExecuteW(window,L"open",L"https://github.com/Aftonstjarna/ReRiff",NULL,NULL,SW_SHOWNORMAL);
         break;
     case WM_CLOSE:if(!installing)DestroyWindow(window);break;
-    case WM_DESTROY:PostQuitMessage(0);break;
+    case WM_DRAWITEM:if(rr_brand_draw((const DRAWITEMSTRUCT *)lparam))return TRUE;break;
+    case WM_DESTROY:rr_brand_cleanup();PostQuitMessage(0);break;
     default:return DefWindowProcW(window,message,wparam,lparam);
     }return 0;
 }
@@ -134,18 +145,35 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE previous,LPWSTR arguments,int s
     INITCOMMONCONTROLSEX common={sizeof(common),ICC_PROGRESS_CLASS};InitCommonControlsEx(&common);
     WNDCLASSW cls={0};cls.lpfnWndProc=setup_proc;cls.hInstance=instance;cls.lpszClassName=L"ReRiffSetup";
     cls.hCursor=LoadCursorW(NULL,IDC_ARROW);cls.hbrBackground=(HBRUSH)(COLOR_BTNFACE+1);RegisterClassW(&cls);
-    RECT bounds={0,0,620,470};AdjustWindowRectEx(&bounds,WS_OVERLAPPED|WS_CAPTION|WS_SYSMENU|WS_MINIMIZEBOX,FALSE,WS_EX_CONTROLPARENT);
+    RECT bounds={0,0,640,620};AdjustWindowRectEx(&bounds,WS_OVERLAPPED|WS_CAPTION|WS_SYSMENU|WS_MINIMIZEBOX,FALSE,WS_EX_CONTROLPARENT);
     setup_window=CreateWindowExW(WS_EX_CONTROLPARENT,cls.lpszClassName,L"ReRiff setup",WS_OVERLAPPED|WS_CAPTION|WS_SYSMENU|WS_MINIMIZEBOX,
         CW_USEDEFAULT,CW_USEDEFAULT,bounds.right-bounds.left,bounds.bottom-bounds.top,NULL,NULL,instance,NULL);
-    control(setup_window,L"STATIC",L"Close Riff Racer before installing. Select its game folder:",0,20,18,580,24,0);
-    path_edit=control(setup_window,L"EDIT",L"",WS_TABSTOP|ES_AUTOHSCROLL,20,47,470,26,12);
-    control(setup_window,L"BUTTON",L"Browse...",WS_TABSTOP,500,47,100,26,10);
-    const WCHAR *labels[]={L"Enable Chinese, Japanese and Korean fonts (about 105 MiB)",L"Enable Latin/European fonts, including Polish (small download)",L"Enable diagnostic logging",L"Download verified private Python from python.org if required",L"Open the GitHub repository after installation"};
-    for(int i=0;i<5;i++)options[i]=control(setup_window,L"BUTTON",labels[i],WS_TABSTOP|BS_AUTOCHECKBOX,20,90+i*34,580,28,20+i);
-    control(setup_window,L"STATIC",L"Fonts do not translate menus. Python stays in the game folder; system Python, PATH and registry are unchanged. Existing settings and saves are retained.",0,20,266,580,50,0);
-    progress_bar=control(setup_window,PROGRESS_CLASSW,L"",PBS_MARQUEE,20,330,580,22,0);
-    status_text=control(setup_window,L"STATIC",L"Choose your options, then select Install.",0,20,365,580,55,0);
-    install_button=control(setup_window,L"BUTTON",L"Install",WS_TABSTOP|BS_DEFPUSHBUTTON,490,429,110,28,11);
+    rr_brand_icon(setup_window);
+    control(setup_window,L"STATIC",L"",SS_OWNERDRAW,76,20,488,88,RERIFF_BRAND_CONTROL);
+    control(setup_window,L"STATIC",L"Install ReRiff for Windows",0,20,122,600,22,0);
+    control(setup_window,L"STATIC",L"Choose the folder the Game.exe is in. Backups of original files will be made.",0,20,154,600,42,0);
+    path_edit=control(setup_window,L"EDIT",L"",WS_TABSTOP|ES_AUTOHSCROLL,20,208,490,28,12);
+    control(setup_window,L"BUTTON",L"Browse...",WS_TABSTOP,522,208,98,28,10);
+    checkbox_tooltips=CreateWindowExW(WS_EX_TOPMOST,TOOLTIPS_CLASSW,NULL,WS_POPUP|TTS_ALWAYSTIP|TTS_NOPREFIX,
+        CW_USEDEFAULT,CW_USEDEFAULT,CW_USEDEFAULT,CW_USEDEFAULT,setup_window,NULL,instance,NULL);
+    SendMessageW(checkbox_tooltips,TTM_SETMAXTIPWIDTH,0,440);
+    SendMessageW(checkbox_tooltips,TTM_SETDELAYTIME,TTDT_AUTOPOP,20000);
+    const WCHAR *labels[]={L"Install and enable CJK fonts",L"Install and enable Latin/European fonts",L"Enable diagnostic logging",L"Download private Python if required",L"Open GitHub after installation"};
+    const WCHAR *tips[]={
+        L"Adds Chinese, Japanese and Korean characters. Downloads about 105 MiB. Fonts do not translate menus.",
+        L"Adds Latin and European characters, including Polish. A small download; fonts do not translate menus.",
+        L"Saves reports in the game's logs folder. Defaults on for beta/development builds. Disabling keeps existing logs.",
+        L"Downloads verified Python from python.org when required. It stays in the game folder; system Python, PATH and registry are unchanged.",
+        L"Opens the ReRiff repository in your browser after a successful installation, for releases, help and source."};
+    for(int i=0;i<5;i++){
+        options[i]=control(setup_window,L"BUTTON",labels[i],WS_TABSTOP|BS_AUTOCHECKBOX,20,248+i*34,600,28,20+i);
+        checkbox_help(options[i],tips[i]);
+    }
+    control(setup_window,L"BUTTON",L"ReRiff on GitHub",WS_TABSTOP,220,424,200,28,14);
+    status_text=control(setup_window,L"STATIC",L"Choose the game folder, then click Install.",0,20,468,600,48,0);
+    progress_bar=control(setup_window,PROGRESS_CLASSW,L"",0,20,528,600,18,0);
+    install_button=control(setup_window,L"BUTTON",L"Install",WS_TABSTOP|BS_DEFPUSHBUTTON,20,568,490,32,11);
+    control(setup_window,L"BUTTON",L"Close",WS_TABSTOP,522,568,98,32,13);
     if(!setup_window)return 1;
     load_options();python_runtime_prompt=setup_prompt;
     ShowWindow(setup_window,show);MSG message;

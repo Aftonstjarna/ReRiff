@@ -292,6 +292,8 @@ static void sync_scroll(void *menu){
     }
 }
 static LRESULT CALLBACK scroll_wndproc(HWND window,UINT message,WPARAM wparam,LPARAM lparam){
+    if(picker_search_message(window,message,wparam,lparam))return 0;
+    if(text_entry_message(window,message,wparam,lparam))return message==WM_UNICHAR&&wparam==UNICODE_NOCHAR?TRUE:0;
     if(message==WM_MOUSEWHEEL&&main_scroll_wheel(0)){
         wheel_remainder+=(short)HIWORD(wparam);int steps=wheel_remainder/WHEEL_DELTA;wheel_remainder-=steps*WHEEL_DELTA;main_scroll_wheel(-steps);return 0;
     }
@@ -317,7 +319,7 @@ static void attach_scroll_window(void){
     if(!target.game)return;
     scroll_previous=(WNDPROC)GetWindowLongPtrW(target.game,GWLP_WNDPROC);
     LONG_PTR previous=SetWindowLongPtrW(target.game,GWLP_WNDPROC,(LONG_PTR)&scroll_wndproc);
-    if(previous){scroll_previous=(WNDPROC)previous;scroll_window=target.game;}
+    if(previous){scroll_previous=(WNDPROC)previous;scroll_window=target.game;text_input_attach_queue(target.game);}
 }
 static BOOL init_scroll(void *menu,void *sample){
     root_count=0;root_first=page_first=extra_count=0;laid_out=-1;scroll_ready=FALSE;

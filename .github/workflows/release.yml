@@ -5,6 +5,11 @@ on:
     branches: [main, launcher, codex/experimental-client]
     paths: [VERSION]
   workflow_dispatch:
+    inputs:
+      draft:
+        description: Create a draft for review without updating public channels
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -14,6 +19,10 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  launcher-checks:
+    uses: ./.github/workflows/launcher-checks.yml
+  client-checks:
+    uses: ./.github/workflows/client-checks.yml
   windows-loader:
     runs-on: windows-latest
     steps:
@@ -32,6 +41,10 @@ jobs:
           dotnet build Patcher/InstallerPatcher.csproj -c Release -o build/installer-patcher
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python scripts/test_language_component.py --host build/installer-patcher/ReRiff-Patcher.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python scripts/test_mods_migration.py --host build/installer-patcher/ReRiff-Patcher.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python scripts/test_core_artwork.py --host build/installer-patcher/ReRiff-Patcher.exe
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           dotnet build NewsHeaders/NewsHeaders.csproj -c Release -o build
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -57,6 +70,15 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & .\build\logging-smoke\LoggingSmoke.exe
           exit $LASTEXITCODE
+      - name: Test prestige checkpoints, recovery and rewards
+        shell: pwsh
+        run: |
+          foreach ($test in @('ProgressionStore', 'ProgressionCheckpoints', 'PrestigeTransaction', 'ProgressionRewards')) {
+            dotnet build ClientConfig/Tests/ProgressionChecks.csproj -c Release -p:SmokeTest=$test -o "build/prestige-checks/$test"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            & "./build/prestige-checks/$test/$($test)Smoke.exe"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
       - name: Test singleplayer routing on Microsoft .NET Framework
         shell: pwsh
         run: |
@@ -66,11 +88,12 @@ jobs:
           exit $LASTEXITCODE
   release:
     if: github.repository == 'Aftonstjarna/ReRiff'
-    needs: windows-loader
+    needs: [windows-loader, launcher-checks, client-checks]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
       RERIFF_RELEASE_CHANNEL: ${{ github.ref_name == 'codex/experimental-client' && 'experimental' || 'stable' }}
+      RERIFF_RELEASE_DRAFT: ${{ inputs.draft || false }}
     permissions:
       contents: write
     steps:
@@ -98,6 +121,10 @@ jobs:
             exit 1
           fi
           if gh release view "v$version" >/dev/null 2>&1; then
+            if [ "$RERIFF_RELEASE_DRAFT" = true ]; then
+              echo 'A release already exists for this version; draft builds never overwrite it.'
+              exit 1
+            fi
             prerelease=$(gh release view "v$version" --json isPrerelease --jq .isPrerelease)
             if [[ "$RERIFF_RELEASE_CHANNEL" != stable || "$prerelease" != true ]]; then
               echo "An existing stable release cannot be overwritten; bump VERSION."
@@ -117,9 +144,11 @@ jobs:
         run: dotnet build Patcher/InstallerPatcher.csproj -c Release -o build/installer-patcher
       - name: Build self-contained Linux patcher
         run: python scripts/build-linux-patcher.py
+      - name: Install artwork build dependency
+        run: python -m pip install Pillow==13.0.0
       - name: Build native launcher, notification, and Windows setup
         run: |
-          python scripts/build-windows-launcher.py --zig "$RUNNER_TEMP/release-tools/zig-x86_64-linux-0.14.1/zig"
+          python scripts/build-windows-launcher.py --release --zig "$RUNNER_TEMP/release-tools/zig-x86_64-linux-0.14.1/zig"
           python scripts/verify-windows-manifests.py
       - name: Install Linux setup build dependencies
         timeout-minutes: 5
@@ -154,6 +183,8 @@ jobs:
           python -m unittest discover -s packaging -p test_font_assets.py -v
           python scripts/fetch-font-components.py
           python scripts/test_language_component.py --host build/linux-patcher/Patcher
+          python scripts/test_mods_migration.py --host build/linux-patcher/Patcher
+          python scripts/test_core_artwork.py --host build/linux-patcher/Patcher
           python scripts/test_font_packs.py --host build/linux-patcher/Patcher --cjk build/cjk-component/ReRiff-CJK.zip --latin build/latin-component/ReRiff-Latin.zip
       - name: Package Windows and Linux installers
         run: >-
@@ -164,6 +195,7 @@ jobs:
           RERIFF_SYNTHETIC_TESTS: '1'
         run: |
           python -m unittest discover -s packaging -p test_installer.py -v
+          python -m unittest discover -s packaging -p test_core_artwork_bundle.py -v
           python -m unittest discover -s packaging -p test_helper_upgrade.py -v
           python -m unittest discover -s packaging -p test_linux_music.py -v
       - name: Build server libraries and dependencies for News regression tests
@@ -180,6 +212,7 @@ jobs:
         run: |
           cc -std=c99 -Wall -Wextra -Werror -Wno-misleading-indentation NativeLauncher/test_release_channel.c -o build/test-release-channel
           build/test-release-channel
+          python -m unittest discover -s packaging -p test_release_metadata.py -v
           python scripts/test_client_update.py
           python scripts/test_steam_bridge.py
           python scripts/test_podman_server.py
@@ -229,10 +262,14 @@ jobs:
           version=$(cat VERSION)
           python packaging/release_notes.py --version "$version" --output "$RUNNER_TEMP/RELEASE-NOTES.md"
           flags=()
+          if [ "$RERIFF_RELEASE_DRAFT" = true ]; then
+            flags+=(--draft --latest=false)
+          fi
           if [ "$RERIFF_RELEASE_CHANNEL" = experimental ]; then
             flags+=(--prerelease --latest=false)
           fi
           if gh release view "v$version" >/dev/null 2>&1; then
+            test "$RERIFF_RELEASE_DRAFT" != true
             test "$RERIFF_RELEASE_CHANNEL" = stable
             test "$(gh release view "v$version" --json isPrerelease --jq .isPrerelease)" = true
             gh release upload "v$version" "dist/v$version/"* --clobber
@@ -246,7 +283,7 @@ jobs:
               --target "$GITHUB_SHA" --title "ReRiff $version" \
               --notes-file "$RUNNER_TEMP/RELEASE-NOTES.md" "dist/v$version/"*
           fi
-          if [ "$RERIFF_RELEASE_CHANNEL" = experimental ]; then
+          if [ "$RERIFF_RELEASE_CHANNEL" = experimental ] && [ "$RERIFF_RELEASE_DRAFT" != true ]; then
             # Compatibility alias for the channel picker shipped in v0.1.10.
             alias_dir="$RUNNER_TEMP/experimental-assets"
             mkdir -p "$alias_dir"
@@ -267,7 +304,7 @@ jobs:
                 while IFS= read -r asset; do
                   case "$asset" in
                     ReRiff-*-source.tar.gz) gh release delete-asset experimental "$asset" --yes ;;
-                    ReRiff-"$version"-*|ReRiff-"$base_version"-linux.run|ReRiff-"$base_version"-windows.zip|ReRiff-Server-x86_64.AppImage|ReRiff-Server-windows.zip|ReRiff-CJK.zip|ReRiff-Latin.zip) ;;
+                    ReRiff-"$version"-*|ReRiff-"$base_version"-linux.run|ReRiff-"$base_version"-windows.zip|ReRiff-Server-x86_64.AppImage|ReRiff-Windows-Server.zip|ReRiff-CJK.zip|ReRiff-Latin.zip) ;;
                     ReRiff-*) gh release delete-asset experimental "$asset" --yes ;;
                   esac
                 done

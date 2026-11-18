@@ -1,0 +1,117 @@
+name: Launcher checks
+
+on:
+  push:
+    paths:
+      - 'images/**'
+      - 'scripts/build-ui-assets.py'
+      - 'scripts/test_ui_assets.py'
+      - 'NativeLauncher/**'
+      - 'LinuxInstaller/**'
+      - 'LinuxRuntime/**'
+      - 'Patcher/**'
+      - 'packaging/**'
+      - 'Shared/**'
+      - 'Managed/Logging*'
+      - 'scripts/build-windows-launcher.py'
+      - 'scripts/build-linux-installer.py'
+      - 'scripts/build-linux-patcher.py'
+      - 'scripts/test-linux-installer.py'
+      - 'scripts/test_client_update.py'
+      - 'scripts/apply-client-update.py'
+      - 'scripts/test_native_client.py'
+      - 'scripts/test_steam_bridge.py'
+      - 'VERSION'
+      - 'packaging/fetch_release_tools.py'
+      - '.github/workflows/launcher-checks.yml'
+  pull_request:
+    paths:
+      - 'images/**'
+      - 'scripts/build-ui-assets.py'
+      - 'scripts/test_ui_assets.py'
+      - 'NativeLauncher/**'
+      - 'LinuxInstaller/**'
+      - 'LinuxRuntime/**'
+      - 'Patcher/**'
+      - 'packaging/**'
+      - 'Shared/**'
+      - 'Managed/Logging*'
+      - 'scripts/build-windows-launcher.py'
+      - 'scripts/build-linux-installer.py'
+      - 'scripts/build-linux-patcher.py'
+      - 'scripts/test-linux-installer.py'
+      - 'scripts/test_client_update.py'
+      - 'scripts/apply-client-update.py'
+      - 'scripts/test_native_client.py'
+      - 'scripts/test_steam_bridge.py'
+      - 'VERSION'
+      - 'packaging/fetch_release_tools.py'
+      - '.github/workflows/launcher-checks.yml'
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: launcher-checks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Verify explicit release metadata and update preflight
+        run: |
+          python -m unittest discover -s packaging -p test_release_metadata.py -v
+          python scripts/test_client_update.py
+      - name: Fetch checksum-pinned compiler
+        run: python packaging/fetch_release_tools.py --asset zig.tar.xz --directory "$RUNNER_TEMP/release-tools"
+      - name: Install artwork build dependency
+        run: |
+          python -m pip install Pillow==13.0.0
+          python scripts/test_ui_assets.py
+      - name: Build launcher independently
+        run: >-
+          python scripts/build-windows-launcher.py
+          --zig "$RUNNER_TEMP/release-tools/zig-x86_64-linux-0.14.1/zig"
+          --component launcher --output-dir build/launcher-checks
+      - name: Build native regression executables
+        run: |
+          export ZIG_GLOBAL_CACHE_DIR="$RUNNER_TEMP/zig-global"
+          export ZIG_LOCAL_CACHE_DIR="$RUNNER_TEMP/zig-local"
+          for source in NativeLauncher/test_release_channel.c NativeLauncher/test_channel.c NativeLauncher/test_languages.c NativeLauncher/test_logging.c NativeLauncher/test_menu_persistence.c NativeLauncher/test_update_progress.c NativeLauncher/test_performance_cache.c NativeLauncher/test_log_timestamps.c; do
+            name=$(basename "$source" .c)
+            "$RUNNER_TEMP/release-tools/zig-x86_64-linux-0.14.1/zig" cc \
+              -target x86-windows-gnu -O2 -Wall -Wextra -Werror \
+              "-DRERIFF_VERSION=\"$(cat VERSION)\"" "$source" \
+              -o "build/launcher-checks/$name.exe" -Wl,--image-base,0x10000000 \
+              -lcomctl32 -lcomdlg32 -lwininet -lshell32 -luser32 -lgdi32 -ladvapi32 -static
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: launcher-checks-${{ github.sha }}
+          path: build/launcher-checks/*
+          retention-days: 7
+
+  native-tests:
+    needs: build
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: launcher-checks-${{ github.sha }}
+          path: component
+      - name: Run native regressions on Windows
+        shell: pwsh
+        run: |
+          Get-ChildItem component/test_*.exe | ForEach-Object {
+            & $_.FullName
+            if ($LASTEXITCODE -ne 0) { throw "Native regression failed: $($_.Name) ($LASTEXITCODE)" }
+          }

@@ -40,8 +40,9 @@ static void *__thiscall mock_sprite(void *ui,int id,const float *pos,int origin,
     (void)ui;if(sprites_created>=64)abort();void *sprite=sprites[sprites_created++];*(void ***)sprite=item_vtable;
     ((int *)sprite)[2]=item_id;((float *)sprite)[12]=300;((float *)sprite)[13]=1;mock_def(sprite,id);mock_origin(sprite,origin);mock_position(sprite,pos);return sprite;
 }
+static int button_sprites_created;
 static void *__thiscall mock_button_sprite(void *ui,int sprite,int id,DWORD mask,const float *point,int origin){
-    void *button=mock_sprite(ui,sprite,point,origin,id);*(DWORD *)((BYTE *)button+64)=mask;return button;
+    button_sprites_created++;void *button=mock_sprite(ui,sprite,point,origin,id);*(DWORD *)((BYTE *)button+64)=mask;return button;
 }
 static void __thiscall mock_graphics_input(void *menu,int selection){
     delegated=selection;if(selection==4)*((BYTE *)menu+305)=!*((BYTE *)menu+305);
@@ -208,7 +209,7 @@ int main(int argc,char **argv){
     original_init=mock_init;original_cleanup=mock_cleanup;original_input=mock_input;original_tick=mock_tick;base_tick=mock_base_tick;
     enable_input=mock_enable;raw_text=mock_raw;key_text=mock_key;create_text=mock_create;menu_item=mock_visible;
     add_item=mock_add;add_screen=mock_add;remove_screen=mock_remove;set_focus=mock_focus;
-    create_sprite=mock_sprite;create_blank_button=mock_blank;ui_instance=&fake_ui;sprite_def=mock_def;sprite_origin=mock_origin;sprite_position=mock_position;original_colour=mock_menu_colour;
+    create_sprite=mock_sprite;server_button_sprite=mock_button_sprite;create_blank_button=mock_blank;ui_instance=&fake_ui;sprite_def=mock_def;sprite_origin=mock_origin;sprite_position=mock_position;original_colour=mock_menu_colour;
     game_allocate=mock_allocate;reel_ctor=mock_reel_ctor;reel_add=mock_reel_add;reel_limit=mock_reel_limit;
     reel_tick=mock_reel_tick;reel_move=mock_reel_move;reel_selection=mock_reel_selection;reel_bar=mock_reel_bar;
     fake_reel_table[0]=(void *)mock_reel_delete;reel_vtable=fake_reel_table;direction_input=mock_direction;
@@ -226,7 +227,7 @@ int main(int argc,char **argv){
         ((void **)menu)[73+i]=vanilla_arrows[i];vanilla_arrows[i][372]=1;
         if(i<3){*(void ***)vanilla_lines[i]=item_vtable;((void **)menu)[78+i]=vanilla_lines[i];vanilla_lines[i][372]=1;}
     }
-    *(DWORD *)(screen+40)=1;group[372]=1;init_entry(menu,NULL,NULL);CHECK(initialized==1&&visible_rows==4&&root_count==5&&added==28);
+    *(DWORD *)(screen+40)=1;group[372]=1;init_entry(menu,NULL,NULL);CHECK(initialized==1&&visible_rows==4&&root_count==5&&added==32);
     CHECK(root_rows[0].id==SERVERS_ID&&(*((BYTE *)server_rows[0]+372)&1));
     CHECK(root_rows[1].id==0&&((float *)root_rows[1].text)[9]-((float *)server_rows[0])[9]==row_gap);
     /* Added separators retain the same vertical sprite scale as vanilla,
@@ -270,7 +271,7 @@ int main(int argc,char **argv){
     open_servers();CHECK(server_page&&focused==1501&&native_reel&&bars==2&&destroyed==1);
     CHECK(server_native_navigation&&(*(void ***)server_rows[1])[28]==(void *)server_scroll_direction);
     void *saved_server_rows[SERVER_ACTION_COUNT];for(int i=0;i<SERVER_ACTION_COUNT;i++)saved_server_rows[i]=server_rows[server_action_order[i]];
-    CHECK(!server_rows[2]&&!server_rows[3]&&server_rows[11]);
+    CHECK(server_rows[2]&&server_rows[3]&&server_rows[11]);
     /* Three full cycles each way through the original handler. The scroll
      * adapter must expose even the wrapped target before native focus checks. */
     for(int pass=0;pass<2;pass++)for(int step=0;step<3*SERVER_ACTION_COUNT;step++){
@@ -280,7 +281,8 @@ int main(int argc,char **argv){
         CHECK(next>=page_first&&next<page_first+visible_rows);
     }
     CHECK(focused==1501&&native_directions==6*SERVER_ACTION_COUNT&&page_first==0);
-    CHECK(thumb_colours==0);
+    CHECK(thumb_colours==0&&button_sprites_created==3);
+    for(int i=0;i<3;i++){CHECK(((int *)toggles[i][0])[15]==0&&((int *)toggles[i][1])[15]==0);}
     const float toggle_focus[4]={0,1,1,0.8f},toggle_normal[4]={1,1,1,0.9f};
     for(int i=0;i<3;i++){
         colour_watch=toggles[i][0];hook_colour(menu,SERVER_ACTION_BASE+toggle_actions[i],toggle_focus);CHECK(!memcmp(watched_colour,toggle_focus,16));
@@ -299,12 +301,12 @@ int main(int argc,char **argv){
     select_action(6);select_action(7);CHECK(!pending.enabled&&((unsigned *)toggles[2][1])[100]==74);
     select_action(5);CHECK(pending.enabled&&((unsigned *)toggles[2][1])[100]==75);select_action(6);
     scroll_to(menu,0,FALSE);apply_pending_focus(menu);
-    CHECK(!wcscmp(label(8),L"SAVE AND RESTART"));CHECK(((float *)server_rows[4])[9]-((float *)server_rows[1])[9]==row_gap);
+    CHECK(!wcscmp(label(8),L"SAVE AND RESTART"));CHECK(((float *)server_rows[4])[9]-((float *)server_rows[1])[9]==3*row_gap);
     CHECK(!(*((BYTE *)server_rows[7]+372)&1)&&*(DWORD *)((BYTE *)server_rows[7]+76)==0);
     *(DWORD *)((BYTE *)server_rows[1]+356)=0x12345678;tick_entry(menu);CHECK(*(DWORD *)((BYTE *)server_rows[1]+356)==0x12345678);
     /* Native drag/tap movement is consumed from the original reel, with no
      * competing custom scrollbar buttons or native UI directional pass. */
-    ((FakeReel *)native_reel)->selection=6;prepare_scroll(menu);sync_scroll(menu);CHECK(page_first==5&&focused==1509);
+    ((FakeReel *)native_reel)->selection=6;prepare_scroll(menu);sync_scroll(menu);CHECK(page_first==6&&focused==row_id(6));
     HWND window=CreateWindowExW(0,L"STATIC",L"Native reel input fixture",WS_OVERLAPPEDWINDOW,0,0,800,600,NULL,NULL,GetModuleHandleW(NULL),NULL);
     CHECK(window);scroll_previous=mock_window;
     scroll_wndproc(window,WM_LBUTTONDOWN,MK_LBUTTON,MAKELPARAM(700,300));CHECK(forwarded==1);
@@ -314,7 +316,7 @@ int main(int argc,char **argv){
     scroll_wndproc(window,WM_MOUSEWHEEL,MAKEWPARAM(0,(WORD)-120),0);CHECK(page_first==0);prepare_scroll(menu);sync_scroll(menu);CHECK(page_first==1);
     scroll_to(menu,0,FALSE);apply_pending_focus(menu);DestroyWindow(window);scroll_previous=NULL;
     dispatching_menu=TRUE;scroll_to(menu,1,TRUE);int previous_focus=focused;apply_pending_focus(menu);CHECK(focused==previous_focus&&pending_focus>=0);
-    dispatching_menu=FALSE;apply_pending_focus(menu);CHECK(focused==1507);
+    dispatching_menu=FALSE;apply_pending_focus(menu);CHECK(focused==row_id(4));
     select_action(1);CHECK(pending.skip_launcher);select_action(6);select_action(1);select_action(7);CHECK(pending.skip_launcher);
     WCHAR value[32];GetPrivateProfileStringW(L"keep",L"key",L"",value,32,config_path);CHECK(!wcscmp(value,L"value"));
     GetPrivateProfileStringW(L"launcher",L"auto_update_on_skip",L"",value,32,config_path);CHECK(!wcscmp(value,L"true"));
@@ -326,7 +328,7 @@ int main(int argc,char **argv){
     restart_ok=TRUE;select_action(8);CHECK(restart_calls==2&&restarting);restart_started=GetTickCount()-15001;tick_entry(menu);CHECK(!restarting);
     request_exit=mock_exit;exit_ok=FALSE;select_action(11);CHECK(exit_calls==1&&!exiting);
     exit_ok=TRUE;select_action(11);CHECK(exit_calls==2&&exiting);
-    cleanup_entry(menu,NULL,NULL);CHECK(cleaned==1&&!page_owner&&!native_reel&&destroyed==constructed&&removed==24);
+    cleanup_entry(menu,NULL,NULL);CHECK(cleaned==1&&!page_owner&&!native_reel&&destroyed==constructed&&removed==28);
     CHECK(!server_native_navigation);
     for(int i=0;i<SERVER_ACTION_COUNT;i++)CHECK(*(void ***)saved_server_rows[i]==item_vtable);
     /* Native race-pause Settings has no Graphics row: add no Servers or reel. */
@@ -376,8 +378,8 @@ int main(int argc,char **argv){
     CHECK(((float *)watermark)[8]==1908&&((float *)watermark)[9]==1036);
     ((float *)menu)[73]=24;branded_main_tick(menu);
     CHECK(((float *)watermark)[44]==0.25f&&((float *)watermark)[9]==1052);
-    branded_main_cleanup(menu,NULL,NULL);CHECK(!watermark&&!watermark_owner&&removed==25);
-    branded_main_tick(menu);CHECK(watermark&&notices==2);branded_main_cleanup(menu,NULL,NULL);CHECK(!watermark&&removed==26);
+    branded_main_cleanup(menu,NULL,NULL);CHECK(!watermark&&!watermark_owner&&removed==29);
+    branded_main_tick(menu);CHECK(watermark&&notices==2);branded_main_cleanup(menu,NULL,NULL);CHECK(!watermark&&removed==30);
     CHECK(validate_graphics_aa_menu((BYTE *)image,nt->OptionalHeader.ImageBase));
     CHECK(validate_aa_backend((BYTE *)image,nt->OptionalHeader.ImageBase));
     CHECK(!validate_aa_backend((BYTE *)image,nt->OptionalHeader.ImageBase+0x18));
@@ -506,7 +508,7 @@ int main(int argc,char **argv){
     CHECK(*(DWORD *)((BYTE *)resolution_hover+76)==1);
     delegated=-1;aa_graphics_input(gm,RESOLUTION_FOCUS_ID);CHECK(delegated==-1);
     CHECK(*(DWORD *)((BYTE *)aa_bar+76)==0&&*(DWORD *)((BYTE *)aa_knob+76)==0);
-    aa_graphics_input(gm,3);CHECK(!aa_requested);aa_graphics_cleanup(gm,NULL,NULL);CHECK(!aa_label&&!aa_bar&&!aa_knob&&!resolution_hover&&!borderless_label&&removed==38);
+    aa_graphics_input(gm,3);CHECK(!aa_requested);aa_graphics_cleanup(gm,NULL,NULL);CHECK(!aa_label&&!aa_bar&&!aa_knob&&!resolution_hover&&!borderless_label&&removed==42);
     CHECK(!(*((BYTE *)graphics_test_items[6]+372)&2));
     CHECK(((int *)graphics_test_items[0])[38]==1&&((int *)graphics_test_items[0])[40]==1);
     CHECK(((int *)graphics_test_items[6])[38]==0&&((int *)graphics_test_items[6])[39]==-1);

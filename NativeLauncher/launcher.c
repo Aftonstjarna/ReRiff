@@ -17,6 +17,9 @@
 #ifndef RERIFF_VERSION
 #define RERIFF_VERSION "0.1.0"
 #endif
+#ifndef RERIFF_DEVELOPMENT_BUILD
+#define RERIFF_DEVELOPMENT_BUILD 0
+#endif
 #define RERIFF_WIDE_LITERAL_(value) L##value
 #define RERIFF_WIDE_LITERAL(value) RERIFF_WIDE_LITERAL_(value)
 #ifndef RERIFF_HEALTH_URL
@@ -25,14 +28,16 @@
 #include "logging.h"
 #define WM_COMPLETE (WM_APP + 1)
 #define WM_GAME_RUNNING (WM_APP + 2)
-enum { EXTERNAL=101, FALLBACK, TIMEOUT, POPUP, SAVE, PLAY, LOCAL, EXTERNAL_ONLY, STOP, UPDATE, EXPERIMENTAL, NETWORKING, SKIP_LAUNCHER, AUTO_UPDATE_SKIP, CJK_INSTALL, LOGGING, LATIN_INSTALL, UPDATE_DETAILS };
+enum { EXTERNAL=101, FALLBACK, TIMEOUT, POPUP, SAVE, PLAY, LOCAL, EXTERNAL_ONLY, STOP, UPDATE, EXPERIMENTAL, NETWORKING, SKIP_LAUNCHER, AUTO_UPDATE_SKIP, CJK_INSTALL, LOGGING, LATIN_INSTALL, UPDATE_DETAILS, LASTFM_ENABLED, LASTFM_PERCENT, LASTFM_LINK, LASTFM_DISCONNECT, LASTFM_SAVE, LASTFM_KEY, LASTFM_SECRET, LOG_CATEGORY_BASE=500 };
+#include "branding.h"
+
 static WCHAR folder[CAP], ini[CAP], message[1024];
 static WCHAR game_arguments[CAP];
 static BOOL force_show_launcher, suppress_auto_update, automatic_update, force_auto_reinstall;
 static DWORD restart_parent_pid;
 #include "restart_protocol.h"
 static HWND window, status, external, fallback, timeout_edit, popup, play_button, save_button;
-static HWND only_checkbox, stop_button, update_button;
+static HWND only_checkbox, stop_button, update_button, launcher_progress, status_separator, footer_separator;
 static BOOL busy = FALSE, playing = FALSE, checking_update = FALSE;
 static HWND experimental_checkbox;
 static HWND networking_checkbox, skip_checkbox, auto_update_checkbox;
@@ -40,11 +45,16 @@ static ULONGLONG settings_signature;
 static BOOL settings_observed=FALSE;
 static BOOL installed_experimental=FALSE, requested_experimental=FALSE;
 static HFONT font;
-static HWND launcher_tabs,latin_checkbox,language_checkbox,language_description,logging_checkbox;
-static HWND diagnostic_controls[8];static unsigned diagnostic_count;static BOOL creating_diagnostics;
+static HWND launcher_tabs,latin_checkbox,language_checkbox,checkbox_tooltips,logging_checkbox;
+static const WCHAR *log_categories[]={L"launcher",L"connections",L"game",L"text",L"languages",L"localserver",L"update",L"installer",L"python"};
+static const WCHAR *log_labels[]={L"Launcher",L"Connections, network and news",L"Menus, progression and saves",L"Unicode and song metadata",L"Font installation",L"Local server and helper",L"Updates",L"Installer",L"Python setup"};
+#define LOG_CATEGORY_COUNT (sizeof(log_categories)/sizeof(log_categories[0]))
+static HWND log_checkboxes[LOG_CATEGORY_COUNT];
+static HWND diagnostic_controls[24];static unsigned diagnostic_count;static BOOL creating_diagnostics;
 static HWND server_page_controls[40],language_page_controls[8];
 static unsigned server_page_count,language_page_count;
-static BOOL creating_languages,changing_language;
+static BOOL creating_languages,changing_language,creating_lastfm;
+static HWND lastfm_controls[16];static unsigned lastfm_count;
 static void language_controls(void);
 
 static void path(WCHAR *out, const WCHAR *relative) {
@@ -59,22 +69,27 @@ static void load_channel(void) {
     requested_experimental=installed_experimental;
 }
 
-static void channel_title(void) {
-    SetWindowTextW(window,installed_experimental
+static const WCHAR *launcher_title(void) {
+#if RERIFF_DEVELOPMENT_BUILD
+    return L"ReRiff Launcher — development build";
+#else
+    return installed_experimental
         ? L"ReRiff Launcher v" RERIFF_WIDE_LITERAL(RERIFF_VERSION) L" — Experimental"
-        : L"ReRiff Launcher v" RERIFF_WIDE_LITERAL(RERIFF_VERSION));
+        : L"ReRiff Launcher v" RERIFF_WIDE_LITERAL(RERIFF_VERSION);
+#endif
+}
+static void channel_title(void) {
+    SetWindowTextW(window,launcher_title());
 }
 
 static void log_message(const WCHAR *text) {
-    if(!rr_logging_enabled(folder,strstr(RERIFF_VERSION,"-")!=NULL))return;
-    WCHAR name[CAP]; char utf8[4096]; DWORD written;
+    if(!rr_log_enabled(folder,L"launcher",strstr(RERIFF_VERSION,"-")!=NULL))return;
+    WCHAR name[CAP]; char utf8[4096];
     path(name,L"logs");CreateDirectoryW(name,NULL);
     path(name, L"logs\\ReRiff-launcher.log");
     int bytes = WideCharToMultiByte(CP_UTF8, 0, text, -1, utf8, sizeof(utf8)-3, NULL, NULL);
     if (!bytes) return;
-    utf8[bytes-1]='\r'; utf8[bytes]='\n';
-    HANDLE file=CreateFileW(name, FILE_APPEND_DATA, FILE_SHARE_READ|FILE_SHARE_WRITE, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (file != INVALID_HANDLE_VALUE) { WriteFile(file, utf8, bytes+1, &written, NULL); CloseHandle(file); }
+    rr_log_append(name,"launcher",utf8);
 }
 
 static BOOL spawn(WCHAR *command, BOOL hidden, PROCESS_INFORMATION *process) {
@@ -262,6 +277,7 @@ static void finish_local_session(BOOL started){
 }
 
 static BOOL launch_game(void) {
+    ULONGLONG launch_started=GetTickCount64();
     BOOL started_local=FALSE;
     if(!external_only()){
         WCHAR config[CAP],enabled[16],primary[2048],secondary[2048];
@@ -279,11 +295,13 @@ static BOOL launch_game(void) {
             }
         }
     }
+    update_timing(L"local-server readiness",launch_started);
     for(;;){
     sync_cached_songs(ini);
     WCHAR command[CAP]; PROCESS_INFORMATION process;
     if(!game_command(command)){wcscpy(message,L"The forwarded game command is too long.");finish_local_session(started_local);return FALSE;}
     if (!spawn(command,FALSE,&process)) { wcscpy(message,L"Could not start Game.exe beside the launcher."); finish_local_session(started_local);return FALSE; }
+    update_timing(L"launch to Game.exe spawn",launch_started);
     WCHAR event_name[96];restart_event_name(event_name,96,process.dwProcessId,FALSE);
     HANDLE restart=CreateEventW(NULL,TRUE,FALSE,event_name);
     if (window) PostMessageW(window,WM_GAME_RUNNING,0,0);
@@ -299,14 +317,17 @@ static BOOL launch_game(void) {
     sync_cached_songs(ini);
     if(!closed){wcscpy(message,L"Could not wait for Game.exe to close.");finish_local_session(started_local);return FALSE;}
     if(!again){finish_local_session(started_local);return TRUE;}
+    launch_started=GetTickCount64();
     log_message(L"Game closed for Save and restart; applying saved server settings.");
     }
 }
 
+#include "lastfm.h"
+
 static DWORD WINAPI worker(LPVOID parameter) {
     int action=(int)(INT_PTR)parameter;
     BOOL play=action==1;
-    BOOL ok=action==6?language_action(L"install --pack latin"):action==7?language_action(L"disable --pack latin"):action==4?language_action(L"install"):action==5?language_action(L"disable"):action==3?check_updates():action==2?local_server_action(local_server_state==2?L"stop":local_server_state==1&&local_server_package_current()?L"start":L"install"):action==0?local_server_action(L"status"):TRUE;
+    BOOL ok=action==8||action==9?lfm_request(action==9):action==6?language_action(L"install --pack latin"):action==7?language_action(L"disable --pack latin"):action==4?language_action(L"install"):action==5?language_action(L"disable"):action==3?check_updates():action==2?local_server_action(local_server_state==2?L"stop":local_server_state==1&&local_server_package_current()?L"start":L"install"):action==0?local_server_action(L"status"):TRUE;
     if (ok && play) ok=launch_game();
     if (ok && action<2) wcscpy(message,play?L"Game closed.":L"Ready. Singleplayer runs inside the game; configured servers are checked at game startup.");
     log_message(message);
@@ -316,13 +337,14 @@ static DWORD WINAPI worker(LPVOID parameter) {
 
 static void begin(int action) {
     if (busy) return;
-    busy=TRUE;playing=action==1;checking_update=action==3;changing_language=action>=4&&action<=7;
+    progress_last=-999;progress_set_bar(launcher_progress,-1);
+    busy=TRUE;lfm_action=action>=8?action:0;lfm_controls();playing=action==1;checking_update=action==3;changing_language=action>=4&&action<=7;
     EnableWindow(language_checkbox,FALSE);EnableWindow(latin_checkbox,FALSE);EnableWindow(logging_checkbox,FALSE);
     EnableWindow(play_button,FALSE);EnableWindow(save_button,FALSE);EnableWindow(stop_button,FALSE);EnableWindow(update_button,FALSE);EnableWindow(experimental_checkbox,FALSE);
-    SetWindowTextW(status,action==6?L"Installing and enabling Latin/European fonts...":action==7?L"Disabling Latin/European fonts...":action==4?L"Installing and enabling CJK fonts...":action==5?L"Disabling CJK fonts...":action==3?L"Checking published GitHub releases...":action==2?(local_server_state==2?L"Stopping the local server...":local_server_state==1&&local_server_package_current()?L"Starting the local server...":L"Downloading and installing the optional local server..."):L"Checking server settings...");
+    SetWindowTextW(status,action>=8?L"Contacting Last.fm…":action==6?L"Installing and enabling Latin/European fonts...":action==7?L"Disabling Latin/European fonts...":action==4?L"Installing and enabling CJK fonts...":action==5?L"Disabling CJK fonts...":action==3?L"Checking published GitHub releases...":action==2?(local_server_state==2?L"Stopping the local server...":local_server_state==1&&local_server_package_current()?L"Starting the local server...":L"Downloading and installing the optional local server..."):L"Checking server settings...");
     HANDLE thread=CreateThread(NULL,4*1024*1024,worker,(LPVOID)(INT_PTR)action,STACK_SIZE_PARAM_IS_A_RESERVATION,NULL);
     if (thread) CloseHandle(thread);
-    else { busy=FALSE; EnableWindow(play_button,TRUE);EnableWindow(save_button,TRUE);EnableWindow(stop_button,TRUE);EnableWindow(update_button,TRUE);EnableWindow(experimental_checkbox,TRUE);SetWindowTextW(status,L"Could not start launcher worker."); }
+    else { progress_set_bar(launcher_progress,0);busy=FALSE;lfm_controls(); EnableWindow(play_button,TRUE);EnableWindow(save_button,TRUE);EnableWindow(stop_button,TRUE);EnableWindow(update_button,TRUE);EnableWindow(experimental_checkbox,TRUE);SetWindowTextW(status,L"Could not start launcher worker."); }
 }
 
 static HWND control(const WCHAR *cls,const WCHAR *text,DWORD style,int x,int y,int w,int h,int id) {
@@ -339,7 +361,7 @@ static HWND control(const WCHAR *cls,const WCHAR *text,DWORD style,int x,int y,i
             FreeLibrary(theme);
         }
     }
-    if(handle){if(creating_diagnostics){if(diagnostic_count<8)diagnostic_controls[diagnostic_count++]=handle;}else if(creating_languages){if(language_page_count<8)language_page_controls[language_page_count++]=handle;}else if(server_page_count<40)server_page_controls[server_page_count++]=handle;}
+    if(handle){if(creating_lastfm){if(lastfm_count<16)lastfm_controls[lastfm_count++]=handle;}else if(creating_diagnostics){if(diagnostic_count<24)diagnostic_controls[diagnostic_count++]=handle;}else if(creating_languages){if(language_page_count<8)language_page_controls[language_page_count++]=handle;}else if(server_page_count<40)server_page_controls[server_page_count++]=handle;}
     SendMessageW(handle,WM_SETFONT,(WPARAM)font,TRUE);return handle;
 }
 
@@ -377,18 +399,17 @@ static BOOL save(void) {
 
 /* Watch content rather than timestamps: the game replaces the INI atomically. */
 static BOOL read_settings_signature(ULONGLONG *signature) {
-    HANDLE file=CreateFileW(ini,GENERIC_READ,FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,NULL,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,NULL);
-    if(file==INVALID_HANDLE_VALUE){
-        if(GetLastError()==ERROR_FILE_NOT_FOUND){*signature=0;return TRUE;}
-        return FALSE;
+    ULONGLONG hash=14695981039346656037ULL;
+    const WCHAR *names[]={L"server.ini",L"client.ini",L"singleplayer.ini"};
+    for(unsigned n=0;n<3;n++) {
+        WCHAR name[CAP];path(name,names[n]);
+        HANDLE file=CreateFileW(name,GENERIC_READ,FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,NULL,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,NULL);
+        if(file==INVALID_HANDLE_VALUE){if(GetLastError()==ERROR_FILE_NOT_FOUND)continue;return FALSE;}
+        BYTE block[4096];DWORD count;BOOL ok=TRUE;hash^=n+1;
+        for(;;){if(!ReadFile(file,block,sizeof(block),&count,NULL)){ok=FALSE;break;}if(!count)break;for(DWORD i=0;i<count;i++){hash^=block[i];hash*=1099511628211ULL;}}
+        CloseHandle(file);if(!ok)return FALSE;
     }
-    BYTE block[4096];DWORD count;ULONGLONG hash=14695981039346656037ULL;BOOL ok=TRUE;
-    for(;;){
-        if(!ReadFile(file,block,sizeof(block),&count,NULL)){ok=FALSE;break;}
-        if(!count)break;
-        for(DWORD i=0;i<count;i++){hash^=block[i];hash*=1099511628211ULL;}
-    }
-    CloseHandle(file);if(ok)*signature=hash;return ok;
+    *signature=hash;return TRUE;
 }
 
 static void update_networking_controls(void) {
@@ -397,8 +418,17 @@ static void update_networking_controls(void) {
     EnableWindow(fallback,enabled&&SendMessageW(only_checkbox,BM_GETCHECK,0,0)!=BST_CHECKED);
 }
 
+static void reload_log_controls(void) {
+    BOOL enabled=rr_logging_enabled(folder,installed_experimental);
+    if(logging_checkbox)SendMessageW(logging_checkbox,BM_SETCHECK,enabled?BST_CHECKED:BST_UNCHECKED,0);
+    for(unsigned i=0;i<LOG_CATEGORY_COUNT;i++)if(log_checkboxes[i]) {
+        SendMessageW(log_checkboxes[i],BM_SETCHECK,rr_log_selected(folder,log_categories[i])?BST_CHECKED:BST_UNCHECKED,0);
+        EnableWindow(log_checkboxes[i],enabled);
+    }
+}
+
 static void reload_settings_controls(void) {
-    if(logging_checkbox)SendMessageW(logging_checkbox,BM_SETCHECK,rr_logging_enabled(folder,installed_experimental)?BST_CHECKED:BST_UNCHECKED,0);
+    reload_log_controls();
     WCHAR value[4096];
     settings_observed=read_settings_signature(&settings_signature);
     /* Another process (the game menu) can atomically replace this file. */
@@ -432,58 +462,118 @@ static void language_controls(void){
     GetPrivateProfileStringW(L"languages",L"latin_enabled",L"false",value,16,ini);
     SendMessageW(latin_checkbox,BM_SETCHECK,(!_wcsicmp(value,L"true")||!wcscmp(value,L"1"))?BST_CHECKED:BST_UNCHECKED,0);
 }
+/* Standard Win32 tooltips preserve native checkbox input and tab navigation.
+ * Text is backed by static literals for the lifetime of the launcher. */
+static void checkbox_help(HWND checkbox,const WCHAR *text) {
+    TOOLINFOW tool={0};tool.cbSize=TTTOOLINFOW_V2_SIZE;
+    tool.uFlags=TTF_IDISHWND|TTF_SUBCLASS;tool.hwnd=window;
+    tool.uId=(UINT_PTR)checkbox;tool.lpszText=(LPWSTR)text;
+    SendMessageW(checkbox_tooltips,TTM_ADDTOOLW,0,(LPARAM)&tool);
+}
 static void select_launcher_page(void){
     int page=(int)SendMessageW(launcher_tabs,TCM_GETCURSEL,0,0);BOOL languages=page==1;
+    SendMessageW(checkbox_tooltips,TTM_POP,0,0);
     for(unsigned i=0;i<server_page_count;i++){
         HWND item=server_page_controls[i];
-        if(item!=status&&item!=play_button&&item!=update_button&&item!=experimental_checkbox)ShowWindow(item,page!=0?SW_HIDE:SW_SHOW);
+        if(item!=status&&item!=play_button&&item!=update_button&&item!=experimental_checkbox&&item!=launcher_progress&&item!=status_separator&&item!=footer_separator)ShowWindow(item,page!=0?SW_HIDE:SW_SHOW);
     }
     for(unsigned i=0;i<language_page_count;i++)ShowWindow(language_page_controls[i],languages?SW_SHOW:SW_HIDE);
     for(unsigned i=0;i<diagnostic_count;i++)ShowWindow(diagnostic_controls[i],page==2?SW_SHOW:SW_HIDE);
+    for(unsigned i=0;i<lastfm_count;i++)ShowWindow(lastfm_controls[i],page==3?SW_SHOW:SW_HIDE);
+    if(page==3){SetFocus(lfm_enabled);return;}
     SetFocus(page==2?logging_checkbox:languages?language_checkbox:external);
 }
 static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
+    if(event==WM_ERASEBKGND){RECT area;GetClientRect(hwnd,&area);FillRect((HDC)wp,&area,GetSysColorBrush(COLOR_BTNFACE));return TRUE;}
+    if(event==WM_CTLCOLORSTATIC||event==WM_CTLCOLORBTN){SetBkColor((HDC)wp,GetSysColor(COLOR_BTNFACE));return (LRESULT)GetSysColorBrush(COLOR_BTNFACE);}
+    if(event==WM_DRAWITEM&&rr_brand_draw((const DRAWITEMSTRUCT *)lp))return TRUE;
     if (event==WM_CREATE) {
+        SetWindowLongPtrW(hwnd,GWL_STYLE,GetWindowLongPtrW(hwnd,GWL_STYLE)|WS_CLIPCHILDREN);
+        rr_brand_icon(hwnd);
         window=hwnd;font=CreateFontW(-16,0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,0,0,CLEARTYPE_QUALITY,0,L"Segoe UI");
-        INITCOMMONCONTROLSEX common={sizeof(common),ICC_TAB_CLASSES};InitCommonControlsEx(&common);
-        launcher_tabs=CreateWindowExW(0,WC_TABCONTROLW,L"",WS_CHILD|WS_VISIBLE|WS_TABSTOP,10,6,630,548,hwnd,NULL,GetModuleHandleW(NULL),NULL);
+        INITCOMMONCONTROLSEX common={sizeof(common),ICC_TAB_CLASSES|ICC_WIN95_CLASSES|ICC_PROGRESS_CLASS};InitCommonControlsEx(&common);
+        checkbox_tooltips=CreateWindowExW(WS_EX_TOPMOST,TOOLTIPS_CLASSW,NULL,
+            WS_POPUP|TTS_ALWAYSTIP|TTS_NOPREFIX,CW_USEDEFAULT,CW_USEDEFAULT,
+            CW_USEDEFAULT,CW_USEDEFAULT,hwnd,NULL,GetModuleHandleW(NULL),NULL);
+        SendMessageW(checkbox_tooltips,TTM_SETMAXTIPWIDTH,0,440);
+        SendMessageW(checkbox_tooltips,TTM_SETDELAYTIME,TTDT_AUTOPOP,20000);
+        launcher_tabs=CreateWindowExW(0,WC_TABCONTROLW,L"",WS_CHILD|WS_VISIBLE|WS_TABSTOP|WS_CLIPSIBLINGS,10,6,630,28,hwnd,NULL,GetModuleHandleW(NULL),NULL);
         SendMessageW(launcher_tabs,WM_SETFONT,(WPARAM)font,TRUE);
         TCITEMW tab={0};tab.mask=TCIF_TEXT;tab.pszText=L"Servers";SendMessageW(launcher_tabs,TCM_INSERTITEMW,0,(LPARAM)&tab);
         tab.pszText=L"Languages";SendMessageW(launcher_tabs,TCM_INSERTITEMW,1,(LPARAM)&tab);
         tab.pszText=L"Diagnostics";SendMessageW(launcher_tabs,TCM_INSERTITEMW,2,(LPARAM)&tab);
+        tab.pszText=L"Last.fm";SendMessageW(launcher_tabs,TCM_INSERTITEMW,3,(LPARAM)&tab);
         control(L"STATIC",L"Riff Racer — Server settings",0,22,18,600,30,0);
+        control(L"STATIC",L"",SS_ETCHEDHORZ,10,52,630,2,0);
         control(L"STATIC",L"Primary server",0,22,66,145,24,0);
         external=control(L"EDIT",L"",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,172,62,448,28,EXTERNAL);
         control(L"STATIC",L"Secondary server",0,22,108,145,24,0);
         fallback=control(L"EDIT",L"",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,172,104,448,28,FALLBACK);
         control(L"STATIC",L"Timeout (seconds)",0,22,150,145,24,0);
         timeout_edit=control(L"EDIT",L"5",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,172,146,95,28,TIMEOUT);
-        popup=control(L"BUTTON",L"Show the selected server or singleplayer when the game starts",BS_AUTOCHECKBOX|WS_TABSTOP,22,191,590,28,POPUP);
-        only_checkbox=control(L"BUTTON",L"Primary server only (skip secondary server)",BS_AUTOCHECKBOX|WS_TABSTOP,22,225,590,28,EXTERNAL_ONLY);
-        networking_checkbox=control(L"BUTTON",L"Enable singleplayer",BS_AUTOCHECKBOX|WS_TABSTOP,22,259,600,28,NETWORKING);
+        popup=control(L"BUTTON",L"Show startup notification",BS_AUTOCHECKBOX|WS_TABSTOP,22,191,590,28,POPUP);
+        only_checkbox=control(L"BUTTON",L"Primary server only",BS_AUTOCHECKBOX|WS_TABSTOP,22,225,590,28,EXTERNAL_ONLY);
+        networking_checkbox=control(L"BUTTON",L"Force singleplayer",BS_AUTOCHECKBOX|WS_TABSTOP,22,259,600,28,NETWORKING);
         skip_checkbox=control(L"BUTTON",L"Skip launcher",BS_AUTOCHECKBOX|WS_TABSTOP,22,293,165,28,SKIP_LAUNCHER);
         auto_update_checkbox=control(L"BUTTON",L"Auto-update when skipping launcher",BS_AUTOCHECKBOX|WS_TABSTOP,195,293,425,28,AUTO_UPDATE_SKIP);
-        control(L"STATIC",L"If neither server responds, the game uses singleplayer automatically.",0,22,332,600,24,0);
-        status=control(L"STATIC",L"Checking server settings...",0,22,359,600,50,0);
-        local_server_hint=control(L"STATIC",L"Local server: http://127.0.0.1:5144 — enter in Secondary server",0,22,417,600,22,0);
-        stop_button=control(L"BUTTON",L"Install local server",WS_TABSTOP,180,445,150,34,STOP);
-        save_button=control(L"BUTTON",L"Save settings",WS_TABSTOP,345,445,130,34,SAVE);
-        play_button=control(L"BUTTON",L"Play",WS_TABSTOP|BS_DEFPUSHBUTTON,490,445,130,34,PLAY);
-        update_button=control(L"BUTTON",L"Update from GitHub",WS_TABSTOP,22,489,155,30,UPDATE);
-        experimental_checkbox=control(L"BUTTON",L"Use experimental releases (prereleases)",BS_AUTOCHECKBOX|WS_TABSTOP,195,489,420,30,EXPERIMENTAL);
+        status_separator=control(L"STATIC",L"",SS_ETCHEDHORZ,10,333,630,2,0);
+        status=control(L"STATIC",L"Checking server settings...",0,22,347,600,38,0);
+        launcher_progress=control(PROGRESS_CLASSW,L"",0,22,389,600,22,0);
+        SendMessageW(launcher_progress,PBM_SETRANGE32,0,100);
+        progress_sink=hwnd;
+        footer_separator=control(L"STATIC",L"",SS_ETCHEDHORZ,10,435,630,2,0);
+        local_server_hint=control(L"STATIC",L"Local server: http://127.0.0.1:5144 — enter in Secondary server",SS_CENTER|SS_CENTERIMAGE,22,437,600,24,0);
+        HWND github_button=control(L"BUTTON",L"ReRiff on GitHub",WS_TABSTOP|BS_BITMAP|BS_CENTER|BS_VCENTER,22,461,150,34,RERIFF_BRAND_CONTROL);
+        rr_brand_button(github_button);
+        stop_button=control(L"BUTTON",L"Install local server",WS_TABSTOP,180,461,150,34,STOP);
+        save_button=control(L"BUTTON",L"Save settings",WS_TABSTOP,345,461,130,34,SAVE);
+        play_button=control(L"BUTTON",L"Play",WS_TABSTOP|BS_DEFPUSHBUTTON,490,461,130,34,PLAY);
+        update_button=control(L"BUTTON",L"Update from GitHub",WS_TABSTOP,22,505,155,30,UPDATE);
+        experimental_checkbox=control(L"BUTTON",L"Use experimental releases",BS_AUTOCHECKBOX|WS_TABSTOP,195,505,420,30,EXPERIMENTAL);
         SendMessageW(experimental_checkbox,BM_SETCHECK,installed_experimental?BST_CHECKED:BST_UNCHECKED,0);
         creating_languages=TRUE;
-        language_checkbox=control(L"BUTTON",L"Install and enable CJK fonts (Chinese, Japanese, Korean)",BS_AUTOCHECKBOX|WS_TABSTOP,22,26,590,32,CJK_INSTALL);
-        latin_checkbox=control(L"BUTTON",L"Install and enable Latin/European fonts (including Polish)",BS_AUTOCHECKBOX|WS_TABSTOP,22,68,590,32,LATIN_INSTALL);
-        language_description=control(L"STATIC",L"Adds missing characters throughout the game, including file names, song metadata, leaderboards and pause screens.\n\nFonts stay in the game folder. High-resolution text is selected automatically. Restart the game after changing this option.\n\nCJK downloads about 105 MiB; Latin/European is a separate small download. Both share one extra font archive pair. Unchecking disables support and retains the installed fonts. This does not translate the menus.",0,22,118,585,220,0);
+        language_checkbox=control(L"BUTTON",L"CJK fonts",BS_AUTOCHECKBOX|WS_TABSTOP,22,26,590,32,CJK_INSTALL);
+        latin_checkbox=control(L"BUTTON",L"Latin/European fonts",BS_AUTOCHECKBOX|WS_TABSTOP,22,68,590,32,LATIN_INSTALL);
         creating_languages=FALSE;
         creating_diagnostics=TRUE;
         logging_checkbox=control(L"BUTTON",L"Enable diagnostic logging",BS_AUTOCHECKBOX|WS_TABSTOP,22,26,590,32,LOGGING);
-        control(L"STATIC",L"Save launcher and client logs in the game's logs folder. Logging defaults on for beta/development builds and off for stable builds.\n\nExisting logs are kept when logging is disabled. Restart a running local server to apply its logging change.\n\nLogs may contain local file paths and server addresses; review them before sharing.",0,22,76,585,200,0);
-        control(L"BUTTON",L"View update details",WS_TABSTOP,22,300,200,32,UPDATE_DETAILS);
+        for(unsigned i=0;i<LOG_CATEGORY_COUNT;i++)
+            log_checkboxes[i]=control(L"BUTTON",log_labels[i],BS_AUTOCHECKBOX|WS_TABSTOP,22+(i%2)*300,78+(i/2)*32,290,28,LOG_CATEGORY_BASE+i);
+        control(L"BUTTON",L"View update details",WS_TABSTOP,22,278,200,32,UPDATE_DETAILS);
         creating_diagnostics=FALSE;
+        creating_lastfm=TRUE;
+        lfm_account=control(L"STATIC",L"No Last.fm account linked",0,22,26,590,28,0);
+        control(L"STATIC",L"API key",0,22,64,140,28,0);
+        lfm_key_field=control(L"EDIT",L"",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL|ES_PASSWORD,170,60,390,28,LASTFM_KEY);
+        control(L"STATIC",L"Shared secret",0,22,102,140,28,0);
+        lfm_secret_field=control(L"EDIT",L"",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL|ES_PASSWORD,170,98,390,28,LASTFM_SECRET);
+        SendMessageW(lfm_key_field,EM_SETLIMITTEXT,32,0);SendMessageW(lfm_secret_field,EM_SETLIMITTEXT,32,0);
+        lfm_enabled=control(L"BUTTON",L"Enable Last.fm scrobbling",BS_AUTOCHECKBOX|WS_TABSTOP,22,140,590,28,LASTFM_ENABLED);
+        control(L"STATIC",L"Scrobble after listening to (%)",0,22,182,280,28,0);
+        lfm_percent=control(L"EDIT",L"80",WS_BORDER|WS_TABSTOP|ES_NUMBER,310,178,80,28,LASTFM_PERCENT);
+        SendMessageW(lfm_percent,EM_SETLIMITTEXT,3,0);
+        lfm_link=control(L"BUTTON",L"Link account",WS_TABSTOP,22,222,220,32,LASTFM_LINK);
+        lfm_disconnect=control(L"BUTTON",L"Disconnect",WS_TABSTOP,260,222,170,32,LASTFM_DISCONNECT);
+        lfm_save=control(L"BUTTON",L"Save settings",WS_TABSTOP,22,266,220,32,LASTFM_SAVE);
+        checkbox_help(lfm_enabled,L"Scrobble tagged songs after a completed race or the configured listening percentage. Pauses and skips do not count. Last.fm requires songs longer than 30 seconds and half the song or four minutes of listening, whichever is shorter. Restart the game after changing settings.");
+        checkbox_help(lfm_percent,L"Default 80%. A completed race can qualify earlier, subject to Last.fm's minimum listening requirement.");
+        checkbox_help(lfm_link,L"Without an API key, opens Last.fm application registration. Enter the key and secret here and save settings. Approve access in your browser; linking finishes automatically while this tab is open. No password is entered here.");
+        checkbox_help(lfm_secret_field,L"Masked while typing. Save settings encrypts the key, secret and existing session with user-scoped DPAPI. Keep your Windows profile or Proton prefix private.");
+        lfm_reload();
+        creating_lastfm=FALSE;
         SendMessageW(logging_checkbox,BM_SETCHECK,rr_logging_enabled(folder,installed_experimental)?BST_CHECKED:BST_UNCHECKED,0);
-        language_controls();select_launcher_page();
+        checkbox_help(popup,L"Show the selected server or singleplayer when the game starts.");
+        checkbox_help(only_checkbox,L"Skip the secondary server. If the primary server is absent or unavailable, use singleplayer automatically.");
+        checkbox_help(networking_checkbox,L"Skip server connections and force singleplayer on the next start. When unchecked, singleplayer is still chosen automatically if servers are absent or unavailable. Saved server addresses are retained.");
+        checkbox_help(skip_checkbox,L"Start the game without showing the launcher. Applies on the next start; use --show-launcher to open settings again.");
+        checkbox_help(auto_update_checkbox,L"Check the selected release channel for updates before starting when the launcher is skipped. Successful checks are reused for 15 minutes. Update from GitHub always checks immediately. A failed check starts the installed version.");
+        checkbox_help(experimental_checkbox,L"Use opt-in beta releases for updates. Uncheck to use stable releases.");
+        checkbox_help(language_checkbox,L"Install and enable Chinese, Japanese and Korean characters in filenames, song metadata, leaderboards and pause screens. Downloads about 105 MiB. Restart the game after changing this option. Unchecking retains the fonts. Each font option has its own folder in mods; menus are not translated. High-resolution text is selected automatically.");
+        checkbox_help(latin_checkbox,L"Install and enable missing Latin/European letters, including Polish, throughout the game. A separate small download installs in its own folder in mods. Restart the game after changing this option. Unchecking retains the fonts; menus are not translated. High-resolution text is selected automatically.");
+        checkbox_help(logging_checkbox,L"Enable diagnostic logging for the selected categories. Related diagnostics share a log. Disabling keeps your selections and existing logs. Restart the game or local server after changes. Logs may contain file paths and server addresses; review before sharing.");
+        for(unsigned i=0;i<LOG_CATEGORY_COUNT;i++)
+            checkbox_help(log_checkboxes[i],L"Include this category when diagnostic logging is enabled. Related components share a log. Existing logs are kept. Restart the game or local server after changes. Logs may contain file paths and server addresses; review before sharing.");
+        reload_log_controls();language_controls();select_launcher_page();
         channel_title();local_server_controls();
         reload_settings_controls();
         SetTimer(hwnd,1,500,NULL);
@@ -491,13 +581,25 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
     }
     if(event==WM_NOTIFY&&((NMHDR *)lp)->hwndFrom==launcher_tabs&&((NMHDR *)lp)->code==TCN_SELCHANGE){select_launcher_page();return 0;}
     if (event==WM_COMMAND) {
+        if(LOWORD(wp)>=LOG_CATEGORY_BASE&&LOWORD(wp)<LOG_CATEGORY_BASE+LOG_CATEGORY_COUNT) {
+            unsigned i=LOWORD(wp)-LOG_CATEGORY_BASE;WCHAR key[80];_snwprintf(key,80,L"log_%ls",log_categories[i]);
+            BOOL enabled=SendMessageW(log_checkboxes[i],BM_GETCHECK,0,0)==BST_CHECKED;
+            if(!WritePrivateProfileStringW(L"diagnostics",key,enabled?L"true":L"false",ini))reload_log_controls();
+            settings_observed=read_settings_signature(&settings_signature);return 0;
+        }
         switch (LOWORD(wp)) {
+            case RERIFF_BRAND_CONTROL:
+                if(HIWORD(wp)==BN_CLICKED)ShellExecuteW(hwnd,L"open",L"https://github.com/Aftonstjarna/ReRiff",NULL,NULL,SW_SHOWNORMAL);
+                break;
             case UPDATE_DETAILS:show_update_details();break;
+            case LASTFM_LINK:if(!busy){if(!lfm_has_api_key())lfm_register_application();else if(*lfm_url)lfm_open_browser();else {*lfm_token=0;begin(8);}}break;
+            case LASTFM_DISCONNECT:if(!busy)lfm_unlink();break;
+            case LASTFM_SAVE:if(!busy)lfm_save_settings();break;
             case LOGGING: {
                 BOOL enabled=SendMessageW(logging_checkbox,BM_GETCHECK,0,0)==BST_CHECKED;
                 if(WritePrivateProfileStringW(L"diagnostics",L"logging_enabled",enabled?L"true":L"false",ini)) {
                     if(enabled){WCHAR logs[CAP],source[CAP],target[CAP];path(logs,L"logs");CreateDirectoryW(logs,NULL);path(source,L"localserver\\diagnostics\\Collect-ReRiffStartup.ps1");path(target,L"logs\\Collect-ReRiffStartup.ps1");CopyFileW(source,target,TRUE);}
-                    settings_observed=read_settings_signature(&settings_signature);SetWindowTextW(status,enabled?L"Diagnostic logging enabled.":L"Logging disabled. Existing logs were kept.");
+                    reload_log_controls();settings_observed=read_settings_signature(&settings_signature);SetWindowTextW(status,enabled?L"Diagnostic logging enabled.":L"Logging disabled. Existing logs were kept.");
                 }
                 break;
             }
@@ -509,7 +611,7 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
                 BOOL singleplayer=SendMessageW(networking_checkbox,BM_GETCHECK,0,0)==BST_CHECKED;
                 if(WritePrivateProfileStringW(L"server",L"networking_enabled",singleplayer?L"false":L"true",ini)){
                     settings_observed=read_settings_signature(&settings_signature);
-                    SetWindowTextW(status,singleplayer?L"Singleplayer enabled. Applies on the next game start.":L"Singleplayer disabled. Configured servers apply on the next game start.");
+                    SetWindowTextW(status,singleplayer?L"Singleplayer forced. Servers will be skipped on the next game start.":L"Servers will be tried first next start, with singleplayer as fallback.");
                 }else{
                     SendMessageW(networking_checkbox,BM_SETCHECK,singleplayer?BST_UNCHECKED:BST_CHECKED,0);
                     SetWindowTextW(status,L"Could not save the singleplayer setting to server.ini.");
@@ -526,17 +628,18 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
             case PLAY:begin(TRUE);break;
         }return 0;
     }
-    if(event==WM_TIMER&&wp==1){refresh_changed_settings();return 0;}
+    if(event==WM_TIMER&&wp==1){refresh_changed_settings();if(SendMessageW(launcher_tabs,TCM_GETCURSEL,0,0)==3&&lfm_poll_due(GetTickCount()))begin(9);return 0;}
     if(event==WM_ACTIVATE&&LOWORD(wp)!=WA_INACTIVE)refresh_changed_settings();
-    if (event==WM_GAME_RUNNING) { SetWindowTextW(status,L"Game running. Keep the launcher open until the game closes.");ShowWindow(window,SW_MINIMIZE);return 0; }
+    if(event==RERIFF_PROGRESS_EVENT){if(busy)progress_set_bar(launcher_progress,(int)(INT_PTR)lp);return 0;}
+    if (event==WM_GAME_RUNNING) { progress_set_bar(launcher_progress,0); SetWindowTextW(status,L"Game running. Keep the launcher open until the game closes.");ShowWindow(window,SW_MINIMIZE);return 0; }
     if (event==WM_COMPLETE) {
         if (lp==2) { DestroyWindow(hwnd);return 0; }
         if(changing_language){settings_observed=read_settings_signature(&settings_signature);changing_language=FALSE;}
         if (lp==1) reload_settings_controls();
         requested_experimental=installed_experimental;
         SendMessageW(experimental_checkbox,BM_SETCHECK,installed_experimental?BST_CHECKED:BST_UNCHECKED,0);
-        busy=FALSE;playing=FALSE;EnableWindow(play_button,TRUE);EnableWindow(save_button,TRUE);EnableWindow(stop_button,TRUE);EnableWindow(update_button,TRUE);EnableWindow(experimental_checkbox,TRUE);SetWindowTextW(status,message);
-        local_server_controls();language_controls();EnableWindow(language_checkbox,TRUE);EnableWindow(latin_checkbox,TRUE);EnableWindow(logging_checkbox,TRUE);
+        progress_set_bar(launcher_progress,0);busy=FALSE;playing=FALSE;EnableWindow(play_button,TRUE);EnableWindow(save_button,TRUE);EnableWindow(stop_button,TRUE);EnableWindow(update_button,TRUE);EnableWindow(experimental_checkbox,TRUE);SetWindowTextW(status,message);
+        lfm_link_completed(lfm_action,(BOOL)wp,GetTickCount());local_server_controls();language_controls();if(lfm_action==9&&wp)lfm_reload();lfm_controls();if(lfm_action==8&&wp)lfm_open_browser();lfm_action=0;EnableWindow(language_checkbox,TRUE);EnableWindow(latin_checkbox,TRUE);EnableWindow(logging_checkbox,TRUE);
         if(!wp&&checking_update&&*update_failure)show_update_details();checking_update=FALSE;
         if (lp) ShowWindow(window,SW_RESTORE);return 0;
     }
@@ -544,7 +647,7 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
         if (busy) { SetWindowTextW(status,L"Wait for server startup or close the game before closing this launcher.");return 0; }
         DestroyWindow(hwnd);return 0;
     }
-    if (event==WM_DESTROY) { KillTimer(hwnd,1);DeleteObject(font);PostQuitMessage(0);return 0; }
+    if (event==WM_DESTROY) { progress_sink=NULL;KillTimer(hwnd,1);rr_brand_cleanup();DeleteObject(font);PostQuitMessage(0);return 0; }
     return DefWindowProcW(hwnd,event,wp,lp);
 }
 
@@ -588,10 +691,10 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE previous,LPWSTR command,int sho
         return 0;
     }
     WNDCLASSW cls;ZeroMemory(&cls,sizeof(cls));cls.lpfnWndProc=procedure;cls.hInstance=instance;cls.lpszClassName=L"ReRiffNativeLauncher";
-    cls.hCursor=LoadCursorW(NULL,IDC_ARROW);cls.hbrBackground=(HBRUSH)(COLOR_WINDOW+1);
+    cls.hCursor=LoadCursorW(NULL,IDC_ARROW);cls.hbrBackground=(HBRUSH)(COLOR_BTNFACE+1);
     RegisterClassW(&cls);
-    HWND handle=CreateWindowExW(0,cls.lpszClassName,L"ReRiff Launcher v" RERIFF_WIDE_LITERAL(RERIFF_VERSION),WS_OVERLAPPED|WS_CAPTION|WS_SYSMENU|WS_MINIMIZEBOX,
-        CW_USEDEFAULT,CW_USEDEFAULT,660,615,NULL,NULL,instance,NULL);
+    HWND handle=CreateWindowExW(0,cls.lpszClassName,launcher_title(),WS_OVERLAPPED|WS_CAPTION|WS_SYSMENU|WS_MINIMIZEBOX,
+        CW_USEDEFAULT,CW_USEDEFAULT,660,631,NULL,NULL,instance,NULL);
     if (!handle) return 1;
     ShowWindow(handle,show);UpdateWindow(handle);
     MSG msg;while (GetMessageW(&msg,NULL,0,0)>0) {if (!IsDialogMessageW(handle,&msg)) {TranslateMessage(&msg);DispatchMessageW(&msg);}}

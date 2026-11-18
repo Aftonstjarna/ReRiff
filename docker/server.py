@@ -4,6 +4,9 @@ import logging
 import os
 from pathlib import Path
 import signal
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'packaging'))
+from logging_policy import TimestampWriter
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -29,6 +32,15 @@ def create_app(data_dir=None, public_url=None, lan_url=None, log_dir=None, trace
                            {'public': public, 'lan': lan}).items() if value
     }
     backend.ensure_dirs()
+    balance_spec = importlib.util.spec_from_file_location('reriff_balance', ROOT/'Progression/balance.py')
+    balance = importlib.util.module_from_spec(balance_spec)
+    balance_spec.loader.exec_module(balance)
+    progression_spec = importlib.util.spec_from_file_location('reriff_multiplayer', ROOT/'Progression/multiplayer.py')
+    progression = importlib.util.module_from_spec(progression_spec)
+    progression_spec.loader.exec_module(progression)
+    identity = backend._identity_module.server_id(data)
+    capabilities = progression.register(backend.app, data, identity, balance)
+    balance.register_endpoint(backend.app, data, identity, capabilities)
     spec = importlib.util.spec_from_file_location('reriff_trace', ROOT/'trace-server.py')
     trace = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(trace)
@@ -38,6 +50,8 @@ def create_app(data_dir=None, public_url=None, lan_url=None, log_dir=None, trace
 
 
 def main():
+    sys.stdout = TimestampWriter(sys.stdout)
+    sys.stderr = TimestampWriter(sys.stderr)
     from waitress import create_server
     logging.basicConfig(level=logging.INFO)
     app = create_app()

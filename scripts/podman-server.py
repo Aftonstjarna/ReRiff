@@ -14,6 +14,13 @@ import time
 import urllib.request
 from urllib.parse import urlsplit
 
+try:
+    from logging_policy import timestamp_text, diagnostic_header
+except ModuleNotFoundError:
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'packaging'))
+    from logging_policy import timestamp_text, diagnostic_header
+
 IMAGE='ghcr.io/aftonstjarna/reriff:latest'
 OWNER='io.reriff.localserver.owner'
 
@@ -49,7 +56,8 @@ class LocalServer:
 
     def log(self,text):
         with (self.logs/'ReRiff-podman.log').open('a',encoding='utf-8') as stream:
-            stream.write(datetime.datetime.now(datetime.timezone.utc).isoformat()+' '+text+'\n')
+            if not getattr(self,'logged_identity',False):stream.write(timestamp_text(diagnostic_header(self.logs.parent)));self.logged_identity=True
+            stream.write(timestamp_text(text))
 
     def run(self,*args,timeout=30,allowed=(0,)):
         command=self.command+list(args);self.log('Command: '+repr(command))
@@ -112,7 +120,7 @@ class LocalServer:
 
     def collect_logs(self):
         result=self.run('logs','--tail','200',self.name,allowed=(0,))
-        atomic(self.logs/'ReRiff-localserver.log',result.stdout+result.stderr)
+        atomic(self.logs/'ReRiff-localserver.log',timestamp_text(diagnostic_header(self.logs.parent)+'\n'+result.stdout+result.stderr))
 
     def perform(self,action):
         if action=='status' and not self.config_file.exists():return 'uninstalled','Optional server is not installed. Install downloads the server image only on request.'

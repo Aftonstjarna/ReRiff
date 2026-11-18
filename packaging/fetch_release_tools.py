@@ -15,13 +15,18 @@ ASSETS = {
 
 parser=argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--directory',type=Path,required=True)
+parser.add_argument('--asset', action='append', choices=tuple(ASSETS),
+                    help='Fetch only selected inputs; repeat to select several (default: all)')
 args=parser.parse_args()
 args.directory.mkdir(parents=True,exist_ok=True)
-for name,(url,expected) in ASSETS.items():
+selected = args.asset or list(ASSETS)
+for name in selected:
+    url, expected = ASSETS[name]
     file=args.directory/name
     if not file.exists():urllib.request.urlretrieve(url,file)
     if hashlib.sha256(file.read_bytes()).hexdigest()!=expected:
         raise SystemExit('Checksum failed: '+name)
-with tarfile.open(args.directory/'zig.tar.xz') as archive:
-    archive.extractall(args.directory,filter='data')
-print('Verified Zig and portable Python build inputs.')
+if 'zig.tar.xz' in selected:
+    with tarfile.open(args.directory/'zig.tar.xz') as archive:
+        archive.extractall(args.directory,filter='data')
+print('Verified build inputs: '+', '.join(selected))

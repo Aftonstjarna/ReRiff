@@ -22,6 +22,8 @@ namespace ReRiff {
         private readonly string root;
         private readonly string token = Guid.NewGuid().ToString("N");
         private volatile bool stopped;
+        private string activeOwner;
+        internal string NativeGhostDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),"Octane/DAT");
         public string Endpoint { get; private set; }
 
         public static string Start(string folder) {
@@ -116,6 +118,12 @@ namespace ReRiff {
             }
         }
         private byte[] Encode(object value) { return Encoding.UTF8.GetBytes(json.Serialize(value)); }
+        private void TraceGhost(string message) {
+            // Observation only; never let optional diagnostics affect storage replies.
+            try { Logging.Append(Path.GetDirectoryName(root), "ReRiff-singleplayer.log",
+                message + Environment.NewLine); }
+            catch (IOException) { } catch (UnauthorizedAccessException) { }
+        }
         private static Dictionary<string, object> Obj(params object[] pairs) {
             var value = new Dictionary<string, object>();
             for (int i = 0; i < pairs.Length; i += 2) value[(string)pairs[i]] = pairs[i + 1];
@@ -200,6 +208,9 @@ namespace ReRiff {
             if (parts[0] == "files" && parts.Length == 2) {
                 string file = Safe(parts[1]), location = Path.Combine(Path.Combine(root, "files"), file);
                 if (method == "GET") {
+                    if (file.EndsWith(".ghost", StringComparison.OrdinalIgnoreCase))
+                        TraceGhost("Ghost download: exists=" + File.Exists(location)
+                            + " bytes=" + (File.Exists(location) ? new FileInfo(location).Length : 0));
                     if (!File.Exists(location)) throw new FileNotFoundException();
                     return File.ReadAllBytes(location);
                 }
@@ -281,9 +292,46 @@ namespace ReRiff {
             } else if (value is IEnumerable && !(value is string)) return ((IEnumerable)value).Cast<object>().Select(RefreshFiles).ToArray();
             return value;
         }
+        private void ImportNativeGhost(Dictionary<string,object> where) {
+            object rawSong;if(!where.TryGetValue("song",out rawSong)||!(rawSong is string))return;
+            string song=(string)rawSong;if(!System.Text.RegularExpressions.Regex.IsMatch(song,@"^[A-Za-z0-9]{1,64}$"))return;
+            var profiles=All("Profile_Steam").Where(p=>Convert.ToString(Field(p,"objectId"))!="SingleplayerProfile").ToArray();
+            var profile=profiles.FirstOrDefault(p=>Convert.ToString(Field(p,"SystemID"))==activeOwner);
+            if(profile==null&&profiles.Length==1)profile=profiles[0];
+            if(profile==null)return;string owner=Convert.ToString(Field(profile,"SystemID"));
+            if(!System.Text.RegularExpressions.Regex.IsMatch(owner??"",@"^[0-9]{1,20}$"))return;
+            if(All("ghost_v18").Any(g=>Convert.ToString(Field(g,"song"))==song&&Convert.ToString(Field(g,"user"))==owner))return;
+            string filename=song+"-"+owner+".ghost",source=Path.Combine(NativeGhostDirectory,filename);
+            if(!File.Exists(source))return;
+            byte[] bytes;CachedGhost ghost;
+            try {bytes=File.ReadAllBytes(source);ghost=CachedGhost.Read(new MemoryStream(bytes),filename,owner);}
+            catch(InvalidDataException){return;}catch(IOException){return;}catch(UnauthorizedAccessException){return;}
+            if(ghost==null)return;
+            // Preserve original payload and normal FileData/ghost_v18 schema.
+            // An existing conflicting FileData row is retained for diagnosis.
+            var files=All("FileData").Where(f=>Convert.ToString(Field(f,"name"))==filename).ToArray();
+            string stored;
+            if(files.Length!=0) {
+                var data=Field(files[0],"data") as Dictionary<string,object>;
+                if(data==null||!data.ContainsKey("name"))return;
+                stored=Safe(Convert.ToString(data["name"]));string existing=Path.Combine(Path.Combine(root,"files"),stored);
+                if(!File.Exists(existing)||!File.ReadAllBytes(existing).SequenceEqual(bytes)){TraceGhost("Cached ghost import skipped: conflicting existing FileData");return;}
+            }else {
+                stored=Guid.NewGuid().ToString("N")+"_"+filename;
+                Write(Path.Combine(Path.Combine(root,"files"),stored),bytes);
+                Save("FileData",Obj("objectId",Guid.NewGuid().ToString("N"),"createdAt",Stamp(),"updatedAt",Stamp(),"name",filename,
+                    "data",Obj("__type","File","name",stored,"url",Endpoint+"files/"+stored)));
+            }
+            Save("ghost_v18",Obj("objectId",Guid.NewGuid().ToString("N"),"createdAt",Stamp(),"updatedAt",Stamp(),
+                "user",owner,"userName",Convert.ToString(Field(profile,"Username")),"song",song,"score",(int)Math.Floor(ghost.Score),"car",ghost.Car,"pack",ghost.Pack));
+            TraceGhost("Cached own ghost imported: song="+song+" score="+((int)Math.Floor(ghost.Score)).ToString(CultureInfo.InvariantCulture)+" bytes="+bytes.Length+" original_file_preserved=1");
+        }
         private object Find(string cls, Dictionary<string, string> query) {
             string raw;
             var where = query.TryGetValue("where", out raw) ? json.Deserialize<Dictionary<string, object>>(raw) : Obj();
+            object requestedOwner;
+            if(cls=="Profile_Steam"&&where.TryGetValue("SystemID",out requestedOwner)&&requestedOwner is string)activeOwner=(string)requestedOwner;
+            if(cls=="ghost_v18")ImportNativeGhost(where);
             IEnumerable<Dictionary<string, object>> matches = All(cls).Where(value => Matches(value, where));
             int count = matches.Count();
             if (query.TryGetValue("order", out raw)) {
@@ -300,6 +348,11 @@ namespace ReRiff {
             int skip = query.TryGetValue("skip", out raw) ? Math.Max(0, int.Parse(raw, CultureInfo.InvariantCulture)) : 0;
             int limit = query.TryGetValue("limit", out raw) ? int.Parse(raw, CultureInfo.InvariantCulture) : 100;
             var results = matches.Skip(skip).Take(limit < 0 ? int.MaxValue : limit).Select(v => RefreshFiles(v)).ToArray();
+            if (cls.StartsWith("ghost_", StringComparison.Ordinal) || cls == "FileData")
+                TraceGhost("Ghost query: class=" + cls + " where=" + json.Serialize(where)
+                    + " order=" + (query.ContainsKey("order") ? query["order"] : "")
+                    + " skip=" + skip + " limit=" + limit + " matched=" + count
+                    + " returned=" + results.Length);
             var response = Obj("results", results);
             if (query.TryGetValue("count", out raw) && (raw == "1" || raw == "true")) response["count"] = count;
             return response;

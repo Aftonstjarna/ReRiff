@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk">
+<PropertyGroup><OutputType>Exe</OutputType><AssemblyName>test_ghost_cache_managed</AssemblyName><TargetFramework>net45</TargetFramework><EnableDefaultCompileItems>false</EnableDefaultCompileItems></PropertyGroup>
+<ItemGroup><Compile Include="GhostCacheSmoke.cs"/><Compile Include="../ClientConfig/CachedGhost.cs"/><PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net45" Version="1.0.3" PrivateAssets="all"/></ItemGroup>
+</Project>

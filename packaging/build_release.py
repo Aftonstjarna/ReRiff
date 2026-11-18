@@ -16,6 +16,8 @@ import zlib
 from shared_patch import make_patch, digest
 from release_notes import release_notes
 from font_assets import load_pin, validate_component
+from release_metadata import release_metadata
+from native_archive import build_volume
 
 ROOT = Path(__file__).resolve().parent.parent
 PYTHON_SHA = '9e35319bffedab8b36ad44d8f377cb4f1733bcec257a0b6d04d94f01486ddb38'
@@ -24,6 +26,16 @@ PYTHON_SHA = '9e35319bffedab8b36ad44d8f377cb4f1733bcec257a0b6d04d94f01486ddb38'
 def copy(source, destination):
     destination.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(source, destination)
+
+
+def bundle_core_artwork(root, common, stage):
+    """Always bundle Re:Start for first launch, independently of font choices."""
+    subprocess.run([os.sys.executable,str(root/'scripts/build-prestige-artwork.py')],check=True)
+    dat,archive=build_volume(root/'packaging/core',stage/'core-artwork','vfs2')
+    copy(dat,common/'components/artwork/core.dat')
+    copy(archive,common/'components/artwork/core.zip')
+    return {'dat':'components/artwork/core.dat','dat_sha256':digest(dat.read_bytes()),
+            'zip':'components/artwork/core.zip','zip_sha256':digest(archive.read_bytes())}
 
 
 def build(args):
@@ -72,6 +84,10 @@ def build(args):
         path.write_bytes(encoded)
         patches[name] = {'file': path.relative_to(common).as_posix(), 'original': metadata['original'], 'patched': metadata['patched']}
         print(name, 'delta:',len(encoded),'bytes')
+    core_artwork=bundle_core_artwork(ROOT,common,stage)
+    subprocess.run([os.sys.executable,str(ROOT/'scripts/build-ui-assets.py')],check=True)
+    copy(ROOT/'build/ui-assets/reriff-logo-button.png',common/'branding/reriff-logo.png')
+    copy(ROOT/'images/reriff-icon-64x64.png',common/'branding/reriff-icon.png')
     font_pack=ROOT/'build/cjk-component/ReRiff-CJK.zip'
     font_pin = load_pin()
     validate_component(font_pack, font_pin, 'cjk')
@@ -118,7 +134,7 @@ def build(args):
             copy(ROOT/'scripts/windows-server-control.py',folder/'payload/localserver/windows-server-control.py')
             for name in ('local_server.py','host_process.py','windows_package.py'):
                 copy(ROOT/'LinuxRuntime'/name,folder/'payload/localserver'/name)
-        manifest = {'singleplayer': True, 'channel':channel,'version':version,'commit':commit,'platform':platform,'patches':patches,
+        manifest = {'mods_vfs':True, 'core_artwork':core_artwork, 'singleplayer': True, 'channel':channel,'version':version,'commit':commit,'platform':platform,'patches':patches,
                     'update_only':update_only, 'native_linux':platform == 'linux', 'latin_component':{'file':'components/ReRiff-Latin.zip','sha256':digest(latin_pack.read_bytes())}, 'language_component':{'file':'components/ReRiff-CJK.zip','sha256':digest(font_pack.read_bytes())}, 'python_runtime':'download' if platform == 'windows' else 'server-only',
                     'vanilla_originals':json.loads((ROOT/'packaging/original-client.json').read_text()) if args.local_patching else {},
                     'compatible_existing':json.loads((ROOT/'packaging/compatible-client.json').read_text()) if args.local_patching else {},
@@ -167,13 +183,16 @@ __RERIFF_PAYLOAD__
     copy(ROOT/'build/linux-runtime/ReRiff-Server-x86_64.AppImage', output/'ReRiff-Server-x86_64.AppImage')
     copy(font_pack,output/'ReRiff-CJK.zip')
     copy(latin_pack,output/'ReRiff-Latin.zip')
-    copy(ROOT/'build/windows-server/ReRiff-Server-windows.zip', output/'ReRiff-Server-windows.zip')
+    copy(ROOT/'build/windows-server/ReRiff-Windows-Server.zip', output/'ReRiff-Windows-Server.zip')
+    # A local rebuild may reuse dist/vVERSION from before the server rename.
+    # Do not re-advertise the obsolete ZIP in release.json or SHA256SUMS.
+    (output/'ReRiff-Server-windows.zip').unlink(missing_ok=True)
     # GitHub supplies source archives for the release tag. Remove the old
     # duplicate when rebuilding an existing output directory.
     (output/f'ReRiff-{version}-source.tar.gz').unlink(missing_ok=True)
     artifacts = sorted(p for p in output.iterdir() if p.suffix in ('.run','.zip','.AppImage'))
     (output/'SHA256SUMS').write_text(''.join(digest(p.read_bytes())+'  '+p.name+'\n' for p in artifacts))
-    (output/'release.json').write_text(json.dumps({'version':version,'commit':commit,'artifacts':[p.name for p in artifacts]},indent=2)+'\n')
+    (output/'release.json').write_text(json.dumps(release_metadata(output, version, commit),indent=2)+'\n')
     (output/'RELEASE-NOTES.md').write_text(notes, encoding='utf-8')
     # User documentation lives on the main repository README, not per release.
     (output/'README-LINUX.md').unlink(missing_ok=True)

@@ -19,6 +19,13 @@ class LifecycleTest(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.server = local.LocalServer(Path(self.temp.name)/'game with spaces ü/localserver')
 
+    def test_log_selection_does_not_create_output(self):
+        self.server.root.parent.mkdir(parents=True,exist_ok=True)
+        for encoding in ('utf-8','utf-16'):
+            (self.server.root.parent/'server.ini').write_text('[diagnostics]\nlogging_enabled=true\nlog_localserver=false\n',encoding=encoding)
+            instance=local.LocalServer(self.server.root)
+            self.assertFalse(instance.logging)
+            self.assertFalse(instance.logs.exists())
     def test_loopback_defaults_and_uninstalled_status(self):
         self.assertEqual(self.server.address, 'http://127.0.0.1:5144')
         self.assertEqual(self.server.status(), 'uninstalled')
@@ -37,10 +44,19 @@ class LifecycleTest(unittest.TestCase):
         self.assertEqual(saved.read_text(), 'previous scores')
         self.assertFalse((self.server.root/'data').exists())
 
+    def test_legacy_json_without_data_dir_migrates_to_ini(self):
+        self.server.control.mkdir(parents=True)
+        self.server.legacy_config_path.write_text(json.dumps({'schema':1,'port':5514}))
+        migrated=local.LocalServer(self.server.root)
+        migrated.write_config()
+        reopened=local.LocalServer(self.server.root)
+        self.assertEqual(reopened.config,{'schema':1,'port':5514,'data_dir':'data'})
+        self.assertEqual(reopened.address,'http://127.0.0.1:5514')
+        self.assertTrue(migrated.legacy_config_path.is_file())
     def test_invalid_port_is_rejected(self):
         self.server.control.mkdir(parents=True)
         for port in [True, 80, 65536, '5144']:
-            self.server.config_path.write_text(json.dumps({'schema': 1, 'port': port}))
+            self.server.legacy_config_path.write_text(json.dumps({'schema': 1, 'port': port}))
             with self.assertRaises(ValueError):
                 local.LocalServer(self.server.root)
 

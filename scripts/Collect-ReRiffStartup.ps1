@@ -8,7 +8,8 @@ if (-not $GameDir) {
     }
 }
 $GameDir = [IO.Path]::GetFullPath($GameDir)
-$settings = Join-Path $GameDir 'server.ini'
+$settings = Join-Path $GameDir 'client.ini'
+if (-not (Test-Path $settings)) { $settings = Join-Path $GameDir 'server.ini' }
 $enabled = $false
 if (Test-Path $settings) {
     $section = ''

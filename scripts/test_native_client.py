@@ -41,6 +41,18 @@ class NativeClientTests(unittest.TestCase):
                        'files':{},'patches':{},'required_existing':{},'vanilla_originals':{}}
         self.env=dict(os.environ,PATH='/no-system-tools')
         for name in ('PYTHONHOME','PYTHONPATH','LD_LIBRARY_PATH','LD_PRELOAD'):self.env.pop(name,None)
+    def test_removed_mods_clears_unselected_font_records(self):
+        for pack in ('cjk','latin'):
+            stem='mods/noto-'+pack+'-font/vfs'
+            record=self.game/('localserver/languages/'+pack+'.json');record.parent.mkdir(parents=True,exist_ok=True)
+            record.write_text(json.dumps({'schema':2,'version':'old','archives':{'combined':stem},'files':{stem+'.zip':'0'*64,stem+'.dat':'0'*64}}))
+        self.manifest['mods_vfs']=True
+        self.package();self.install('--no-music-link');self.retained()
+        self.assertTrue((self.game/'mods').is_dir())
+        for pack in ('cjk','latin'):
+            self.assertFalse((self.game/('localserver/languages/'+pack+'.json')).exists())
+            self.assertFalse((self.game/('mods/noto-'+pack+'-font')).exists())
+
     def package(self,files=None):
         for name,data in (files or {'payload/a.txt':b'new value'}).items():
             p=self.bundle/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes(data)
@@ -81,6 +93,12 @@ class NativeClientTests(unittest.TestCase):
         self.install('--no-logging','--no-music-link')
         self.assertEqual((self.game/'logs/retained.log').read_bytes(),b'old diagnostic')
         self.call('logging-status','--root',self.game,success=False)
+    def test_individual_logs_follow_master_and_preserve_selections(self):
+        for encoding in ('utf-8','utf-16'):
+            (self.game/'server.ini').write_text('[diagnostics]\nlogging_enabled=true\nlog_localserver=false\nlog_update=true\n',encoding=encoding)
+            self.call('logging-status','--root',self.game,'--log','ReRiff-localserver-helper.log',success=False)
+            self.call('logging-status','--root',self.game,'--log','update.log')
+            self.assertFalse((self.game/'logs').exists())
     def test_stable_retains_only_originals_and_config_snapshots(self):
         self.manifest['channel']='stable'
         (self.game/'extra.ini').write_bytes(b'old config')
@@ -120,6 +138,39 @@ class NativeClientTests(unittest.TestCase):
     def test_symlink_destination_cannot_escape_game(self):
         outside=self.root/'outside';outside.mkdir();(self.game/'linked').symlink_to(outside,target_is_directory=True)
         self.package({'payload/linked/escape':b'blocked'});self.install(success=False);self.assertFalse((outside/'escape').exists());self.retained()
+    def test_mods_migration_repeat_conflict_and_rollback(self):
+        self.manifest['mods_vfs']=True
+        for name,data in {'vfs.dat':b'stock index','vfs.zip':b'stock zip','vfs1.dat':b'mod index','vfs1.zip':b'mod zip'}.items():
+            (self.game/name).write_bytes(data)
+        self.package();self.install('--dry-run','--no-music-link')
+        self.assertTrue((self.game/'vfs1.dat').exists());self.assertFalse((self.game/'mods/.reriff-vfs').exists())
+        # Failure after archive writes rolls back the entire migration.
+        (self.game/'mods').mkdir();(self.game/'mods/.reriff-vfs').mkdir()
+        self.install('--no-music-link',success=False)
+        self.assertEqual((self.game/'vfs1.zip').read_bytes(),b'mod zip')
+        self.assertFalse((self.game/'mods/vfs1.zip').exists())
+        (self.game/'mods/.reriff-vfs').rmdir()
+        self.install('--no-music-link');self.install('--no-music-link')
+        self.assertFalse((self.game/'vfs1.dat').exists())
+        self.assertEqual((self.game/'mods/vfs1.dat').read_bytes(),b'mod index')
+        self.assertEqual((self.game/'vfs.dat').read_bytes(),b'stock index')
+        self.assertEqual((self.game/'vfs.zip').read_bytes(),b'stock zip')
+        (self.game/'vfs1.dat').write_bytes(b'conflicting index')
+        self.install('--no-music-link',success=False)
+        self.assertEqual((self.game/'vfs1.dat').read_bytes(),b'conflicting index')
+        self.assertEqual((self.game/'mods/vfs1.dat').read_bytes(),b'mod index')
+        self.retained()
+    def test_mods_incomplete_alias_and_symlink_refused(self):
+        self.manifest['mods_vfs']=True;self.package()
+        (self.game/'vfs1.dat').write_bytes(b'index')
+        self.install('--no-music-link',success=False)
+        self.assertFalse((self.game/'mods').exists())
+        (self.game/'vfs1.zip').write_bytes(b'zip')
+        (self.game/'vfs01.dat').write_bytes(b'alias')
+        self.install('--no-music-link',success=False);(self.game/'vfs01.dat').unlink()
+        outside=self.root/'outside';outside.mkdir();(self.game/'mods').symlink_to(outside,target_is_directory=True)
+        self.install('--no-music-link',success=False)
+        self.assertEqual(list(outside.iterdir()),[]);self.retained()
     def test_old_client_python_runtime_is_archived(self):
         local=self.game/'localserver';local.mkdir();(local/'install-state.json').write_text('{"version":"old"}')
         (local/'ReRiff-Runtime-x86_64.AppImage').write_bytes(b'old owned runtime');self.package();self.install('--no-music-link')
@@ -194,6 +245,23 @@ class NativeClientTests(unittest.TestCase):
         work=self.root/'update';work.mkdir();self.prepare(archive,checksum,work)
         self.assertTrue(os.access(work/'ReRiff-ClientHost',os.X_OK));self.assertFalse((self.game/'a.txt').exists())
         self.call('update','--work',work);self.assertTrue((work/'success').exists());self.assertEqual((self.game/'a.txt').read_bytes(),b'updated');self.retained()
+    def test_explicit_update_metadata_validation(self):
+        local=self.game/'localserver';local.mkdir();shutil.copy2(ROOT/'scripts/linux-runtime.sh',local/'linux-runtime.sh')
+        archive,checksum=self.archive()
+        original=dict(component='client',platform='linux',architecture='x86_64',filename=archive.name,size=archive.stat().st_size,sha256=checksum)
+        cases=[('ok',None,None),('component','component','server'),('architecture','architecture','arm64'),('size','size',1),('sha256','sha256','0'*64),('filename','filename','other.run'),('schema','schema',3),('null-schema','schema',None),('duplicate','duplicate',None)]
+        for name,field,value in cases:
+            with self.subTest(name=name):
+                work=self.root/('explicit-'+name);work.mkdir();package=dict(original)
+                metadata=dict(schema=2,version=self.manifest['version'],artifacts=[archive.name],packages=[package])
+                if field=='schema':metadata['schema']=value
+                elif field=='duplicate':metadata['packages'].append(dict(package))
+                elif field:package[field]=value
+                (work/'latest-release.json').write_text(json.dumps(metadata))
+                self.prepare(archive,checksum,work,success=field is None)
+                self.assertEqual((work/'prepared.json').exists(),field is None)
+        self.retained()
+
     def test_update_checksum_metadata_and_archive_paths(self):
         self.config=self.config.replace(b'false',b'true');(self.game/'server.ini').write_bytes(self.config)
         archive,checksum=self.archive();work=self.root/'bad-checksum';work.mkdir();self.prepare(archive,'0'*64,work,False);self.assertTrue((work/'failure').exists())
@@ -203,6 +271,8 @@ class NativeClientTests(unittest.TestCase):
         archive=self.root/'oversize.run';archive.write_bytes(b'#!/bin/sh\n__RERIFF_PAYLOAD__\n'+gzip.compress(member.tobuf()+b'\0'*1024))
         work=self.root/'oversize';work.mkdir();self.prepare(archive,digest(archive.read_bytes()),work,False)
         self.assertIn('Release is too large',(self.game/'logs/update.log').read_text())
+        for line in (self.game/'logs/update.log').read_text().splitlines():
+            self.assertRegex(line,r'^\[\d{4}-.*\.\d{3}Z\] ')
         self.assertFalse((self.root/'escape').exists());self.retained()
     @unittest.skipUnless(args.installer and args.original_dir,'Complete .run fixture is optional')
     def test_self_extractor_without_python(self):

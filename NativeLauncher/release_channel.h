@@ -112,13 +112,55 @@ static BOOL release_tag_path(const char *tag,char *out,size_t capacity){
     }
     out[used]=0;return TRUE;
 }
-typedef struct ReleasePackage {char version[128],filename[256];} ReleasePackage;
+#include <limits.h>
+typedef struct ReleasePackage {char version[128],filename[256],sha256[65];unsigned long long size;BOOL explicit_metadata;} ReleasePackage;
 static BOOL release_filename(const char *name){
     return *name&&name[0]!='.'&&strspn(name,"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._")==strlen(name);
 }
+static BOOL release_server_package(const char *name){
+    return !strncmp(name,"ReRiff-Server-",14)||!strcmp(name,"ReRiff-Windows-Server.zip");
+}
+/* Strict nonnegative JSON integer, with overflow/leading-zero refusal. */
+static const char *release_uint(const char *p,unsigned long long *value){
+    if(!isdigit((unsigned char)*p)||(*p=='0'&&isdigit((unsigned char)p[1])))return NULL;
+    unsigned long long n=0;
+    do{unsigned digit=(unsigned)(*p-'0');if(n>(ULLONG_MAX-digit)/10)return NULL;n=n*10+digit;p++;}while(isdigit((unsigned char)*p));
+    *value=n;return p;
+}
+static const char *release_packages(const char *p,BOOL linux_package,ReleasePackage *selected){
+    if(*p++!='[')return NULL;p=release_space(p);unsigned entries=0;
+    while(*p!=']'){
+        if(*p++!='{'||++entries>128)return NULL;
+        char component[64]="",platform[32]="",architecture[32]="",filename[256]="",sha256[65]="",key[128];
+        unsigned fields=0;unsigned long long size=0;
+        for(;;){
+            p=release_space(p);if(*p=='}')break;
+            p=release_string(p,key,sizeof(key));if(!p)return NULL;p=release_space(p);if(*p++!=':')return NULL;p=release_space(p);
+            unsigned bit=0;char *text=NULL;size_t capacity=0;
+            if(!strcmp(key,"component")){bit=1;text=component;capacity=sizeof(component);}
+            else if(!strcmp(key,"platform")){bit=2;text=platform;capacity=sizeof(platform);}
+            else if(!strcmp(key,"architecture")){bit=4;text=architecture;capacity=sizeof(architecture);}
+            else if(!strcmp(key,"filename")){bit=8;text=filename;capacity=sizeof(filename);}
+            else if(!strcmp(key,"sha256")){bit=16;text=sha256;capacity=sizeof(sha256);}
+            else if(!strcmp(key,"size"))bit=32;
+            if(bit){if(fields&bit)return NULL;fields|=bit;p=bit==32?release_uint(p,&size):release_string(p,text,capacity);}
+            else p=release_skip(p,0);
+            if(!p)return NULL;p=release_space(p);if(*p=='}')break;if(*p++!=',')return NULL;if(*release_space(p)=='}')return NULL;
+        }
+        if(fields!=63||!*component||!*platform||!*architecture||!release_filename(filename)||!size
+            ||strlen(sha256)!=64||strspn(sha256,"0123456789abcdefABCDEF")!=64)return NULL;
+        if(!strcmp(component,"client")&&!strcmp(platform,linux_package?"linux":"windows")&&!strcmp(architecture,linux_package?"x86_64":"x86")){
+            if(*selected->filename)return NULL;
+            strcpy(selected->filename,filename);strcpy(selected->sha256,sha256);selected->size=size;selected->explicit_metadata=TRUE;
+        }
+        p=release_space(p+1);if(*p==']')break;if(*p++!=',')return NULL;p=release_space(p);if(*p==']')return NULL;
+    }
+    return p+1;
+}
 static BOOL release_package(const char *json,BOOL linux_package,ReleasePackage *package){
     memset(package,0,sizeof(*package));const char *p=release_space(json);if(*p++!='{')return FALSE;
-    BOOL have_version=FALSE,have_artifacts=FALSE;char key[128];
+    BOOL have_version=FALSE,have_artifacts=FALSE,have_packages=FALSE,have_schema=FALSE,legacy_ambiguous=FALSE;
+    unsigned long long schema=1;char key[128],legacy[256]="";
     const char *suffix=linux_package?"-linux.run":"-windows.zip";
     for(;;){
         p=release_space(p);if(*p=='}')break;
@@ -127,23 +169,28 @@ static BOOL release_package(const char *json,BOOL linux_package,ReleasePackage *
             if(have_version)return FALSE;have_version=TRUE;
             p=release_string(p,package->version,sizeof(package->version));if(!p)return FALSE;
             for(const unsigned char *v=(const unsigned char *)package->version;*v;v++)if(*v<32||*v==127)return FALSE;
+        }else if(!strcmp(key,"schema")){
+            if(have_schema)return FALSE;have_schema=TRUE;p=release_uint(p,&schema);if(!p)return FALSE;
+        }else if(!strcmp(key,"packages")){
+            if(have_packages)return FALSE;have_packages=TRUE;p=release_packages(p,linux_package,package);if(!p)return FALSE;
         }else if(!strcmp(key,"artifacts")){
             if(have_artifacts||*p++!='[')return FALSE;have_artifacts=TRUE;p=release_space(p);
             while(*p!=']'){
                 char name[256];p=release_string(p,name,sizeof(name));if(!p)return FALSE;
                 size_t length=strlen(name),tail=strlen(suffix);
-                if(length>tail&&!strcmp(name+length-tail,suffix)){
-                    if(*package->filename||!release_filename(name))return FALSE;strcpy(package->filename,name);
+                if(!release_server_package(name)&&length>tail&&!strcmp(name+length-tail,suffix)){
+                    if(*legacy||!release_filename(name))legacy_ambiguous=TRUE;
+                    else strcpy(legacy,name);
                 }
-                p=release_space(p);if(*p==']')break;if(*p++!=',')return FALSE;p=release_space(p);
-                if(*p==']')return FALSE;
-            }
-            p++;
+                p=release_space(p);if(*p==']')break;if(*p++!=',')return FALSE;p=release_space(p);if(*p==']')return FALSE;
+            }p++;
         }else{p=release_skip(p,0);if(!p)return FALSE;}
-        p=release_space(p);if(*p=='}')break;if(*p++!=',')return FALSE;
-        if(*release_space(p)=='}')return FALSE;
+        p=release_space(p);if(*p=='}')break;if(*p++!=',')return FALSE;if(*release_space(p)=='}')return FALSE;
     }
-    return !*release_space(p+1)&&*package->version&&*package->filename;
+    if(*release_space(p+1)||!*package->version)return FALSE;
+    if(have_packages||schema==2)return have_schema&&schema==2&&have_packages&&package->explicit_metadata;
+    if(schema!=1||legacy_ambiguous||!*legacy)return FALSE;
+    strcpy(package->filename,legacy);return TRUE;
 }
 static BOOL release_needs_install(const char *remote,const char *local,BOOL requested,BOOL installed,BOOL force){
     return force||requested!=installed||strcmp(remote,local)!=0;

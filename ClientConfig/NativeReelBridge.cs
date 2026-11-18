@@ -18,6 +18,9 @@ namespace ReRiff {
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int Selection(IntPtr reel);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void Scrollbar(IntPtr reel, float x, float top, float bottom, int pcScale, IntPtr width);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void Overlay(IntPtr manager,int state);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int AlphabetJump(IntPtr menu,int letter);
+        [DllImport("ReRiff.Notify.dll",CallingConvention=CallingConvention.Cdecl,ExactSpelling=true)]
+        private static extern int ReRiffConfigurePickerAlphabet(IntPtr callback);
         private static readonly List<Delegate> Roots = new List<Delegate>();
         private static bool attempted;
         [DllImport("ReRiff.Notify.dll", CallingConvention=CallingConvention.Cdecl, ExactSpelling=true)]
@@ -32,7 +35,7 @@ namespace ReRiff {
 
         // addOption consumes an SSP passed by address in IL. Its C ABI adapter
         // accepts an owning object reference and supplies the temporary SSP.
-        private static Delegate CreateCall(MethodInfo target, Type delegateType, bool owningSsp) {
+        internal static Delegate CreateCall(MethodInfo target, Type delegateType, bool owningSsp) {
             MethodInfo invoke=delegateType.GetMethod("Invoke");
             ParameterInfo[] parameters=invoke.GetParameters();
             Type[] signature=new Type[parameters.Length];
@@ -51,7 +54,7 @@ namespace ReRiff {
         }
 
         internal static void Log(string message) {
-            try {Logging.Append(Path.GetDirectoryName(typeof(ClientConfig).Assembly.Location),"ReRiff-engine-menu.log",DateTime.UtcNow.ToString("o")+" "+message+Environment.NewLine);}catch(Exception) { }
+            try {Logging.Append(Path.GetDirectoryName(typeof(ClientConfig).Assembly.Location),"ReRiff-engine-menu.log",message+Environment.NewLine);}catch(Exception) { }
         }
         internal static void Configure() {
             if(attempted)return;attempted=true;
@@ -100,6 +103,33 @@ namespace ReRiff {
                     Delegate callback=CreateCall(original,typeof(Overlay),false);Roots.Add(callback);overlayPointers[i]=Marshal.GetFunctionPointerForDelegate(callback);
                 }
                 ReRiffConfigureNativePrompt(overlayPointers,2);
+                try {LastFmNative.Configure(game);}
+                catch {Log("Last.fm playback binding unavailable.");}
+                try {NativePickerSearch.Configure(game);}
+                catch(Exception error){Log("Picker search unavailable: "+error);}
+                try {ProgressionNative.Configure(game);}
+                catch(Exception error){Log("Original progression adapter unavailable; live prestige remains disabled: "+error);}
+                try {ProgressionView.Configure(game);}
+                catch(Exception error){Log("Permanent-level display binding unavailable: "+error);}
+                try {ProgressionGhost.Configure(game);}
+                catch(Exception error){Log("Singleplayer ghost achievement binding unavailable: "+error);}
+                try {ProgressionRank.Configure(game);}
+                catch(Exception error){Log("Permanent Rank binding unavailable; original Rank checks retained: "+error);}
+                try {ProgressionEconomy.Configure(game);}
+                catch(Exception error){Log("Original economy trace unavailable; original amounts retained: "+error);}
+                try {
+                    var jump=game.ResolveMethod(0x06001053) as MethodInfo;
+                    if(jump==null||jump.Name!="gaFileSelectInterface.jumpToSelection"||jump.ReturnType!=typeof(bool)||jump.GetParameters().Length!=2||jump.GetParameters()[1].ParameterType!=typeof(sbyte))throw new IOException("Native picker jump signature differs");
+                    var body=jump.GetMethodBody();if(body==null)throw new IOException("Native picker jump body missing");
+                    using(var hash=SHA256.Create()) {
+                        string value=BitConverter.ToString(hash.ComputeHash(body.GetILAsByteArray())).Replace("-","").ToLowerInvariant();
+                        if(value!="27868fc02f3bdb306399a688ccbc08628148349407a3a5f98702affd6d8a6545")throw new IOException("Native picker jump bytes differ");
+                    }
+                    Delegate callback=CreateCall(jump,typeof(AlphabetJump),false);Roots.Add(callback);
+                    if(ReRiffConfigurePickerAlphabet(Marshal.GetFunctionPointerForDelegate(callback))!=1)throw new IOException("Picker alphabet registration refused");
+                    Log("Original picker A-Z jump bound; controller alphabet integration ready.");
+                }catch(Exception error){Log("Controller alphabet shortcut unavailable; original picker unchanged: "+error);}
+
             } catch(DllNotFoundException) { }
               catch(EntryPointNotFoundException) { }
               catch(BadImageFormatException) { }

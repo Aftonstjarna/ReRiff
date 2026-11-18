@@ -15,7 +15,7 @@ import shutil
 import subprocess
 
 from shared_patch import apply_patch, digest
-from logging_policy import logging_enabled, logging_config
+from logging_policy import logging_enabled, logging_config, client_config, client_settings, archive_grouped_logs, TimestampWriter, diagnostic_header
 
 
 def auto_game():
@@ -346,7 +346,7 @@ def install(bundle, game, backups, platform, dry_run=False, restore=False, music
         if restore:
             raise ValueError('This update does not modify game DLLs. Use the original full installer to restore them.')
         for name, expected in manifest['required_existing'].items():
-            if not (game/name).is_file() or digest((game/name).read_bytes()) != expected:
+            if not (game/name).is_file() or digest((game/('mods/'+name if (game/'mods/.reriff-vfs').is_file() else name)).read_bytes()) != expected:
                 raise ValueError('This is an update-only package. A supported existing ReRiff installation is required: '+name)
         if not (game/'ReRiff.ClientConfig.dll').is_file():
             raise ValueError('This update requires an existing ReRiff client helper.')
@@ -424,7 +424,7 @@ def install(bundle, game, backups, platform, dry_run=False, restore=False, music
                 latin_enabled = settings.getboolean('languages', 'latin_enabled', fallback=False)
             except (configparser.Error, ValueError):
                 latin_enabled = False
-        if language_enabled or cjk is False or latin_enabled or latin is False:
+        if language_enabled or cjk is False or latin_enabled or latin is False or any((game/f"localserver/languages/{pack}.json").is_file() for pack in ("cjk", "latin")):
             component = manifest.get('language_component', {})
             with tempfile.TemporaryDirectory(prefix='reriff-font-plan-') as scratch:
                 command = [str(bundle/'patcher/ReRiff-Patcher.exe'), '--language-component', 'stage',
@@ -444,8 +444,27 @@ def install(bundle, game, backups, platform, dry_run=False, restore=False, music
                 removals = Path(scratch)/'.reriff-language-removals.json'
                 if removals.is_file():
                     for name, expected in json.loads(removals.read_text()).items():
-                        if not re.fullmatch(r'vfs[1-9a-f][0-9a-f]?\.(dat|zip)', name) or name in plan or (game/name).is_symlink() or digest((game/name).read_bytes()) != expected:
+                        if not re.fullmatch(r'(?:mods/)?vfs[1-9a-f][0-9a-f]?\.(?:dat|zip)|(?:fonts|mods/noto-cjk-font)/noto-cjk/(?:jp|kr|sc|tc|hk)(?:64|96)?\.rrcf|(?:fonts|mods/noto-latin-font)/noto-latin/latin(?:32|64|96)\.rrcf|(?:fonts|mods/noto-(?:cjk|latin)-font)/noto-(?:cjk|latin)/OFL\.txt|mods/noto-(?:cjk|latin)-font/vfs\.(?:dat|zip)|localserver/languages/(?:cjk|latin)\.json', name) or name in plan or (game/name).is_symlink() or digest((game/('mods/'+name if name.startswith('vfs') and (game/'mods/.reriff-vfs').is_file() else name)).read_bytes()) != expected:
                             raise ValueError('Unsafe or changed obsolete CJK archive: '+name)
+                        plan[name] = None
+        artwork = manifest.get('core_artwork')
+        if artwork:
+            with tempfile.TemporaryDirectory(prefix='reriff-artwork-plan-') as scratch:
+                command = [str(bundle/'patcher/ReRiff-Patcher.exe'), '--core-artwork',
+                           '--game-dir', str(game), '--stage', scratch,
+                           '--dat', str(bundle/artwork['dat']), '--dat-sha256', artwork['dat_sha256'],
+                           '--zip', str(bundle/artwork['zip']), '--zip-sha256', artwork['zip_sha256'],
+                           '--reserved', ','.join(name for name in plan if re.fullmatch(r'vfs[0-9a-f]+\.(dat|zip)', name))]
+                result = subprocess.run(command, capture_output=True, text=True, timeout=30)
+                if result.returncode:
+                    raise ValueError(result.stdout+result.stderr)
+                for path in Path(scratch).rglob('*'):
+                    if path.is_file() and path.name != '.reriff-artwork-removals.json': plan[path.relative_to(scratch).as_posix()] = path.read_bytes()
+                removals = Path(scratch)/'.reriff-artwork-removals.json'
+                if removals.is_file():
+                    for name, expected in json.loads(removals.read_text()).items():
+                        if not re.fullmatch(r'(?:mods/)?vfs[1-9a-f][0-9a-f]?\.(dat|zip)', name) or name in plan or (game/name).is_symlink() or digest((game/name).read_bytes()) != expected:
+                            raise ValueError('Unsafe or changed obsolete artwork archive: '+name)
                         plan[name] = None
         next_state = {'version': manifest['version'], 'backup_dir': str(backups),
                       'patched': {n: digest(plan[n] if n in plan else (game/n).read_bytes()) for n in manifest['required_existing']} if local_patching else ({n: digest(plan[n]) for n in originals} if originals else state.get('patched',manifest.get('required_existing',{})))}
@@ -455,13 +474,30 @@ def install(bundle, game, backups, platform, dry_run=False, restore=False, music
             next_state.update(music_link=enabled, music_dir=str(chosen_music.expanduser().resolve()))
         plan['localserver/install-state.json'] = (json.dumps(next_state, indent=2)+'\n').encode()
         enabled = logging if logging is not None else logging_enabled(game, development)
-        plan['server.ini'] = logging_config(plan.get('server.ini', (game/'server.ini').read_bytes() if (game/'server.ini').is_file() else b''), enabled)
+        plan['client.ini'] = logging_config(plan.get('client.ini', client_config(game)), enabled)
         collector = 'localserver/diagnostics/Collect-ReRiffStartup.ps1'
         if enabled and collector in plan: plan['logs/Collect-ReRiffStartup.ps1'] = plan[collector]
         if not enabled:
             plan = {name:data for name,data in plan.items() if not name.startswith('logs/')}
         if unattended_update_context(bundle, game, platform):
             plan['localserver/update-notification.ini'] = ('[update]\nversion='+manifest['version']+'\n').encode('utf-8')
+    if not restore and manifest.get('mods_vfs'):
+        with tempfile.TemporaryDirectory(prefix='reriff-mods-plan-') as scratch:
+            stage = Path(scratch)
+            for name, data in plan.items():
+                if data is not None:
+                    target = stage/name
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    target.write_bytes(data)
+            (stage/'.reriff-mods-removals.json').write_text(json.dumps([name for name, data in plan.items() if data is None]))
+            result = subprocess.run([str(bundle/'patcher/ReRiff-Patcher.exe'), '--mods-vfs', '--game-dir', str(game), '--stage', scratch], capture_output=True, text=True, timeout=180)
+            if result.returncode:
+                raise ValueError(result.stdout+result.stderr)
+            plan = {path.relative_to(stage).as_posix():path.read_bytes() for path in stage.rglob('*') if path.is_file() and path.name != '.reriff-mods-removals.json'}
+            for name in json.loads((stage/'.reriff-mods-removals.json').read_text()):
+                if not re.fullmatch(r'(?:mods/)?vfs[0-9a-fA-F]+\.(?:dat|zip)|(?:fonts|mods/noto-(?:cjk|latin)-font)/noto-(?:cjk|latin)/(?:[a-z0-9]+\.rrcf|OFL\.txt)|mods/noto-(?:cjk|latin)-font/vfs\.(?:dat|zip)|localserver/languages/(?:cjk|latin)\.json', name):
+                    raise ValueError('Unsafe mod archive removal: '+name)
+                plan[name] = None
     if restore and state:
         plan['localserver/install-state.json'] = (json.dumps({**state, 'backup_dir':str(backups)}, indent=2)+'\n').encode()
     if dry_run:
@@ -559,6 +595,7 @@ def install(bundle, game, backups, platform, dry_run=False, restore=False, music
                     import time
                     target=logs/('legacy-'+str(time.time_ns())+'-'+name)
                 old.rename(target)
+        if not restore: archive_grouped_logs(game)
     except OSError as error:
         print('Could not relocate legacy diagnostics: '+str(error))
     print(('Original DLLs restored.' if restore else 'ReRiff '+manifest['version']+' installed.')+'\nGame: '+str(game)+'\nBackups: '+str(backups)+'\nExisting settings and saved data preserved.')
@@ -592,6 +629,7 @@ def main():
             print(found)
         return
     game = args.game_dir or auto_game()
+    if game is not None:print(diagnostic_header(game),flush=True)
     if game is None:
         parser.error('Steam installation not found. Pass --game-dir pointing to the folder containing Game.exe.')
     if args.platform == 'linux' and sys.version_info < (3, 10):
@@ -605,4 +643,8 @@ def main():
 
 
 if __name__ == '__main__':
+    # Installer stdout/stderr are captured by both graphical setup programs.
+    if not any(option in sys.argv for option in ('--print-game-dir', '--print-music-dir')):
+        sys.stdout = TimestampWriter(sys.stdout)
+        sys.stderr = TimestampWriter(sys.stderr)
     main()

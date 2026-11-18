@@ -27,6 +27,18 @@ mkdir -p build/experimental-engine-menu
   -Wl,--image-base,0x10000000 -luser32 -lgdi32 -ladvapi32 -static
 
 "$zig_tool" cc -target x86-windows-gnu -O2 -Wall -Wextra -Werror \
+  ExperimentalMenu/test_prestige_prompt.c -o build/experimental-engine-menu/test-prestige-prompt.exe \
+  -Wl,--image-base,0x10000000 -luser32 -lgdi32 -ladvapi32 -static
+
+"$zig_tool" cc -target x86-windows-gnu -O2 -Wall -Wextra -Werror \
+  ExperimentalMenu/test_progression_view.c -o build/experimental-engine-menu/test-progression-view.exe \
+  -Wl,--image-base,0x10000000 -luser32 -lgdi32 -ladvapi32 -static
+
+"$zig_tool" cc -target x86-windows-gnu -O2 -Wall -Wextra -Werror \
+  ExperimentalMenu/test_progression_economy.c -o build/experimental-engine-menu/test-progression-economy.exe \
+  -Wl,--image-base,0x10000000 -luser32 -lgdi32 -ladvapi32 -static
+
+"$zig_tool" cc -target x86-windows-gnu -O2 -Wall -Wextra -Werror \
   ExperimentalMenu/test_antialiasing.c -o build/experimental-engine-menu/test-antialiasing.exe \
   -luser32 -lgdi32 -ladvapi32 -static
 
@@ -60,4 +72,20 @@ mkdir -p build/experimental-engine-menu
 
 "$zig_tool" cc -target x86-windows-gnu -O2 -Wall -Wextra -Werror \
   ExperimentalMenu/test_font_components.c -o build/experimental-engine-menu/test-font-components.exe \
+  -Wl,--image-base,0x10000000 -luser32 -lgdi32 -ladvapi32 -static
+
+"$zig_tool" cc -target x86-windows-gnu -O2 -Wall -Wextra -Werror \
+  ExperimentalMenu/test_progression_rewards.c -o build/experimental-engine-menu/test-progression-rewards.exe \
+  -Wl,--image-base,0x10000000 -luser32 -lgdi32 -ladvapi32 -static
+
+"$zig_tool" cc -target x86-windows-gnu -O2 -Wall -Wextra -Werror \
+  ExperimentalMenu/test_progression_badge.c -o build/experimental-engine-menu/test-progression-badge.exe \
+  -Wl,--image-base,0x10000000 -luser32 -lgdi32 -ladvapi32 -static
+
+"$zig_tool" cc -target x86-windows-gnu -O2 -Wall -Wextra -Werror \
+  ExperimentalMenu/test_progression_rank.c -o build/experimental-engine-menu/test-progression-rank.exe \
+  -Wl,--image-base,0x10000000 -luser32 -lgdi32 -ladvapi32 -static
+
+"$zig_tool" cc -target x86-windows-gnu -O2 -Wall -Wextra -Werror \
+  ExperimentalMenu/test_progression_ghost.c -o build/experimental-engine-menu/test-progression-ghost.exe \
   -Wl,--image-base,0x10000000 -luser32 -lgdi32 -ladvapi32 -static
