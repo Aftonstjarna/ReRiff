@@ -94,6 +94,37 @@ use a physical keyboard with Steam's keyboard closed. M4A playback is not suppor
 · [Set up Last.fm](https://github.com/Aftonstjarna/ReRiff/wiki/Last.fm)
 · [Full release notes](https://github.com/Aftonstjarna/ReRiff/releases)
 
+## Optional progression and prestige
+
+ReRiff's modified **Singleplayer progression is off by default**. When enabled
+with the default balance settings:
+
+- Permanent levels continue beyond 40, costing 250,000,000 XP per extra level.
+- Race and creator coin rewards start at ×1, then become ×2 after one prestige,
+  ×3 after two, and so on.
+- Coin-priced paint packs receive permanent-level discounts: 10% at level 10,
+  20% at 20 and 25% at 30, then gradually approach 30%.
+- After earning all 38 original in-game achievements, open **Settings → Credits**
+  to confirm a prestige. This resets coins, cycle XP, progression unlocks and
+  in-game achievements while retaining permanent XP/level, equipped car/paint,
+  race records and generated tracks. Steam achievements stay earned.
+
+**Enable it:** close the game, back up your save, and select **Force singleplayer**
+in the launcher. In `singleplayer.ini` beside `Game.exe`, set
+`isolate_singleplayer = 1` under `[progression]`, then restart. ReRiff imports
+existing progress into a separate profile and preserves the original save.
+Set it back to `0` to return to the original save; progress is not merged back.
+
+**Change the balance:** edit the existing `[balance]` values in that same file,
+then restart. For example, `coin_reward_rate = 2` doubles race coin awards before
+prestige multipliers, and `paint_price_scale = 0.5` halves base paint prices before
+discounts. Existing custom values are preserved during updates. See the
+[progression and balance guide](https://github.com/Aftonstjarna/ReRiff/wiki/Progression-and-balance)
+for all settings, discount examples and save precautions.
+
+Multiplayer progression is enabled by the **server operator**, with its own
+balance settings; your `singleplayer.ini` does not change server rules.
+
 ## Uninstall
 
 Close the game, then choose **Diagnostics → Uninstall ReRiff** in the launcher.
