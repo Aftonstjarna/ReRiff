@@ -6,6 +6,10 @@ on:
     paths: [VERSION]
   workflow_dispatch:
     inputs:
+      publish:
+        description: Publish a release (disable to build and check artifacts only)
+        type: boolean
+        default: true
       draft:
         description: Create a draft for review without updating public channels
         type: boolean
@@ -255,7 +259,16 @@ jobs:
               assert 'SAVE AND RESTART'.encode('utf-16-le') in menu
           PYCODE
           cd "dist/v$(cat VERSION)" && sha256sum -c SHA256SUMS
+      - name: Retain checked packages without publishing
+        if: github.event_name == 'workflow_dispatch' && !inputs.publish
+        uses: actions/upload-artifact@v6
+        with:
+          name: checked-release-packages
+          path: dist/v*/*
+          if-no-files-found: error
+          retention-days: 14
       - name: Publish GitHub release and installers
+        if: github.event_name != 'workflow_dispatch' || inputs.publish
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
