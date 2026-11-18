@@ -1,3 +1,80 @@
+# ReRiff 1.4.0 — Library search, prestige and Last.fm
+
+## In-game summary
+
+- Search your music library and edit server addresses in-game.
+- Prestige with isolated saves and configurable progression rewards.
+- Link Last.fm and install fonts and artwork as separate mods.
+
+## Full release notes
+
+### Music picker and launcher
+
+- Search cached tracks and unimported music with Ctrl+F or Xbox Y. Search
+  filenames, paths and available title/artist metadata, with Unicode-width,
+  hiragana/katakana and romaji matching. Esc/B clears search before leaving.
+- Jump between available A–Z groups with LT/RT. Preserve the native picker’s
+  rows, scrolling and selection, and repair navigation after returning from a race.
+- Edit server addresses in-game with selection, paste, undo/redo and a blinking
+  caret. Save persists pending settings; Cancel leaves the existing value intact.
+- Simplify launcher controls, group diagnostic settings, add checkbox hover help
+  and show startup/update progress. The Singleplayer shortcut selects the mode
+  without enabling a LAN server.
+
+### Prestige and server progression
+
+- Add opt-in isolated Singleplayer progression, permanent levels beyond 40,
+  configurable rewards and paint discounts, and the Re:Start achievement/artwork.
+  Prestige uses the native Credits confirmation after all 38 original achievements.
+  It preserves permanent XP, equipped items, race records and generated tracks.
+- Keep Rank milestones tied to permanent level after prestige. Support Friend or
+  Foe from normal Singleplayer ghost wins, recover missing own ghost records from
+  valid native replay caches, and keep displayed and credited reward bonuses aligned.
+- Include matching client and server support for authenticated multiplayer
+  progression. Servers opt in with RERIFF_PROGRESSION_MODE=trusted; legacy
+  servers keep their existing behavior. Create accounts automatically, support
+  optional server-password admission, and isolate saves by server/account UUID.
+- Store acknowledged progression in recoverable checkpoints. Preserve original
+  and Singleplayer saves; importing an original save into an empty server account
+  requires an explicit action. Configure server balance through RERIFF_BALANCE_*
+  environment settings, separately from Singleplayer balance.
+
+### Last.fm, installation and updates
+
+- Add opt-in Last.fm now-playing and scrobbling for completed qualifying listens.
+  Link through the browser, configure the listening threshold, and protect saved
+  credentials with Windows user-scoped DPAPI. Preserve settings if credentials
+  cannot be decrypted; changing API credentials requires linking again.
+- Load named mod archives from immediate mods subfolders using native VFS
+  behavior. Install ReRiff artwork and optional CJK/Latin fonts independently,
+  with ownership checks, backups and rollback. Repair a completely removed mods
+  directory on reinstall while preserving stock archives, settings and saves.
+- Use explicit component/platform/architecture identities, sizes and checksums
+  for update packages. Retain compatibility with older updaters and keep optional
+  server packages separate from client downloads.
+- Cache unchanged song hashes and successful automatic update checks, reduce
+  repeated library-search work, and stream archive checks/extraction in bounded
+  chunks. Manual update checks still contact GitHub.
+- Add timestamped diagnostics, installation/account/server identifiers and stage
+  timings. Split connection, client and Singleplayer settings into their own
+  files while preserving existing explicit values during migration.
+
+### Validation and limitations
+
+- Release checks cover native client/launcher behavior, Windows and Linux
+  installers, update metadata, progression/checkpoint recovery, server identity,
+  persistent storage and authenticated multiplayer restart recovery.
+- Earlier live Proton tests covered library search, alphabet navigation, server
+  editing and Singleplayer prestige. The combined 1.4.0 build still needs broader
+  multiplayer and display-scale testing; performance measurements are not FPS
+  or startup-time guarantees.
+- Multiplayer progression trusts the client; it is not anticheat. Back up private
+  account credentials and checkpoint banks. Unsaved progress since the last
+  acknowledged checkpoint may be lost after a disconnect.
+- Steam virtual-keyboard input remains unresolved, and M4A playback is unsupported.
+  Music search displays up to 200 results and scans up to 100,000 matching files.
+- The livery editor is separate and is not included in these server/client packages.
+
 # ReRiff 1.4.0-beta.13 — Faster library search and clearer diagnostics
 
 ## In-game summary
