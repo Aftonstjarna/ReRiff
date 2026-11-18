@@ -15,7 +15,8 @@ leaderboards and ghosts.
 
 ![ReRiff launcher with server settings](docs/images/reriff-launcher.png)
 
-Beta.12 launcher shown. Hover over checkboxes for explanations.
+Launcher screenshot from beta.12; the current stable release is 1.4.0.
+Hover over checkboxes for explanations.
 
 ## Install
 
@@ -71,7 +72,8 @@ check **Use experimental releases** to try betas.
 
 [1.4.0](https://github.com/Aftonstjarna/ReRiff/releases/tag/v1.4.0) includes
 whole-library music search, opt-in prestige progression, Last.fm scrobbling,
-named mod folders and separate CJK/Latin font packs.
+named mod folders and separate CJK/Latin font packs. It also adds faster repeat
+launches, clearer diagnostics and an uninstaller that keeps your saved data.
 
 In the music picker, press **Ctrl+F** or **Xbox Y** to search, including music you
 haven't imported. **Esc/B** clears search before leaving the picker.
@@ -84,6 +86,14 @@ use a physical keyboard with Steam's keyboard closed. M4A playback is not suppor
 [Music search guide](https://github.com/Aftonstjarna/ReRiff/wiki/Music-search-and-beta-features)
 · [Set up Last.fm](https://github.com/Aftonstjarna/ReRiff/wiki/Last.fm)
 · [Full release notes](https://github.com/Aftonstjarna/ReRiff/releases)
+
+## Uninstall
+
+Close the game, then choose **Diagnostics → Uninstall ReRiff** in the launcher.
+It restores original game DLLs and keeps saves, settings, localserver data and
+unrelated mods. Afterwards, clear ReRiff’s Steam launch options. Keep `.bak`
+for recovery. See the [uninstall guide](https://github.com/Aftonstjarna/ReRiff/wiki/Restoring-original-files)
+if your installation predates 1.4.0 or the ownership checks stop removal.
 
 ## Help
 
