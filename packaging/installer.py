@@ -498,6 +498,24 @@ def install(bundle, game, backups, platform, dry_run=False, restore=False, music
                 if not re.fullmatch(r'(?:mods/)?vfs[0-9a-fA-F]+\.(?:dat|zip)|(?:fonts|mods/noto-(?:cjk|latin)-font)/noto-(?:cjk|latin)/(?:[a-z0-9]+\.rrcf|OFL\.txt)|mods/noto-(?:cjk|latin)-font/vfs\.(?:dat|zip)|localserver/languages/(?:cjk|latin)\.json', name):
                     raise ValueError('Unsafe mod archive removal: '+name)
                 plan[name] = None
+    if not restore:
+        receipt_path = game/'localserver/uninstall-state.json'
+        receipt = json.loads(receipt_path.read_text()) if receipt_path.exists() else {'schema': 1, 'files': {}}
+        if receipt.get('schema') != 1 or not isinstance(receipt.get('files'), dict):
+            raise ValueError('Invalid uninstall ownership record')
+        original_hashes = dict(manifest.get('vanilla_originals', {}))
+        original_hashes.update({name: item['original'] for name, item in manifest.get('patches', {}).items()})
+        receipt.update(backup_dir=str(backups), originals=original_hashes)
+        for name, data in plan.items():
+            managed = (re.fullmatch(r'ReRiff[.-][A-Za-z0-9_.-]+\.(dll|exe|sh)', name, re.I)
+                       or re.fullmatch(r'(mods/(reriff-assets|noto-cjk-font|noto-latin-font)/|fonts/noto-(cjk|latin)/)[A-Za-z0-9_./-]+', name)
+                       or re.fullmatch(r'(mods/)?vfs[1-9a-f][0-9a-f]?\.(dat|zip)', name))
+            if (managed and not name.lower().endswith('.ini')) or name in original_hashes:
+                if data is None: receipt['files'].pop(name, None)
+                else: receipt['files'][name] = digest(data)
+        for name in original_hashes:
+            if name not in plan and (game/name).is_file(): receipt['files'][name] = digest((game/name).read_bytes())
+        plan['localserver/uninstall-state.json'] = (json.dumps(receipt, indent=2)+'\n').encode()
     if restore and state:
         plan['localserver/install-state.json'] = (json.dumps({**state, 'backup_dir':str(backups)}, indent=2)+'\n').encode()
     if dry_run:

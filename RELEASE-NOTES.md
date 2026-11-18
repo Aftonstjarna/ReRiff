@@ -49,6 +49,11 @@
   behavior. Install ReRiff artwork and optional CJK/Latin fonts independently,
   with ownership checks, backups and rollback. Repair a completely removed mods
   directory on reinstall while preserving stock archives, settings and saves.
+- Restore missing ReRiff artwork after a fresh install or reinstall, even when
+  old ownership records remain. Preserve modified files instead of overwriting them.
+- Add Uninstall ReRiff to the launcher’s Diagnostics tab. Restore original game
+  DLLs and remove owned ReRiff files while keeping localserver data, Singleplayer
+  saves, INI settings, logs and unrelated mods. Keep recovery backups.
 - Use explicit component/platform/architecture identities, sizes and checksums
   for update packages. Retain compatibility with older updaters and keep optional
   server packages separate from client downloads.

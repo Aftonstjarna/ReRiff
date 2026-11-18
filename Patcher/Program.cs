@@ -2,6 +2,8 @@ using dnlib.DotNet;
 using dnlib.DotNet.Emit;
 using dnlib.DotNet.Writer;
 
+if (args.Length > 0 && args[0] == "--uninstall") { Environment.Exit(Uninstall.Run(args.Skip(1).ToArray())); return; }
+
 if (args.Length > 0 && args[0] == "--mods-vfs") { Environment.Exit(ModsVfs.Run(args.Skip(1).ToArray())); return; }
 
 if (args.Length > 0 && args[0] == "--core-artwork") { Environment.Exit(CoreArtwork.Run(args.Skip(1).ToArray())); return; }

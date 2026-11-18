@@ -44,16 +44,17 @@ internal static class CoreArtwork
             using(var stream=File.OpenRead(stateFile))previous=(State)Serializer().ReadObject(stream);
             if(previous==null||previous.files==null||previous.files.Count!=2||
                 !(previous.schema==1&&Stem(previous.stem)||previous.schema==2&&previous.stem==ModStem))throw new IOException("Invalid core artwork ownership record.");
-            // A fully removed named-mod tree is a reinstall, not a conflicting edit.
-            string mods=Safe(game,"mods");
-            bool removedTree=previous.schema==2&&!Directory.Exists(mods)&&!File.Exists(mods);
             foreach(string suffix in new[]{".dat",".zip"}) {
                 string name=previous.stem+suffix,path=Safe(game,name);string expected;
                 if(!previous.files.TryGetValue(name,out expected))throw new IOException("Incomplete artwork ownership record.");
-                if(removedTree)continue;
                 // Accept a manually moved pair only when its recorded hashes still match.
+                if(Directory.Exists(path))throw new IOException("Artwork path is a directory: "+name);
                 if(!File.Exists(path)&&previous.schema==1)path=Safe(game,ModStem+suffix);
-                if(!File.Exists(path)||LanguageComponent.Hash(File.ReadAllBytes(path))!=expected)throw new IOException("Owned artwork changed or missing: "+name);
+                if(Directory.Exists(path))throw new IOException("Artwork path is a directory: "+name);
+                // Reinstalls can retain ownership receipts after deleting archives.
+                // Restore absent files, but never retire or overwrite changed files.
+                if(!File.Exists(path))continue;
+                if(LanguageComponent.Hash(File.ReadAllBytes(path))!=expected)throw new IOException("Owned artwork changed: "+name);
                 string relative=path.Substring(Path.GetFullPath(game).Length+1).Replace('\\','/');owned.Add(relative);
                 if(relative!=ModStem+suffix)plan[relative]=null;
             }

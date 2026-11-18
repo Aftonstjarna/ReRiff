@@ -95,6 +95,7 @@ internal static class LinuxClientHost {
         using var stampedError=new ReRiff.Logging.TimestampWriter(originalError);
         if(diagnostic){Console.SetOut(stampedOut);Console.SetError(stampedError);}
         try {
+            if(args.Length>0 && args[0]=="uninstall") return Uninstall.Run(args.Skip(1).ToArray());
             if(args.Length>0 && args[0]=="language-component") return LanguageComponent.Run(args.Skip(1).ToArray());
             if(args.Length==0)throw new ArgumentException("Use install, update, server-control, stop-servers, print-game-dir or print-music-dir.");
             string command=args[0];int offset=command=="server-control"?2:1;var options=new Options(args.Skip(offset).ToArray());
@@ -221,6 +222,7 @@ internal static class LinuxClientHost {
                 if(options.Get("--work")!=""&&File.Exists(Path.Combine(options.Get("--work"),"resume-command.txt")))plan["localserver/update-notification.ini"]=Encoding.UTF8.GetBytes("[update]\nversion="+Text(manifest,"version")+"\n");
             }
             if(!restore&&manifest["mods_vfs"]?.GetValue<bool>()==true)plan=ModsVfs.Plan(game,plan);
+            if(!restore)plan["localserver/uninstall-state.json"]=Uninstall.MakeReceipt(game,plan,vanilla.ToDictionary(p=>p.Key,p=>p.Value!.GetValue<string>()),backups);
             if(restore&&state.Count!=0) { state["backup_dir"]=backups;plan["localserver/install-state.json"]=Encoding.UTF8.GetBytes(state.ToJsonString()+"\n"); }
             foreach(var pair in plan)Under(game,pair.Key);
             Console.WriteLine("Validated ReRiff "+Text(manifest,"version")+": "+plan.Count+" files; backups: "+backups);

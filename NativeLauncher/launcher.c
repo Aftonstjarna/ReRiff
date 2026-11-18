@@ -28,7 +28,7 @@
 #include "logging.h"
 #define WM_COMPLETE (WM_APP + 1)
 #define WM_GAME_RUNNING (WM_APP + 2)
-enum { EXTERNAL=101, FALLBACK, TIMEOUT, POPUP, SAVE, PLAY, LOCAL, EXTERNAL_ONLY, STOP, UPDATE, EXPERIMENTAL, NETWORKING, SKIP_LAUNCHER, AUTO_UPDATE_SKIP, CJK_INSTALL, LOGGING, LATIN_INSTALL, UPDATE_DETAILS, LASTFM_ENABLED, LASTFM_PERCENT, LASTFM_LINK, LASTFM_DISCONNECT, LASTFM_SAVE, LASTFM_KEY, LASTFM_SECRET, LOG_CATEGORY_BASE=500 };
+enum { EXTERNAL=101, FALLBACK, TIMEOUT, POPUP, SAVE, PLAY, LOCAL, EXTERNAL_ONLY, STOP, UPDATE, EXPERIMENTAL, NETWORKING, SKIP_LAUNCHER, AUTO_UPDATE_SKIP, CJK_INSTALL, LOGGING, LATIN_INSTALL, UPDATE_DETAILS, LASTFM_ENABLED, LASTFM_PERCENT, LASTFM_LINK, LASTFM_DISCONNECT, LASTFM_SAVE, LASTFM_KEY, LASTFM_SECRET, UNINSTALL, LOG_CATEGORY_BASE=500 };
 #include "branding.h"
 
 static WCHAR folder[CAP], ini[CAP], message[1024];
@@ -269,6 +269,7 @@ static BOOL stop_server(void) {
 #include "local_server.h"
 #include "song_sync.h"
 #include "languages.h"
+#include "uninstall.h"
 
 static void finish_local_session(BOOL started){
     if(!started)return;
@@ -327,21 +328,21 @@ static BOOL launch_game(void) {
 static DWORD WINAPI worker(LPVOID parameter) {
     int action=(int)(INT_PTR)parameter;
     BOOL play=action==1;
-    BOOL ok=action==8||action==9?lfm_request(action==9):action==6?language_action(L"install --pack latin"):action==7?language_action(L"disable --pack latin"):action==4?language_action(L"install"):action==5?language_action(L"disable"):action==3?check_updates():action==2?local_server_action(local_server_state==2?L"stop":local_server_state==1&&local_server_package_current()?L"start":L"install"):action==0?local_server_action(L"status"):TRUE;
+    BOOL ok=action==10?uninstall_action():action==8||action==9?lfm_request(action==9):action==6?language_action(L"install --pack latin"):action==7?language_action(L"disable --pack latin"):action==4?language_action(L"install"):action==5?language_action(L"disable"):action==3?check_updates():action==2?local_server_action(local_server_state==2?L"stop":local_server_state==1&&local_server_package_current()?L"start":L"install"):action==0?local_server_action(L"status"):TRUE;
     if (ok && play) ok=launch_game();
     if (ok && action<2) wcscpy(message,play?L"Game closed.":L"Ready. Singleplayer runs inside the game; configured servers are checked at game startup.");
     log_message(message);
-    PostMessageW(window,WM_COMPLETE,ok,update_handoff?2:play);
+    PostMessageW(window,WM_COMPLETE,ok,action==10&&ok?3:update_handoff?2:play);
     return 0;
 }
 
 static void begin(int action) {
     if (busy) return;
     progress_last=-999;progress_set_bar(launcher_progress,-1);
-    busy=TRUE;lfm_action=action>=8?action:0;lfm_controls();playing=action==1;checking_update=action==3;changing_language=action>=4&&action<=7;
+    busy=TRUE;lfm_action=action==8||action==9?action:0;lfm_controls();playing=action==1;checking_update=action==3;changing_language=action>=4&&action<=7;
     EnableWindow(language_checkbox,FALSE);EnableWindow(latin_checkbox,FALSE);EnableWindow(logging_checkbox,FALSE);
     EnableWindow(play_button,FALSE);EnableWindow(save_button,FALSE);EnableWindow(stop_button,FALSE);EnableWindow(update_button,FALSE);EnableWindow(experimental_checkbox,FALSE);
-    SetWindowTextW(status,action>=8?L"Contacting Last.fm…":action==6?L"Installing and enabling Latin/European fonts...":action==7?L"Disabling Latin/European fonts...":action==4?L"Installing and enabling CJK fonts...":action==5?L"Disabling CJK fonts...":action==3?L"Checking published GitHub releases...":action==2?(local_server_state==2?L"Stopping the local server...":local_server_state==1&&local_server_package_current()?L"Starting the local server...":L"Downloading and installing the optional local server..."):L"Checking server settings...");
+    SetWindowTextW(status,action==10?L"Removing ReRiff; preserving user data and settings…":action>=8?L"Contacting Last.fm…":action==6?L"Installing and enabling Latin/European fonts...":action==7?L"Disabling Latin/European fonts...":action==4?L"Installing and enabling CJK fonts...":action==5?L"Disabling CJK fonts...":action==3?L"Checking published GitHub releases...":action==2?(local_server_state==2?L"Stopping the local server...":local_server_state==1&&local_server_package_current()?L"Starting the local server...":L"Downloading and installing the optional local server..."):L"Checking server settings...");
     HANDLE thread=CreateThread(NULL,4*1024*1024,worker,(LPVOID)(INT_PTR)action,STACK_SIZE_PARAM_IS_A_RESERVATION,NULL);
     if (thread) CloseHandle(thread);
     else { progress_set_bar(launcher_progress,0);busy=FALSE;lfm_controls(); EnableWindow(play_button,TRUE);EnableWindow(save_button,TRUE);EnableWindow(stop_button,TRUE);EnableWindow(update_button,TRUE);EnableWindow(experimental_checkbox,TRUE);SetWindowTextW(status,L"Could not start launcher worker."); }
@@ -540,6 +541,7 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
         for(unsigned i=0;i<LOG_CATEGORY_COUNT;i++)
             log_checkboxes[i]=control(L"BUTTON",log_labels[i],BS_AUTOCHECKBOX|WS_TABSTOP,22+(i%2)*300,78+(i/2)*32,290,28,LOG_CATEGORY_BASE+i);
         control(L"BUTTON",L"View update details",WS_TABSTOP,22,278,200,32,UPDATE_DETAILS);
+        control(L"BUTTON",L"Uninstall ReRiff",WS_TABSTOP,242,278,200,32,UNINSTALL);
         creating_diagnostics=FALSE;
         creating_lastfm=TRUE;
         lfm_account=control(L"STATIC",L"No Last.fm account linked",0,22,26,590,28,0);
@@ -592,6 +594,9 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
                 if(HIWORD(wp)==BN_CLICKED)ShellExecuteW(hwnd,L"open",L"https://github.com/Aftonstjarna/ReRiff",NULL,NULL,SW_SHOWNORMAL);
                 break;
             case UPDATE_DETAILS:show_update_details();break;
+            case UNINSTALL:
+                if(!busy&&MessageBoxW(hwnd,L"Remove ReRiff and restore the original game DLLs?\n\nLocalserver, singleplayer saves, INI settings, logs, backups and unrelated mods will be kept. Close the game first.\n\nAfterward, remove ReRiff from Steam's launch options.",L"Uninstall ReRiff",MB_YESNO|MB_ICONWARNING|MB_DEFBUTTON2)==IDYES)begin(10);
+                break;
             case LASTFM_LINK:if(!busy){if(!lfm_has_api_key())lfm_register_application();else if(*lfm_url)lfm_open_browser();else {*lfm_token=0;begin(8);}}break;
             case LASTFM_DISCONNECT:if(!busy)lfm_unlink();break;
             case LASTFM_SAVE:if(!busy)lfm_save_settings();break;
@@ -633,6 +638,7 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
     if(event==RERIFF_PROGRESS_EVENT){if(busy)progress_set_bar(launcher_progress,(int)(INT_PTR)lp);return 0;}
     if (event==WM_GAME_RUNNING) { progress_set_bar(launcher_progress,0); SetWindowTextW(status,L"Game running. Keep the launcher open until the game closes.");ShowWindow(window,SW_MINIMIZE);return 0; }
     if (event==WM_COMPLETE) {
+        if(lp==3){MessageBoxW(hwnd,message,L"ReRiff removed",MB_OK|MB_ICONINFORMATION);DestroyWindow(hwnd);return 0;}
         if (lp==2) { DestroyWindow(hwnd);return 0; }
         if(changing_language){settings_observed=read_settings_signature(&settings_signature);changing_language=FALSE;}
         if (lp==1) reload_settings_controls();

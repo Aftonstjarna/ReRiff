@@ -49,6 +49,12 @@ with tempfile.TemporaryDirectory(prefix='reriff artwork ü ') as temp:
         assert set(json.loads((target/'.reriff-artwork-removals.json').read_text()))=={('mods/' if flat else '')+'vfs3'+ext for ext in ('.dat','.zip')}
         (folder/'vfs3.zip').write_bytes(b'changed');plan(root/f'changed-{flat}',False)
         (folder/'vfs3.dat').unlink();(folder/'vfs3.zip').unlink();record.unlink()
+    # Legacy receipts can survive a fresh install with no owned archives.
+    record.write_text(json.dumps(state))
+    assert plan(root/'missing-legacy')['schema']==2
+    (game/'mods/vfs3.dat').mkdir();plan(root/'legacy-directory',False);(game/'mods/vfs3.dat').rmdir()
+    (game/'mods/vfs3.zip').write_bytes(b'changed surviving archive')
+    plan(root/'legacy-missing-and-modified',False);(game/'mods/vfs3.zip').unlink()
     # A manual move with unchanged hashes is adopted and supports upgrades.
     record.write_text(json.dumps(state))
     for suffix,archive_file in (('.dat',dat),('.zip',zip_path)):
@@ -69,7 +75,8 @@ with tempfile.TemporaryDirectory(prefix='reriff artwork ü ') as temp:
     plan(root/'integrity',False,dat_hash='0'*64)
     plan(root/'conflict',False,reserved=stem+'.dat')
     (game/(stem+'.dat')).write_bytes(b'user modification');plan(root/'modified',False)
-    (game/(stem+'.dat')).unlink();plan(root/'missing',False)
+    (game/(stem+'.dat')).unlink();assert plan(root/'missing')['schema']==2
+    (game/(stem+'.zip')).write_bytes(b'changed surviving archive');plan(root/'missing-and-modified',False)
     import shutil
     shutil.rmtree(game/'mods')
     assert plan(root/'removed-tree')['schema']==2
