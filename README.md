@@ -1,12 +1,13 @@
 # ReRiff
 
 Play Riff Racer on Windows or Linux/Proton with singleplayer, shared
-leaderboards and ghosts.
+leaderboards, ghosts and asset mods.
 
 [Download stable](https://github.com/Aftonstjarna/ReRiff/releases/latest)
 · [Wiki and guides](https://github.com/Aftonstjarna/ReRiff/wiki)
 · [Get help](https://github.com/Aftonstjarna/ReRiff/issues)
 
+- Load asset mods from their own folders without replacing stock archives.
 - Play solo offline or connect to a server for shared leaderboards and ghosts.
 - Start a local server from the launcher to share with other PCs on your LAN.
 - Add Chinese, Japanese, Korean and Latin/European characters with optional fonts.
@@ -68,12 +69,18 @@ check **Use experimental releases** to try betas.
 · [Graphics settings](https://github.com/Aftonstjarna/ReRiff/wiki/Graphics)
 · [Language fonts](https://github.com/Aftonstjarna/ReRiff/wiki/Language-fonts)
 
-## ReRiff 1.4.0
+## ReRiff 1.4.0 — Mod loader, music search, prestige and Last.fm
 
-[1.4.0](https://github.com/Aftonstjarna/ReRiff/releases/tag/v1.4.0) includes
-whole-library music search, opt-in prestige progression, Last.fm scrobbling,
-named mod folders and separate CJK/Latin font packs. It also adds faster repeat
-launches, clearer diagnostics and an uninstaller that keeps your saved data.
+[1.4.0](https://github.com/Aftonstjarna/ReRiff/releases/tag/v1.4.0) adds a
+**native asset mod loader**. Put each mod's `vfs.dat` and `vfs.zip` in its own
+`mods/<mod-name>/` folder to add or override game assets while keeping the stock
+archives intact. ReRiff artwork and optional CJK/Latin fonts use this same system.
+See [how the mod loader works](https://github.com/Aftonstjarna/ReRiff/wiki/Mod-loader)
+for archive requirements, override order and the 31 extra-volume limit.
+
+The release also includes whole-library music search, opt-in prestige progression,
+Last.fm scrobbling, faster repeat launches, clearer diagnostics and an uninstaller
+that keeps your saved data.
 
 In the music picker, press **Ctrl+F** or **Xbox Y** to search, including music you
 haven't imported. **Esc/B** clears search before leaving the picker.
