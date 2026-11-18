@@ -69,7 +69,7 @@ check **Use experimental releases** to try betas.
 · [Graphics settings](https://github.com/Aftonstjarna/ReRiff/wiki/Graphics)
 · [Language fonts](https://github.com/Aftonstjarna/ReRiff/wiki/Language-fonts)
 
-## ReRiff 1.4.0 — Mod loader, music search, prestige and Last.fm
+## ReRiff 1.4.0 — Mod loader, prestige, music search and Last.fm
 
 [1.4.0](https://github.com/Aftonstjarna/ReRiff/releases/tag/v1.4.0) adds a
 **native asset mod loader**. Put each mod's `vfs.dat` and `vfs.zip` in its own
@@ -78,7 +78,7 @@ archives intact. ReRiff artwork and optional CJK/Latin fonts use this same syste
 See [how the mod loader works](https://github.com/Aftonstjarna/ReRiff/wiki/Mod-loader)
 for archive requirements, override order and the 31 extra-volume limit.
 
-The release also includes whole-library music search, opt-in prestige progression,
+The release also includes opt-in prestige progression, whole-library music search,
 Last.fm scrobbling, faster repeat launches, clearer diagnostics and an uninstaller
 that keeps your saved data.
 
