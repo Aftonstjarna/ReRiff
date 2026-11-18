@@ -23,7 +23,15 @@ int main(void){
  SendMessageW(logging_checkbox,BM_SETCHECK,BST_UNCHECKED,0);SendMessageW(hwnd,WM_COMMAND,LOGGING,0);
  SendMessageW(logging_checkbox,BM_SETCHECK,BST_CHECKED,0);SendMessageW(hwnd,WM_COMMAND,LOGGING,0);
  assert(SendMessageW(log_checkboxes[0],BM_GETCHECK,0,0)==BST_UNCHECKED);
- assert(LOG_CATEGORY_COUNT==9&&diagnostic_count==LOG_CATEGORY_COUNT+2);
+ assert(LOG_CATEGORY_COUNT==9&&diagnostic_count==LOG_CATEGORY_COUNT+3);
+ HWND uninstall=GetDlgItem(hwnd,UNINSTALL);assert(uninstall);
+ for(int page=0;page<4;page++){
+  SendMessageW(launcher_tabs,TCM_SETCURSEL,page,0);select_launcher_page();
+  assert(((GetWindowLongW(uninstall,GWL_STYLE)&WS_VISIBLE)!=0)==(page==2));
+ }
+ RECT uninstall_rect,details_rect;GetWindowRect(uninstall,&uninstall_rect);GetWindowRect(GetDlgItem(hwnd,UPDATE_DETAILS),&details_rect);
+ assert(uninstall_rect.left>=details_rect.right&&uninstall_rect.top==details_rect.top);
+ SendMessageW(launcher_tabs,TCM_SETCURSEL,2,0);select_launcher_page();
  WCHAR help[1024]={0};TOOLINFOW tool={0};tool.cbSize=TTTOOLINFOW_V2_SIZE;tool.lpszText=help;tool.hwnd=hwnd;tool.uId=(UINT_PTR)logging_checkbox;
  assert(SendMessageW(checkbox_tooltips,TTM_GETTOOLINFOW,0,(LPARAM)&tool));
  assert((tool.uFlags&(TTF_IDISHWND|TTF_SUBCLASS))==(TTF_IDISHWND|TTF_SUBCLASS));
