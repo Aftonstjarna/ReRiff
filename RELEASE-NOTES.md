@@ -1,3 +1,24 @@
+# ReRiff 1.4.1-beta.1 — Scrobbling, track history and graphics controls
+
+## In-game summary
+
+- Scrobble races to ListenBrainz or Libre.fm alongside Last.fm.
+- Browse more recent tracks with difficulty stars and faster scrolling.
+- Adjust graphics and track-history limits from the launcher.
+
+## Full release notes
+
+- Add ListenBrainz and experimental Libre.fm support under one Scrobbling tab, with protected credentials and independent queues.
+- Add Recent Tracks limits of All, 20, 50 or 100, difficulty stars, accelerated navigation and a view that follows selection.
+- Add a launcher Graphics tab; move Diagnostics last and show small restart notices where needed. [Settings guide](https://github.com/Aftonstjarna/ReRiff/wiki/Launcher-and-in-game-settings).
+- Share graphics settings between launcher and game, using one fullscreen mode value. Add the Recent Tracks limit to both menus.
+- Reuse recent library scans and tolerate malformed display metadata without weakening path or song-ID checks. [Search guide](https://github.com/Aftonstjarna/ReRiff/wiki/Music-search-and-beta-features).
+
+### Validation and known limitations
+
+- Automated checks cover scrobbling, search, settings, native menus and track lists up to 1,000 entries. ListenBrainz posting was confirmed live; Libre.fm linking and submission remain unverified. The latest selection-follow change still needs live testing.
+- Steam virtual-keyboard input and M4A playback remain unsupported.
+
 # ReRiff 1.4.0 — Mod loader, prestige, music search and Last.fm
 
 ## In-game summary
