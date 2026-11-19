@@ -1,15 +1,18 @@
-// Opt-in Pulse Test protocol experiment; not a general custom-car registry.
+// Normalize replay headers to stock identities when a matching donor is known.
 using System;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Collections.Generic;
 namespace ReRiff {
     internal static class GhostCarTestFormat {
         internal const int TrailerSize=92,MaxSize=64*1024*1024;
         private static readonly byte[] Magic=Encoding.ASCII.GetBytes("RRGCAR1\0");
         internal sealed class Header {internal int CarOffset,PackOffset,Pack;internal string Car;}
         internal static bool Enabled(string folder){string value;return ConfigFiles.Read(folder,"diagnostics").TryGetValue("car_ghost_test",out value)&&(value=="1"||value.Equals("true",StringComparison.OrdinalIgnoreCase));}
+        internal static bool IsRuntimeCar(string car){return car!=null&&car.Length==3&&car[0]=='r'&&car[1]=='0'&&car[2]>='0'&&car[2]<='6';}
+        private static readonly HashSet<string> StockCars=new HashSet<string>(new[]{"alf","bui","cor","rs1","vau","fab","hon","cad","rol","mer","mot","pha","che","f1r","pl1"},StringComparer.Ordinal);
         private static string Text(BinaryReader reader){
             int size=reader.ReadInt32();if(size<1||size>64)throw new InvalidDataException("Ghost identifier length");
             byte[] bytes=reader.ReadBytes(size);if(bytes.Length!=size||bytes.Any(b=>b<33||b>126))throw new InvalidDataException("Ghost identifier");return Encoding.ASCII.GetString(bytes);
@@ -29,12 +32,21 @@ namespace ReRiff {
         internal static byte[] Digest(byte[] bytes,int length){using(var hash=SHA256.Create())return hash.ComputeHash(bytes,0,length);}
         // Fallback-only publication. The argument is retained for fixture ABI
         // compatibility; no mod identity is written or used to restore a car.
-        internal static byte[] Publish(byte[] recorded,byte[] unusedModHash){
+        internal static byte[] Publish(byte[] recorded,byte[] unusedModHash,Func<string,string> resolveDonor=null,bool allowLegacyDod=true){
             Header header=ReadHeader(recorded);
-            if(header.Car!="dod"&&header.Car!="alf")return recorded;
-            if(header.Car=="dod"&&header.Pack>1)throw new InvalidDataException("Unsupported test paint");
+            bool legacyDod=header.Car=="dod";
+            bool runtimeCar=IsRuntimeCar(header.Car);
+            if(legacyDod&&!allowLegacyDod)return recorded;
+            if(!legacyDod&&header.Car!="alf"&&!runtimeCar)return recorded;
+            string donor=null;
+            if(runtimeCar){
+                donor=resolveDonor==null?null:resolveDonor(header.Car);
+                if(donor==null||!StockCars.Contains(donor))throw new InvalidDataException("No stock donor for runtime car "+header.Car);
+            }
+            if(legacyDod&&header.Pack>1)throw new InvalidDataException("Unsupported test paint");
             byte[] canonical=(byte[])recorded.Clone();
-            if(header.Car=="dod")Buffer.BlockCopy(Encoding.ASCII.GetBytes("alf"),0,canonical,header.CarOffset,3);
+            if(legacyDod)Buffer.BlockCopy(Encoding.ASCII.GetBytes("alf"),0,canonical,header.CarOffset,3);
+            if(runtimeCar){Buffer.BlockCopy(Encoding.ASCII.GetBytes(donor),0,canonical,header.CarOffset,3);Buffer.BlockCopy(BitConverter.GetBytes(0),0,canonical,header.PackOffset,4);}
             int length=canonical.Length;
             // Remove only verifiable old experiment trailers, including the
             // nested trailer observed in the live test. Never trim race data.
@@ -46,7 +58,7 @@ namespace ReRiff {
                     throw new InvalidDataException("Invalid legacy custom-car trailer");
                 length=at;
             }
-            if(length==recorded.Length&&header.Car=="alf")return recorded;
+            if(length==recorded.Length&&(header.Car=="alf"||(!runtimeCar&&!legacyDod)))return recorded;
             byte[] result=new byte[length];Buffer.BlockCopy(canonical,0,result,0,length);ReadHeader(result);return result;
         }
         internal static Header Restore(byte[] shared,byte[] installedModHash){return null;}

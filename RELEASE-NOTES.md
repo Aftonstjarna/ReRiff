@@ -1,3 +1,19 @@
+# ReRiff 1.4.1-beta.4 — Automatic custom-car slots
+
+## In-game summary
+
+- Add experimental automatic slots for custom cars.
+- Keep custom-car progress when slots change or mods are removed.
+- Use stock donor cars for compatible shared ghosts.
+
+## Full release notes
+
+- Read origin.txt to replace a donor car or assign one of seven custom slots. Track assignments in mods/car-slots.ini.
+- Migrate custom-car selection, paints, unlocks and usage by mod identity; retain removed-car progress for reinstalling.
+- Publish shared ghosts using the stock donor car and refresh custom-car names at startup.
+- Automated checks cover slot allocation, cache composition, save metadata, migration and ghost fallback. Full live save round-trip, removal/reinstall and cross-client tests remain pending.
+- Custom cars remain experimental. Old custom saves without identity metadata require verified migration; custom-model sharing, Steam virtual-keyboard input and M4A playback remain unsupported.
+
 # ReRiff 1.4.1-beta.3 — Missing font repair
 
 ## In-game summary

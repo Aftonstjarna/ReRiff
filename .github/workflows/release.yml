@@ -2,7 +2,7 @@ name: Build and publish client release
 
 on:
   push:
-    branches: [main, launcher, codex/experimental-client]
+    branches: [main, launcher, codex/experimental-client, experimental-client]
     paths: [VERSION]
   workflow_dispatch:
     inputs:
@@ -96,7 +96,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
-      RERIFF_RELEASE_CHANNEL: ${{ github.ref_name == 'codex/experimental-client' && 'experimental' || 'stable' }}
+      RERIFF_RELEASE_CHANNEL: ${{ (github.ref_name == 'codex/experimental-client' || github.ref_name == 'experimental-client') && 'experimental' || 'stable' }}
       RERIFF_RELEASE_DRAFT: ${{ inputs.draft || false }}
     permissions:
       contents: write

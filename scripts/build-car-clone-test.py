@@ -228,6 +228,7 @@ def main():
     pair = build_volume(resources,a.output/'mod','vfs1')
     for source in pair:
         source.rename(source.with_name('vfs'+source.suffix))
+    (a.output/'origin.txt').write_text('[origins]\ndod=alf\n')
     (a.output/'manifest.json').write_text(json.dumps(dict(stock_sources=provenance, clone_id='dod', runtime_slot=15, label='Pulse Test', packs=2, limitation='Uses previously unused stock localization tokens; arbitrary new IDs not proven.'),indent=2)+'\n')
     print('Built local-only Pulse Test: slot 15, two paints, native purchase prices 1 coin.')
 

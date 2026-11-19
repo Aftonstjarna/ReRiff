@@ -1,8 +1,13 @@
-/* Local removal regression only. The origin registry survives disabled mods.
- * Native settings setter is supplied by the hash-checked managed bridge.
- * No save layout, ownership, paint selection or shared replay is rewritten. */
+/* Native selection fallback and managed identity-migration callback.
+ * Allocated slots use portable save identities; legacy authored slots retain
+ * donor-only removal fallback through the original guarded settings setter. */
 typedef void (__cdecl *CarFallbackSetter)(void *,int);
 static CarFallbackSetter car_fallback_setter;
+typedef int (__cdecl *CarMigrationCallback)(void *);
+static CarMigrationCallback car_migration_callback;
+static BOOL car_slots_active;
+__declspec(dllexport) void __cdecl ReRiffSetCarSlotsActive(int active){car_slots_active=active!=0;}
+__declspec(dllexport) int __cdecl ReRiffConfigureCarMigration(void *callback){if(!callback||car_migration_callback)return 0;car_migration_callback=(CarMigrationCallback)callback;return 1;}
 __declspec(dllexport) int __cdecl ReRiffConfigureCarFallback(void *setter){
     if(!setter||car_fallback_setter)return 0;
     car_fallback_setter=(CarFallbackSetter)setter;return 1;
@@ -29,19 +34,67 @@ static int car_fallback_target(void *manager,void *settings,const char *origin){
     }
     return found;
 }
+/* Package metadata is read once after native car names are initialized.
+ * Keep origins outside the mod so disabling/removing it retains fallback. */
+static BOOL car_origin_stock(const WCHAR *id){
+    static const WCHAR *stock[]={L"alf",L"bui",L"cor",L"rs1",L"vau",L"fab",L"hon",L"cad",L"rol",L"mer",L"mot",L"pha",L"che",L"f1r",L"pl1"};
+    for(unsigned i=0;i<15;i++)if(!wcscmp(id,stock[i]))return TRUE;
+    return FALSE;
+}
+static void car_origin_packages(void *manager,const WCHAR *registry){
+    int count=*(int *)((BYTE *)manager+792);
+    if(count<15||count>22)return;
+    WCHAR root[MAX_PATH],pattern[MAX_PATH];DWORD n=GetModuleFileNameW(NULL,root,MAX_PATH);
+    if(!n||n>=MAX_PATH)return;
+    WCHAR *slash=wcsrchr(root,L'\\');if(!slash)return;slash[1]=0;
+    if(wcslen(root)+12>=MAX_PATH)return;wcscat(root,L"mods");
+    DWORD attrs=GetFileAttributesW(root);if(attrs==INVALID_FILE_ATTRIBUTES||(attrs&FILE_ATTRIBUTE_REPARSE_POINT))return;
+    _snwprintf(pattern,MAX_PATH,L"%ls\\*",root);
+    WCHAR origins[7][16]={{0}};BOOL conflict[7]={0};
+    WIN32_FIND_DATAW fd;HANDLE find=FindFirstFileW(pattern,&fd);if(find==INVALID_HANDLE_VALUE)return;
+    do {
+        if(fd.cFileName[0]==L'.'||!(fd.dwFileAttributes&FILE_ATTRIBUTE_DIRECTORY)||(fd.dwFileAttributes&FILE_ATTRIBUTE_REPARSE_POINT))continue;
+        WCHAR path[MAX_PATH];if(wcslen(root)+wcslen(fd.cFileName)+13>=MAX_PATH)continue;
+        _snwprintf(path,MAX_PATH,L"%ls\\%ls\\origin.txt",root,fd.cFileName);
+        attrs=GetFileAttributesW(path);if(attrs==INVALID_FILE_ATTRIBUTES||(attrs&(FILE_ATTRIBUTE_REPARSE_POINT|FILE_ATTRIBUTE_DIRECTORY)))continue;
+        for(int slot=15;slot<count;slot++){
+            char id[4];if(!car_fallback_name(manager,slot,id))continue;
+            WCHAR key[4]={(WCHAR)id[0],(WCHAR)id[1],(WCHAR)id[2],0},base[16];
+            GetPrivateProfileStringW(L"origins",key,L"",base,16,path);
+            if(!*base)continue;
+            int i=slot-15;
+            if(!car_origin_stock(base)||(origins[i][0]&&wcscmp(origins[i],base)))conflict[i]=TRUE;
+            else wcscpy(origins[i],base);
+        }
+    }while(FindNextFileW(find,&fd));FindClose(find);
+    for(int slot=15;slot<count;slot++){
+        WCHAR section[24];_snwprintf(section,24,L"slot_%d",slot);int i=slot-15;
+        /* Clear stale mappings for reused active slots lacking valid metadata. */
+        if(!WritePrivateProfileStringW(section,L"base",conflict[i]||!*origins[i]?NULL:origins[i],registry))
+            log_line("Car origin: could not persist package donor; removal fallback unavailable.");
+        if(conflict[i])log_line("Car origin: invalid or conflicting package donors refused.");
+    }
+}
 static void car_fallback_main(void){
     if(!car_fallback_setter)return;
     BYTE *base=(BYTE *)GetModuleHandleW(NULL);
     void *manager=*(void **)(base+0x7f3d2c),*save=*(void **)(base+0x7ed7b8);
     if(!readable(save,20)||!readable(manager,796))return;
+    if(car_migration_callback&&car_migration_callback(save)!=1){
+        MessageBoxW(NULL,L"Custom car identities could not be migrated safely. The last committed save is retained. See logs/ReRiff-game.log.",L"ReRiff car slots",MB_OK|MB_ICONERROR);ExitProcess(1);return;
+    }
+    if(car_slots_active)return; /* Portable identity migration owns allocated slots. */
     void *settings=*(void **)((BYTE *)save+16);if(!readable(settings,328))return;
     int selected=*(int *)((BYTE *)settings+324),count=*(int *)((BYTE *)manager+792);
-    if(selected<15||selected>=22||count<15||count>22||selected<count)return;
+    if(count<15||count>22)return;
     WCHAR path[MAX_PATH],section[24],origin[16];
     const WCHAR *slash=wcsrchr(config_path,L'\\');if(!slash)return;
     size_t length=(size_t)(slash-config_path)+1;
     if(length+32>=MAX_PATH)return;
     memcpy(path,config_path,length*sizeof(WCHAR));wcscpy(path+length,L"car-origins.ini");
+    static BOOL origins_scanned;
+    if(!origins_scanned){car_origin_packages(manager,path);origins_scanned=TRUE;}
+    if(selected<15||selected>=22||selected<count)return;
     _snwprintf(section,24,L"slot_%d",selected);
     GetPrivateProfileStringW(section,L"base",L"",origin,16,path);
     char id[4];if(wcslen(origin)!=3)return;
