@@ -55,6 +55,22 @@ class PickerSearchSmoke {
         for(int cut=0;cut<cache.Length;cut++){var truncated=new byte[cut];Array.Copy(cache,truncated,cut);Rejected(truncated,"Truncation at "+cut);}
         byte[] wrong=(byte[])cache.Clone();wrong[4]=20;Rejected(wrong,"Unknown cache version");
         wrong=(byte[])cache.Clone();wrong[16]=0xff;Rejected(wrong,"Invalid UTF-8");
+        wrong=(byte[])cache.Clone();int artist=Encoding.UTF8.GetString(cache).IndexOf("Artist",StringComparison.Ordinal);
+        // Locate by bytes (the preceding Japanese title has multibyte encoding).
+        for(int offset=16;offset<wrong.Length-6;offset++)if(Encoding.ASCII.GetString(wrong,offset,6)=="Artist"){artist=offset;break;}
+        wrong[artist]=0xff;var repaired=LibrarySearchCache.Read(wrong);
+        Check(repaired.Length==2&&repaired[0].Artist=="\ufffdrtist"&&repaired[1].Artist=="Artist","Malformed artist does not discard valid records");
+        Check(repaired[0].Filename==songs[0].Filename&&repaired[0].SongId==songs[0].SongId,"Metadata replacement preserves exact selection identity");
+        Check(wrong[artist]==0xff,"Metadata repair never writes native cache");
+        var now=new DateTime(2026,11,18,0,0,0,DateTimeKind.Utc);
+        var cachedIndex=new PickerSearchIndex(new[]{songs[0].SearchText,songs[1].SearchText});
+        var retained=new LibrarySearchSnapshot(new[]{"C:/Music","D:/Music"},cache,songs,cachedIndex,false,now);
+        Check(retained.Matches(new[]{"d:/music","C:/Music","C:/Music"}),"Root order, duplicate roots and case do not invalidate snapshot");
+        Check(!retained.Matches(new[]{"C:/Music"})&&!retained.Matches(new[]{"C:/Music","E:/Music"}),"Removed or changed roots cannot reuse another library");
+        Check(retained.Fresh(cache,now.AddSeconds(29))&&object.ReferenceEquals(retained.Index,cachedIndex),"Warm reopen reuses built search index");
+        Check(!retained.Fresh(cache,now.AddSeconds(30))&&!retained.Fresh(cache,now.AddSeconds(-1)),"Expired and backwards-clock snapshots refresh");
+        Check(!retained.Fresh(wrong,now)&&!retained.Fresh(null,now),"Changed or unreadable catalogue forces refresh");
+        Check(!new LibrarySearchSnapshot(new[]{"C:/Music"},cache,songs,cachedIndex,true,now).Fresh(cache,now),"Incomplete scan always retries");
         wrong=new byte[cache.Length+1];Array.Copy(cache,wrong,cache.Length);Rejected(wrong,"Trailing bytes");
         string folder=Path.Combine(Path.GetTempPath(),"reriff-search-"+Guid.NewGuid().ToString("N"));
         try {
@@ -74,6 +90,11 @@ class PickerSearchSmoke {
             Check(Array.Exists(scan.Songs,s=>s.SongId==""&&s.Title=="つき"),"Unimported M4A indexed without decoding or invented ID");
             Check(File.ReadAllBytes(imported).Length==3,"Audio untouched");
             Check(StringComparer.OrdinalIgnoreCase.Compare(scan.Songs[0].Filename,scan.Songs[1].Filename)<0,"Complete scan sorted deterministically");
+            var savedScan=new LibrarySearchSnapshot(new[]{folder},cache,scan.Songs,new PickerSearchIndex(Array.ConvertAll(scan.Songs,song=>song.SearchText)),false,now);
+            string added=Path.Combine(child,"added.flac");File.Delete(imported);File.WriteAllBytes(added,new byte[]{1});
+            Check(Array.Exists(savedScan.Songs,song=>song.Filename=="hst:"+imported),"Old snapshot remains usable during refresh");
+            var refreshed=LibrarySearchScan.Run(new[]{folder},known,CancellationToken.None,100);
+            Check(!Array.Exists(refreshed.Songs,song=>song.Filename=="hst:"+imported)&&Array.Exists(refreshed.Songs,song=>song.Filename=="hst:"+added),"Refresh discovers additions and removes deleted cached files");
             using(var during=new CancellationTokenSource()) {
                 bool stoppedDuring=false;
                 try{LibrarySearchScan.Run(new[]{folder},known,during.Token,100,snapshot=>during.Cancel());}catch(OperationCanceledException){stoppedDuring=true;}
@@ -89,7 +110,13 @@ class PickerSearchSmoke {
                 Check(cancelled,"Scan cancellation");
             }
         }finally{if(Directory.Exists(folder))Directory.Delete(folder,true);}
-        if(args.Length>0) {
+        if(args.Length==2&&args[0]=="--catalogue") {
+            byte[] original=File.ReadAllBytes(args[1]);var local=LibrarySearchCache.Read(original);
+            Check(local.Length==BitConverter.ToUInt32(original,8),"Local catalogue preserves every structurally valid record");
+            Check(Array.Exists(local,song=>song.Artist.IndexOf('\ufffd')>=0),"Local malformed artist safely replaced");
+            Check(Convert.ToBase64String(original)==Convert.ToBase64String(File.ReadAllBytes(args[1])),"Local native cache not modified");
+            Console.WriteLine("Local catalogue: {0} records retained",local.Length);
+        }else if(args.Length>0) {
             string fixture=args[0];
             var scan=LibrarySearchScan.Run(new[]{Path.Combine(fixture,"tree")},new LibrarySearchSong[0],CancellationToken.None,100);
             Check(scan.Songs.Length==1,"Nested directory link and cycle excluded");

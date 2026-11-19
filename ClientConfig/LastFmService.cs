@@ -18,6 +18,8 @@ namespace ReRiff {
         internal DateTime NextAttempt=DateTime.MinValue;
         internal bool Stopped;
         internal int Count {get{return queue.Tracks.Count;}}
+        internal LastFmTrack First {get{return Count==0?null:queue.Tracks[0];}}
+        internal void RemoveFirst(){queue.Tracks.RemoveAt(0);dirty=true;Flush();}
         internal LastFmOutbox(string path,string account){
             this.path=path;queue=new LastFmQueue{Account=account,Tracks=new List<LastFmTrack>()};
             if(File.Exists(path)&&new FileInfo(path).Length<1024*1024){
@@ -43,7 +45,7 @@ namespace ReRiff {
                 string accepted=LastFmApi.Text(summary,"accepted"),ignored=LastFmApi.Text(summary,"ignored");
                 if(accepted!="1"&&ignored!="1")throw new LastFmFailure(0);
                 queue.Tracks.RemoveAt(0);dirty=true;Flush();delay=15;NextAttempt=now.AddSeconds(2);
-                return accepted=="1"?"Scrobble accepted.":"Track ignored by Last.fm.";
+                return accepted=="1"?"Scrobble accepted.":config.Libre?"Track ignored by Libre.fm.":"Track ignored by Last.fm.";
             }catch(LastFmFailure error){
                 if(error.Retry){NextAttempt=now.AddSeconds(delay);delay=Math.Min(delay*2,900);}
                 else if(error.Code==6){queue.Tracks.RemoveAt(0);dirty=true;Flush();NextAttempt=now.AddSeconds(2);}
@@ -54,23 +56,24 @@ namespace ReRiff {
     }
     internal sealed class LastFmService {
         private readonly string folder,account;
+        private readonly bool libre;
         private readonly object sync=new object();
         private readonly Queue<LastFmTrack> incoming=new Queue<LastFmTrack>();
         private LastFmTrack nowPlaying;
         internal volatile bool Ready;
         internal LastFmService(string folder,LastFmConfig config){
-            this.folder=folder;account=LastFmOutbox.Account(config);Ready=config.Ready;
-            new Thread(Run){IsBackground=true,Name="ReRiff Last.fm"}.Start();
+            this.folder=folder;libre=config.Libre;account=LastFmOutbox.Account(config);Ready=config.Ready;
+            new Thread(Run){IsBackground=true,Name=libre?"ReRiff Libre.fm":"ReRiff Last.fm"}.Start();
         }
         internal void Submit(LastFmTrack track){lock(sync){if(incoming.Count<100)incoming.Enqueue(track);}}
         internal void Playing(LastFmTrack track){lock(sync){nowPlaying=track;}}
         private void Log(string message){NativeReelBridge.Log("Last.fm: "+message);}
         private void Run(){
-            LastFmOutbox box;try{box=new LastFmOutbox(Path.Combine(folder,"lastfm-queue.json"),account);}catch{Ready=false;Log("Could not open the local queue. Restart the game after checking file permissions.");return;}
+            LastFmOutbox box;try{box=new LastFmOutbox(Path.Combine(folder,libre?"librefm-queue.json":"lastfm-queue.json"),account);}catch{Ready=false;Log("Could not open the local queue. Restart the game after checking file permissions.");return;}
             DateTime nextPlaying=DateTime.MinValue;
             while(true){
                 try{
-                    var config=LastFmConfig.Load(folder);Ready=config.Ready&&LastFmOutbox.Account(config)==account&&!box.Stopped;
+                    var config=LastFmConfig.Load(folder,libre);Ready=config.Ready&&LastFmOutbox.Account(config)==account&&!box.Stopped;
                     if(!Ready){lock(sync){incoming.Clear();nowPlaying=null;}Thread.Sleep(1000);continue;}
                     LastFmTrack playing;
                     lock(sync){while(incoming.Count>0)box.Add(incoming.Dequeue());playing=nowPlaying;nowPlaying=null;}

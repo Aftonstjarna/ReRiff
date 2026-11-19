@@ -24,6 +24,7 @@ int main(void){
     aa_pending=TRUE;CHECK(graphics_dirty(owner));aa_pending=FALSE;
     borderless_pending=TRUE;CHECK(graphics_dirty(owner));borderless_pending=FALSE;
     *((BYTE *)owner+305)=TRUE;CHECK(graphics_dirty(owner));*((BYTE *)owner+305)=FALSE;
+    recent_limit_pending=20;CHECK(graphics_dirty(owner));recent_limit_pending=0;
     ui_slider_pending=25;CHECK(graphics_dirty(owner));ui_slider_pending=0;CHECK(!graphics_dirty(owner));
     prompt_installed=FALSE;CHECK(!save_prompt_begin(owner,result_mock));
     puts("PASS: native save/discard/back results, deferred callbacks, no quit forwarding, duplicate prevention, graphics dirty tracking and unavailable-helper guard");return 0;

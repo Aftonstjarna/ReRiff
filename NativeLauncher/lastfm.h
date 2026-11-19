@@ -35,6 +35,16 @@ static void lfm_error(int code,DWORD transport,DWORD http){
     else if(code)_snwprintf(message,1024,L"Last.fm error %d. Try linking again.",code);
     else _snwprintf(message,1024,L"Last.fm connection failed (Windows %lu, HTTP %lu). Try again.",(unsigned long)transport,(unsigned long)http);
 }
+static void scrobble_auth_fetch(const WCHAR *agent,const WCHAR *url,char json[65537],DWORD *http,DWORD *error,DWORD *total,BOOL *ok){
+    HINTERNET internet=InternetOpenW(agent,INTERNET_OPEN_TYPE_PRECONFIG,NULL,NULL,0),request=NULL;
+    if(internet){DWORD timeout=15000;InternetSetOptionW(internet,INTERNET_OPTION_CONNECT_TIMEOUT,&timeout,sizeof(timeout));InternetSetOptionW(internet,INTERNET_OPTION_RECEIVE_TIMEOUT,&timeout,sizeof(timeout));InternetSetOptionW(internet,INTERNET_OPTION_SEND_TIMEOUT,&timeout,sizeof(timeout));
+        request=InternetOpenUrlW(internet,url,L"Accept: application/json\r\n",(DWORD)-1,INTERNET_FLAG_RELOAD|INTERNET_FLAG_NO_CACHE_WRITE|INTERNET_FLAG_NO_AUTO_REDIRECT|INTERNET_FLAG_NO_COOKIES,0);
+    }
+    if(request){DWORD size=sizeof(*http);HttpQueryInfoW(request,HTTP_QUERY_STATUS_CODE|HTTP_QUERY_FLAG_NUMBER,http,&size,NULL);
+        while((*total)<65536){DWORD got=0;if(!InternetReadFile(request,json+(*total),(DWORD)65536-(*total),&got)){(*error)=GetLastError();break;}if(!got){(*ok)=TRUE;break;}(*total)+=got;}
+    }else (*error)=GetLastError();
+    if(request)InternetCloseHandle(request);if(internet)InternetCloseHandle(internet);json[(*total)]=0;
+}
 static BOOL lfm_request(BOOL finish){
     lfm_last_error=-1;
     WCHAR key[64],secret[64],url[512];char signed_text[256],signature[33],json[65537];DWORD http=0,error=0,total=0;BOOL ok=FALSE;
@@ -45,14 +55,7 @@ static BOOL lfm_request(BOOL finish){
     if(!lfm_md5(signed_text,signature)){SecureZeroMemory(secret,sizeof(secret));SecureZeroMemory(signed_text,sizeof(signed_text));lfm_error(0,GetLastError(),0);return FALSE;}
     SecureZeroMemory(secret,sizeof(secret));SecureZeroMemory(signed_text,sizeof(signed_text));
     _snwprintf(url,512,L"https://ws.audioscrobbler.com/2.0/?method=%ls&api_key=%ls&api_sig=%hs&format=json%ls%ls",finish?L"auth.getSession":L"auth.getToken",key,signature,finish?L"&token=":L"",finish?lfm_token:L"");
-    HINTERNET internet=InternetOpenW(L"ReRiffLauncher/LastFm",INTERNET_OPEN_TYPE_PRECONFIG,NULL,NULL,0),request=NULL;
-    if(internet){DWORD timeout=15000;InternetSetOptionW(internet,INTERNET_OPTION_CONNECT_TIMEOUT,&timeout,sizeof(timeout));InternetSetOptionW(internet,INTERNET_OPTION_RECEIVE_TIMEOUT,&timeout,sizeof(timeout));InternetSetOptionW(internet,INTERNET_OPTION_SEND_TIMEOUT,&timeout,sizeof(timeout));
-        request=InternetOpenUrlW(internet,url,L"Accept: application/json\r\n",(DWORD)-1,INTERNET_FLAG_RELOAD|INTERNET_FLAG_NO_CACHE_WRITE|INTERNET_FLAG_NO_AUTO_REDIRECT|INTERNET_FLAG_NO_COOKIES,0);
-    }
-    if(request){DWORD size=sizeof(http);HttpQueryInfoW(request,HTTP_QUERY_STATUS_CODE|HTTP_QUERY_FLAG_NUMBER,&http,&size,NULL);
-        while(total<sizeof(json)-1){DWORD got=0;if(!InternetReadFile(request,json+total,(DWORD)sizeof(json)-1-total,&got)){error=GetLastError();break;}if(!got){ok=TRUE;break;}total+=got;}
-    }else error=GetLastError();
-    if(request)InternetCloseHandle(request);if(internet)InternetCloseHandle(internet);json[total]=0;
+    scrobble_auth_fetch(L"ReRiffLauncher/LastFm",url,json,&http,&error,&total,&ok);
     const char *failure=ok?lfm_field(json,"error"):NULL;int code=failure?(int)strtol(failure,NULL,10):0;
     if(!ok||http!=200||code){lfm_error(code,error,http);SecureZeroMemory(json,sizeof(json));return FALSE;}
     if(!finish){

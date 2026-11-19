@@ -35,6 +35,7 @@ namespace ReRiff {
             internal bool Failed,Partial,Searching;
         }
         private static Session current;
+        private static LibrarySearchSnapshot library;
         [DllImport("kernel32.dll",CharSet=CharSet.Unicode,ExactSpelling=true)]
         private static extern uint GetLongPathNameW(string path,StringBuilder output,uint capacity);
         private static string LongPath(string path) {
@@ -87,19 +88,33 @@ namespace ReRiff {
             Close(false);string[] roots=Roots(menu);var session=new Session {Menu=menu};lock(gate)current=session;
             ThreadPool.QueueUserWorkItem(_=>{
                 try {
-                    var cached=new LibrarySearchSong[0];
+                    var cached=new LibrarySearchSong[0];byte[] catalogue=null;
                     string path=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),"Octane","DAT","cache.bin");
-                    if(File.Exists(path))try{if(new FileInfo(path).Length<=16*1024*1024)if(!LibrarySearchCache.TryRead(File.ReadAllBytes(path),out cached))NativeReelBridge.Log("Picker cache ignored: invalid catalogue; continuing filesystem search.");}catch(InvalidDataException){NativeReelBridge.Log("Picker cache ignored: invalid catalogue; continuing filesystem search.");}catch(IOException){}catch(UnauthorizedAccessException){}
-                    // Cached paths work even when stored in short form. Publish
-                    // immediately instead of resolving every file before search.
+                    if(File.Exists(path))try{if(new FileInfo(path).Length<=16*1024*1024)if(!LibrarySearchCache.TryRead(catalogue=File.ReadAllBytes(path),out cached))NativeReelBridge.Log("Picker cache ignored: invalid catalogue; continuing filesystem search.");}catch(InvalidDataException){NativeReelBridge.Log("Picker cache ignored: invalid catalogue; continuing filesystem search.");}catch(IOException){}catch(UnauthorizedAccessException){}
+                    // Resolve root directories only; do not stat every cached file.
+                    // Completed snapshots retain their already-built search index.
                     var clock=System.Diagnostics.Stopwatch.StartNew();
                     cached=Array.FindAll(cached,song=>song!=null&&song.Filename.StartsWith("hst:",StringComparison.Ordinal));
-                    Publish(session,cached,true);
                     var allRoots=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                     foreach(string root in roots)if(!string.IsNullOrEmpty(root))allRoots.Add(LongPath(root));
-                    foreach(var song in cached)if(song.Filename.StartsWith("hst:",StringComparison.Ordinal))try{string parent=Path.GetDirectoryName(song.Filename.Substring(4));if(!string.IsNullOrEmpty(parent))allRoots.Add(parent);}catch(ArgumentException){}
-                    var scan=LibrarySearchScan.Run(new List<string>(allRoots).ToArray(),cached,session.Cancel.Token,100000,songs=>Publish(session,Merge(cached,songs),true));
-                    Publish(session,scan.Songs,scan.LimitReached||scan.UnreadableFolders.Length>0);
+                    foreach(var song in cached)if(song.Filename.StartsWith("hst:",StringComparison.Ordinal))try{string parent=Path.GetDirectoryName(song.Filename.Substring(4));if(!string.IsNullOrEmpty(parent))allRoots.Add(LongPath(parent));}catch(ArgumentException){}
+                    string[] scanRoots=new List<string>(allRoots).ToArray();
+                    LibrarySearchSnapshot previous;lock(gate)previous=library;
+                    if(previous!=null&&!previous.Matches(scanRoots))previous=null;
+                    if(previous!=null) {
+                        bool fresh=previous.Fresh(catalogue,DateTime.UtcNow);
+                        lock(gate){if(current!=session)return;session.Songs=previous.Songs;session.Index=previous.Index;session.Partial=!fresh||previous.Partial;session.Revision++;}
+                        Search(session);
+                        NativeReelBridge.Log("Picker index reused: tracks="+previous.Songs.Length+" refresh="+(!fresh));
+                        if(fresh)return;
+                    }else Publish(session,cached,true);
+                    // Keep existing results visible during refresh. The final
+                    // scan replaces, rather than merges, so deleted files vanish.
+                    var visible=previous==null?cached:Merge(cached,previous.Songs);
+                    var scan=LibrarySearchScan.Run(scanRoots,cached,session.Cancel.Token,100000,songs=>Publish(session,Merge(visible,songs),true));
+                    bool partial=scan.LimitReached||scan.UnreadableFolders.Length>0;
+                    Publish(session,scan.Songs,partial);
+                    lock(gate){if(current==session&&!session.Cancel.IsCancellationRequested)library=new LibrarySearchSnapshot(scanRoots,catalogue,session.Songs,session.Index,partial,DateTime.UtcNow);}
                     NativeReelBridge.Log("Picker scan completed: tracks="+scan.Songs.Length+" unreadable="+scan.UnreadableFolders.Length+" elapsed_ms="+clock.ElapsedMilliseconds);
                 }catch(OperationCanceledException){}catch(Exception error){lock(gate){if(current==session)session.Failed=true;}NativeReelBridge.Log("Picker worker failed: "+error.GetType().Name);}
             });

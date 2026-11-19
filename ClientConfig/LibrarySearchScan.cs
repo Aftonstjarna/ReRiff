@@ -13,6 +13,29 @@ namespace ReRiff {
         }
     }
 
+    // One bounded, process-local completed scan. It owns no native UI state.
+    // A short freshness window avoids repeat disk walks; older results can be
+    // shown while a replacement scan removes deleted files and discovers additions.
+    internal sealed class LibrarySearchSnapshot {
+        internal readonly LibrarySearchSong[] Songs;
+        internal readonly PickerSearchIndex Index;
+        internal readonly bool Partial;
+        private readonly HashSet<string> roots;
+        private readonly byte[] catalogue;
+        private readonly DateTime completed;
+        internal LibrarySearchSnapshot(string[] roots,byte[] catalogue,LibrarySearchSong[] songs,PickerSearchIndex index,bool partial,DateTime completed) {
+            this.roots=new HashSet<string>(roots,StringComparer.OrdinalIgnoreCase);
+            this.catalogue=catalogue==null?null:(byte[])catalogue.Clone();
+            Songs=(LibrarySearchSong[])songs.Clone();Index=index;Partial=partial;this.completed=completed;
+        }
+        internal bool Matches(string[] paths) {return roots.SetEquals(paths);}
+        internal bool Fresh(byte[] bytes,DateTime now) {
+            if(Partial||now<completed||now-completed>=TimeSpan.FromSeconds(30)||bytes==null||catalogue==null||bytes.Length!=catalogue.Length)return false;
+            for(int i=0;i<bytes.Length;i++)if(bytes[i]!=catalogue[i])return false;
+            return true;
+        }
+    }
+
     internal static class LibrarySearchScan {
         private static bool Audio(string path) {
             switch(Path.GetExtension(path).ToLowerInvariant()) {

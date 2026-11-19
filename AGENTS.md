@@ -24,6 +24,15 @@
   sizes and Steam depot/build/manifest identifiers. Compare working copies and
   backups against this baseline before treating them as original game files.
 
+# Changelog review before publication
+
+- Stable releases require review of the complete proposed changelog and explicit
+  approval of the final wording before publication. Material wording changes
+  require renewed approval.
+- Beta prereleases do not require changelog approval, as explicitly requested by
+  the user on November 18, 2026. Publish only after release checks pass.
+- Keep `RELEASE-NOTES.md`, packaged notes and the GitHub release body consistent.
+
 # In-game release summaries
 
 - For each new release, add a `## In-game summary` section to its release notes,

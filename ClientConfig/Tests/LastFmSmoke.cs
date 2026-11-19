@@ -30,7 +30,23 @@ class LastFmSmoke {
         var t=Track(100);t.Artist="雪";t.Title="曲";Check(t.Valid&&t.Parameters("session",true)["timestamp"]=="123","tagged Unicode metadata and original timestamp");
         string folder=Path.Combine(Path.GetTempPath(),"reriff-lastfm-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(folder);
         try{
-            string file=Path.Combine(folder,"client.ini");File.WriteAllText(file,"[launcher]\nskip=true\n[lastfm]\napi_key = preserved\nshared_secret = preserved-secret\nenabled = false\n");
+            string file=Path.Combine(folder,"client.ini");
+            File.WriteAllText(file,"[librefm]\nenabled=true\nusername=fixture\nsession_key="+new string('a',32)+"\nscrobble_percent=95\n");
+            var libre=LastFmConfig.Load(folder,true);
+            Check(libre.Ready&&libre.Libre&&libre.Percent==95,"Libre.fm independently configured in client.ini");
+            File.AppendAllText(file,"api_key="+new string('c',32)+"\n");
+            Check(LastFmConfig.Load(folder,true).Key==new string('c',32),"Libre.fm custom API key used by submissions");
+            File.AppendAllText(file,"api_key=dpapi:00\n");Check(!LastFmConfig.Load(folder,true).Ready,"unreadable Libre.fm key fails closed");
+            Check(!LastFmConfig.Load(folder).Ready,"Libre.fm does not enable Last.fm");
+            Check(LastFmApi.Endpoint(libre)=="https://libre.fm/2.0/"&&LastFmApi.Endpoint(new LastFmConfig())=="https://ws.audioscrobbler.com/2.0/","fixed independent HTTPS endpoints");
+            Check(LastFmOutbox.Account(libre)!=LastFmOutbox.Account(new LastFmConfig{Key=new string('b',32),Session=libre.Session}),"provider queue account isolation");
+            var libreQueue=new LastFmOutbox(Path.Combine(folder,"librefm-queue.json"),LastFmOutbox.Account(libre));libreQueue.Add(Track(100));
+            libreQueue.Deliver(libre,DateTime.UtcNow,(config,method,args)=>{
+                Check(config.Libre&&method=="track.scrobble"&&args["timestamp"]=="123"&&args["sk"]==libre.Session,"Libre.fm uses native playback timestamp and its own session");
+                return new Dictionary<string,object>{{"scrobbles",new Dictionary<string,object>{{"@attr",new Dictionary<string,object>{{"accepted","1"},{"ignored","0"}}}}}};
+            });
+            Check(libreQueue.Count==0,"Libre.fm accepted listen dequeued");
+            File.WriteAllText(file,"[launcher]\nskip=true\n[lastfm]\napi_key = preserved\nshared_secret = preserved-secret\nenabled = false\n");
             LastFmConfig.Save(folder,new Dictionary<string,string>{{"enabled","true"},{"scrobble_percent","90"}});
             var c=LastFmConfig.Load(folder);Check(c.Enabled&&c.Percent==90&&c.Key=="preserved"&&c.Secret=="preserved-secret","preserve credentials while saving");Check(File.ReadAllText(file).Contains("skip=true"),"preserve other sections");
             File.WriteAllText(file,File.ReadAllText(file)+"\n[lastfm]\nenabled = false\n[graphics]\nwidth=1920\n",System.Text.Encoding.Unicode);LastFmConfig.Save(folder,new Dictionary<string,string>{{"enabled","true"}});Check(LastFmConfig.Load(folder).Enabled,"duplicate section keys replaced");Check(File.ReadAllText(file).Contains("width=1920"),"following section preserved");

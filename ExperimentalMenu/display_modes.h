@@ -1,3 +1,4 @@
+#include "../NativeLauncher/graphics_settings.h"
 /* Extend the original PC display interface and Graphics confirmation overlay. */
 typedef struct DisplayMode {UINT width,height,render_width,render_height,refresh,samples;} DisplayMode;
 typedef UINT (__thiscall *ModeCountFn)(void *);
@@ -264,10 +265,9 @@ static BYTE __thiscall extended_mode_set(void *pc,const DisplayMode *mode,BYTE s
 static void save_display_preference(void){
     void *pc=display_pc();if(!pc)return;DisplayMode mode;BYTE full,sync;mode_current_original(pc,&mode,&full,&sync);
     WCHAR width[24],height[24];_snwprintf(width,24,L"%u",mode.render_width);_snwprintf(height,24,L"%u",mode.render_height);
-    if(!WritePrivateProfileStringW(L"graphics",L"borderless",borderless_active?L"true":L"false",config_path)
+    if(!rr_save_fullscreen_mode(config_path,borderless_active?1:full?2:0)
         ||!WritePrivateProfileStringW(L"graphics",L"render_width",width,config_path)
-        ||!WritePrivateProfileStringW(L"graphics",L"render_height",height,config_path)
-        ||!WritePrivateProfileStringW(L"graphics",L"exclusive_fullscreen",full?L"true":L"false",config_path))log_line("Could not persist confirmed display settings.");
+        ||!WritePrivateProfileStringW(L"graphics",L"render_height",height,config_path))log_line("Could not persist confirmed display settings.");
 }
 static void cancel_display_style(void){
     if(display_change.active)borderless_active=display_change.old_borderless;
@@ -353,9 +353,12 @@ static void display_restore_startup(void){
     void *pc=display_pc();if(!pc)return;display_startup_checked=TRUE;
     UINT width=GetPrivateProfileIntW(L"graphics",L"render_width",0,config_path),height=GetPrivateProfileIntW(L"graphics",L"render_height",0,config_path);
     UINT max_width=0,max_height=0;DisplayMode current;BYTE full,sync;mode_current_original(pc,&current,&full,&sync);
+    int mode_setting=rr_fullscreen_mode(config_path);
+    if(!width&&!height&&(mode_setting>=0||borderless_active)){
+        width=current.render_width?current.render_width:current.width;height=current.render_height?current.render_height:current.height;
+    }
     if(width>=800&&height>=600&&display_limits(&max_width,&max_height)&&width<=max_width&&height<=max_height){
-        WCHAR value[16];GetPrivateProfileStringW(L"graphics",L"exclusive_fullscreen",L"false",value,16,config_path);
-        BYTE desired_full=!borderless_active&&!_wcsicmp(value,L"true");
+        BYTE desired_full=!borderless_active&&(mode_setting>=0?mode_setting==2:full);
         DisplayMode desired={width,height,width,height,current.refresh,0};
         if(width!=current.render_width||height!=current.render_height||desired_full!=full||borderless_active){
             if(extended_mode_set(pc,&desired,TRUE,desired_full)){graphics_notify_resize();log_line("Restored confirmed render resolution.");}
@@ -401,7 +404,7 @@ static BOOL install_display_modes(BYTE *base){
     graphics_dt=(float *)(base+0x7ef604);
     graphics_game=(void **)(base+0x7e9d24);graphics_states=(void **)(base+0x7eefe0);
     confirm_previous_mode=(DisplayMode *)(base+0x7ec1f8);confirm_previous_full=(BYTE *)(base+0x7ebf04);
-    WCHAR value[16];GetPrivateProfileStringW(L"graphics",L"borderless",L"false",value,16,config_path);borderless_active=!_wcsicmp(value,L"true");borderless_preferred=borderless_active;
+    borderless_active=rr_fullscreen_mode(config_path)==1;borderless_preferred=borderless_active;
     aa_skip_background_present=display_background_present;
     display_installed=TRUE;return TRUE;
 }

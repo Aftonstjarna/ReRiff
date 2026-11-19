@@ -182,6 +182,15 @@ int main(void){
     prepare(choices,2,1,FALSE);int old_resets=resets;CHECK(apply_display(graphics_menu,TRUE)&&resets==old_resets);
     current_mode=native_modes[0];borderless_active=TRUE;display_startup_checked=FALSE;display_restore_startup();
     CHECK(current_mode.render_width==3840&&current_mode.width==3840&&current_mode.height==2160);
+    CHECK(WritePrivateProfileStringW(L"graphics",L"render_width",L"0",config_path));
+    CHECK(WritePrivateProfileStringW(L"graphics",L"render_height",L"0",config_path));
+    CHECK(rr_save_fullscreen_mode(config_path,2));
+    current_mode=native_modes[0];current_full=FALSE;borderless_active=FALSE;display_startup_checked=FALSE;display_restore_startup();
+    CHECK(current_mode.render_width==1280&&current_full);
+    CHECK(WritePrivateProfileStringW(L"graphics",L"render_width",L"1920",config_path));
+    CHECK(WritePrivateProfileStringW(L"graphics",L"render_height",L"1080",config_path));
+    CHECK(rr_save_fullscreen_mode(config_path,-1));
+    display_startup_checked=FALSE;display_restore_startup();CHECK(current_mode.render_width==1920&&current_full);
     borderless_active=FALSE;display_style();DestroyWindow(host);DeleteFileW(config_path);DeleteFileW(log_path);
     puts("PASS: GPU-limited catalog, coherent render dimensions, native pointer scaling and pass-through, window message forwarding, Alt+Enter borderless/windowed/repeat/native exclusive forwarding, idle/minimized behavior, borderless window, native confirmation, exact 10s timeout, reject/keep/failure rollback and startup restoration");return 0;
 }

@@ -719,6 +719,8 @@ static BOOL cjk_pack_enabled(void){
 static BOOL cjk_component_enabled(void){return cjk_pack_enabled()||latin_pack_enabled();}
 #include "lastfm_utf8.h"
 #include "progression_probe.h"
+#include "recent_tracks.h"
+#include "recent_track_stars.h"
 #include "first_prestige_entry.h"
 #include "progression_domain.h"
 #include "prestige_prompt.h"
@@ -795,7 +797,8 @@ __declspec(dllexport) BOOL __cdecl ReRiffStartEngineMenu(void) {
     if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_PIN,
         (const WCHAR *)(uintptr_t)&ReRiffStartEngineMenu,&pinned)) return FALSE;
     if(!install_mods_vfs(base,path))log_line("Mods VFS hook refused: native archive loader differs.");
-    if(!install_scrobbler(base))log_line("Last.fm playback hook refused: original race differs.");
+    if(!install_recent_tracks(base))log_line("Recent Tracks extension refused: original CIL differs.");
+    if(!install_scrobbler(base))log_line("Scrobbling playback hook refused: original race differs.");
     if(!install_lastfm_utf8(base))log_line("Last.fm UTF-8 correction refused: original CIL bytes differ.");
     if(!install_progression_economy(base))log_line("Economy trace wrappers refused: original CIL differs.");
     if(!install_progression_rank(base))log_line("Permanent Rank hook refused: original checker differs.");
@@ -825,6 +828,7 @@ __declspec(dllexport) BOOL __cdecl ReRiffStartEngineMenu(void) {
     InterlockedExchangePointer(&table[26],(void *)&hook_colour);
     DWORD ignored; VirtualProtect(table,27*sizeof(void *),protection,&ignored);
     if(!install_display_modes(base))log_line("Native display-mode extension could not be installed.");
+    if(!install_recent_stars(base))log_line("Recent Tracks stars refused: native row layout differs.");
     if(!install_graphics_aa_menu(base))log_line("Native antialiasing control could not be installed.");
     if(!install_main_branding(base))log_line("Main-menu branding could not be installed.");
     if(!install_save_prompt(base))log_line("Native save prompt could not be installed.");

@@ -10,7 +10,12 @@ on:
       - 'NativeLauncher/logging.h'
       - 'NativeLauncher/config.h'
       - 'NativeLauncher/launcher.c'
+      - 'NativeLauncher/graphics.h'
+      - 'NativeLauncher/graphics_settings.h'
       - 'NativeLauncher/lastfm.h'
+      - 'NativeLauncher/lastfm_storage.h'
+      - 'NativeLauncher/listenbrainz.h'
+      - 'NativeLauncher/librefm.h'
       - 'NativeLauncher/test_lastfm.c'
       - 'NewsHeaders/**'
       - 'Managed/**'
@@ -38,7 +43,12 @@ on:
       - 'NativeLauncher/logging.h'
       - 'NativeLauncher/config.h'
       - 'NativeLauncher/launcher.c'
+      - 'NativeLauncher/graphics.h'
+      - 'NativeLauncher/graphics_settings.h'
       - 'NativeLauncher/lastfm.h'
+      - 'NativeLauncher/lastfm_storage.h'
+      - 'NativeLauncher/listenbrainz.h'
+      - 'NativeLauncher/librefm.h'
       - 'NativeLauncher/test_lastfm.c'
       - 'NewsHeaders/**'
       - 'Managed/**'
@@ -88,7 +98,9 @@ jobs:
           dotnet build Managed/GhostCacheSmoke.csproj -c Release -o build/client-checks
           dotnet build Managed/ConfigSplitSmoke.csproj -c Release -o build/client-checks
           dotnet build ClientConfig/ClientConfig.csproj -c Release -o build/client-checks
+          dotnet build ClientConfig/Tests/RecentTracksSmoke.csproj -c Release -o build/client-checks
           dotnet build ClientConfig/Tests/LastFmSmoke.csproj -c Release -o build/client-checks
+          dotnet build ClientConfig/Tests/ListenBrainzSmoke.csproj -c Release -o build/client-checks
           dotnet build NewsHeaders/NewsHeaders.csproj -c Release -o build/client-checks
           dotnet build ClientConfig/Tests/ProgressionRankSmoke.csproj -c Release -o build/client-checks
           dotnet build ClientConfig/Tests/ProgressionLevelQuoteSmoke.csproj -c Release -o build/client-checks
@@ -112,7 +124,7 @@ jobs:
         run: |
           export ZIG_GLOBAL_CACHE_DIR="$RUNNER_TEMP/zig-global"
           export ZIG_LOCAL_CACHE_DIR="$RUNNER_TEMP/zig-local"
-          for source in ExperimentalMenu/test_lastfm_scrobbler.c ExperimentalMenu/test_main_scale.c ExperimentalMenu/test_display_modes.c ExperimentalMenu/test_ui_scale.c ExperimentalMenu/test_picker_alphabet.c ExperimentalMenu/test_picker_search.c ExperimentalMenu/test_steam_keyboard.c ExperimentalMenu/test_server_config_save.c ExperimentalMenu/test_text_entry.c ExperimentalMenu/test_text_input_queue.c ExperimentalMenu/test_text_entry_overlay.c ExperimentalMenu/test_save_prompt.c ExperimentalMenu/test_prestige_prompt.c ExperimentalMenu/test_progression_domain.c ExperimentalMenu/test_progression_probe.c ExperimentalMenu/test_progression_view.c ExperimentalMenu/test_progression_badge.c ExperimentalMenu/test_progression_achievement_probe.c ExperimentalMenu/test_first_prestige_entry.c ExperimentalMenu/test_progression_rewards.c ExperimentalMenu/test_progression_level_reward.c ExperimentalMenu/test_progression_economy.c ExperimentalMenu/test_progression_rank.c ExperimentalMenu/test_progression_ghost.c; do
+          for source in ExperimentalMenu/test_recent_track_scroll.c ExperimentalMenu/test_recent_track_stars.c ExperimentalMenu/test_recent_tracks.c ExperimentalMenu/test_lastfm_scrobbler.c ExperimentalMenu/test_main_scale.c ExperimentalMenu/test_display_modes.c ExperimentalMenu/test_ui_scale.c ExperimentalMenu/test_picker_alphabet.c ExperimentalMenu/test_picker_search.c ExperimentalMenu/test_steam_keyboard.c ExperimentalMenu/test_server_config_save.c ExperimentalMenu/test_text_entry.c ExperimentalMenu/test_text_input_queue.c ExperimentalMenu/test_text_entry_overlay.c ExperimentalMenu/test_save_prompt.c ExperimentalMenu/test_prestige_prompt.c ExperimentalMenu/test_progression_domain.c ExperimentalMenu/test_progression_probe.c ExperimentalMenu/test_progression_view.c ExperimentalMenu/test_progression_badge.c ExperimentalMenu/test_progression_achievement_probe.c ExperimentalMenu/test_first_prestige_entry.c ExperimentalMenu/test_progression_rewards.c ExperimentalMenu/test_progression_level_reward.c ExperimentalMenu/test_progression_economy.c ExperimentalMenu/test_progression_rank.c ExperimentalMenu/test_progression_ghost.c; do
             name=$(basename "$source" .c)
             "$RUNNER_TEMP/release-tools/zig-x86_64-linux-0.14.1/zig" cc \
               -target x86-windows-gnu -O2 -Wall -Wextra -Werror \
@@ -148,6 +160,10 @@ jobs:
       - name: Run native regressions on Windows
         shell: pwsh
         run: |
+          & ./component/ListenBrainzSmoke.exe
+          if ($LASTEXITCODE -ne 0) { throw "ListenBrainz regression failed" }
+          & ./component/RecentTracksSmoke.exe
+          if ($LASTEXITCODE -ne 0) { throw "Recent Tracks IL regression failed" }
           & ./component/LastFmSmoke.exe
           if ($LASTEXITCODE -ne 0) { throw "Last.fm regression failed" }
           & ./component/MultiplayerCheckpointsSmoke.exe

@@ -6,7 +6,7 @@ static inline const WCHAR *rr_config_path(const WCHAR *file,const WCHAR *section
     const WCHAR *base=wcsrchr(file,L'\\');base=base?base+1:file;
     if(_wcsicmp(base,L"server.ini"))return file;
     const WCHAR *name=NULL;
-    if(!_wcsicmp(section,L"lastfm")||!_wcsicmp(section,L"graphics")||!_wcsicmp(section,L"languages")||!_wcsicmp(section,L"launcher")||!_wcsicmp(section,L"diagnostics"))name=L"client.ini";
+    if(!_wcsicmp(section,L"librefm")||!_wcsicmp(section,L"listenbrainz")||!_wcsicmp(section,L"lastfm")||!_wcsicmp(section,L"graphics")||!_wcsicmp(section,L"languages")||!_wcsicmp(section,L"launcher")||!_wcsicmp(section,L"diagnostics"))name=L"client.ini";
     if(!_wcsicmp(section,L"progression"))name=L"singleplayer.ini";
     if(!name)return file;
     size_t n=(size_t)(base-file);if(n+wcslen(name)>=32768)return file;

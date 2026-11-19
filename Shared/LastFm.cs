@@ -29,6 +29,10 @@ namespace ReRiff {
             }
         }
         internal string Key, Secret, Session, User;
+        internal bool Libre;
+        // Libre.fm accepts a fixed client identifier; these are not account secrets.
+        internal const string LibreKey="72657269666600000000000000000000";
+        internal const string LibreSecret="00000000000000000000000000000000";
         internal bool Enabled;
         internal int Percent=80;
         internal bool Credentials {get{return ValidKey(Key)&&ValidKey(Secret);}}
@@ -36,11 +40,12 @@ namespace ReRiff {
         // Authentication tokens/session identifiers are opaque ASCII, not MD5 hex.
         internal static bool ValidToken(string value){return value!=null&&value.Length==32&&value.All(c=>c<128&&(Char.IsLetterOrDigit(c)||c=='-'||c=='_'));}
         internal static bool ValidKey(string value){return value!=null&&value.Length==32&&value.All(c=>Uri.IsHexDigit(c));}
-        internal static LastFmConfig Load(string folder){
-            var d=ConfigFiles.Read(folder,"lastfm");string v;var c=new LastFmConfig();
+        internal static LastFmConfig Load(string folder){return Load(folder,false);}
+        internal static LastFmConfig Load(string folder,bool libre){
+            var d=ConfigFiles.Read(folder,libre?"librefm":"lastfm");string v;var c=new LastFmConfig{Libre=libre};
             c.Key=d.TryGetValue("api_key",out v)?v:"";c.Secret=d.TryGetValue("shared_secret",out v)?v:"";
             c.Session=d.TryGetValue("session_key",out v)?v:"";c.User=d.TryGetValue("username",out v)?v:"";
-            c.Key=ReadCredential(c.Key);c.Secret=ReadCredential(c.Secret);c.Session=ReadCredential(c.Session);
+            c.Key=libre&&String.IsNullOrEmpty(c.Key)?LibreKey:ReadCredential(c.Key);c.Secret=libre?LibreSecret:ReadCredential(c.Secret);c.Session=ReadCredential(c.Session);
             c.Enabled=d.TryGetValue("enabled",out v)&&(v=="1"||v.Equals("true",StringComparison.OrdinalIgnoreCase));
             int p;if(d.TryGetValue("scrobble_percent",out v)&&Int32.TryParse(v,out p)&&p>=1&&p<=100)c.Percent=p;
             return c;
@@ -70,6 +75,7 @@ namespace ReRiff {
         internal bool Retry {get{return Code==0||Code==8||Code==11||Code==16||Code==29;}}
     }
     internal static class LastFmApi {
+        internal static string Endpoint(LastFmConfig config){return config.Libre?"https://libre.fm/2.0/":"https://ws.audioscrobbler.com/2.0/";}
         internal static string Signature(IDictionary<string,string> values,string secret){
             var input=new StringBuilder();foreach(var p in values.OrderBy(p=>p.Key,StringComparer.Ordinal))if(p.Key!="format"&&p.Key!="callback"&&p.Key!="api_sig")input.Append(p.Key).Append(p.Value);
             input.Append(secret);using(var md5=MD5.Create())return BitConverter.ToString(md5.ComputeHash(Encoding.UTF8.GetBytes(input.ToString()))).Replace("-","").ToLowerInvariant();
@@ -80,9 +86,9 @@ namespace ReRiff {
             p["api_sig"]=Signature(p,config.Secret);p["format"]="json";
             // net40 runs on the installed CLR4 runtime. Require TLS1.2; never downgrade or ignore certificate errors.
             ServicePointManager.SecurityProtocol|=(SecurityProtocolType)3072;
-            var request=(HttpWebRequest)WebRequest.Create("https://ws.audioscrobbler.com/2.0/");
+            var request=(HttpWebRequest)WebRequest.Create(Endpoint(config));
             request.Method="POST";request.AllowAutoRedirect=false;request.Timeout=15000;request.ReadWriteTimeout=15000;
-            request.UserAgent="ReRiff/LastFm";request.ContentType="application/x-www-form-urlencoded; charset=utf-8";
+            request.UserAgent=config.Libre?"ReRiff/LibreFm":"ReRiff/LastFm";request.ContentType="application/x-www-form-urlencoded; charset=utf-8";
             byte[] body=Encoding.UTF8.GetBytes(Encode(p));request.ContentLength=body.Length;
             try {
                 using(var stream=request.GetRequestStream())stream.Write(body,0,body.Length);

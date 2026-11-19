@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net45</TargetFramework><PlatformTarget>x86</PlatformTarget><EnableDefaultCompileItems>false</EnableDefaultCompileItems></PropertyGroup>
+  <ItemGroup>
+    <Compile Include="ListenBrainzSmoke.cs" /><Compile Include="../ListenBrainzService.cs" /><Compile Include="../LastFmService.cs" />
+    <Compile Include="../../Shared/ListenBrainz.cs" /><Compile Include="../../Shared/LastFm.cs" /><Compile Include="../../Shared/ConfigFiles.cs" />
+    <Reference Include="System.Web.Extensions" /><PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net45" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+</Project>

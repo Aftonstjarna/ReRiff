@@ -67,17 +67,94 @@ int wmain(int argc,WCHAR **argv){
     CHECK(WritePrivateProfileStringW(L"lastfm",L"session_key",L"ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ",ini));
     /* Tab repaint must never cover page controls or the shared footer. */
     RECT tabs,field;GetWindowRect(launcher_tabs,&tabs);GetWindowRect(lfm_key_field,&field);CHECK(tabs.bottom<=field.top);
-    for(int cycle=0;cycle<3;cycle++)for(int page=0;page<4;page++){
+    for(int cycle=0;cycle<3;cycle++)for(int page=0;page<PAGE_COUNT;page++){
         SendMessageW(launcher_tabs,TCM_SETCURSEL,page,0);select_launcher_page();
         RedrawWindow(host,NULL,NULL,RDW_INVALIDATE|RDW_ERASE|RDW_ALLCHILDREN|RDW_UPDATENOW);
         CHECK(IsWindowVisible(play_button)&&IsWindowVisible(status));
-        CHECK(IsWindowVisible(lfm_key_field)==(page==3));
+        CHECK(IsWindowVisible(graphics_resolution)==(page==PAGE_GRAPHICS));
+        CHECK(IsWindowVisible(language_checkbox)==(page==PAGE_LANGUAGES));
+        CHECK(IsWindowVisible(logging_checkbox)==(page==PAGE_DIAGNOSTICS));
+        CHECK(IsWindowVisible(external)==(page==PAGE_SERVERS));
+        CHECK(IsWindowVisible(lfm_key_field)==(page==PAGE_SCROBBLING));CHECK(!IsWindowVisible(lb_token));CHECK(IsWindowVisible(scrobbling_tabs)==(page==3));
     }
+    SendMessageW(launcher_tabs,TCM_SETCURSEL,PAGE_GRAPHICS,0);select_launcher_page();
+    CHECK(GetFocus()==graphics_resolution);
+    graphics_select(graphics_mode,2);graphics_select(graphics_scale,75);graphics_select(graphics_recent,50);
+    SendMessageW(graphics_aa,BM_SETCHECK,BST_CHECKED,0);
+    SendMessageW(host,WM_COMMAND,MAKEWPARAM(GRAPHICS_SAVE,BN_CLICKED),(LPARAM)graphics_save);
+    CHECK(rr_fullscreen_mode(ini)==1&&graphics_bool(L"antialiasing"));
+    CHECK(GetPrivateProfileIntW(L"graphics",L"ui_scale",0,ini)==75);
+    CHECK(GetPrivateProfileIntW(L"graphics",L"recent_tracks_limit",0,ini)==50);
+    graphics_reload();CHECK(graphics_value(graphics_recent)==50&&graphics_value(graphics_mode)==2);
+    for(int mode=0;mode<=2;mode++){
+        CHECK(rr_save_fullscreen_mode(ini,mode));CHECK(rr_fullscreen_mode(ini)==mode);
+        GetPrivateProfileStringW(L"graphics",L"borderless",L"missing",value,64,ini);CHECK(!wcscmp(value,L"missing"));
+        GetPrivateProfileStringW(L"graphics",L"exclusive_fullscreen",L"missing",value,64,ini);CHECK(!wcscmp(value,L"missing"));
+    }
+    CHECK(rr_save_fullscreen_mode(ini,-1));CHECK(rr_fullscreen_mode(ini)==-1);
+    CHECK(WritePrivateProfileStringW(L"graphics",L"borderless",L"true",ini));CHECK(rr_fullscreen_mode(ini)==1);
+    CHECK(WritePrivateProfileStringW(L"graphics",L"exclusive_fullscreen",L"true",ini));CHECK(rr_fullscreen_mode(ini)==1);
+    CHECK(rr_save_fullscreen_mode(ini,0));CHECK(rr_fullscreen_mode(ini)==0);
+    RECT graphics_bounds,graphics_footer;GetWindowRect(graphics_save,&graphics_bounds);GetWindowRect(status_separator,&graphics_footer);CHECK(graphics_bounds.bottom<graphics_footer.top);
+    CHECK(SendMessageW(launcher_tabs,TCM_GETITEMCOUNT,0,0)==PAGE_COUNT);
+    CHECK(SendMessageW(scrobbling_tabs,TCM_GETITEMCOUNT,0,0)==3);
+    SendMessageW(launcher_tabs,TCM_SETCURSEL,3,0);select_launcher_page();
+    RECT subtabs,account,save,footer;
+    GetWindowRect(scrobbling_tabs,&subtabs);GetWindowRect(lfm_account,&account);
+    GetWindowRect(lfm_save,&save);GetWindowRect(status_separator,&footer);
+    CHECK(subtabs.bottom<account.top&&save.bottom<footer.top);
+    SetWindowTextW(lfm_percent,L"87");
+    SendMessageW(scrobbling_tabs,TCM_SETCURSEL,1,0);
+    NMHDR changed={scrobbling_tabs,0,TCN_SELCHANGE};SendMessageW(host,WM_NOTIFY,0,(LPARAM)&changed);
+    CHECK(GetFocus()==scrobbling_tabs);
+    SendMessageW(launcher_tabs,TCM_SETCURSEL,0,0);select_launcher_page();
+    CHECK(!IsWindowVisible(scrobbling_tabs)&&!IsWindowVisible(lb_token));
+    SendMessageW(launcher_tabs,TCM_SETCURSEL,3,0);select_launcher_page();
+    CHECK(SendMessageW(scrobbling_tabs,TCM_GETCURSEL,0,0)==1);
+    GetWindowTextW(lfm_percent,value,64);CHECK(!wcscmp(value,L"87"));
+    SetWindowTextW(lfm_percent,L"85");
+    CHECK(IsWindowVisible(lb_save)&&IsWindowVisible(lb_token)&&!IsWindowVisible(lfm_save));
+    CHECK((GetWindowLongPtrW(lb_token,GWL_STYLE)&ES_PASSWORD)!=0);
+    CHECK(lb_token_valid(L"12345678-1234-1234-1234-123456789abc")&&!lb_token_valid(L"00000000-0000-0000-0000-000000000000"));
+    SetWindowTextW(lb_token,L"12345678-1234-1234-1234-123456789abc");SendMessageW(lb_enabled,BM_SETCHECK,BST_CHECKED,0);
+    SetWindowTextW(lb_percent,L"80");CHECK(lb_save_settings());
+    CHECK(scrobble_read_credential(L"listenbrainz",L"user_token",value)&&!wcscmp(value,L"12345678-1234-1234-1234-123456789abc"));
+    GetPrivateProfileStringW(L"listenbrainz",L"user_token",L"",protected_value,4096,ini);CHECK(!wcsncmp(protected_value,L"dpapi:",6));
+    CHECK(lfm_read_credential(L"api_key",value)&&!wcscmp(value,L"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"));
+    SetWindowTextW(lb_percent,L"85");CHECK(lb_save_settings());lb_reload();CHECK(SendMessageW(lb_enabled,BM_GETCHECK,0,0)==BST_CHECKED);
+    SetWindowTextW(lb_percent,L"101");CHECK(!lb_save_settings());CHECK(GetPrivateProfileIntW(L"listenbrainz",L"scrobble_percent",0,ini)==85);lb_reload();
+    RECT lbrect,separator;GetWindowRect(lb_save,&lbrect);GetWindowRect(status_separator,&separator);CHECK(lbrect.bottom<separator.top);
+    if(argc==3&&!wcscmp(argv[1],L"--storage-test")){path(file,L"client.ini");CHECK(CopyFileW(file,argv[2],FALSE));}
+    CHECK(WritePrivateProfileStringW(L"listenbrainz",L"user_token",L"dpapi:00",ini));CHECK(!lb_save_settings());
+    GetPrivateProfileStringW(L"listenbrainz",L"user_token",L"",value,64,ini);CHECK(!wcscmp(value,L"dpapi:00"));
+    SendMessageW(scrobbling_tabs,TCM_SETCURSEL,2,0);SendMessageW(host,WM_NOTIFY,0,(LPARAM)&changed);
+    CHECK(IsWindowVisible(libre_save)&&!IsWindowVisible(lb_token)&&!IsWindowVisible(lfm_save));
+    GetWindowRect(libre_save,&save);CHECK(save.bottom<footer.top);
+    CHECK(scrobble_store_credentials(L"librefm",LIBRE_KEY,LIBRE_SECRET,L"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",L"fixture",FALSE,NULL));libre_reload();
+    SendMessageW(libre_enabled,BM_SETCHECK,BST_CHECKED,0);SetWindowTextW(libre_percent,L"95");CHECK(libre_save_settings());
+    CHECK(GetPrivateProfileIntW(L"librefm",L"scrobble_percent",0,ini)==95);
+    CHECK(scrobble_read_credential(L"librefm",L"session_key",value)&&!wcscmp(value,L"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"));
+    GetPrivateProfileStringW(L"librefm",L"session_key",L"",protected_value,4096,ini);CHECK(!wcsncmp(protected_value,L"dpapi:",6));
+    CHECK(lfm_read_credential(L"api_key",value)&&!wcscmp(value,L"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"));
+    SetWindowTextW(libre_percent,L"0");CHECK(!libre_save_settings());libre_reload();
+    CHECK((GetWindowLongPtrW(libre_key_field,GWL_STYLE)&ES_PASSWORD)!=0);
+    SetWindowTextW(libre_key_field,L"invalid");CHECK(!libre_save_settings());libre_reload();
+    SetWindowTextW(libre_key_field,L"cccccccccccccccccccccccccccccccc");CHECK(libre_save_settings());
+    CHECK(libre_read_key(value)&&!wcscmp(value,L"cccccccccccccccccccccccccccccccc"));
+    CHECK(scrobble_read_credential(L"librefm",L"session_key",value)&&!*value);
+    CHECK(SendMessageW(libre_enabled,BM_GETCHECK,0,0)==BST_UNCHECKED);
+    GetPrivateProfileStringW(L"librefm",L"api_key",L"",protected_value,4096,ini);CHECK(!wcsncmp(protected_value,L"dpapi:",6));
+    CHECK(WritePrivateProfileStringW(L"librefm",L"session_key",L"dpapi:00",ini));CHECK(!libre_save_settings());
+    wcscpy(libre_token,L"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");wcscpy(libre_url,L"https://libre.fm/api/auth/");
+    libre_link_completed(8,TRUE,1000);CHECK(!libre_poll_due(5999)&&libre_poll_due(6000));
+    libre_last_error=14;libre_link_completed(9,FALSE,6000);CHECK(!libre_poll_due(10999)&&libre_poll_due(11000));
+    libre_unlink();CHECK(!libre_poll_deadline);CHECK(libre_read_key(value)&&!wcscmp(value,L"cccccccccccccccccccccccccccccccc"));
+    CHECK(scrobble_read_credential(L"librefm",L"session_key",value)&&!*value);
     if(argc==2){DWORD until=GetTickCount()+4000;MSG msg;while((LONG)(until-GetTickCount())>0){while(PeekMessageW(&msg,NULL,0,0,PM_REMOVE)){TranslateMessage(&msg);DispatchMessageW(&msg);}Sleep(10);}}
     SetWindowTextW(lfm_key_field,L"cccccccccccccccccccccccccccccccc");CHECK(lfm_save_settings());
     CHECK(lfm_read_credential(L"session_key",value)&&!*value);GetPrivateProfileStringW(L"lastfm",L"enabled",L"",value,64,ini);CHECK(!wcscmp(value,L"false"));
     lfm_unlink();GetPrivateProfileStringW(L"lastfm",L"session_key",L"",value,64,ini);CHECK(!*value);CHECK(lfm_read_credential(L"api_key",value)&&lfm_hex(value));
     SendMessageW(launcher_tabs,TCM_SETCURSEL,0,0);select_launcher_page();CHECK(!IsWindowVisible(lfm_enabled)&&!IsWindowVisible(lfm_key_field)&&!IsWindowVisible(lfm_secret_field)&&!IsWindowVisible(lfm_save)&&IsWindowVisible(external));DestroyWindow(host);
     path(file,L"client.ini");DeleteFileW(file);DeleteFileW(ini);RemoveDirectoryW(folder);
-    puts("PASS: Last.fm signature, JSON, opaque tokens, inline controls, threshold validation, settings persistence and disconnect");return 0;
+    puts("PASS: Last.fm, ListenBrainz and Libre.fm subtabs, DPAPI sessions, thresholds, persistence, layout and disconnect");return 0;
 }

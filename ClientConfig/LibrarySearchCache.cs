@@ -16,6 +16,7 @@ namespace ReRiff {
     // Does not decode audio, change song IDs, or write the game's cache.
     internal static class LibrarySearchCache {
         private static readonly Encoding Utf8=new UTF8Encoding(false,true);
+        private static readonly Encoding DisplayUtf8=new UTF8Encoding(false,false);
         internal static bool TryRead(byte[] bytes,out LibrarySearchSong[] songs) {
             try {songs=Read(bytes);return true;}
             catch(InvalidDataException){songs=new LibrarySearchSong[0];return false;}
@@ -33,7 +34,9 @@ namespace ReRiff {
                     for(int j=0;j<fields.Length;j++) {
                         int end=Array.IndexOf(bytes,(byte)0,cursor);
                         if(end<0)throw new InvalidDataException("Unterminated song cache field");
-                        try {fields[j]=Utf8.GetString(bytes,cursor,end-cursor);}
+                        // Only display metadata may replace malformed sequences. Paths and
+                        // song IDs remain strict so selection cannot target another file.
+                        try {fields[j]=(j<2?Utf8:DisplayUtf8).GetString(bytes,cursor,end-cursor);}
                         catch(DecoderFallbackException error){throw new InvalidDataException("Invalid song cache UTF-8",error);}
                         cursor=end+1;
                     }

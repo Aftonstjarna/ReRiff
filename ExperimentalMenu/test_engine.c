@@ -411,21 +411,35 @@ int main(int argc,char **argv){
     CHECK(aa_label&&aa_bar&&aa_knob&&!aa_pending&&((int *)aa_label)[2]==AA_CONTROL_ID);
     CHECK(resolution_hover&&((int *)resolution_hover)[2]==RESOLUTION_FOCUS_ID);
     CHECK(((float *)resolution_hover)[8]==960&&((float *)resolution_hover)[9]==125);
-    CHECK(graphics_visible==4&&!graphics_reel);
+    CHECK(graphics_visible==5&&!graphics_reel);
+    CHECK(recent_limit_label&&recent_limit_left&&recent_limit_right&&recent_limit_restart&&recent_limit_pending==0);
+    CHECK(!*(DWORD *)((BYTE *)recent_limit_restart+76));
+    ((int *)gm)[11]=RECENT_LIMIT_ID;aa_graphics_input_state(gm);
+    CHECK(*(DWORD *)((BYTE *)recent_limit_left+64)==256&&*(DWORD *)((BYTE *)recent_limit_right+64)==512);
+    CHECK(!*(DWORD *)((BYTE *)graphics_test_items[2]+64)&&!*(DWORD *)((BYTE *)graphics_test_items[3]+64));
+    aa_graphics_input(gm,RECENT_RIGHT_ID);CHECK(recent_limit_pending==20&&graphics_dirty(gm));
+    aa_graphics_input(gm,RECENT_RIGHT_ID);CHECK(recent_limit_pending==50);
+    aa_graphics_input(gm,RECENT_RIGHT_ID);CHECK(recent_limit_pending==100);
+    aa_graphics_input(gm,RECENT_RIGHT_ID);CHECK(recent_limit_pending==0);
+    aa_graphics_input(gm,RECENT_LEFT_ID);CHECK(recent_limit_pending==100);
+    CHECK(recent_limit_save());CHECK(GetPrivateProfileIntW(L"graphics",L"recent_tracks_limit",0,config_path)==100);
+    recent_limit_pending=20;graphics_save_prompt_result(gm,0);CHECK(recent_limit_pending==100);
+    recent_limit_pending=0;CHECK(recent_limit_save());
+
     CHECK(((float *)resolution_hover)[12]==520&&((float *)resolution_hover)[13]==56);
     /* Exercise multiple complete native row loops in both directions, including
      * both resolution arrows and escape from the mouse-focused Apply button. */
-    void *nav_items[8]={graphics_test_items[2],graphics_test_items[3],borderless_label,borderless_bar,borderless_knob,aa_label,graphics_test_items[6],ui_slider_label};
-    const int down_cycle[]={BORDERLESS_CONTROL_ID,AA_CONTROL_ID,UI_SCALE_CONTROL_ID,3,1,BORDERLESS_CONTROL_ID,AA_CONTROL_ID,UI_SCALE_CONTROL_ID,3,1};
-    const int up_cycle[]={3,UI_SCALE_CONTROL_ID,AA_CONTROL_ID,BORDERLESS_CONTROL_ID,1,3,UI_SCALE_CONTROL_ID,AA_CONTROL_ID,BORDERLESS_CONTROL_ID,1};
-    CHECK(graphics_cycle(nav_items,8,1,40,down_cycle,10));
-    CHECK(graphics_cycle(nav_items,8,2,40,down_cycle,10));
-    CHECK(graphics_cycle(nav_items,8,1,39,up_cycle,10));
-    CHECK(graphics_cycle(nav_items,8,2,39,up_cycle,10));
-    const int from_apply_down[]={1,BORDERLESS_CONTROL_ID,AA_CONTROL_ID,UI_SCALE_CONTROL_ID,3};
-    const int from_apply_up[]={UI_SCALE_CONTROL_ID,AA_CONTROL_ID,BORDERLESS_CONTROL_ID,1,3};
-    CHECK(graphics_cycle(nav_items,8,3,40,from_apply_down,5));
-    CHECK(graphics_cycle(nav_items,8,3,39,from_apply_up,5));
+    void *nav_items[9]={recent_limit_label,graphics_test_items[2],graphics_test_items[3],borderless_label,borderless_bar,borderless_knob,aa_label,graphics_test_items[6],ui_slider_label};
+    const int down_cycle[]={BORDERLESS_CONTROL_ID,AA_CONTROL_ID,UI_SCALE_CONTROL_ID,RECENT_LIMIT_ID,3,1,BORDERLESS_CONTROL_ID,AA_CONTROL_ID,UI_SCALE_CONTROL_ID,RECENT_LIMIT_ID,3,1};
+    const int up_cycle[]={3,RECENT_LIMIT_ID,UI_SCALE_CONTROL_ID,AA_CONTROL_ID,BORDERLESS_CONTROL_ID,1,3,RECENT_LIMIT_ID,UI_SCALE_CONTROL_ID,AA_CONTROL_ID,BORDERLESS_CONTROL_ID,1};
+    CHECK(graphics_cycle(nav_items,9,1,40,down_cycle,12));
+    CHECK(graphics_cycle(nav_items,9,2,40,down_cycle,12));
+    CHECK(graphics_cycle(nav_items,9,1,39,up_cycle,12));
+    CHECK(graphics_cycle(nav_items,9,2,39,up_cycle,12));
+    const int from_apply_down[]={1,BORDERLESS_CONTROL_ID,AA_CONTROL_ID,UI_SCALE_CONTROL_ID,RECENT_LIMIT_ID,3};
+    const int from_apply_up[]={RECENT_LIMIT_ID,UI_SCALE_CONTROL_ID,AA_CONTROL_ID,BORDERLESS_CONTROL_ID,1,3};
+    CHECK(graphics_cycle(nav_items,9,3,40,from_apply_down,6));
+    CHECK(graphics_cycle(nav_items,9,3,39,from_apply_up,6));
     CHECK(((int *)borderless_bar)[2]==DISPLAY_LEFT_ID&&((int *)borderless_knob)[2]==DISPLAY_RIGHT_ID);
     ((int *)gm)[11]=BORDERLESS_CONTROL_ID;aa_graphics_input_state(gm);
     CHECK(*(DWORD *)((BYTE *)borderless_label+64)==0);
@@ -508,7 +522,7 @@ int main(int argc,char **argv){
     CHECK(*(DWORD *)((BYTE *)resolution_hover+76)==1);
     delegated=-1;aa_graphics_input(gm,RESOLUTION_FOCUS_ID);CHECK(delegated==-1);
     CHECK(*(DWORD *)((BYTE *)aa_bar+76)==0&&*(DWORD *)((BYTE *)aa_knob+76)==0);
-    aa_graphics_input(gm,3);CHECK(!aa_requested);aa_graphics_cleanup(gm,NULL,NULL);CHECK(!aa_label&&!aa_bar&&!aa_knob&&!resolution_hover&&!borderless_label&&removed==42);
+    aa_graphics_input(gm,3);CHECK(!aa_requested);aa_graphics_cleanup(gm,NULL,NULL);CHECK(!aa_label&&!aa_bar&&!aa_knob&&!resolution_hover&&!borderless_label&&removed==46);
     CHECK(!(*((BYTE *)graphics_test_items[6]+372)&2));
     CHECK(((int *)graphics_test_items[0])[38]==1&&((int *)graphics_test_items[0])[40]==1);
     CHECK(((int *)graphics_test_items[6])[38]==0&&((int *)graphics_test_items[6])[39]==-1);
@@ -522,7 +536,10 @@ int main(int argc,char **argv){
     CHECK(!(*((BYTE *)aa_label+372)&1)&&!(*((BYTE *)ui_slider_label+372)&1));
     graphics_scroll_to(gm,2,FALSE);CHECK(graphics_first==2&&(*((BYTE *)ui_slider_label+372)&1));
     CHECK(!(*((BYTE *)graphics_test_items[2]+372)&1));
+    graphics_scroll_to(gm,3,FALSE);CHECK(graphics_first==3&&(*((BYTE *)recent_limit_label+372)&1)&&(*((BYTE *)recent_limit_restart+372)&1));
+    CHECK(!(*((BYTE *)aa_label+372)&1));
     graphics_scroll_to(gm,0,FALSE);CHECK((*((BYTE *)graphics_test_items[2]+372)&1)&&!(*((BYTE *)ui_slider_label+372)&1));
+    CHECK(!(*((BYTE *)recent_limit_restart+372)&1));
     /* A native confirmation suspends input, but must preserve the reel's
      * viewport. Input-mask reconciliation must not reveal offscreen rows. */
     overlay_value=overlay_fixture;overlay_manager=&overlay_value;((void **)overlay_fixture)[11]=gm;
