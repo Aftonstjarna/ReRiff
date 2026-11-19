@@ -1,3 +1,19 @@
+# ReRiff 1.4.1-beta.5 — Configured custom-car music unlocks
+
+## In-game summary
+
+- Unlock custom cars with configured artist and song rules.
+- Keep the original Police and Monaco music unlocks.
+- Reject unlock configs that do not match their manifest.
+
+## Full release notes
+
+- Extend the original Track Summary Police/Monaco music check through the existing native `unlockCar` path; no parallel ownership system is introduced.
+- Load artist and optional title rules from the active package's manifest-matched `unlocks_pc` CFG/Lua pair. The manifest must match both files exactly; malformed or independently changed pairs fall back to the original defaults.
+- Match rules case-insensitively when Track Summary is entered and preserve the original The Police then Fleetwood Mac / Chain precedence when no customs manifest is active.
+- Keep authored loose car packages on their existing layout. The beta.4 automatic car-slot allocation experiment is not part of this experimental branch.
+- Kansas — Carry on Wayward Son unlocking Baby was confirmed in-game; random and control tracks did not unlock it. Other custom unlock rules remain subject to live testing.
+
 # ReRiff 1.4.1-beta.3 — Missing font repair
 
 ## In-game summary
