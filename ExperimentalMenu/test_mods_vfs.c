@@ -7,6 +7,13 @@ static WCHAR fixture_base[MAX_PATH];
 static void __fastcall fixture_scan(const ModsNativeString *unused,void *entries){
  (void)unused;mods_scan_path(fixture_base,entries);
 }
+static int __cdecl fixture_cache(const WCHAR *root,DWORD used,ModsCachePlan *out,int capacity){
+ WCHAR path[MAX_PATH];wcscpy(path,root);wcscat(path,L"plan.txt");
+ FILE *f=_wfopen(path,L"rb");if(!f||capacity<1){if(f)fclose(f);return -1;}
+ char text[1024]={0};size_t size=fread(text,1,sizeof(text)-1,f);fclose(f);
+ if(!size||!MultiByteToWideChar(CP_UTF8,0,text,-1,out[0].stem,MAX_PATH))return -1;
+ for(unsigned id=1;id<32;id++)if(!(used&(1u<<id))){out[0].id=id;printf("cache plan id=%u stem=%ls\n",id,out[0].stem);return 1;}return -1;
+}
 static int __thiscall fixture_cancelled(void *self){(void)self;return 0;}
 static int verify_bytes(BYTE *base,const char *path,const void *expected,unsigned length){
  BYTE stream[64]={0};BYTE *data=calloc(length+1,1);CHECK(data);
@@ -72,6 +79,7 @@ int main(int argc,char **argv){
 
  if(overrides){
   BOOL startup=strstr(argv[4],"startup")!=NULL,real=strstr(argv[4],"real")!=NULL;
+  if(strstr(argv[4],"cache"))mods_prepare=fixture_cache;
   mods_scan_original=(ModsScanFn)(base+0x15e130);
   wcscpy(fixture_base,folder);WCHAR *last=wcsrchr(fixture_base,L'\\');
   if(last&&last[1]==0)*last=0;
@@ -90,11 +98,12 @@ int main(int argc,char **argv){
   if(startup){mods_only=TRUE;((void(__thiscall *)(void *))(base+0x15ed80))(manager);mods_only=FALSE;}
   else CHECK(install_mods_vfs(base,fake_exe));
   CHECK(mods_scanned);
-  CHECK(*(BYTE **)(manager+0x4c)-*(BYTE **)(manager+0x48)==60);
-  CHECK(!memcmp(prior,*(BYTE **)(manager+0x48)+40,20));
+  printf("mounted count=%d expected=%u\n",(int)(*(BYTE **)(manager+0x4c)-*(BYTE **)(manager+0x48))/20,expected+1);
+  CHECK(*(BYTE **)(manager+0x4c)-*(BYTE **)(manager+0x48)==(int)(expected+1)*20);
+  CHECK(!memcmp(prior,*(BYTE **)(manager+0x48)+expected*20,20));
   BYTE *mounted=*(BYTE **)(manager+0x48);
   CHECK(*(unsigned *)(mounted+12)>*(unsigned *)(mounted+32));
-  CHECK(*(unsigned *)(mounted+32)>*(unsigned *)(mounted+52));
+  if(expected>1)CHECK(*(unsigned *)(mounted+32)>*(unsigned *)(mounted+52));
   unsigned index=99;typedef void *(__thiscall *Lookup)(void *,const char *,unsigned *);
   Lookup lookup=(Lookup)(base+0x160230);
   CHECK(lookup(manager,"graphics\\vehicles\\decals\\alf_01\\batchtextures.brres",&index));CHECK(index==0);
@@ -104,7 +113,7 @@ int main(int argc,char **argv){
   CHECK(!lookup(manager,"missing.txt",&index));CHECK(index==0);
   if(real){
    /* Model a fresh mount with the two test mods absent; original bytes return. */
-   BYTE *end=*(BYTE **)(manager+0x4c);*(BYTE **)(manager+0x48)=mounted+40;
+   BYTE *end=*(BYTE **)(manager+0x4c);*(BYTE **)(manager+0x48)=mounted+expected*20;
    CHECK(!verify_original_livery(base,folder));
    *(BYTE **)(manager+0x48)=mounted;*(BYTE **)(manager+0x4c)=end;
   }

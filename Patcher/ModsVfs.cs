@@ -10,6 +10,11 @@ using System.Globalization;
 using System.Runtime.Serialization.Json;
 internal static class ModsVfs {
     internal const string Marker="mods/.reriff-vfs";
+    internal static void DisabledFolder(string game,Dictionary<string,byte[]> plan) {
+        const string marker="mods/.disabled/README.txt";
+        Safe(game,marker);
+        if(!File.Exists(Path.Combine(game,marker)))plan[marker]=Encoding.UTF8.GetBytes("Mods in this folder are not loaded. Move a mod folder back into mods to enable it. Use the launcher's Languages checkboxes for font packs.\n");
+    }
     static bool Archive(string name) {return Regex.IsMatch(name,@"^vfs[0-9a-f]+\.(dat|zip)$",RegexOptions.IgnoreCase);}
     internal static string Resolve(string game,string name) {
         return Archive(name)&&File.Exists(Path.Combine(game,Marker))?"mods/"+name:name;
@@ -55,6 +60,7 @@ internal static class ModsVfs {
             if(!m.Success||!int.TryParse(m.Groups[1].Value,NumberStyles.HexNumber,CultureInfo.InvariantCulture,out id)||id<1||id>31||!finalIds.Add(id.ToString("x")+"."+m.Groups[2].Value))throw new IOException("Conflicting or unsupported planned VFS name: "+name);
         }
         foreach(string name in final){string pair=Path.ChangeExtension(name,name.EndsWith(".dat",StringComparison.OrdinalIgnoreCase)?"zip":"dat");if(!final.Contains(pair))throw new IOException("Incomplete mod archive pair: "+name);}
+        DisabledFolder(game,result);
         result[Marker]=Encoding.UTF8.GetBytes("ReRiff VFS directory version 1\n");return result;
     }
     internal static int Run(string[] args){

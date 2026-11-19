@@ -16,7 +16,7 @@ with tempfile.TemporaryDirectory(prefix='reriff fonts ü ') as temp:
     def call(game,pack='cjk',action='install',extra=(),success=True):
         result=root/'result.ini';result.unlink(missing_ok=True)
         cmd=([a.wine] if a.wine else [])+[str(a.host.resolve()),'--language-component',action,'--game-dir',path(game),'--pack',pack,'--result',path(result),*extra]
-        run=subprocess.run(cmd,capture_output=True,text=True,timeout=90)
+        run=subprocess.run(cmd,capture_output=True,text=True,errors="replace",timeout=90)
         assert result.exists(),run.stdout+run.stderr
         ini=configparser.ConfigParser(interpolation=None);ini.read(result,encoding='utf-16')
         assert (run.returncode==0)==success and (ini['result']['ok']=='true')==success,(run.returncode,dict(ini['result']),run.stderr)
@@ -63,7 +63,17 @@ with tempfile.TemporaryDirectory(prefix='reriff fonts ü ') as temp:
         assert (game/'vfs.dat').read_bytes()==b'stock' and (game/'vfs.zip').read_bytes()==b'stock zip'
         assert not (game/'vfs1.zip').exists() and not (game/'mods/vfs1.zip').exists()
         latin=snapshot(game/'mods/noto-latin-font');call(game,extra=assets['cjk']);assert snapshot(game/'mods/noto-latin-font')==latin
-        assert call(game,action='disable')['enabled']=='false';assert call(game)['enabled']=='true'
+        saved_pack=snapshot(game/'mods/noto-cjk-font')
+        assert call(game,action='disable')['enabled']=='false'
+        assert not (game/'mods/noto-cjk-font/vfs.zip').exists()
+        assert snapshot(game/'mods/.disabled/noto-cjk-font')==saved_pack
+        assert (game/'mods/.disabled').is_dir()
+        assert call(game,action='disable')['enabled']=='false'
+        conflict=game/'mods/noto-cjk-font/vfs.zip';conflict.write_bytes(b'user mod')
+        before=snapshot(game);call(game,success=False);assert snapshot(game)==before;conflict.unlink()
+        assert call(game)['enabled']=='true'
+        assert snapshot(game/'mods/noto-cjk-font')==saved_pack
+        assert not (game/'mods/.disabled/noto-cjk-font/vfs.zip').exists()
         damaged=game/'mods/noto-cjk-font/vfs.dat';saved=damaged.read_bytes();damaged.write_bytes(b'damaged')
         before=snapshot(game);call(game,extra=assets['cjk'],success=False);assert snapshot(game)==before;damaged.write_bytes(saved)
         print('PASS:',mode,'migration, isolated packs, ownership, staging and enable/disable',flush=True)

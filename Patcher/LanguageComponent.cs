@@ -97,7 +97,7 @@ internal static class LanguageComponent
         Directory.Delete(old);
     }
     static string Under(string game, string name) { name=ModsVfs.Resolve(game,name); if (name.Length == 0 || name.Contains('\\') || name.Contains(':') || name.Split('/').Any(p => p == "" || p == "." || p == "..") || Path.IsPathRooted(name)) throw new IOException("Unsafe language component path."); string target = Path.GetFullPath(game); foreach (string part in name.Split('/')) { target = Path.Combine(target, part); if ((File.Exists(target) || Directory.Exists(target)) && (File.GetAttributes(target) & FileAttributes.ReparsePoint) != 0) throw new IOException("Language component paths must not be links."); } return target; }
-    static bool FontPath(string name) => Regex.IsMatch(name,@"^mods/noto-(cjk|latin)-font/vfs\.(dat|zip)$") || (name.StartsWith("mods/noto-cjk-font/noto-cjk/") && FontPath("fonts/"+name.Substring("mods/noto-cjk-font/".Length))) || (name.StartsWith("mods/noto-latin-font/noto-latin/") && FontPath("fonts/"+name.Substring("mods/noto-latin-font/".Length))) || Regex.IsMatch(name, @"^vfs[1-9a-f][0-9a-f]?\.(dat|zip)$") || Regex.IsMatch(name, @"^fonts/noto-cjk/(jp|kr|sc|tc|hk)(64|96)?\.rrcf$") || name == "fonts/noto-cjk/OFL.txt" || Regex.IsMatch(name,@"^fonts/noto-latin/(latin(32|64|96)\.rrcf|OFL\.txt)$");
+    static bool FontPath(string name) => name.StartsWith("mods/.disabled/",StringComparison.Ordinal) ? FontPath("mods/"+name.Substring("mods/.disabled/".Length)) : Regex.IsMatch(name,@"^mods/noto-(cjk|latin)-font/vfs\.(dat|zip)$") || (name.StartsWith("mods/noto-cjk-font/noto-cjk/") && FontPath("fonts/"+name.Substring("mods/noto-cjk-font/".Length))) || (name.StartsWith("mods/noto-latin-font/noto-latin/") && FontPath("fonts/"+name.Substring("mods/noto-latin-font/".Length))) || Regex.IsMatch(name, @"^vfs[1-9a-f][0-9a-f]?\.(dat|zip)$") || Regex.IsMatch(name, @"^fonts/noto-cjk/(jp|kr|sc|tc|hk)(64|96)?\.rrcf$") || name == "fonts/noto-cjk/OFL.txt" || Regex.IsMatch(name,@"^fonts/noto-latin/(latin(32|64|96)\.rrcf|OFL\.txt)$");
     // A deliberately removed mods tree must not leave installed-component flags behind.
     // Restrict recovery to named-mod records; partial or modified installs stay strict.
     internal static bool RemovedModTree(string game,string pack) {
@@ -105,8 +105,8 @@ internal static class LanguageComponent
         if(!File.Exists(record)||Directory.Exists(mods)||File.Exists(mods))return false;
         var old=Read<Installed>(File.ReadAllBytes(record));
         return old.schema==2&&old.files!=null&&old.files.Count>0&&old.archives!=null&&
-            old.archives.Count==1&&old.archives.Values.Single()==ModRoot(pack)+"vfs"&&
-            old.files.Keys.All(name=>name.StartsWith(ModRoot(pack),StringComparison.Ordinal)&&FontPath(name));
+            old.archives.Count==1&&(old.archives.Values.Single()==ModRoot(pack)+"vfs"||old.archives.Values.Single()=="mods/.disabled/noto-"+pack+"-font/vfs")&&
+            old.files.Keys.All(name=>(name.StartsWith(ModRoot(pack),StringComparison.Ordinal)||name.StartsWith("mods/.disabled/noto-"+pack+"-font/",StringComparison.Ordinal))&&FontPath(name));
     }
     internal static bool Present(string game,string pack="cjk") => File.Exists(Under(game, StateFor(pack)))&&!RemovedModTree(game,pack);
     internal static bool Enabled(string game,string pack="cjk")
@@ -127,6 +127,9 @@ internal static class LanguageComponent
     static string OwnedPath(string game,string name,string hash) {
         string path=Under(game,name);
         if(File.Exists(path))return path;
+        string alternate=name.StartsWith("mods/.disabled/",StringComparison.Ordinal)?"mods/"+name.Substring("mods/.disabled/".Length):name.StartsWith("mods/noto-",StringComparison.Ordinal)?"mods/.disabled/"+name.Substring(5):name;
+        string parked=Under(game,alternate);
+        if(File.Exists(parked)&&Hash(File.ReadAllBytes(parked))==hash)return parked;
         // Adopt the user's earlier manually arranged folder only with exact ownership hashes.
         string candidate=name.StartsWith("vfs")?ModRoot("cjk")+"vfs"+Path.GetExtension(name):
             name.StartsWith("fonts/noto-")?"mods/noto-"+(name.Contains("noto-latin/")?"latin":"cjk")+"-font/"+name.Substring(6):name;
@@ -221,6 +224,28 @@ internal static class LanguageComponent
                 foreach(var file in updated)plan[file.Key]=file.Value;
             }
         }else if(enable&&!Present(game,pack))throw new IOException("Install the font component first.");
+        // Relocate owned files and their receipt together; Apply rolls back failures.
+        byte[] record;
+        Installed selected=plan.TryGetValue(StateFor(pack),out record)?(record==null?null:Read<Installed>(record)):
+            Present(game,pack)?Existing(game,pack):null;
+        if(selected!=null&&selected.schema==2) {
+            string root=enable?ModRoot(pack):"mods/.disabled/noto-"+pack+"-font/";
+            var relocated=new Installed{schema=2,version=selected.version};
+            relocated.archives["combined"]=root+"vfs";
+            foreach(var entry in selected.files) {
+                string source=entry.Key;byte[] bytes;
+                if(!plan.TryGetValue(source,out bytes)) {
+                    source=OwnedPath(game,entry.Key,entry.Value).Substring(Path.GetFullPath(game).Length+1).Replace('\\','/');
+                    bytes=File.ReadAllBytes(Under(game,source));
+                }
+                string prefix=entry.Key.StartsWith("mods/.disabled/",StringComparison.Ordinal)?"mods/.disabled/noto-"+pack+"-font/":ModRoot(pack);
+                if(!entry.Key.StartsWith(prefix,StringComparison.Ordinal))throw new IOException("Unexpected font mod root.");
+                string destination=root+entry.Key.Substring(prefix.Length);
+                if(source!=destination) { if(File.Exists(Under(game,source)))plan[source]=null;else plan.Remove(source); }
+                plan[destination]=bytes;relocated.files[destination]=Hash(bytes);
+            }
+            plan[StateFor(pack)]=Json(relocated);
+        }
         // Check every destination, including migration-only operations, before any writes.
         foreach(var file in plan.Where(f=>f.Value!=null&&f.Key.StartsWith("mods/",StringComparison.Ordinal))) {
             string path=Under(game,file.Key);
@@ -232,6 +257,7 @@ internal static class LanguageComponent
             }
             if(!owned&&Hash(File.ReadAllBytes(path))!=Hash(file.Value))throw new IOException("Unowned mod file retained: "+file.Key);
         }
+        ModsVfs.DisabledFolder(game,plan);
         plan["client.ini"]=Config(game,enable,pack);
         return plan;
     }
@@ -287,8 +313,8 @@ internal static class LanguageComponent
                     Atomic(Under(shadow,relative),File.ReadAllBytes(source));
                 }
             }
-            foreach(string pack in new[]{"cjk","latin"}) {
-                string folder=Under(game,ModRoot(pack).TrimEnd('/'));
+            foreach(string pack in new[]{"cjk","latin"}) foreach(string modRoot in new[]{ModRoot(pack),"mods/.disabled/noto-"+pack+"-font/"}) {
+                string folder=Under(game,modRoot.TrimEnd('/'));
                 if(Directory.Exists(folder))foreach(string file in Directory.GetFiles(folder,"*",SearchOption.AllDirectories)) {
                     string name=file.Substring(Path.GetFullPath(game).Length+1).Replace('\\','/');
                     Atomic(Under(shadow,name),File.ReadAllBytes(Under(game,name)));
@@ -297,6 +323,7 @@ internal static class LanguageComponent
             foreach(string config in new[]{"server.ini","client.ini"})if(File.Exists(Under(game,config)))Atomic(Under(shadow,config),File.ReadAllBytes(Under(game,config)));
             if(cjk.HasValue)foreach(var item in Plan(shadow,cjkAsset,cjkHash,cjk.Value)) {result[item.Key]=item.Value;if(item.Value==null)File.Delete(Under(shadow,item.Key));else Atomic(Under(shadow,item.Key),item.Value);}
             foreach(var item in Plan(shadow,latinAsset,latinHash,latin.Value,"latin"))result[item.Key]=item.Value;
+            foreach(string name in result.Where(p=>p.Value==null&&!File.Exists(Under(game,p.Key))).Select(p=>p.Key).ToArray())result.Remove(name);
             return result;
         } finally {Directory.Delete(shadow,true);}
     }

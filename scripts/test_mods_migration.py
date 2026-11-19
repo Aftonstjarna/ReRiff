@@ -14,6 +14,7 @@ with tempfile.TemporaryDirectory(prefix='reriff mods ü ') as tmp:
     (game/'vfs1.dat').write_bytes(b'index');call(False)
     (game/'vfs1.zip').write_bytes(b'zip');call()
     assert (stage/'mods/vfs1.dat').read_bytes()==b'index'
+    assert (stage/'mods/.disabled/README.txt').is_file()
     assert set(json.loads((stage/'.reriff-mods-removals.json').read_text()))=={'vfs1.dat','vfs1.zip'}
     for f in stage.rglob('*'):
         if f.is_file() and f.name!='.reriff-mods-removals.json':

@@ -53,6 +53,21 @@ int main(void){
     CHECK(picker_search_before(owner)&&text_entry_inline);picker_search_controller(0,TRUE);picker_search_controller(0x2000,TRUE);
     picker_search_before(owner);CHECK(!text_entry_inline&&!picker_search_filtered);
     picker_search_controller(0,FALSE);picker_search_controller(0x8000,TRUE);CHECK(!picker_search_request);
+    picker_search_wait_neutral=FALSE;picker_search_release=0;
+    CHECK(text_entry_begin_inline(L"mouse"));
+    CHECK(!picker_search_message(window,WM_RBUTTONDOWN,0,MAKELPARAM(100,100)));
+    CHECK(!text_entry_action);
+    CHECK(picker_search_message(window,WM_LBUTTONDOWN,0,MAKELPARAM(100,100)));
+    CHECK(text_entry_action==1&&!picker_search_request);
+    int selected_before=selections;CHECK(picker_search_before(owner));
+    CHECK(!text_entry_inline&&picker_search_filtered&&!wcscmp(queried,L"mouse"));
+    picker_search_input(owner,6);CHECK(selections==selected_before); /* No click-through. */
+    picker_search_release=0;picker_search_input(owner,6);CHECK(selections==selected_before+1);
+    CHECK(!picker_search_message(window,WM_LBUTTONDOWN,0,MAKELPARAM(100,100)));
+    CHECK(picker_search_message(window,WM_LBUTTONDOWN,0,MAKELPARAM(100,20)));
+    CHECK(picker_search_before(owner)&&text_entry_inline);
+    CHECK(picker_search_message(window,WM_LBUTTONDOWN,0,MAKELPARAM(100,20)));
+    CHECK(picker_search_before(owner)&&!text_entry_inline); /* Clicking the field accepts too. */
     picker_search_forget(owner);CHECK(closed==1&&!picker_search_owner&&!picker_search_available&&!text_entry_active&&!text_entry_inline);
     picker_search_forget(owner);CHECK(closed==1);CHECK(!picker_search_message(window,WM_KEYDOWN,'F',0));
     DestroyWindow(window);puts("PASS: inline field activation, Unicode editing, debounce, native result routing, Enter/Esc isolation, small viewport, overlay separation and cleanup");return 0;

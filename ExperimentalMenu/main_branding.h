@@ -106,10 +106,12 @@ static void attach_main_branding(void *menu){
     deliver_update_notice();
 }
 static void __thiscall branded_main_init(void *menu,void *screen,void *lower){
+    car_fallback_main();
     display_restore_startup();
     main_init_original(menu,screen,lower);main_scale_size(menu);center_main_rows(menu);main_scale_scroll_init(menu);attach_main_branding(menu);
 }
 static void __thiscall branded_main_tick(void *menu){
+    car_fallback_main();
     display_restore_startup();display_style();
     /* Transport initialization can happen after the first main-menu init. */
     if(!watermark||watermark_owner!=menu)attach_main_branding(menu);

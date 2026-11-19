@@ -22,6 +22,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ('zig', 'wine', 'prefix', 'reference'):
         parser.add_argument('--' + name, type=Path, required=True)
+    parser.add_argument("--cache-smoke", type=Path, help="Built ModArchiveCacheSmoke.exe")
     args = parser.parse_args()
     game = args.reference.resolve() / 'Game.exe'
     expected = '2d1af8a01ec6b1e3477ff6dbe4a44895828e2ac71449344fec9d7d99e87a58e2'
@@ -55,6 +56,13 @@ def main():
             if output.parent.name == 'mods':
                 for file in pair:
                     file.rename(file.with_name('vfs' + file.suffix))
+        # Disabled packs must neither consume slots nor override active assets.
+        import shutil
+        disabled = root / 'mods/.disabled'
+        disabled.mkdir()
+        for file in (root / 'mods/z-livery').iterdir():
+            shutil.copy2(file, disabled / file.name)
+        shutil.copytree(root / 'mods/z-livery', disabled / 'parked-mod')
         with zipfile.ZipFile(args.reference / 'vfs.zip') as archive:
             original = archive.read('graphics/vehicles/decals/alf_01/batchTextures.brres')
         if hashlib.sha256(original).hexdigest() != '7805bdcc802a85f5d22e47053a08a50ccc37b158a76312a82d83cded684d26f0':
@@ -67,6 +75,23 @@ def main():
             subprocess.run([str(args.wine.resolve()), str(exe), windows(game),
                             windows(root / 'mods') + '\\', '2', mode],
                            env=env, check=True, timeout=60)
+        if args.cache_smoke:
+            cached = root / 'cached'
+            shutil.copytree(root / 'baseline', cached / 'baseline')
+            shutil.copy2(root / 'original-livery.bin', cached / 'original-livery.bin')
+            subprocess.run([str(args.wine.resolve()), str(args.cache_smoke.resolve()),
+                            windows(cached / 'mods')], env=env, check=True, timeout=60)
+            stem = (cached / 'mods/plan.txt').read_text()
+            pair = Path(stem[2:].replace('\\', '/'))
+            assert pair.parent == cached / 'mods', 'Merge must be directly in mods/'
+            with zipfile.ZipFile(str(pair) + '.zip') as archive:
+                assert archive.testzip() is None
+                assert archive.read(path) == b'second mod'
+            for mode in ('cache-late', 'cache-startup', 'real-cache-late', 'real-cache-startup'):
+                print('Native cached merge fixture:', mode, flush=True)
+                subprocess.run([str(args.wine.resolve()), str(exe), windows(game),
+                                windows(cached / 'mods') + '\\', '1', mode],
+                               env=env, check=True, timeout=60)
         print('Native mount-only regression', flush=True)
         subprocess.run([str(args.wine.resolve()), str(exe), windows(game),
                         windows(root / 'mods') + '\\', '2'],

@@ -105,6 +105,12 @@ namespace ReRiff {
                 ReRiffConfigureNativePrompt(overlayPointers,2);
                 try {LastFmNative.Configure(game);}
                 catch {Log("Scrobbling playback binding unavailable.");}
+                try {NativeModCache.Configure();}
+                catch(Exception error){Log("Mod cache adapter unavailable: "+error);}
+                try {CarFallback.Configure(game);}
+                catch(Exception error){Log("Local car fallback unavailable: "+error);}
+                try {GhostCarTest.Configure();}
+                catch(Exception error){Log("Ghost car test unavailable: "+error);}
                 try {NativePickerSearch.Configure(game);}
                 catch(Exception error){Log("Picker search unavailable: "+error);}
                 try {ProgressionNative.Configure(game);}

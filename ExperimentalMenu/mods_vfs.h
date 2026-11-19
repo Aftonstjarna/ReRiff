@@ -6,8 +6,17 @@ typedef struct ModsNativeString {
 } ModsNativeString;
 typedef void (__fastcall *ModsScanFn)(const ModsNativeString *,void *);
 static ModsScanFn mods_scan_original;
-static WCHAR mods_directory[MAX_PATH];
+typedef struct { unsigned id; WCHAR stem[MAX_PATH]; } ModsCachePlan;
+typedef int (__cdecl *ModsPrepareFn)(const WCHAR *,DWORD,ModsCachePlan *,int);
+static ModsPrepareFn mods_prepare;
 static BOOL mods_scanned,mods_only;
+static void (__thiscall *mods_push_original)(void *,void *);
+static void *(__thiscall *mods_string_assign)(void *,const WCHAR *,unsigned);
+__declspec(dllexport) int __cdecl ReRiffConfigureModCache(void *callback){
+    if(mods_scanned)return 0;
+    mods_prepare=(ModsPrepareFn)callback;return 1;
+}
+static WCHAR mods_directory[MAX_PATH];
 static BYTE *mods_manager;
 static BYTE **mods_manager_global;
 typedef struct { BYTE *begin,*end,*capacity; } ModsVector;
@@ -28,6 +37,31 @@ static void __fastcall mods_scan(const ModsNativeString *original,void *entries)
     if(mods_manager&&readable(mods_manager,0x54)){
         BYTE *start=*(BYTE **)(mods_manager+0x48),*end=*(BYTE **)(mods_manager+0x4c);
         for(BYTE *p=start;p<end;p+=20)if(*(unsigned *)(p+12)<32)used|=1u<<*(unsigned *)(p+12);
+    }
+    if(mods_prepare&&mods_push_original&&mods_string_assign){
+        ModsCachePlan *plans=HeapAlloc(GetProcessHeap(),HEAP_ZERO_MEMORY,31*sizeof(*plans));
+        if(plans){
+            int count=mods_prepare(mods_directory,used,plans,31);BOOL valid=count>=0&&count<=31;
+            DWORD assigned=used;
+            for(int i=0;valid&&i<count;i++){
+                unsigned id=plans[i].id;
+                if(id==0||id>=32||(assigned&(1u<<id))||!plans[i].stem[0]||plans[i].stem[MAX_PATH-1])valid=FALSE;
+                else assigned|=1u<<id;
+            }
+            if(valid){
+                for(int i=0;i<count;i++){
+                    struct {unsigned id;ModsNativeString name;} entry={0};
+                    entry.id=plans[i].id;entry.name.capacity=7;
+                    /* Native vector push MOVES its string. Use the original
+                       allocator/assigner, never a borrowed managed/heap buffer. */
+                    mods_string_assign(&entry.name,plans[i].stem,(unsigned)wcslen(plans[i].stem));
+                    mods_push_original(entries,&entry);
+                }
+                HeapFree(GetProcessHeap(),0,plans);return;
+            }
+            HeapFree(GetProcessHeap(),0,plans);
+            log_line("Mod cache plan unavailable; using legacy VFS discovery.");
+        }
     }
     WCHAR pattern[MAX_PATH];wcscpy(pattern,mods_directory);wcscat(pattern,L"*");
     WIN32_FIND_DATAW data;HANDLE find=FindFirstFileW(pattern,&data);
@@ -76,6 +110,12 @@ static BOOL install_mods_vfs(BYTE *base,const WCHAR *executable){
     DWORD old,ignored;if(!VirtualProtect(site,5,PAGE_EXECUTE_READWRITE,&old))return FALSE;
     mods_manager_global=(BYTE **)(base+0x7fcd2c);
     mods_scan_original=(ModsScanFn)(base+0x15e130);
+    const BYTE push[]={0x55,0x8b,0xec,0x56,0x8b,0xf1,0x57,0x8b,0x7d,0x08};
+    const BYTE assign[]={0x55,0x8b,0xec,0x53,0x8b,0x5d,0x08,0x56,0x8b,0xf1};
+    if(!memcmp(base+0x1614e0,push,sizeof(push))&&!memcmp(base+0x4f9b0,assign,sizeof(assign))){
+        mods_push_original=(void(__thiscall *)(void *,void *))(base+0x1614e0);
+        mods_string_assign=(void *(__thiscall *)(void *,const WCHAR *,unsigned))(base+0x4f9b0);
+    }
     *(int32_t *)(site+1)=(int32_t)((BYTE *)(uintptr_t)mods_scan-(site+5));
     FlushInstructionCache(GetCurrentProcess(),site,5);VirtualProtect(site,5,old,&ignored);
     /* Network initialization can follow the initial mount pass. Load mods
@@ -83,7 +123,10 @@ static BOOL install_mods_vfs(BYTE *base,const WCHAR *executable){
        records by descending volume ID, enabling native asset overrides. */
     BYTE *manager=*(BYTE **)(base+0x7fcd2c);mods_manager=manager;
     if(manager&&readable(manager,0x54)&&*(void **)(manager+0x48)){
+        size_t before=(size_t)(*(BYTE **)(manager+0x4c)-*(BYTE **)(manager+0x48));
         mods_only=TRUE;((void(__thiscall *)(void *))(base+0x15ed80))(manager);mods_only=FALSE;
+        size_t after=(size_t)(*(BYTE **)(manager+0x4c)-*(BYTE **)(manager+0x48));
+        if(after>before)mods_refresh_localization(base);
     }
     return TRUE;
 }

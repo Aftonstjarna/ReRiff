@@ -1,3 +1,24 @@
+# ReRiff 1.4.1-beta.2 — Loose mods and picker fixes
+
+## In-game summary
+
+- Load loose-file mods and merge archives when slots run low.
+- Keep disabled mods and language packs in mods/.disabled.
+- Accept searches with a click and display Steam friend names correctly.
+
+## Full release notes
+
+- Load loose assets from each mod's `assets/` folder, building reusable VFS caches locally. Merge excess archives in the base `mods/` folder when native slots run low. [Mod loader guide](https://github.com/Aftonstjarna/ReRiff/wiki/Mod-loader).
+- Create `mods/.disabled` during installation and move disabled language packs there; the loader ignores this folder.
+- Let left-click accept an active music search, matching Enter and controller A.
+- Fix UTF-8 decoding of Steam friend names, including trademark symbols.
+- Include opt-in custom-car diagnostics, startup name refresh, and tested stock-car fallback for the Pulse clone experiment. Custom-model sharing remains deferred.
+
+### Validation and known limitations
+
+- Automated regressions cover loose-mod packaging and caching, disabled language migration, search input, friend names, and custom-car fallback. Owner tests confirmed loose loading and the Pulse clone's naming and fallback behavior.
+- General custom-car support remains experimental; no car models are bundled. Over-limit merging still needs live rendering validation. Steam virtual-keyboard input and M4A playback remain unsupported.
+
 # ReRiff 1.4.1-beta.1 — Scrobbling, track history and graphics controls
 
 ## In-game summary

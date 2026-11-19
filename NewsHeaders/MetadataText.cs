@@ -46,6 +46,10 @@ namespace ReRiff {
             return null;
         }
         public static string DecodeValue(IntPtr value,IntPtr key){
+            // Isolated Pulse Test has two paints, both valid stock Pulse paints.
+            // Keep legacy leaderboard metadata stock-compatible as well as the file.
+            if(key!=IntPtr.Zero&&Marshal.PtrToStringAnsi(key)=="car"&&value!=IntPtr.Zero
+                &&Marshal.PtrToStringAnsi(value)=="dod"&&GhostCarTestFormat.Enabled(AppDomain.CurrentDomain.BaseDirectory))return "alf";
             string field=Field(key);
             if(field==null)return Marshal.PtrToStringAnsi(value)??string.Empty;
             if(value==IntPtr.Zero)return string.Empty;

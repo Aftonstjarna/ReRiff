@@ -14,6 +14,7 @@ static ProgressCreateFn progression_create;
 static ProgressOpenFn progression_open;
 static ProgressCloseFn progression_close;
 static ProgressWriteFn progression_write;
+static ProgressReadFn progression_read;
 typedef int (__cdecl *ProgressCheckpointFn)(const WCHAR *,int,int);
 static ProgressCheckpointFn progression_checkpoint;
 static WCHAR progression_domain_path[MAX_PATH];
@@ -34,6 +35,7 @@ static LONG progression_domain_pending;
 static void *progression_local_device,*progression_cloud_device;
 static void progression_domain_ensure(void);
 static BOOL progression_domain_root(void *device,WCHAR *root);
+#include "ghost_car_test.h"
 static void progression_domain_io(void *self,const char *name,const char *operation,DWORD detail,BYTE result){
     if(!progression_domain_active||!name||strcmp(name,"save.bin")||InterlockedIncrement(&progression_io_events)>32)return;
     WCHAR root[MAX_PATH];BOOL same=progression_domain_root(self,root)&&!wcscmp(root,progression_seed_root);
@@ -49,20 +51,29 @@ static const char *progression_domain_route(const char *name){
 static BYTE __thiscall progression_domain_exists(void *self,const char *name){BYTE result=progression_exists(self,progression_domain_route(name));progression_domain_io(self,name,"exists",0,result);return result;}
 static BYTE __thiscall progression_domain_create(void *self,const char *name,DWORD size){BYTE result=progression_create(self,progression_domain_route(name),size);progression_domain_io(self,name,"create",size,result);return result;}
 static BYTE __thiscall progression_domain_open(void *self,const char *name,DWORD mode){
+    ghost_car_before_open(self,name,mode);
     BYTE result=progression_open(self,progression_domain_route(name),mode);
+    if(!result)ghost_car_target=ghost_car_patch_ready=FALSE;
     progression_file_target=result&&progression_domain_active&&name&&!strcmp(name,"save.bin");
     progression_file_mode=mode;progression_file_failed=FALSE;
     progression_domain_io(self,name,"open",mode,result);return result;
 }
 static BYTE __thiscall progression_domain_write(void *self,DWORD offset,const void *buffer,DWORD size){
     BYTE result=progression_write(self,offset,buffer,size);
+    if(ghost_car_target&&!result)ghost_car_write_failed=TRUE;
     if(progression_file_target&&!result)progression_file_failed=TRUE;
+    return result;
+}
+static BYTE __thiscall progression_domain_read(void *self,DWORD offset,void *buffer,DWORD size,DWORD *count){
+    BYTE result=progression_read(self,offset,buffer,size,count);
+    if(result&&ghost_car_patch_ready&&count&&*count<=size)ghost_car_overlay(offset,buffer,*count,&ghost_car_patch);
     return result;
 }
 static BYTE __thiscall progression_domain_close(void *self){
     BOOL target=progression_file_target,failed=progression_file_failed;DWORD mode=progression_file_mode;
     progression_file_target=FALSE;progression_file_mode=0;
     BYTE result=progression_close(self);
+    ghost_car_after_close(result);
     if(target&&result&&!failed&&progression_checkpoint){
         int phase=mode==1?1:(mode==2||mode==3?2:-1),xp=0;
         if(phase>=0&&(phase!=1||!progression_load_observed)){
@@ -260,15 +271,16 @@ static int progression_domain_prepare(void){
     }
     progression_exists=(ProgressExistsFn)local_table[0];progression_create=(ProgressCreateFn)local_table[1];
     progression_close=(ProgressCloseFn)local_table[3];progression_write=(ProgressWriteFn)local_table[7];
+    progression_read=(ProgressReadFn)local_table[6];
     progression_open=(ProgressOpenFn)local_table[2];progression_delete=(ProgressExistsFn)local_table[5];
     progression_cloud_enable=(EnableFn)cloud_table[0];
     progression_local_device=local;progression_cloud_device=cloud;
     snprintf(progression_domain_name,sizeof(progression_domain_name),"reriff-%s-%s.bin",progression_domain_multiplayer?"mp":"sp",digest);
-    BOOL patched[7]={FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE};
-    void **slots[]={local_table,local_table+1,local_table+2,local_table+5,cloud_table,local_table+3,local_table+7};
-    void *originals[]={(void *)progression_exists,(void *)progression_create,(void *)progression_open,(void *)progression_delete,(void *)progression_cloud_enable,(void *)progression_close,(void *)progression_write};
-    void *hooks[]={(void *)&progression_domain_exists,(void *)&progression_domain_create,(void *)&progression_domain_open,(void *)&progression_domain_delete,(void *)&progression_domain_cloud_enable,(void *)&progression_domain_close,(void *)&progression_domain_write};
-    for(unsigned i=0;i<7;i++){
+    BOOL patched[8]={FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE};
+    void **slots[]={local_table,local_table+1,local_table+2,local_table+5,cloud_table,local_table+3,local_table+7,local_table+6};
+    void *originals[]={(void *)progression_exists,(void *)progression_create,(void *)progression_open,(void *)progression_delete,(void *)progression_cloud_enable,(void *)progression_close,(void *)progression_write,(void *)progression_read};
+    void *hooks[]={(void *)&progression_domain_exists,(void *)&progression_domain_create,(void *)&progression_domain_open,(void *)&progression_domain_delete,(void *)&progression_domain_cloud_enable,(void *)&progression_domain_close,(void *)&progression_domain_write,(void *)&progression_domain_read};
+    for(unsigned i=0;i<(ghost_car_process?8u:7u);i++){
         patched[i]=progression_domain_slot(slots[i],originals[i],hooks[i]);
         if(!patched[i]){
             for(unsigned j=0;j<=i;j++)if(*slots[j]==hooks[j])progression_domain_slot(slots[j],hooks[j],originals[j]);

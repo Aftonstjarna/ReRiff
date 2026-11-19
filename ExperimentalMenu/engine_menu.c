@@ -609,6 +609,7 @@ static void picker_search_forget(void *menu);
 #include "picker_search.h"
 #include "ui_scale_slider.h"
 #include "graphics_aa_menu.h"
+#include "car_fallback.h"
 #include "main_branding.h"
 
 /* The supported PE's HIGHLOW relocation table identifies absolute operands.
@@ -709,6 +710,7 @@ static BOOL validate_image_at(BYTE *base,uintptr_t address_base) {
 static BOOL validate_image(BYTE *base) { return validate_image_at(base,(uintptr_t)base); }
 
 #include "flac_sample_rate.h"
+#include "mod_localization.h"
 #include "mods_vfs.h"
 static BOOL latin_pack_enabled(void){WCHAR value[16];GetPrivateProfileStringW(L"languages",L"latin_enabled",L"0",value,16,config_path);return !wcscmp(value,L"1")||!_wcsicmp(value,L"true");}
 static BOOL cjk_pack_enabled(void){
@@ -718,7 +720,9 @@ static BOOL cjk_pack_enabled(void){
 }
 static BOOL cjk_component_enabled(void){return cjk_pack_enabled()||latin_pack_enabled();}
 #include "lastfm_utf8.h"
+#include "friend_utf8.h"
 #include "progression_probe.h"
+#include "car_capacity_trace.h"
 #include "recent_tracks.h"
 #include "recent_track_stars.h"
 #include "first_prestige_entry.h"
@@ -799,10 +803,12 @@ __declspec(dllexport) BOOL __cdecl ReRiffStartEngineMenu(void) {
     if(!install_mods_vfs(base,path))log_line("Mods VFS hook refused: native archive loader differs.");
     if(!install_recent_tracks(base))log_line("Recent Tracks extension refused: original CIL differs.");
     if(!install_scrobbler(base))log_line("Scrobbling playback hook refused: original race differs.");
+    if(!install_friend_utf8(base))log_line("Friend UTF-8 correction refused: original CIL bytes differ.");
     if(!install_lastfm_utf8(base))log_line("Last.fm UTF-8 correction refused: original CIL bytes differ.");
     if(!install_progression_economy(base))log_line("Economy trace wrappers refused: original CIL differs.");
     if(!install_progression_rank(base))log_line("Permanent Rank hook refused: original checker differs.");
     start_progression_probe(base);
+    start_car_trace(base);
     if(!install_flac_sample_rate(base))log_line("FLAC sample-rate patch guard refused; original decoder retained.");
     void **table=(void **)(base+0x7a5a7c); DWORD protection;
     if (!VirtualProtect(table,27*sizeof(void *),PAGE_READWRITE,&protection)) return FALSE;

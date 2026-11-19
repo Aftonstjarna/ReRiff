@@ -58,6 +58,9 @@ static BOOL picker_search_message(HWND window,UINT message,WPARAM key,LPARAM fla
         InterlockedExchange(&picker_search_request,1);return TRUE;
     }
     if(message==WM_LBUTTONDOWN){
+        /* Accept editing like Enter/A and consume the click so it cannot
+           also activate a result row underneath the search field. */
+        if(text_entry_inline){InterlockedExchange(&text_entry_action,1);return TRUE;}
         POINT p={(short)LOWORD(flags),(short)HIWORD(flags)};
         EnterCriticalSection(&text_entry_lock);RECT hit=picker_search_rect;LeaveCriticalSection(&text_entry_lock);
         if(PtInRect(&hit,p)){InterlockedExchange(&picker_search_request,1);return TRUE;}
