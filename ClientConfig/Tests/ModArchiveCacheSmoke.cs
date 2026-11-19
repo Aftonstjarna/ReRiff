@@ -11,11 +11,14 @@ class ModCacheSmoke {
         Asset(root,".disabled/ignored","hidden.txt","disabled");
         var initial=ModArchiveCache.Prepare(root,1);Check(initial.Count==2,"two mods");
         Check(Path.GetDirectoryName(initial[0].Stem)==Path.Combine(root,"a-first"),"individual cache is in mod");
+        Check(System.Text.Encoding.UTF8.GetString(ModArchiveCache.Resource(initial,"graphics/vehicles/decals/alf_01/batchtextures.brres"))=="second mod","resource uses final mounted priority");
+        Check(ModArchiveCache.Resource(initial,"hidden.txt")==null,"disabled resource not loaded");
         DateTime stamp=File.GetLastWriteTimeUtc(initial[0].Stem+".zip");var warm=ModArchiveCache.Prepare(root,1);
         Check(initial[0].Stem==warm[0].Stem&&stamp==File.GetLastWriteTimeUtc(warm[0].Stem+".zip"),"reuse without rewrite");
         // Only slot 31 available. Merged output MUST be directly under mods root.
         var merged=ModArchiveCache.Prepare(root,0x7fffffffu);Check(merged.Count==1&&merged[0].Id==31,"reserve numbered slots");
         Check(Path.GetDirectoryName(merged[0].Stem)==root,"root-level merged cache");
+        Check(System.Text.Encoding.UTF8.GetString(ModArchiveCache.Resource(merged,"graphics/vehicles/decals/alf_01/batchtextures.brres"))=="second mod","merged resource priority");
         string changed=Path.Combine(root,"z-last","assets","second.txt");DateTime savedTime=File.GetLastWriteTimeUtc(changed);
         File.WriteAllText(changed,"second best");File.SetLastWriteTimeUtc(changed,savedTime);
         Check(ModArchiveCache.Prepare(root,1)[1].Stem!=initial[1].Stem,"same-size same-time edit detected");

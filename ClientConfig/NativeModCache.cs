@@ -16,6 +16,7 @@ namespace ReRiff {
                     IntPtr record=new IntPtr(output.ToInt64()+i*524);Marshal.WriteInt32(record,plan[i].Id);
                     char[] path=(plan[i].Stem+"\0").ToCharArray();Marshal.Copy(path,0,new IntPtr(record.ToInt64()+4),path.Length);
                 }
+                try{CustomsUnlocks.LoadPlan(plan);}catch(Exception error){CustomsUnlocks.Load(null);NativeReelBridge.Log("Customs music rules disabled: "+error.Message);}
                 NativeReelBridge.Log("Prepared "+plan.Count+" native mod volumes (loose caches and automatic overflow merge).");return plan.Count;
             }catch(Exception error){NativeReelBridge.Log("Mod cache preparation failed; retaining legacy discovery: "+error);return -1;}
         }

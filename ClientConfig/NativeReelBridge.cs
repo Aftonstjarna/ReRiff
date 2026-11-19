@@ -113,6 +113,7 @@ namespace ReRiff {
                 catch(Exception error){Log("Ghost car test unavailable: "+error);}
                 try {NativePickerSearch.Configure(game);}
                 catch(Exception error){Log("Picker search unavailable: "+error);}
+                try {CustomsUnlocks.Configure(game);}catch(Exception e){Log("Customs unlock setup failed: "+e.Message);}
                 try {ProgressionNative.Configure(game);}
                 catch(Exception error){Log("Original progression adapter unavailable; live prestige remains disabled: "+error);}
                 try {ProgressionView.Configure(game);}

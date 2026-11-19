@@ -734,6 +734,7 @@ static BOOL cjk_component_enabled(void){return cjk_pack_enabled()||latin_pack_en
 #include "progression_ghost.h"
 #include "lastfm_scrobbler.h"
 #include "progression_rewards.h"
+#include "customs_unlocks.h"
 #include "progression_level_reward.h"
 #include "cjk_fonts.h"
 #include "cjk_direct_visuals.h"
@@ -839,6 +840,7 @@ __declspec(dllexport) BOOL __cdecl ReRiffStartEngineMenu(void) {
     if(!install_main_branding(base))log_line("Main-menu branding could not be installed.");
     if(!install_save_prompt(base))log_line("Native save prompt could not be installed.");
     if(!install_progression_ghost(base))log_line("Singleplayer ghost achievement hook refused: original versus entry differs.");
+    if(!install_customs_unlocks(base))log_line("Customs unlock extension refused: original summary block differs.");
     if(!install_progression_rewards(base))log_line("Native reward entry hooks refused; original awards retained.");
     if(!install_progression_level_quote(base))log_line("Level-up reward message quote refused; original message retained.");
     if(!install_progression_view(base))log_line("Permanent-level Profile display hook unavailable.");

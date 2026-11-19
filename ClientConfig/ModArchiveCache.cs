@@ -99,6 +99,15 @@ namespace ReRiff {
             }
             if(total!=U32(dat,16))throw new IOException("VFS checksum mismatch");return entries;
         }
+        internal static byte[] Resource(List<Plan> plans,string name){
+            Entry found=null;foreach(var plan in plans)foreach(var e in ReadPair(plan.Stem))if(e.Name==name)found=e;
+            if(found==null)return null;if(found.Size>4000000||found.Packed>4000000)throw new IOException("Mod config exceeds bounds");
+            using(var packed=new MemoryStream()){Copy(found,packed);packed.Position=0;byte[] result;
+                if(found.Method==0)result=packed.ToArray();else using(var unzip=new System.IO.Compression.DeflateStream(packed,System.IO.Compression.CompressionMode.Decompress))using(var output=new MemoryStream()){
+                    byte[] buffer=new byte[4096];int n;while((n=unzip.Read(buffer,0,buffer.Length))>0){if(output.Length+n>found.Size)throw new IOException("Config decompression exceeds bounds");output.Write(buffer,0,n);}result=output.ToArray();}
+                if(result.Length!=found.Size)throw new IOException("Config size mismatch");using(var data=new MemoryStream(result))if(Crc(data,result.Length)!=found.Crc)throw new IOException("Config CRC mismatch");return result;
+            }
+        }
         sealed class Node {internal ushort Name,Next=65535,Child=65535,File=0x3fff;}
         static void Copy(Entry e,Stream output) {
             Regular(e.Source);using(var input=File.OpenRead(e.Source)){input.Position=e.Offset;long left=e.Packed;byte[] bytes=new byte[65536];while(left>0){int n=input.Read(bytes,0,(int)Math.Min(left,bytes.Length));if(n==0)throw new EndOfStreamException();output.Write(bytes,0,n);left-=n;}}
