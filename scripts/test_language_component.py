@@ -101,3 +101,36 @@ with tempfile.TemporaryDirectory(prefix='reriff fonts ü ') as temp:
     call(game,extra=(*assets['cjk'],'--latin-enable','true','--latin-asset',assets['latin'][1],'--latin-sha256',assets['latin'][3]))
     assert (game/'mods/noto-cjk-font/vfs.zip').is_file() and (game/'mods/noto-latin-font/vfs.zip').is_file()
     print('PASS: removed mods tree, dry staging, selected packs and stale receipt cleanup',flush=True)
+
+    # Legacy receipts can outlive either half of a shared font archive. Fresh
+    # verified packs must repair both selections without reading the old pair.
+    for missing in ('vfs1.dat', 'vfs1.zip', 'both', 'fonts/noto-cjk/jp.rrcf'):
+        game=root/('missing-'+missing.replace('/','-'));game.mkdir()
+        shared={'vfs1.dat':b'old index','vfs1.zip':archive(['cjk','latin'])}
+        for pack in metrics:
+            files={**shared,**metrics[pack]}
+            for name,data in files.items():
+                dest=game/name;dest.parent.mkdir(parents=True,exist_ok=True);dest.write_bytes(data)
+            receipt=game/f'localserver/languages/{pack}.json';receipt.parent.mkdir(parents=True,exist_ok=True)
+            receipt.write_text(json.dumps({'schema':1,'version':'legacy','archives':{'combined':'vfs1'},'files':{n:sha(b) for n,b in files.items()}}))
+        for name in (shared if missing=='both' else [missing]):(game/name).unlink()
+        assert call(game,action='status')['installed']=='false'
+        extra=(*assets['cjk'],'--latin-enable','true','--latin-asset',assets['latin'][1],'--latin-sha256',assets['latin'][3])
+        before=snapshot(game);stage=root/(game.name+'-stage')
+        call(game,action='stage',extra=(*extra,'--stage',path(stage)))
+        assert snapshot(game)==before
+        call(game,extra=extra)
+        assert not (game/'vfs1.dat').exists() and not (game/'vfs1.zip').exists()
+        for pack in metrics:assert call(game,pack,action='status')['installed']=='true'
+        # Partial modern installs are repaired too, including disabled packs.
+        call(game,action='disable')
+        (game/'mods/.disabled/noto-cjk-font/vfs.dat').unlink()
+        assert call(game,action='status')['installed']=='false'
+        call(game,extra=assets['cjk'])
+        assert call(game,action='status')['installed']=='true'
+        assert not (game/'mods/.disabled/noto-cjk-font/vfs.zip').exists()
+    print('PASS: missing legacy index/archive/metrics, simultaneous repair, and partial disabled mod repair',flush=True)
+    (game/'mods/noto-cjk-font/vfs.dat').unlink()
+    (game/'mods/noto-cjk-font/vfs.zip').write_bytes(b'user modified archive')
+    before=snapshot(game);call(game,extra=assets['cjk'],success=False);assert snapshot(game)==before
+    print('PASS: missing files do not bypass protection for modified surviving files',flush=True)

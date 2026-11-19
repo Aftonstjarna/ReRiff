@@ -1,3 +1,16 @@
+# ReRiff 1.4.1-beta.3 — Missing font repair
+
+## In-game summary
+
+- Repair missing font files automatically during installation.
+
+## Full release notes
+
+- Redownload incomplete font packs, including missing legacy `vfs1` files and partially removed disabled packs.
+- Preserve modified files and user settings.
+- Font repair, migration and artwork recovery regressions passed.
+- Existing beta.2 limitations remain unchanged.
+
 # ReRiff 1.4.1-beta.2 — Loose mods and picker fixes
 
 ## In-game summary

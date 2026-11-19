@@ -89,3 +89,17 @@
 - Do not write research notes directly into the live decomp checkout. The
   coordinator tracks snapshots, provenance and review status outside that tree;
   direct untracked files stop recovery. Submission grants no matching-byte credit.
+
+# Repair missing ReRiff-managed files
+
+- During installation, update or component enablement, treat missing ReRiff-owned
+  files as an incomplete installation, not a fatal ownership mismatch. Restore
+  them from a verified bundled payload or redownload the verified component.
+- Receipts alone do not prove a component is installed. Check that its required
+  files exist, including legacy numbered archives and disabled component folders.
+- Do not require missing legacy files to migrate to a freshly downloaded pack.
+  Retire surviving legacy files only after verifying their ownership hashes.
+- Preserve existing modified or unrelated files, user data and settings. Missing
+  original game files require a verified original backup or game-file repair;
+  do not substitute unverified downloads. Keep repair transactional and test both
+  missing-file recovery and protection of modified surviving files.
