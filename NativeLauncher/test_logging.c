@@ -10,7 +10,7 @@ int main(void){
  log_message(L"disabled");assert(GetFileAttributesW(logs)==INVALID_FILE_ATTRIBUTES);
  WNDCLASSW cls={0};cls.lpfnWndProc=procedure;cls.hInstance=GetModuleHandleW(NULL);cls.lpszClassName=L"LoggingTest";RegisterClassW(&cls);busy=TRUE;
  HWND hwnd=CreateWindowW(cls.lpszClassName,L"",WS_OVERLAPPED,0,0,660,615,NULL,NULL,cls.hInstance,NULL);assert(hwnd);
- assert(SendMessageW(logging_checkbox,BM_GETCHECK,0,0)==BST_UNCHECKED);assert(SendMessageW(launcher_tabs,TCM_GETITEMCOUNT,0,0)==4);
+ assert(SendMessageW(logging_checkbox,BM_GETCHECK,0,0)==BST_UNCHECKED);assert(SendMessageW(launcher_tabs,TCM_GETITEMCOUNT,0,0)==PAGE_COUNT);
  SendMessageW(logging_checkbox,BM_SETCHECK,BST_CHECKED,0);SendMessageW(hwnd,WM_COMMAND,LOGGING,0);assert(rr_logging_ini(ini));log_message(L"enabled");assert(GetFileAttributesW(file)!=INVALID_FILE_ATTRIBUTES);
  WIN32_FILE_ATTRIBUTE_DATA before,after;assert(GetFileAttributesExW(file,GetFileExInfoStandard,&before));
  SendMessageW(logging_checkbox,BM_SETCHECK,BST_UNCHECKED,0);SendMessageW(hwnd,WM_COMMAND,LOGGING,0);assert(!rr_logging_ini(ini));log_message(L"must not append");assert(GetFileAttributesExW(file,GetFileExInfoStandard,&after));assert(before.nFileSizeLow==after.nFileSizeLow&&GetFileAttributesW(logs)!=INVALID_FILE_ATTRIBUTES);
@@ -23,15 +23,15 @@ int main(void){
  SendMessageW(logging_checkbox,BM_SETCHECK,BST_UNCHECKED,0);SendMessageW(hwnd,WM_COMMAND,LOGGING,0);
  SendMessageW(logging_checkbox,BM_SETCHECK,BST_CHECKED,0);SendMessageW(hwnd,WM_COMMAND,LOGGING,0);
  assert(SendMessageW(log_checkboxes[0],BM_GETCHECK,0,0)==BST_UNCHECKED);
- assert(LOG_CATEGORY_COUNT==9&&diagnostic_count==LOG_CATEGORY_COUNT+3);
+ assert(LOG_CATEGORY_COUNT==9&&diagnostic_count==LOG_CATEGORY_COUNT+4);
  HWND uninstall=GetDlgItem(hwnd,UNINSTALL);assert(uninstall);
- for(int page=0;page<4;page++){
+ for(int page=0;page<PAGE_COUNT;page++){
   SendMessageW(launcher_tabs,TCM_SETCURSEL,page,0);select_launcher_page();
-  assert(((GetWindowLongW(uninstall,GWL_STYLE)&WS_VISIBLE)!=0)==(page==2));
+  assert(((GetWindowLongW(uninstall,GWL_STYLE)&WS_VISIBLE)!=0)==(page==PAGE_DIAGNOSTICS));
  }
  RECT uninstall_rect,details_rect;GetWindowRect(uninstall,&uninstall_rect);GetWindowRect(GetDlgItem(hwnd,UPDATE_DETAILS),&details_rect);
  assert(uninstall_rect.left>=details_rect.right&&uninstall_rect.top==details_rect.top);
- SendMessageW(launcher_tabs,TCM_SETCURSEL,2,0);select_launcher_page();
+ SendMessageW(launcher_tabs,TCM_SETCURSEL,PAGE_DIAGNOSTICS,0);select_launcher_page();
  WCHAR help[1024]={0};TOOLINFOW tool={0};tool.cbSize=TTTOOLINFOW_V2_SIZE;tool.lpszText=help;tool.hwnd=hwnd;tool.uId=(UINT_PTR)logging_checkbox;
  assert(SendMessageW(checkbox_tooltips,TTM_GETTOOLINFOW,0,(LPARAM)&tool));
  assert((tool.uFlags&(TTF_IDISHWND|TTF_SUBCLASS))==(TTF_IDISHWND|TTF_SUBCLASS));
