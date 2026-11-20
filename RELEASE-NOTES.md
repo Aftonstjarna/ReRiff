@@ -1,3 +1,22 @@
+# ReRiff 1.4.5 — Custom-car unlocks, server caches and fallback cars
+
+## In-game summary
+
+- Unlock custom cars with configured artist and song rules.
+- Keep song caches and leaderboards separate for each server.
+- Match re-encodes to one leaderboard by artist and title.
+
+## Full release notes
+
+- Read artist and optional title unlock rules from a custom package's manifest-matched `unlocks_pc` CFG/Lua pair, extending the original Police/Monaco music check. Unmatched, malformed or independently changed pairs keep the original behavior.
+- Key the launcher's song cache by the selected server identity. Any HTTP server, including the localhost/LAN server, is distinct; offline singleplayer uses its own cache and is never registered. The launcher now uses WinHTTP for identity sync, restoring reliable server registration.
+- Read an optional `[fallbacks]` section from each loose car package's `origin.txt`. It names the stock car shown when the custom car's slot is unavailable, independently of the donor used for assets, configuration, saves and shared ghosts. Invalid or conflicting declarations are refused; the donor is used when no fallback applies.
+- Match songs in the server catalog by normalized artist and title, retaining every observed SHA-256 as evidence. Differently encoded copies of one song, including future cache transcodes, share one leaderboard identity. A cache ID may gain a new encoding but cannot change metadata; audio with an empty title or artist still requires exact-source matching.
+- Reuse the built picker index for ten minutes and report unreadable folders, so warm picker sessions no longer rescan an unchanged library on slow mounts.
+- Report the stock ID that actually resolved a missing-car fallback, and add low-volume diagnostics for frame gaps, FLAC declared/decoded durations, picker refresh reasons, mod-volume preparation and refused ghost fixtures.
+- Validation: launcher, client, Windows loader and installer checks pass with the native and managed regressions. The high-sample-rate FLAC analysis resamples to the 44.1 kHz time base; a 96 kHz / 24-bit source (35,744,790 samples) analysed to 16,420,263 frames with zero duration delta, resolving issue #2.
+- Automatic car-slot allocation remains experimental and is not part of this release. Track audio is still read and decoded synchronously when a track is selected; local caching for slow mounts and Navidrome downloads is planned for 1.5.0.
+
 # ReRiff 1.4.1-beta.7 — Per-package missing-car fallback
 
 ## In-game summary
