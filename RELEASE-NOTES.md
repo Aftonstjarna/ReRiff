@@ -1,3 +1,20 @@
+# ReRiff 1.4.1-beta.7 — Per-package missing-car fallback
+
+## In-game summary
+
+- Pick which stock car appears when a custom car is missing.
+- Keep the donor separate for assets, saves and shared ghosts.
+- Set the fallback per authored car in origin.txt.
+
+## Full release notes
+
+- Read an optional `[fallbacks]` section from each loose car package's `origin.txt`. Each entry is **authored car ID = stock fallback**; the `[origins]` donor is unchanged and still supplies copied assets, configuration, save identity and shared-ghost identity.
+- Record the donor and fallback in the generated `car-origins.ini`, and retain them when the mod is disabled or removed so the original selected-car setter can select the fallback.
+- Refuse unknown, malformed, duplicate or conflicting fallback declarations instead of guessing. An invalid or unavailable fallback falls back to the donor.
+- Accept packages without `[fallbacks]` unchanged; they keep using their donor. Existing `origin.txt` policies and the Customs editor's **Missing-car fallback** control write the same format.
+- Validation: native fallback planning and metadata tests cover declaration, conflict refusal, invalid IDs, removal retention and fallback-over-donor precedence. Existing launcher and client checks must pass before publication.
+- The beta.4 automatic car-slot allocation experiment is still not part of this branch.
+
 # ReRiff 1.4.1-beta.6 — Per-server song caches
 
 ## In-game summary
