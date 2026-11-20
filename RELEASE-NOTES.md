@@ -1,3 +1,20 @@
+# ReRiff 1.4.1-beta.6 — Per-server song caches
+
+## In-game summary
+
+- Keep song caches separate for each server and offline mode.
+- Register only the active server's cache with its leaderboard.
+- Restore reliable song identity sync with multiplayer servers.
+
+## Full release notes
+
+- Key the launcher's song cache sidecar by the selected server's `ServerID`. Any HTTP server, including the localhost/LAN server, is a distinct server; offline singleplayer uses its own `cache.singleplayer.bin` and is never registered.
+- Start a server cache from bundled records only, so singleplayer-generated IDs cannot appear on an alternate server's leaderboard. The game re-adds local songs with server-specific IDs, and the launcher registers that cache for the selected server.
+- Replace the launcher's WinINet identity and registration requests with WinHTTP. This fixes the previous `Song identity sync: unavailable` result and lets the server catalog alias and rank the active cache.
+- Preserve the beta.5 configured customs music unlock behavior and its manifest-matched unlock files.
+- Validation: native cache split, bundled-only bootstrap and sidecar commit tests pass; the launcher was verified against two distinct server IDs and a real localhost server; a one-song registration reached the server and created its catalog record. Cross-client testing is the purpose of this beta.
+- The beta.4 automatic car-slot allocation experiment is still not part of this branch.
+
 # ReRiff 1.4.1-beta.5 — Configured custom-car music unlocks
 
 ## In-game summary
