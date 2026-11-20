@@ -67,7 +67,7 @@ static BOOL song_hash(const char *filename,char hex[65]) {
     CloseHandle(file);return ok;
 }
 
-static BOOL song_request(HINTERNET session,const WCHAR *base,const char *body) {
+static BOOL song_request(HINTERNET session,const WCHAR *base,const char *body,WCHAR *server_id,size_t server_id_cap) {
     if(!session)return FALSE;
     WCHAR url[CAP];URL_COMPONENTSW parts;WCHAR host[1024],urlpath[CAP];
     _snwprintf(url,CAP,L"%ls%ls",base,body?L"/reriff/songs/register":L"/classes/Version");url[CAP-1]=0;
@@ -90,12 +90,140 @@ static BOOL song_request(HINTERNET session,const WCHAR *base,const char *body) {
         }
         response[used]=0;char *first=response;while(*first==' '||*first=='\t'||*first=='\r'||*first=='\n')first++;
         ok=reading&&*first=='{'&&strstr(response,"\"results\"")!=NULL;
+        if(server_id&&server_id_cap){
+            server_id[0]=0;
+            char *marker=strstr(response,"\"ServerID\"");
+            if(marker){char *colon=strchr(marker,':');if(colon){char *p=colon+1;while(*p==' '||*p=='\t')p++;if(*p=='\"'){p++;size_t n=0;while(p[n]&&p[n]!='\"'&&n+1<server_id_cap){server_id[n]=(WCHAR)(unsigned char)p[n];n++;}server_id[n]=0;}}}
+        }
     }
     if(req)InternetCloseHandle(req);if(connection)InternetCloseHandle(connection);
     return ok;
 }
 
-static void sync_cached_songs(const WCHAR *config) {
+/* Per-server v19 song cache. The game has one cache.bin, so the launcher
+ * swaps in the cache for the selected server identity. Singleplayer is its
+ * own identity and is never registered with a remote catalog. */
+static BOOL song_cache_paths(const WCHAR *key,WCHAR *cache,WCHAR *sidecar) {
+    WCHAR appdata[MAX_PATH],directory[MAX_PATH];
+    if(FAILED(SHGetFolderPathW(NULL,CSIDL_APPDATA,NULL,SHGFP_TYPE_CURRENT,appdata)))return FALSE;
+    _snwprintf(directory,MAX_PATH,L"%ls\\Octane\\DAT",appdata);directory[MAX_PATH-1]=0;
+    SHCreateDirectoryExW(NULL,directory,NULL);
+    _snwprintf(cache,CAP,L"%ls\\cache.bin",directory);cache[CAP-1]=0;
+    _snwprintf(sidecar,CAP,L"%ls\\cache.%ls.bin",directory,key);sidecar[CAP-1]=0;
+    return cache[CAP-1]==0&&sidecar[CAP-1]==0;
+}
+static BOOL song_cache_read(const WCHAR *path,char **data,DWORD *size) {
+    HANDLE file=CreateFileW(path,GENERIC_READ,FILE_SHARE_READ|FILE_SHARE_WRITE,NULL,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,NULL);
+    if(file==INVALID_HANDLE_VALUE)return FALSE;
+    DWORD length=GetFileSize(file,NULL),read=0;
+    if(length<16||length>16*1024*1024){CloseHandle(file);return FALSE;}
+    char *bytes=(char*)malloc(length);
+    if(!bytes){CloseHandle(file);return FALSE;}
+    BOOL ok=ReadFile(file,bytes,length,&read,NULL)&&read==length;
+    CloseHandle(file);
+    if(!ok){free(bytes);return FALSE;}
+    *data=bytes;*size=length;return TRUE;
+}
+static BOOL song_cache_write(const WCHAR *path,const char *data,DWORD size) {
+    WCHAR temporary[CAP];_snwprintf(temporary,CAP,L"%ls.tmp-%lu",path,(unsigned long)GetCurrentProcessId());temporary[CAP-1]=0;
+    HANDLE file=CreateFileW(temporary,GENERIC_WRITE,0,NULL,CREATE_ALWAYS,FILE_ATTRIBUTE_NORMAL,NULL);
+    if(file==INVALID_HANDLE_VALUE)return FALSE;
+    DWORD wrote=0;BOOL ok=WriteFile(file,data,size,&wrote,NULL)&&wrote==size&&FlushFileBuffers(file);
+    CloseHandle(file);
+    if(ok)ok=MoveFileExW(temporary,path,MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH)!=0;
+    if(!ok)DeleteFileW(temporary);
+    return ok;
+}
+static BOOL song_cache_bundled(const char *data,DWORD size,char **output,DWORD *out_size) {
+    if(size<16)return FALSE;
+    DWORD header[4];memcpy(header,data,16);
+    if(header[0]!=1128350512||header[1]!=19||header[3]!=18||header[2]>10000)return FALSE;
+    char *result=(char*)malloc(size);
+    if(!result)return FALSE;
+    memcpy(result,data,16);
+    DWORD cursor=16,target=16,count=0;
+    for(DWORD i=0;i<header[2];i++){
+        DWORD start=cursor;
+        for(int field=0;field<7;field++){
+            char *zero=(char*)memchr(data+cursor,0,size-cursor);
+            if(!zero){free(result);return FALSE;}
+            cursor=(DWORD)(zero-data)+1;
+        }
+        if(size-cursor<29){free(result);return FALSE;}
+        cursor+=29;
+        if(strncmp(data+start,"hst:",4)){DWORD length=cursor-start;memcpy(result+target,data+start,length);target+=length;count++;}
+    }
+    if(cursor!=size){free(result);return FALSE;}
+    memcpy(result+8,&count,4);
+    *output=result;*out_size=target;return TRUE;
+}
+static BOOL song_cache_prepare(const WCHAR *key) {
+    WCHAR cache[CAP],sidecar[CAP],sp_sidecar[CAP];
+    if(!song_cache_paths(key,cache,sidecar)||!song_cache_paths(L"singleplayer",cache,sp_sidecar))return FALSE;
+    char *data=NULL;DWORD size=0;BOOL have=song_cache_read(cache,&data,&size);
+    if(have&&GetFileAttributesW(sp_sidecar)==INVALID_FILE_ATTRIBUTES)song_cache_write(sp_sidecar,data,size);
+    BOOL result=TRUE;
+    if(GetFileAttributesW(sidecar)!=INVALID_FILE_ATTRIBUTES)result=CopyFileW(sidecar,cache,FALSE)!=0;
+    else if(!_wcsicmp(key,L"singleplayer")){if(have)result=song_cache_write(sidecar,data,size);}
+    else if(have){char *filtered=NULL;DWORD filtered_size=0;if(song_cache_bundled(data,size,&filtered,&filtered_size)){result=song_cache_write(cache,filtered,filtered_size);free(filtered);}}
+    free(data);return result;
+}
+static BOOL song_cache_commit(const WCHAR *key) {
+    WCHAR cache[CAP],sidecar[CAP];if(!song_cache_paths(key,cache,sidecar))return FALSE;
+    char *data=NULL;DWORD size=0;if(!song_cache_read(cache,&data,&size))return FALSE;
+    BOOL ok=song_cache_write(sidecar,data,size);free(data);return ok;
+}
+static BOOL song_cache_safe(const WCHAR *value) {
+    if(!value||!*value)return FALSE;size_t length=0;
+    for(const WCHAR *p=value;*p;p++,length++){
+        if(length>=120)return FALSE;
+        WCHAR c=*p;if(!((c>='a'&&c<='z')||(c>='A'&&c<='Z')||(c>='0'&&c<='9')||c=='-'||c=='_'))return FALSE;
+    }
+    return TRUE;
+}
+static void song_cache_hashed(const WCHAR *value,WCHAR *key,size_t capacity) {
+    unsigned long long hash=1469598103934665603ULL;
+    for(const WCHAR *p=value;*p;p++){hash^=(unsigned long long)(unsigned int)*p;hash*=1099511628211ULL;}
+    _snwprintf(key,capacity,L"server-%016llx",hash);key[capacity-1]=0;
+}
+static void song_cache_key_for(const WCHAR *server_id,WCHAR *key,size_t capacity) {
+    if(song_cache_safe(server_id)){
+        _snwprintf(key,capacity,L"server-%ls",server_id);key[capacity-1]=0;
+    }else song_cache_hashed(server_id?server_id:L"",key,capacity);
+}
+static BOOL song_cache_identity(const WCHAR *config,WCHAR *key,size_t capacity,WCHAR *base,WCHAR *server_id) {
+    wcscpy(key,L"singleplayer");base[0]=0;server_id[0]=0;
+    WCHAR networking[32];GetPrivateProfileStringW(L"server",L"networking_enabled",L"true",networking,32,config);
+    if(!_wcsicmp(networking,L"false")||!_wcsicmp(networking,L"no")||!wcscmp(networking,L"0"))return TRUE;
+    WCHAR timeout_value[64],*timeout_end;GetPrivateProfileStringW(L"server",L"timeout_seconds",L"5",timeout_value,64,config);
+    double seconds=wcstod(timeout_value,&timeout_end);while(*timeout_end==' '||*timeout_end=='\t')timeout_end++;
+    if(*timeout_end||!(seconds>0&&seconds<=60))return TRUE;
+    song_timeout=(DWORD)(seconds*1000);
+    HINTERNET session=InternetOpenW(L"ReRiffSongSync/1",INTERNET_OPEN_TYPE_DIRECT,NULL,NULL,0);
+    if(!session)return TRUE;
+    DWORD timeout=song_timeout;InternetSetOptionW(session,INTERNET_OPTION_CONNECT_TIMEOUT,&timeout,sizeof(timeout));
+    InternetSetOptionW(session,INTERNET_OPTION_RECEIVE_TIMEOUT,&timeout,sizeof(timeout));
+    InternetSetOptionW(session,INTERNET_OPTION_SEND_TIMEOUT,&timeout,sizeof(timeout));
+    WCHAR external[CAP],fallback[CAP],only[32];
+    GetPrivateProfileStringW(L"server",L"external_url",L"",external,CAP,config);
+    GetPrivateProfileStringW(L"server",L"fallback_url",L"",fallback,CAP,config);
+    GetPrivateProfileStringW(L"server",L"external_only",L"false",only,32,config);
+    BOOL external_only=!_wcsicmp(only,L"true")||!wcscmp(only,L"1")||!_wcsicmp(only,L"yes");
+    WCHAR candidates[2][CAP];wcscpy(candidates[0],external);wcscpy(candidates[1],external_only?L"":fallback);
+    for(int i=0;i<2;i++){
+        size_t n=wcslen(candidates[i]);while(n&&candidates[i][n-1]=='/')candidates[i][--n]=0;
+        if(!n)continue;
+        WCHAR id[256]={0};
+        if(song_request(session,candidates[i],NULL,id,256)){
+            wcscpy(base,candidates[i]);wcscpy(server_id,id);song_cache_key_for(id[0]?id:candidates[i],key,capacity);break;
+        }
+    }
+    InternetCloseHandle(session);
+    return TRUE;
+}
+
+
+static void sync_cached_songs(const WCHAR *config,const WCHAR *selected) {
     WCHAR networking[32];
     GetPrivateProfileStringW(L"server",L"networking_enabled",L"true",networking,32,config);
     if(!_wcsicmp(networking,L"false")||!_wcsicmp(networking,L"no")||!wcscmp(networking,L"0"))return;
@@ -151,16 +279,19 @@ static void sync_cached_songs(const WCHAR *config) {
         if(session)InternetSetOptionW(session,INTERNET_OPTION_RECEIVE_TIMEOUT,&timeout,sizeof(timeout));
         if(session)InternetSetOptionW(session,INTERNET_OPTION_SEND_TIMEOUT,&timeout,sizeof(timeout));
         WCHAR base[CAP],only[32];
-        GetPrivateProfileStringW(L"server",L"external_url",L"",base,CAP,config);
-        GetPrivateProfileStringW(L"server",L"external_only",L"false",only,32,config);
-        BOOL externalOnly=!_wcsicmp(only,L"true")||!wcscmp(only,L"1")||!_wcsicmp(only,L"yes");
-        size_t n=wcslen(base);while(n&&base[n-1]=='/')base[--n]=0;
-        if(!n||!song_request(session,base,NULL)){
-            if(externalOnly)base[0]=0;
-            else GetPrivateProfileStringW(L"server",L"fallback_url",L"",base,CAP,config);
+        if(selected&&*selected){wcscpy(base,selected);base[CAP-1]=0;}
+        else{
+            GetPrivateProfileStringW(L"server",L"external_url",L"",base,CAP,config);
+            GetPrivateProfileStringW(L"server",L"external_only",L"false",only,32,config);
+            BOOL externalOnly=!_wcsicmp(only,L"true")||!wcscmp(only,L"1")||!_wcsicmp(only,L"yes");
+            size_t m=wcslen(base);while(m&&base[m-1]=='/')base[--m]=0;
+            if(!m||!song_request(session,base,NULL,NULL,0)){
+                if(externalOnly)base[0]=0;
+                else GetPrivateProfileStringW(L"server",L"fallback_url",L"",base,CAP,config);
+            }
         }
-        n=wcslen(base);while(n&&base[n-1]=='/')base[--n]=0;
-        BOOL ok=n&&song_request(session,base,body.data);
+        size_t n=wcslen(base);while(n&&base[n-1]=='/')base[--n]=0;
+        BOOL ok=n&&song_request(session,base,body.data,NULL,0);
         WCHAR note[256];_snwprintf(note,256,L"Song identity sync: %ls; files=%u unavailable=%u",ok?L"registered":L"unavailable",registered,skipped);
         log_message(note);
         if(session)InternetCloseHandle(session);

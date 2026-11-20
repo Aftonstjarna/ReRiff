@@ -302,7 +302,16 @@ static BOOL launch_game(void) {
     }
     update_timing(L"local-server readiness",launch_started);
     for(;;){
-    sync_cached_songs(ini);
+    WCHAR cache_key[160],cache_base[CAP],cache_id[256];BOOL multiplayer=FALSE;
+    if(!song_cache_identity(ini,cache_key,sizeof(cache_key)/sizeof(cache_key[0]),cache_base,cache_id)){
+        wcscpy(cache_key,L"singleplayer");cache_base[0]=0;multiplayer=FALSE;
+    }
+    WCHAR cache_note[512];
+    if(multiplayer)_snwprintf(cache_note,512,L"Song cache: %ls; server=%ls",cache_key,cache_base);
+    else _snwprintf(cache_note,512,L"Song cache: singleplayer; local only");
+    cache_note[511]=0;log_message(cache_note);
+    if(!song_cache_prepare(cache_key))log_message(L"Song cache: selected cache could not be prepared; using current cache.");
+    if(multiplayer)sync_cached_songs(ini,cache_base);
     WCHAR command[CAP]; PROCESS_INFORMATION process;
     if(!game_command(command)){wcscpy(message,L"The forwarded game command is too long.");finish_local_session(started_local);return FALSE;}
     if (!spawn(command,FALSE,&process)) { wcscpy(message,L"Could not start Game.exe beside the launcher."); finish_local_session(started_local);return FALSE; }
@@ -319,7 +328,8 @@ static BOOL launch_game(void) {
     BOOL again=restart&&WaitForSingleObject(restart,0)==WAIT_OBJECT_0;
     if(restart)CloseHandle(restart);
     CloseHandle(process.hProcess);
-    sync_cached_songs(ini);
+    if(!song_cache_commit(cache_key))log_message(L"Song cache: could not commit the selected cache.");
+    if(multiplayer)sync_cached_songs(ini,cache_base);
     if(!closed){wcscpy(message,L"Could not wait for Game.exe to close.");finish_local_session(started_local);return FALSE;}
     if(!again){finish_local_session(started_local);return TRUE;}
     launch_started=GetTickCount64();

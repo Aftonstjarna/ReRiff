@@ -85,7 +85,7 @@ jobs:
         run: |
           export ZIG_GLOBAL_CACHE_DIR="$RUNNER_TEMP/zig-global"
           export ZIG_LOCAL_CACHE_DIR="$RUNNER_TEMP/zig-local"
-          for source in NativeLauncher/test_release_channel.c NativeLauncher/test_channel.c NativeLauncher/test_languages.c NativeLauncher/test_logging.c NativeLauncher/test_menu_persistence.c NativeLauncher/test_update_progress.c NativeLauncher/test_performance_cache.c NativeLauncher/test_log_timestamps.c; do
+          for source in NativeLauncher/test_release_channel.c NativeLauncher/test_channel.c NativeLauncher/test_languages.c NativeLauncher/test_logging.c NativeLauncher/test_menu_persistence.c NativeLauncher/test_update_progress.c NativeLauncher/test_performance_cache.c NativeLauncher/test_log_timestamps.c NativeLauncher/test_song_cache.c; do
             name=$(basename "$source" .c)
             "$RUNNER_TEMP/release-tools/zig-x86_64-linux-0.14.1/zig" cc \
               -target x86-windows-gnu -O2 -Wall -Wextra -Werror \

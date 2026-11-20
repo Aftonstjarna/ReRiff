@@ -20,6 +20,6 @@ int wmain(int argc,WCHAR **argv) {
     if(SHCreateDirectoryExW(NULL,directory,NULL)!=ERROR_SUCCESS&&GetFileAttributesW(directory)==INVALID_FILE_ATTRIBUTES)return 2;
     _snwprintf(destination,CAP,L"%ls\\cache.bin",directory);destination[CAP-1]=0;
     if(!CopyFileW(argv[1],destination,FALSE))return 3;
-    sync_cached_songs(argv[2]);
+    sync_cached_songs(argv[2],NULL);
     return 0;
 }
