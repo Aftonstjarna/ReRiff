@@ -4,11 +4,12 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
+using System.Collections.Generic;
 namespace ReRiff {
     internal static class GhostCarTest {
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int Process(IntPtr root,IntPtr name,int phase,int installed,IntPtr patch);
         private static readonly Process Callback=Run;
-        private static string folder;
+        private static string folder;private static readonly HashSet<string> reported=new HashSet<string>(StringComparer.Ordinal);
         [DllImport("ReRiff.Notify.dll",CallingConvention=CallingConvention.Cdecl,ExactSpelling=true)] private static extern int ReRiffConfigureGhostCarTest(IntPtr callback);
         internal static void Configure(){
             folder=AppDomain.CurrentDomain.BaseDirectory;if(!GhostCarTestFormat.Enabled(folder))return;
@@ -31,7 +32,11 @@ namespace ReRiff {
                 // Before-open canonicalization also covers old cached test files.
                 // Never hand a custom-car overlay to the native read hook.
                 return phase==1?1:0;
-            }catch(Exception error){NativeReelBridge.Log("Ghost car test refused: "+error.GetType().Name+": "+error.Message);return -1;}
+            }catch(Exception error){
+                string key=error.GetType().Name+": "+error.Message;
+                lock(reported){if(!reported.Add(key))return -1;}
+                NativeReelBridge.Log("Ghost car test refused: "+key);return -1;
+            }
         }
     }
 }

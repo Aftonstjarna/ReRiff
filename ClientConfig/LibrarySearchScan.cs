@@ -32,7 +32,7 @@ namespace ReRiff {
         internal string Freshness(byte[] bytes,DateTime now) {
             if(Partial)return "partial";
             if(now<completed)return "clock";
-            if(now-completed>=TimeSpan.FromSeconds(30))return "age";
+            if(now-completed>=TimeSpan.FromMinutes(10))return "age";
             if(bytes==null||catalogue==null)return "catalogue-missing";
             if(bytes.Length!=catalogue.Length)return "catalogue-size";
             for(int i=0;i<bytes.Length;i++)if(bytes[i]!=catalogue[i])return "catalogue-changed";
