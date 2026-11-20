@@ -303,7 +303,7 @@ static BOOL launch_game(void) {
     update_timing(L"local-server readiness",launch_started);
     for(;;){
     WCHAR cache_key[160],cache_base[CAP],cache_id[256];BOOL multiplayer=FALSE;
-    if(!song_cache_identity(ini,cache_key,sizeof(cache_key)/sizeof(cache_key[0]),cache_base,cache_id)){
+    if(!song_cache_identity(ini,cache_key,sizeof(cache_key)/sizeof(cache_key[0]),cache_base,cache_id,&multiplayer)){
         wcscpy(cache_key,L"singleplayer");cache_base[0]=0;multiplayer=FALSE;
     }
     WCHAR cache_note[512];

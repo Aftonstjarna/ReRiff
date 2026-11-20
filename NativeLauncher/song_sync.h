@@ -4,6 +4,29 @@
  * Never sends local filenames, audio bytes, scores or account credentials. */
 #include <shlobj.h>
 #include <wincrypt.h>
+/* MinGW winhttp.h conflicts with wininet.h on HTTP_VERSION_INFO. These are
+ * the WinHTTP declarations used here; handles use the wininet HINTERNET type. */
+#define WINHTTP_ACCESS_TYPE_NO_PROXY 1
+#define WINHTTP_NO_PROXY_NAME ((LPCWSTR)0)
+#define WINHTTP_NO_PROXY_BYPASS ((LPCWSTR)0)
+#define WINHTTP_FLAG_SECURE 0x00800000
+#define WINHTTP_NO_REFERER ((LPCWSTR)0)
+#define WINHTTP_DEFAULT_ACCEPT_TYPES ((LPCWSTR*)0)
+#define WINHTTP_NO_REQUEST_DATA ((LPVOID)0)
+#define WINHTTP_QUERY_STATUS_CODE 19
+#define WINHTTP_QUERY_FLAG_NUMBER 0x20000000
+#define WINHTTP_HEADER_NAME_BY_INDEX ((LPCWSTR)0)
+#define WINHTTP_NO_HEADER_INDEX ((LPDWORD)0)
+extern HINTERNET WINAPI WinHttpOpen(LPCWSTR,DWORD,LPCWSTR,LPCWSTR,DWORD);
+extern HINTERNET WINAPI WinHttpConnect(HINTERNET,LPCWSTR,INTERNET_PORT,DWORD);
+extern HINTERNET WINAPI WinHttpOpenRequest(HINTERNET,LPCWSTR,LPCWSTR,LPCWSTR,LPCWSTR,LPCWSTR*,DWORD);
+extern BOOL WINAPI WinHttpSendRequest(HINTERNET,LPCWSTR,DWORD,LPVOID,DWORD,DWORD,DWORD_PTR);
+extern BOOL WINAPI WinHttpReceiveResponse(HINTERNET,LPVOID);
+extern BOOL WINAPI WinHttpQueryHeaders(HINTERNET,DWORD,LPCWSTR,LPVOID,LPDWORD,LPDWORD);
+extern BOOL WINAPI WinHttpReadData(HINTERNET,LPVOID,DWORD,LPDWORD);
+extern BOOL WINAPI WinHttpCloseHandle(HINTERNET);
+extern BOOL WINAPI WinHttpSetTimeouts(HINTERNET,int,int,int,int);
+extern BOOL WINAPI WinHttpCrackUrl(LPCWSTR,DWORD,DWORD,LPURL_COMPONENTS);
 #include <stdlib.h>
 
 typedef struct { char *data; size_t used, capacity; BOOL failed; } SongBuffer;
@@ -69,34 +92,42 @@ static BOOL song_hash(const char *filename,char hex[65]) {
 
 static BOOL song_request(HINTERNET session,const WCHAR *base,const char *body,WCHAR *server_id,size_t server_id_cap) {
     if(!session)return FALSE;
-    WCHAR url[CAP];URL_COMPONENTSW parts;WCHAR host[1024],urlpath[CAP];
-    _snwprintf(url,CAP,L"%ls%ls",base,body?L"/reriff/songs/register":L"/classes/Version");url[CAP-1]=0;
-    ZeroMemory(&parts,sizeof(parts));parts.dwStructSize=sizeof(parts);
-    parts.lpszHostName=host;parts.dwHostNameLength=1024;parts.lpszUrlPath=urlpath;parts.dwUrlPathLength=CAP;
-    if(!InternetCrackUrlW(url,0,0,&parts)||(parts.nScheme!=INTERNET_SCHEME_HTTP&&parts.nScheme!=INTERNET_SCHEME_HTTPS))return FALSE;
-    HINTERNET connection=InternetConnectW(session,host,parts.nPort,NULL,NULL,INTERNET_SERVICE_HTTP,0,0);
-    DWORD flags=INTERNET_FLAG_RELOAD|INTERNET_FLAG_NO_CACHE_WRITE|INTERNET_FLAG_NO_UI|INTERNET_FLAG_NO_AUTO_REDIRECT|INTERNET_FLAG_KEEP_CONNECTION;
-    if(parts.nScheme==INTERNET_SCHEME_HTTPS)flags|=INTERNET_FLAG_SECURE;
-    HINTERNET req=connection?HttpOpenRequestW(connection,body?L"POST":L"GET",urlpath,NULL,NULL,NULL,flags,0):NULL;
+    const WCHAR *p=base;INTERNET_PORT port=0;BOOL secure=FALSE;
+    if(!wcsncmp(p,L"http://",7)){p+=7;port=80;}
+    else if(!wcsncmp(p,L"https://",8)){p+=8;port=443;secure=TRUE;}
+    else return FALSE;
+    const WCHAR *slash=wcschr(p,L'/');size_t host_length=slash?(size_t)(slash-p):wcslen(p);
+    if(!host_length||host_length>=1024)return FALSE;
+    WCHAR host[1024];wcsncpy(host,p,host_length);host[host_length]=0;
+    WCHAR *colon=wcschr(host,L':');
+    if(colon){*colon=0;WCHAR *end=NULL;unsigned long value=wcstoul(colon+1,&end,10);if(!end||*end||!value||value>65535)return FALSE;port=(INTERNET_PORT)value;}
+    HINTERNET connection=WinHttpConnect(session,host,port,0);
+    DWORD flags=secure?WINHTTP_FLAG_SECURE:0;
+    HINTERNET req=connection?WinHttpOpenRequest(connection,body?L"POST":L"GET",body?L"/reriff/songs/register":L"/classes/Version",NULL,WINHTTP_NO_REFERER,WINHTTP_DEFAULT_ACCEPT_TYPES,flags):NULL;
     BOOL ok=FALSE;DWORD code=0,size=sizeof(code);
-    if(req&&HttpSendRequestW(req,body?L"Content-Type: application/json\r\n":NULL,body?(DWORD)-1:0,
-        (LPVOID)body,body?(DWORD)strlen(body):0)&&HttpQueryInfoW(req,HTTP_QUERY_STATUS_CODE|HTTP_QUERY_FLAG_NUMBER,&code,&size,NULL))
-        ok=code==200;
-    if(ok&&!body){
-        char response[16385];DWORD used=0,count=0;BOOL reading=TRUE;
-        while(used<sizeof(response)-1){
-            if(!InternetReadFile(req,response+used,(DWORD)sizeof(response)-1-used,&count)){reading=FALSE;break;}
-            if(!count)break;used+=count;
-        }
-        response[used]=0;char *first=response;while(*first==' '||*first=='\t'||*first=='\r'||*first=='\n')first++;
-        ok=reading&&*first=='{'&&strstr(response,"\"results\"")!=NULL;
-        if(server_id&&server_id_cap){
-            server_id[0]=0;
-            char *marker=strstr(response,"\"ServerID\"");
-            if(marker){char *colon=strchr(marker,':');if(colon){char *p=colon+1;while(*p==' '||*p=='\t')p++;if(*p=='\"'){p++;size_t n=0;while(p[n]&&p[n]!='\"'&&n+1<server_id_cap){server_id[n]=(WCHAR)(unsigned char)p[n];n++;}server_id[n]=0;}}}
+    if(req){
+        DWORD body_size=body?(DWORD)strlen(body):0;
+        if(WinHttpSendRequest(req,body?L"Content-Type: application/json\r\n":NULL,-1L,
+            body?(LPVOID)body:WINHTTP_NO_REQUEST_DATA,body_size,body_size,0)
+            &&WinHttpReceiveResponse(req,NULL)
+            &&WinHttpQueryHeaders(req,WINHTTP_QUERY_STATUS_CODE|WINHTTP_QUERY_FLAG_NUMBER,WINHTTP_HEADER_NAME_BY_INDEX,&code,&size,WINHTTP_NO_HEADER_INDEX))
+            ok=code==200;
+        if(ok&&!body){
+            char response[16385];DWORD used=0,count=0;BOOL reading=TRUE;
+            while(used<sizeof(response)-1){
+                if(!WinHttpReadData(req,response+used,(DWORD)sizeof(response)-1-used,&count)){reading=FALSE;break;}
+                if(!count)break;used+=count;
+            }
+            response[used]=0;char *first=response;while(*first==' '||*first=='\t'||*first=='\r'||*first=='\n')first++;
+            ok=reading&&*first=='{'&&strstr(response,"\"results\"")!=NULL;
+            if(server_id&&server_id_cap){
+                server_id[0]=0;
+                char *marker=strstr(response,"\"ServerID\"");
+                if(marker){char *colon2=strchr(marker,':');if(colon2){char *q=colon2+1;while(*q==' '||*q=='\t')q++;if(*q=='\"'){q++;size_t n=0;while(q[n]&&q[n]!='\"'&&n+1<server_id_cap){server_id[n]=(WCHAR)(unsigned char)q[n];n++;}server_id[n]=0;}}}
+            }
         }
     }
-    if(req)InternetCloseHandle(req);if(connection)InternetCloseHandle(connection);
+    if(req)WinHttpCloseHandle(req);if(connection)WinHttpCloseHandle(connection);
     return ok;
 }
 
@@ -191,19 +222,17 @@ static void song_cache_key_for(const WCHAR *server_id,WCHAR *key,size_t capacity
         _snwprintf(key,capacity,L"server-%ls",server_id);key[capacity-1]=0;
     }else song_cache_hashed(server_id?server_id:L"",key,capacity);
 }
-static BOOL song_cache_identity(const WCHAR *config,WCHAR *key,size_t capacity,WCHAR *base,WCHAR *server_id) {
-    wcscpy(key,L"singleplayer");base[0]=0;server_id[0]=0;
+static BOOL song_cache_identity(const WCHAR *config,WCHAR *key,size_t capacity,WCHAR *base,WCHAR *server_id,BOOL *multiplayer) {
+    wcscpy(key,L"singleplayer");base[0]=0;server_id[0]=0;if(multiplayer)*multiplayer=FALSE;
     WCHAR networking[32];GetPrivateProfileStringW(L"server",L"networking_enabled",L"true",networking,32,config);
     if(!_wcsicmp(networking,L"false")||!_wcsicmp(networking,L"no")||!wcscmp(networking,L"0"))return TRUE;
     WCHAR timeout_value[64],*timeout_end;GetPrivateProfileStringW(L"server",L"timeout_seconds",L"5",timeout_value,64,config);
     double seconds=wcstod(timeout_value,&timeout_end);while(*timeout_end==' '||*timeout_end=='\t')timeout_end++;
     if(*timeout_end||!(seconds>0&&seconds<=60))return TRUE;
     song_timeout=(DWORD)(seconds*1000);
-    HINTERNET session=InternetOpenW(L"ReRiffSongSync/1",INTERNET_OPEN_TYPE_DIRECT,NULL,NULL,0);
+    HINTERNET session=WinHttpOpen(L"ReRiffSongSync/1",WINHTTP_ACCESS_TYPE_NO_PROXY,WINHTTP_NO_PROXY_NAME,WINHTTP_NO_PROXY_BYPASS,0);
     if(!session)return TRUE;
-    DWORD timeout=song_timeout;InternetSetOptionW(session,INTERNET_OPTION_CONNECT_TIMEOUT,&timeout,sizeof(timeout));
-    InternetSetOptionW(session,INTERNET_OPTION_RECEIVE_TIMEOUT,&timeout,sizeof(timeout));
-    InternetSetOptionW(session,INTERNET_OPTION_SEND_TIMEOUT,&timeout,sizeof(timeout));
+    if(session)WinHttpSetTimeouts(session,song_timeout,song_timeout,song_timeout,song_timeout);
     WCHAR external[CAP],fallback[CAP],only[32];
     GetPrivateProfileStringW(L"server",L"external_url",L"",external,CAP,config);
     GetPrivateProfileStringW(L"server",L"fallback_url",L"",fallback,CAP,config);
@@ -215,10 +244,10 @@ static BOOL song_cache_identity(const WCHAR *config,WCHAR *key,size_t capacity,W
         if(!n)continue;
         WCHAR id[256]={0};
         if(song_request(session,candidates[i],NULL,id,256)){
-            wcscpy(base,candidates[i]);wcscpy(server_id,id);song_cache_key_for(id[0]?id:candidates[i],key,capacity);break;
+            wcscpy(base,candidates[i]);wcscpy(server_id,id);if(multiplayer)*multiplayer=TRUE;song_cache_key_for(id[0]?id:candidates[i],key,capacity);break;
         }
     }
-    InternetCloseHandle(session);
+    WinHttpCloseHandle(session);
     return TRUE;
 }
 
@@ -271,13 +300,11 @@ static void sync_cached_songs(const WCHAR *config,const WCHAR *selected) {
     song_hash_save();
     WCHAR timing[256];_snwprintf(timing,256,L"Timing: song hashing %llu ms; reused=%u read=%u",(unsigned long long)(GetTickCount64()-sync_started),song_hash_hits,song_hash_reads);log_message(timing);
     if(valid&&registered){
-        /* Keep one WinINet session through probe and registration, allowing
+        /* Keep one WinHTTP session through probe and registration, allowing
          * connection/TLS reuse without caching server health or skipping the
          * identity handshake that must finish before the game starts. */
-        HINTERNET session=InternetOpenW(L"ReRiffSongSync/1",INTERNET_OPEN_TYPE_DIRECT,NULL,NULL,0);
-        DWORD timeout=song_timeout;if(session)InternetSetOptionW(session,INTERNET_OPTION_CONNECT_TIMEOUT,&timeout,sizeof(timeout));
-        if(session)InternetSetOptionW(session,INTERNET_OPTION_RECEIVE_TIMEOUT,&timeout,sizeof(timeout));
-        if(session)InternetSetOptionW(session,INTERNET_OPTION_SEND_TIMEOUT,&timeout,sizeof(timeout));
+        HINTERNET session=WinHttpOpen(L"ReRiffSongSync/1",WINHTTP_ACCESS_TYPE_NO_PROXY,WINHTTP_NO_PROXY_NAME,WINHTTP_NO_PROXY_BYPASS,0);
+        if(session)WinHttpSetTimeouts(session,song_timeout,song_timeout,song_timeout,song_timeout);
         WCHAR base[CAP],only[32];
         if(selected&&*selected){wcscpy(base,selected);base[CAP-1]=0;}
         else{
@@ -294,7 +321,7 @@ static void sync_cached_songs(const WCHAR *config,const WCHAR *selected) {
         BOOL ok=n&&song_request(session,base,body.data,NULL,0);
         WCHAR note[256];_snwprintf(note,256,L"Song identity sync: %ls; files=%u unavailable=%u",ok?L"registered":L"unavailable",registered,skipped);
         log_message(note);
-        if(session)InternetCloseHandle(session);
+        if(session)WinHttpCloseHandle(session);
     }else if(!valid)log_message(L"Song identity sync: unsupported or malformed cache; no registration sent.");
     free(body.data);
     _snwprintf(timing,256,L"Timing: song sync total %llu ms",(unsigned long long)(GetTickCount64()-sync_started));log_message(timing);

@@ -91,7 +91,7 @@ jobs:
               -target x86-windows-gnu -O2 -Wall -Wextra -Werror \
               "-DRERIFF_VERSION=\"$(cat VERSION)\"" "$source" \
               -o "build/launcher-checks/$name.exe" -Wl,--image-base,0x10000000 \
-              -lcomctl32 -lcomdlg32 -lwininet -lshell32 -luser32 -lgdi32 -ladvapi32 -static
+              -lcomctl32 -lcomdlg32 -lwininet -lwinhttp -lshell32 -luser32 -lgdi32 -ladvapi32 -static
           done
       - uses: actions/upload-artifact@v4
         with:
