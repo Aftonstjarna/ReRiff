@@ -18,10 +18,11 @@ int main(void){
     for(int i=-1;i<15;i++){*(int *)(settings+324)=i;CHECK(car_fallback_target(manager,settings,"alf")==-1);}
     *(int *)(settings+324)=22;CHECK(car_fallback_target(manager,settings,"alf")==-1);
     *(int *)(settings+324)=21;CHECK(car_fallback_target(manager,settings,"alf")==0);
-    CHECK(car_fallback_resolve(manager,settings,"alf","fab")==5); /* Declared fallback wins. */
-    CHECK(car_fallback_resolve(manager,settings,"alf","")==0); /* Absent fallback uses donor. */
-    CHECK(car_fallback_resolve(manager,settings,"alf","pl1")==0); /* Missing stock fallback uses donor. */
-    CHECK(car_fallback_resolve(manager,settings,"alf","dod")==0); /* Non-stock fallback is refused. */
+    const char *used=NULL;
+    CHECK(car_fallback_resolve(manager,settings,"alf","fab",&used)==5&&!strcmp(used,"fab")); /* Declared fallback wins. */
+    CHECK(car_fallback_resolve(manager,settings,"alf","",&used)==0&&!strcmp(used,"alf")); /* Absent fallback uses donor. */
+    CHECK(car_fallback_resolve(manager,settings,"alf","pl1",&used)==0&&!strcmp(used,"alf")); /* Missing stock fallback uses donor. */
+    CHECK(car_fallback_resolve(manager,settings,"alf","dod",&used)==0&&!strcmp(used,"alf")); /* Non-stock fallback is refused. */
     *(int *)(manager+792)=23;CHECK(car_fallback_target(manager,settings,"alf")==-1);
     *(int *)(manager+792)=14;CHECK(car_fallback_target(manager,settings,"alf")==-1);
     CHECK(car_fallback_target(NULL,settings,"alf")==-1);CHECK(car_fallback_target(manager,NULL,"alf")==-1);

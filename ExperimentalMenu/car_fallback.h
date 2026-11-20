@@ -31,9 +31,11 @@ static int car_fallback_target(void *manager,void *settings,const char *origin){
 }
 /* Prefer the declared missing-car fallback, then the donor. An unavailable or
  * invalid fallback never blocks the donor fallback. */
-static int car_fallback_resolve(void *manager,void *settings,const char *base,const char *fallback){
+static int car_fallback_resolve(void *manager,void *settings,const char *base,const char *fallback,const char **used){
     int target=fallback&&*fallback?car_fallback_target(manager,settings,fallback):-1;
-    return target>=0?target:car_fallback_target(manager,settings,base);
+    if(target>=0){if(used)*used=fallback;return target;}
+    if(used)*used=base;
+    return car_fallback_target(manager,settings,base);
 }
 /* Package metadata is read once after native car names are initialized.
  * Keep origins outside the mod so disabling/removing it retains fallback. */
@@ -106,9 +108,9 @@ static void car_fallback_main(void){
     for(unsigned i=0;i<3;i++){if(origin[i]>127)return;id[i]=(char)origin[i];}id[3]=0;
     /* An unusable declared fallback is ignored and the donor still applies. */
     if(wcslen(fallback)==3){BOOL valid=TRUE;for(unsigned i=0;i<3;i++){if(fallback[i]>127)valid=FALSE;else fallbackId[i]=(char)fallback[i];}if(!valid)fallbackId[0]=0;fallbackId[3]=0;}
-    int target=car_fallback_resolve(manager,settings,id,fallbackId);if(target<0)return;
+    const char *used=NULL;
+    int target=car_fallback_resolve(manager,settings,id,fallbackId,&used);if(target<0)return;
     car_fallback_setter(settings,target);
-    const char *used=fallbackId[0]&&car_fallback_target(manager,settings,fallbackId)==target?fallbackId:id;
     char message[192];snprintf(message,sizeof(message),"Car fallback: missing slot=%d selected stock base=%s used=%s slot=%d through original setter; paints and unlocks retained.",selected,id,used,target);
     log_line(message);
 }
