@@ -141,7 +141,7 @@ jobs:
           "$RUNNER_TEMP/release-tools/zig-x86_64-linux-0.14.1/zig" cc
           -target x86-windows-gnu -municode -O2 -Wall -Wextra -Werror
           NativeLauncher/test_lastfm.c -o build/client-checks/test_lastfm.exe
-          -lcomctl32 -lwininet -lshell32 -luser32 -lgdi32 -ladvapi32 -static
+          -lcomctl32 -lwininet -lwinhttp -lshell32 -luser32 -lgdi32 -ladvapi32 -static
       - uses: actions/upload-artifact@v4
         with:
           name: client-checks-${{ github.sha }}
