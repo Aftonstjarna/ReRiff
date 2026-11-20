@@ -94,15 +94,46 @@ class SongAliasesTest(unittest.TestCase):
         self.assertEqual(self.client.get('/files/cached-second-123.ghost').data, payload)
         self.assertEqual(self.client.get('/files/unrelated-123.ghost').status_code, 404)
 
-    def test_matching_metadata_does_not_join_different_audio(self):
+    def test_matching_metadata_joins_different_audio(self):
+        # Artist/title is the identity; hashes are retained as evidence so a
+        # FLAC original and an MP3 transcode share one leaderboard identity.
         songs = [{'song_id': song, 'sha256': hashlib.sha256(song.encode()).hexdigest(), 'title': 'Same', 'artist': 'Same'} for song in self.ids]
         self.assertEqual(self.client.post('/reriff/songs/register', json={'songs': songs}).status_code, 200)
-        self.assertEqual(len(self.query('Score', {'SongID': self.ids[0]})['results']), 1)
-        original = (self.data/'song-catalog.json').read_bytes()
-        songs[0]['sha256'] = '0'*64
-        response = self.client.post('/reriff/songs/register', json={'songs': songs})
-        self.assertEqual(response.status_code, 409)
-        self.assertEqual((self.data/'song-catalog.json').read_bytes(), original)
+        for song in self.ids:
+            self.assertEqual(len(self.query('Score', {'SongID': song})['results']), 2)
+            self.assertEqual(len(self.query('ghost_v18', {'song': song})['results']), 2)
+        state = json.loads((self.data/'song-catalog.json').read_text())
+        self.assertEqual(len(state['records']), 2)
+        self.assertEqual(len(set(state['aliases'].values())), 1)
+        self.assertNotEqual(state['records'][self.ids[0]]['hashes'], state['records'][self.ids[1]]['hashes'])
+        # Re-encoding the same cache ID is accepted; the ID tracks one song,
+        # not one byte sequence.
+        reencoded = dict(songs[0], sha256='0'*64)
+        self.assertEqual(self.client.post('/reriff/songs/register', json={'songs': [reencoded]}).status_code, 200)
+        hashes = json.loads((self.data/'song-catalog.json').read_text())['records'][self.ids[0]]['hashes']
+        self.assertIn('0'*64, hashes)
+        self.assertEqual(len(hashes), 2)
+        # Moving a cache ID to different metadata is still refused.
+        retitled = dict(songs[1], title='Different song')
+        self.assertEqual(self.client.post('/reriff/songs/register', json={'songs': [retitled]}).status_code, 409)
+
+    def test_normalized_metadata_joins(self):
+        songs = [
+            {'song_id': self.ids[0], 'sha256': 'a'*64, 'title': '  Same   Song ', 'artist': 'SAME artist'},
+            {'song_id': self.ids[1], 'sha256': 'b'*64, 'title': 'same song', 'artist': ' same  ARTIST '},
+        ]
+        self.assertEqual(self.client.post('/reriff/songs/register', json={'songs': songs}).status_code, 200)
+        state = json.loads((self.data/'song-catalog.json').read_text())
+        self.assertEqual(len(set(state['aliases'].values())), 1)
+
+    def test_unlabelled_audio_requires_exact_source(self):
+        songs = [
+            {'song_id': self.ids[0], 'sha256': 'c'*64, 'title': '', 'artist': ''},
+            {'song_id': self.ids[1], 'sha256': 'd'*64, 'title': '   ', 'artist': 'Artist'},
+        ]
+        self.assertEqual(self.client.post('/reriff/songs/register', json={'songs': songs}).status_code, 200)
+        state = json.loads((self.data/'song-catalog.json').read_text())
+        self.assertNotEqual(state['aliases'][self.ids[0]], state['aliases'][self.ids[1]])
 
     def test_invalid_manifests_do_not_change_history(self):
         for body in [{}, {'songs': 'bad'}, {'songs': [{'song_id': '../bad', 'sha256': '0'*64}]}]:
