@@ -52,6 +52,11 @@
   betas as prereleases with `--latest=false`; experimental updates require opt-in.
 - Do not delete or draft releases automatically. Superseded betas may be removed
   when requested; preserve Git tags for the tested commits.
+- Keep `main` on the latest stable release. Publish stable builds from `main`:
+  fast-forward `main` to the tested stable branch, then let the `main` push or
+  dispatch run the release workflow. Do not publish a stable from a side branch
+  without updating `main`. `main`'s `VERSION` and history must contain the latest
+  stable tag; the `Keep main on the latest stable` workflow verifies this.
 
 # Upstream server restoration after stable releases
 
