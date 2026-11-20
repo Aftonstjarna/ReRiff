@@ -1,6 +1,6 @@
 # Singleplayer integration
 
-Experimental client branch: `codex/experimental-client`.
+Experimental client branch: `reriff/experimental-client`.
 
 The reference project is [moylien/RiffRacer-Offline](https://github.com/moylien/RiffRacer-Offline).
 Its relevant changes are local Parse storage, seeded configuration/version,
