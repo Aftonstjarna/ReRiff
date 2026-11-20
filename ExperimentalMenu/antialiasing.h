@@ -103,14 +103,29 @@ static void aa_draw(IDirect3DDevice9 *device){
     if(state)IDirect3DStateBlock9_Release(state);IDirect3DSurface9_Release(back);
 }
 static BOOL (*aa_skip_background_present)(void);
-static HRESULT WINAPI aa_present(IDirect3DDevice9 *self,const RECT *a,const RECT *b,HWND window,const RGNDATA *dirty){if(self!=aa_device)return aa_present_original(self,a,b,window,dirty);if(aa_skip_background_present&&aa_skip_background_present())return D3D_OK;aa_draw(self);return aa_present_original(self,a,b,window,dirty);}
+/* Frame-gap trace for the unresolved track-start hitch. Gaps are visible
+ * without attributing a cause; loading screens are recorded too. */
+static ULONGLONG hitch_last_present;
+static unsigned hitch_reported;
+static void hitch_observe(void){
+    ULONGLONG now=GetTickCount64();
+    if(hitch_last_present&&now>=hitch_last_present){
+        ULONGLONG gap=now-hitch_last_present;
+        if(gap>=250&&hitch_reported<40){
+            char message[128];snprintf(message,sizeof(message),"Frame gap: %llu ms (stall or loading; cause not attributed)",(unsigned long long)gap);
+            log_line(message);hitch_reported++;
+        }
+    }
+    hitch_last_present=now;
+}
+static HRESULT WINAPI aa_present(IDirect3DDevice9 *self,const RECT *a,const RECT *b,HWND window,const RGNDATA *dirty){if(self!=aa_device)return aa_present_original(self,a,b,window,dirty);if(aa_skip_background_present&&aa_skip_background_present())return D3D_OK;hitch_observe();aa_draw(self);return aa_present_original(self,a,b,window,dirty);}
 static HRESULT WINAPI aa_reset(IDirect3DDevice9 *self,D3DPRESENT_PARAMETERS *params){
     if(self!=aa_device)return aa_reset_original(self,params);
     char trace[192];snprintf(trace,sizeof(trace),"D3D9 Reset: %ux%u windowed=%d refresh=%u thread=%lu owner=%lu.",params->BackBufferWidth,params->BackBufferHeight,params->Windowed,params->FullScreen_RefreshRateInHz,(unsigned long)GetCurrentThreadId(),(unsigned long)GetWindowThreadProcessId(params->hDeviceWindow,NULL));log_line(trace);
     log_line("D3D9 Reset: releasing AA resources.");aa_release_resources();log_line("D3D9 Reset: calling original device.");
     HRESULT result=aa_reset_original(self,params);log_line(SUCCEEDED(result)?"D3D9 Reset: original device succeeded.":"D3D9 Reset: original device failed.");return result;
 }
-static HRESULT WINAPI aa_present_ex(IDirect3DDevice9Ex *self,const RECT *a,const RECT *b,HWND window,const RGNDATA *dirty,DWORD flags){if((IDirect3DDevice9 *)self!=aa_device)return aa_present_ex_original(self,a,b,window,dirty,flags);if(aa_skip_background_present&&aa_skip_background_present())return D3D_OK;aa_draw((IDirect3DDevice9 *)self);return aa_present_ex_original(self,a,b,window,dirty,flags);}
+static HRESULT WINAPI aa_present_ex(IDirect3DDevice9Ex *self,const RECT *a,const RECT *b,HWND window,const RGNDATA *dirty,DWORD flags){if((IDirect3DDevice9 *)self!=aa_device)return aa_present_ex_original(self,a,b,window,dirty,flags);if(aa_skip_background_present&&aa_skip_background_present())return D3D_OK;hitch_observe();aa_draw((IDirect3DDevice9 *)self);return aa_present_ex_original(self,a,b,window,dirty,flags);}
 static HRESULT WINAPI aa_reset_ex(IDirect3DDevice9Ex *self,D3DPRESENT_PARAMETERS *params,D3DDISPLAYMODEEX *mode){
     if((IDirect3DDevice9 *)self!=aa_device)return aa_reset_ex_original(self,params,mode);
     log_line("D3D9 ResetEx: releasing AA resources.");aa_release_resources();log_line("D3D9 ResetEx: calling original device.");

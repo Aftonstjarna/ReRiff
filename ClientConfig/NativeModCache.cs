@@ -10,6 +10,7 @@ namespace ReRiff {
         internal static void Configure(){if(ReRiffConfigureModCache(Marshal.GetFunctionPointerForDelegate(Callback))!=1)throw new InvalidOperationException("Mod discovery already ran; cache adapter was not registered");}
         static int Build(IntPtr root,uint used,IntPtr output,int capacity){
             try{
+                var clock=System.Diagnostics.Stopwatch.StartNew();
                 var plan=ModArchiveCache.Prepare(Marshal.PtrToStringUni(root),used);
                 if(plan.Count>capacity)throw new InvalidOperationException("Mod plan exceeds native capacity");
                 for(int i=0;i<plan.Count;i++){
@@ -17,7 +18,7 @@ namespace ReRiff {
                     char[] path=(plan[i].Stem+"\0").ToCharArray();Marshal.Copy(path,0,new IntPtr(record.ToInt64()+4),path.Length);
                 }
                 try{CustomsUnlocks.LoadPlan(plan);}catch(Exception error){CustomsUnlocks.Load(null);NativeReelBridge.Log("Customs music rules disabled: "+error.Message);}
-                NativeReelBridge.Log("Prepared "+plan.Count+" native mod volumes (loose caches and automatic overflow merge).");return plan.Count;
+                NativeReelBridge.Log("Prepared "+plan.Count+" native mod volumes (loose caches and automatic overflow merge) in "+clock.ElapsedMilliseconds+" ms.");return plan.Count;
             }catch(Exception error){NativeReelBridge.Log("Mod cache preparation failed; retaining legacy discovery: "+error);return -1;}
         }
     }

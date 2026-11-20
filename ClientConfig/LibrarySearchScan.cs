@@ -29,11 +29,16 @@ namespace ReRiff {
             Songs=(LibrarySearchSong[])songs.Clone();Index=index;Partial=partial;this.completed=completed;
         }
         internal bool Matches(string[] paths) {return roots.SetEquals(paths);}
-        internal bool Fresh(byte[] bytes,DateTime now) {
-            if(Partial||now<completed||now-completed>=TimeSpan.FromSeconds(30)||bytes==null||catalogue==null||bytes.Length!=catalogue.Length)return false;
-            for(int i=0;i<bytes.Length;i++)if(bytes[i]!=catalogue[i])return false;
-            return true;
+        internal string Freshness(byte[] bytes,DateTime now) {
+            if(Partial)return "partial";
+            if(now<completed)return "clock";
+            if(now-completed>=TimeSpan.FromSeconds(30))return "age";
+            if(bytes==null||catalogue==null)return "catalogue-missing";
+            if(bytes.Length!=catalogue.Length)return "catalogue-size";
+            for(int i=0;i<bytes.Length;i++)if(bytes[i]!=catalogue[i])return "catalogue-changed";
+            return "fresh";
         }
+        internal bool Fresh(byte[] bytes,DateTime now) {return Freshness(bytes,now)=="fresh";}
     }
 
     internal static class LibrarySearchScan {

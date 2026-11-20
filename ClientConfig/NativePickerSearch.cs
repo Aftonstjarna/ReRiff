@@ -102,10 +102,10 @@ namespace ReRiff {
                     LibrarySearchSnapshot previous;lock(gate)previous=library;
                     if(previous!=null&&!previous.Matches(scanRoots))previous=null;
                     if(previous!=null) {
-                        bool fresh=previous.Fresh(catalogue,DateTime.UtcNow);
+                        string freshness=previous.Freshness(catalogue,DateTime.UtcNow);bool fresh=freshness=="fresh";
                         lock(gate){if(current!=session)return;session.Songs=previous.Songs;session.Index=previous.Index;session.Partial=!fresh||previous.Partial;session.Revision++;}
                         Search(session);
-                        NativeReelBridge.Log("Picker index reused: tracks="+previous.Songs.Length+" refresh="+(!fresh));
+                        NativeReelBridge.Log("Picker index reused: tracks="+previous.Songs.Length+" refresh="+(!fresh)+" reason="+freshness);
                         if(fresh)return;
                     }else Publish(session,cached,true);
                     // Keep existing results visible during refresh. The final
@@ -114,6 +114,11 @@ namespace ReRiff {
                     var scan=LibrarySearchScan.Run(scanRoots,cached,session.Cancel.Token,100000,songs=>Publish(session,Merge(visible,songs),true));
                     bool partial=scan.LimitReached||scan.UnreadableFolders.Length>0;
                     Publish(session,scan.Songs,partial);
+                    if(scan.UnreadableFolders.Length>0){
+                        var sample=new StringBuilder();int shown=scan.UnreadableFolders.Length<5?scan.UnreadableFolders.Length:5;
+                        for(int i=0;i<shown;i++){if(i>0)sample.Append("; ");sample.Append(scan.UnreadableFolders[i]);}
+                        NativeReelBridge.Log("Picker unreadable: "+scan.UnreadableFolders.Length+" e.g. "+sample);
+                    }
                     lock(gate){if(current==session&&!session.Cancel.IsCancellationRequested)library=new LibrarySearchSnapshot(scanRoots,catalogue,session.Songs,session.Index,partial,DateTime.UtcNow);}
                     NativeReelBridge.Log("Picker scan completed: tracks="+scan.Songs.Length+" unreadable="+scan.UnreadableFolders.Length+" elapsed_ms="+clock.ElapsedMilliseconds);
                 }catch(OperationCanceledException){}catch(Exception error){lock(gate){if(current==session)session.Failed=true;}NativeReelBridge.Log("Picker worker failed: "+error.GetType().Name);}

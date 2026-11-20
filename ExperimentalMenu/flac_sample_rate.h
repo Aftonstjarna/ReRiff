@@ -9,6 +9,10 @@ static void *flac_decode_original,*flac_create_original,*flac_process_original;
 static FlacNewFn flac_new_array;
 static FlacFreeFn flac_delete_array,flac_free;
 static BOOL flac_rate_installed;
+/* Diagnostics for the open high-sample-rate duration mismatch: STREAMINFO
+ * declares the source length; decoded and resampled frame counts are logged
+ * against it so wrong analysis lengths are attributable per track. */
+static unsigned long long flac_declared_samples;
 
 /* Original x86 routines use ECX/EDX with CALLER-popped stack arguments,
  * unlike MS __fastcall. The constructor also takes ratio in XMM1/XMM2.
@@ -36,6 +40,7 @@ __attribute__((naked,noinline)) static int flac_call_process(void *fn,void *stat
 }
 #pragma GCC diagnostic pop
 static unsigned flac_stream_rate(const BYTE *data,unsigned bytes){
+    flac_declared_samples=0;
     if(bytes>=10&&!memcmp(data,"ID3",3)){
         if((data[6]|data[7]|data[8]|data[9])&128)return 0;
         unsigned skip=10+((unsigned)data[6]<<21)+((unsigned)data[7]<<14)
@@ -46,6 +51,8 @@ static unsigned flac_stream_rate(const BYTE *data,unsigned bytes){
     }
     if(bytes<42||memcmp(data,"fLaC",4)||(data[4]&127)!=0
         ||data[5]!=0||data[6]!=0||data[7]!=34)return 0;
+    flac_declared_samples=((unsigned long long)(data[21]&0x0F)<<32)|((unsigned)data[22]<<24)
+        |((unsigned)data[23]<<16)|((unsigned)data[24]<<8)|data[25];
     return ((unsigned)data[18]<<12)|((unsigned)data[19]<<4)|(data[20]>>4);
 }
 static void flac_release_resampler(void *state){
@@ -55,6 +62,7 @@ static void flac_release_resampler(void *state){
 }
 static BOOL flac_resample(float **pcm,int *frames,unsigned rate){
     if(rate==44100)return TRUE;
+    DWORD resample_start=GetTickCount();
     if(!rate||rate<8000||rate>384000||!pcm||!*pcm||!frames||*frames<=0)return FALSE;
     const int input_frames=*frames;
     /* Match the original Ogg ratio's float division before conversion to double. */
@@ -82,13 +90,25 @@ static BOOL flac_resample(float **pcm,int *frames,unsigned rate){
     flac_release_resampler(state);
     if(!ok||!produced){flac_delete_array(converted);return FALSE;}
     flac_delete_array(*pcm);*pcm=converted;*frames=produced;
-    char message[160];snprintf(message,sizeof(message),"FLAC analysis: %u Hz -> 44100 Hz; frames %d -> %d (original resampler).",rate,input_frames,produced);log_line(message);
+    double declared=flac_declared_samples?(double)flac_declared_samples/(double)rate:0.0;
+    double resampled=(double)produced/44100.0;
+    char message[256];snprintf(message,sizeof(message),"FLAC analysis: %u Hz -> 44100 Hz; frames %d -> %d; declared=%.3f s resampled=%.3f s delta=%+.3f s elapsed_ms=%lu",rate,input_frames,produced,declared,resampled,resampled-declared,(unsigned long)(GetTickCount()-resample_start));log_line(message);
     return TRUE;
 }
 __attribute__((used,noinline)) static unsigned __cdecl flac_decode_bridge(const BYTE *input,unsigned bytes,
     void *a0,float **pcm,int *frames,char *artist,void *a4,char *title,void *a6){
     unsigned rate=flac_stream_rate(input,bytes);
+    DWORD decode_start=GetTickCount();
     unsigned result=flac_call_decode(flac_decode_original,input,bytes,a0,pcm,frames,artist,a4,title,a6);
+    DWORD decode_ms=GetTickCount()-decode_start;
+    if((result&255)&&rate){
+        double declared=flac_declared_samples?(double)flac_declared_samples/(double)rate:0.0;
+        double decoded=frames&&*frames?(double)*frames/(double)rate:0.0;
+        double delta=decoded-declared;if(delta<0)delta=-delta;
+        if(decode_ms>=250||(declared>0&&delta>0.25)){
+            char message[224];snprintf(message,sizeof(message),"FLAC decode: %u Hz declared=%.3f s decoded=%.3f s delta=%+.3f s bytes=%u elapsed_ms=%lu",rate,declared,decoded,decoded-declared,bytes,(unsigned long)decode_ms);log_line(message);
+        }
+    }
     if(!(result&255)||rate==44100)return result;
     if(!flac_resample(pcm,frames,rate)){
         log_line("FLAC analysis: resampling failed; refusing incorrect track analysis.");return 0;

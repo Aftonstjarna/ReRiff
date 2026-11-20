@@ -32,7 +32,7 @@ namespace ReRiff {
         internal static byte[] Publish(byte[] recorded,byte[] unusedModHash){
             Header header=ReadHeader(recorded);
             if(header.Car!="dod"&&header.Car!="alf")return recorded;
-            if(header.Car=="dod"&&header.Pack>1)throw new InvalidDataException("Unsupported test paint");
+            if(header.Car=="dod"&&header.Pack>1)throw new InvalidDataException("Unsupported test paint (car="+header.Car+", pack="+header.Pack+")");
             byte[] canonical=(byte[])recorded.Clone();
             if(header.Car=="dod")Buffer.BlockCopy(Encoding.ASCII.GetBytes("alf"),0,canonical,header.CarOffset,3);
             int length=canonical.Length;
