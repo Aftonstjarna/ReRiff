@@ -2,7 +2,7 @@ name: Keep release documentation on the main README
 
 on:
   push:
-    branches: [main]
+    branches: [reriff/main]
     paths:
       - README.md
       - packaging/build_release.py

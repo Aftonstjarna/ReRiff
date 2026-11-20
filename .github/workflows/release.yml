@@ -2,7 +2,7 @@ name: Build and publish client release
 
 on:
   push:
-    branches: [main, launcher, reriff/experimental-client]
+    branches: [reriff/main, launcher, reriff/experimental-client]
     paths: [VERSION]
   workflow_dispatch:
     inputs:
