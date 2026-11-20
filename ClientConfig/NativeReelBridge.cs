@@ -107,7 +107,7 @@ namespace ReRiff {
                 catch {Log("Scrobbling playback binding unavailable.");}
                 try {NativeModCache.Configure();}
                 catch(Exception error){Log("Mod cache adapter unavailable: "+error);}
-                try {CarFallback.Configure(game);}
+                try {CarFallback.Configure(game);CarSaveRuntime.Configure();}
                 catch(Exception error){Log("Local car fallback unavailable: "+error);}
                 try {GhostCarTest.Configure();}
                 catch(Exception error){Log("Ghost car test unavailable: "+error);}

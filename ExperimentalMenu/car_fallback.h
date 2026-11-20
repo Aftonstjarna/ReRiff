@@ -1,8 +1,13 @@
-/* Native missing-car fallback for authored loose car packages.
- * Reads the donor and optional independent fallback from each package's
- * origin.txt and selects the stock fallback through the original setter. */
+/* Native selection fallback and managed identity-migration callback.
+ * Allocated slots use portable save identities; legacy authored slots retain
+ * donor-only removal fallback through the original guarded settings setter. */
 typedef void (__cdecl *CarFallbackSetter)(void *,int);
 static CarFallbackSetter car_fallback_setter;
+typedef int (__cdecl *CarMigrationCallback)(void *);
+static CarMigrationCallback car_migration_callback;
+static BOOL car_slots_active;
+__declspec(dllexport) void __cdecl ReRiffSetCarSlotsActive(int active){car_slots_active=active!=0;}
+__declspec(dllexport) int __cdecl ReRiffConfigureCarMigration(void *callback){if(!callback||car_migration_callback)return 0;car_migration_callback=(CarMigrationCallback)callback;return 1;}
 __declspec(dllexport) int __cdecl ReRiffConfigureCarFallback(void *setter){
     if(!setter||car_fallback_setter)return 0;
     car_fallback_setter=(CarFallbackSetter)setter;return 1;
@@ -90,6 +95,10 @@ static void car_fallback_main(void){
     BYTE *base=(BYTE *)GetModuleHandleW(NULL);
     void *manager=*(void **)(base+0x7f3d2c),*save=*(void **)(base+0x7ed7b8);
     if(!readable(save,20)||!readable(manager,796))return;
+    if(car_migration_callback&&car_migration_callback(save)!=1){
+        MessageBoxW(NULL,L"Custom car identities could not be migrated safely. The last committed save is retained. See logs/ReRiff-game.log.",L"ReRiff car slots",MB_OK|MB_ICONERROR);ExitProcess(1);return;
+    }
+    if(car_slots_active)return; /* Portable identity migration owns allocated slots. */
     void *settings=*(void **)((BYTE *)save+16);if(!readable(settings,328))return;
     int selected=*(int *)((BYTE *)settings+324),count=*(int *)((BYTE *)manager+792);
     if(count<15||count>22)return;

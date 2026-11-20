@@ -3,7 +3,7 @@
 ## In-game summary
 
 - Unlock custom cars with configured artist and song rules.
-- Keep song caches and leaderboards separate for each server.
+- Add imported cars to the seven spare slots automatically.
 - Match re-encodes to one leaderboard by artist and title.
 
 ## Full release notes
@@ -15,7 +15,9 @@
 - Reuse the built picker index for ten minutes and report unreadable folders, so warm picker sessions no longer rescan an unchanged library on slow mounts.
 - Report the stock ID that actually resolved a missing-car fallback, and add low-volume diagnostics for frame gaps, FLAC declared/decoded durations, picker refresh reasons, mod-volume preparation and refused ghost fixtures.
 - Validation: launcher, client, Windows loader and installer checks pass with the native and managed regressions. The high-sample-rate FLAC analysis resamples to the 44.1 kHz time base; a 96 kHz / 24-bit source (35,744,790 samples) analysed to 16,420,263 frames with zero duration delta, resolving issue #2.
-- Automatic car-slot allocation remains experimental and is not part of this release. Track audio is still read and decoded synchronously when a track is selected; local caching for slow mounts and Navidrome downloads is planned for 1.5.0.
+- Add automatic car-slot allocation for loose packages with `overwrite=0`. ReRiff composes the native roster, donor assets, configuration and localization into a mounted car cache, assigns slots 15–21 by stable package identity, and records assignments in `mods/car-slots.ini`. `overwrite=1` continues to replace the donor's stock slot without consuming a new one.
+- Move paint selection, ownership, usage and the selected car by stable package identity when slots change, and retain removed cars for reinstall. Saves carry their own checked identity metadata so another client's unlabelled custom progress is refused rather than guessed. Shared ghosts use the stock donor and default paint.
+- Track audio is still read and decoded synchronously when a track is selected; local caching for slow mounts and Navidrome downloads is planned for 1.5.0.
 
 # ReRiff 1.4.1-beta.7 — Per-package missing-car fallback
 

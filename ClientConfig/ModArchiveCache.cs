@@ -6,10 +6,11 @@ using System.Text;
 using System.Security.Cryptography;
 
 namespace ReRiff {
-    internal static class ModArchiveCache {
+    internal static partial class ModArchiveCache {
         const string Version="reriff-loose-cache-v1";
         internal sealed class Entry {
             internal string Name, Source, SourceHash;
+            internal byte[] Data;
             internal long Offset;
             internal uint Size, Packed, Crc;
             internal ushort Method;
@@ -51,7 +52,7 @@ namespace ReRiff {
         static ushort U16(byte[] b,int p){return BitConverter.ToUInt16(b,p);}
         static uint U32(byte[] b,int p){return BitConverter.ToUInt32(b,p);}
         // Read only resources exposed by the native index; ZIP extras are not mods.
-        static List<Entry> ReadPair(string stem) {
+        static List<Entry> ReadPair(string stem,bool original=false) {
             Regular(stem+".dat");Regular(stem+".zip");if(new FileInfo(stem+".dat").Length>1048576)throw new IOException("Native VFS index exceeds bounds");byte[] dat=File.ReadAllBytes(stem+".dat");
             if(dat.Length<28||U32(dat,0)!=0x0300ffee)throw new IOException("Invalid VFS index");
             uint nc=U32(dat,4),fc=U32(dat,8),pool=U32(dat,12);
@@ -87,11 +88,11 @@ namespace ReRiff {
                 if(U32(directory,0)!=0x02014b50||U16(directory,10)!=method||U32(directory,20)!=packed||U32(directory,24)!=size||U32(directory,42)!=offset||U16(directory,28)!=len)throw new IOException("ZIP directory/index mismatch");
                 uint expectedCrc=U32(directory,16);ushort expectedFlags=U16(directory,8);
                 if(cpOffset+46+len+U16(directory,30)+U16(directory,32)>central+centralSize)throw new IOException("ZIP directory record overflow");
-                if(Encoding.ASCII.GetString(r.ReadBytes((int)len))!=name)throw new IOException("ZIP directory name mismatch");
+                if(!String.Equals(Encoding.ASCII.GetString(r.ReadBytes((int)len)),name,original?StringComparison.OrdinalIgnoreCase:StringComparison.Ordinal))throw new IOException("ZIP directory name mismatch");
                 f.Position=offset;if(r.ReadUInt32()!=0x04034b50)throw new IOException("Invalid ZIP local header");
                 r.ReadUInt16();ushort flags=r.ReadUInt16(),zipMethod=r.ReadUInt16();r.ReadUInt32();uint crc=r.ReadUInt32(),cp=r.ReadUInt32(),sz=r.ReadUInt32();ushort nl=r.ReadUInt16(),extra=r.ReadUInt16();
-                if((flags&~0x808)!=0||flags!=expectedFlags||zipMethod!=method||nl!=len||((flags&8)==0&&(cp!=packed||sz!=size||crc!=expectedCrc)))throw new IOException("ZIP/index mismatch");
-                byte[] nb=r.ReadBytes(nl);if(nb.Length!=nl||Encoding.ASCII.GetString(nb)!=name)throw new IOException("ZIP name/index mismatch");
+                if((flags&~(method==8||original?0x80e:0x808))!=0||flags!=expectedFlags||zipMethod!=method||nl!=len||((flags&8)==0&&(cp!=packed||sz!=size||crc!=expectedCrc)))throw new IOException("ZIP/index mismatch");
+                byte[] nb=r.ReadBytes(nl);if(nb.Length!=nl||!String.Equals(Encoding.ASCII.GetString(nb),name,original?StringComparison.OrdinalIgnoreCase:StringComparison.Ordinal))throw new IOException("ZIP name/index mismatch");
                 long start=f.Position+extra;if(start+packed>central)throw new IOException("Truncated ZIP data");
                 crc=expectedCrc;
                 total=unchecked(total+crc);entries.Add(new Entry{Name=name,Source=stem+".zip",Offset=start,Size=size,Packed=packed,Crc=crc,Method=(ushort)method});
@@ -110,6 +111,7 @@ namespace ReRiff {
         }
         sealed class Node {internal ushort Name,Next=65535,Child=65535,File=0x3fff;}
         static void Copy(Entry e,Stream output) {
+            if(e.Data!=null){output.Write(e.Data,0,e.Data.Length);return;}
             Regular(e.Source);using(var input=File.OpenRead(e.Source)){input.Position=e.Offset;long left=e.Packed;byte[] bytes=new byte[65536];while(left>0){int n=input.Read(bytes,0,(int)Math.Min(left,bytes.Length));if(n==0)throw new EndOfStreamException();output.Write(bytes,0,n);left-=n;}}
         }
         static uint Position(Stream s){if(s.Position>uint.MaxValue)throw new IOException("ZIP64 mod archives are unsupported");return (uint)s.Position;}
@@ -130,7 +132,7 @@ namespace ReRiff {
             foreach(var pair in children){if(pair.Key!="")nodes[paths[pair.Key.TrimEnd('/')]].Child=(ushort)pair.Value[0];for(int i=1;i<pair.Value.Count;i++)nodes[pair.Value[i-1]].Next=(ushort)pair.Value[i];}
             var offsets=new List<uint>();var centrals=new List<uint>();uint total=0;
             using(var f=new FileStream(stem+".zip",FileMode.CreateNew,FileAccess.Write))using(var w=new BinaryWriter(f)){
-                foreach(var e in entries){if(e.SourceHash!=null){using(var source=File.OpenRead(e.Source))e.Crc=Crc(source,e.Size);}
+                foreach(var e in entries){if(e.Data!=null){using(var source=new MemoryStream(e.Data))e.Crc=Crc(source,e.Size);}else if(e.SourceHash!=null){using(var source=File.OpenRead(e.Source))e.Crc=Crc(source,e.Size);}
                     offsets.Add(Position(f));byte[] name=Encoding.ASCII.GetBytes(e.Name);w.Write(0x04034b50u);w.Write((ushort)20);w.Write((ushort)0);w.Write(e.Method);w.Write((ushort)0);w.Write((ushort)33);w.Write(e.Crc);w.Write(e.Packed);w.Write(e.Size);w.Write((ushort)name.Length);w.Write((ushort)0);w.Write(name);Copy(e,f);if(e.SourceHash!=null&&Digest(e.Source)!=e.SourceHash)throw new IOException("Mod changed during cache generation; retry after edits finish");total=unchecked(total+e.Crc);}
                 uint central=Position(f);for(int i=0;i<entries.Count;i++){var e=entries[i];byte[] name=Encoding.ASCII.GetBytes(e.Name);centrals.Add(Position(f)-central);w.Write(0x02014b50u);w.Write((ushort)20);w.Write((ushort)20);w.Write((ushort)0);w.Write(e.Method);w.Write((ushort)0);w.Write((ushort)33);w.Write(e.Crc);w.Write(e.Packed);w.Write(e.Size);w.Write((ushort)name.Length);w.Write((ushort)0);w.Write((ushort)0);w.Write((ushort)0);w.Write((ushort)0);w.Write(0u);w.Write(offsets[i]);w.Write(name);}
                 uint length=Position(f)-central;w.Write(0x06054b50u);w.Write((ushort)0);w.Write((ushort)0);w.Write((ushort)entries.Count);w.Write((ushort)entries.Count);w.Write(length);w.Write(central);w.Write((ushort)0);
@@ -158,16 +160,29 @@ namespace ReRiff {
             finally{foreach(string extension in new[]{".dat",".zip"})if(File.Exists(temporary+extension))File.Delete(temporary+extension);}
             return stem;
         }
+        // The native scanner passes the mods directory with a trailing separator.
+        // GetDirectoryName would then return the mods directory itself, so car
+        // packages must resolve the game root from a trimmed path.
+        static string Full(string path) {
+            path=Path.GetFullPath(path);string trimmed=path.TrimEnd(Path.DirectorySeparatorChar,Path.AltDirectorySeparatorChar);
+            return trimmed.Length==0||trimmed.EndsWith(":",StringComparison.Ordinal)?path:trimmed;
+        }
         internal static List<Plan> Prepare(string root,uint used) {
-            root=Path.GetFullPath(root);Regular(root);var slots=new List<int>();for(int id=1;id<32;id++)if((used&(1u<<id))==0)slots.Add(id);
+            root=Full(root);Regular(root);
+            using(var gate=new FileStream(Path.Combine(root,".car-slots.lock"),FileMode.OpenOrCreate,FileAccess.ReadWrite,FileShare.None))return PrepareCore(root,used);
+        }
+        static List<Plan> PrepareCore(string root,uint used) {
+            root=Full(root);Regular(root);var slots=new List<int>();for(int id=1;id<32;id++)if((used&(1u<<id))==0)slots.Add(id);
             var stems=new List<string>();string[] folders=Directory.GetDirectories(root);Array.Sort(folders,StringComparer.Ordinal);
-            foreach(string folder in folders){if(Path.GetFileName(folder).StartsWith(".",StringComparison.Ordinal)||(File.GetAttributes(folder)&FileAttributes.ReparsePoint)!=0)continue;
+            var carPlan=PlanCars(root,folders);
+            foreach(string folder in folders){if(carPlan!=null&&carPlan.Folders.Contains(folder))continue;if(Path.GetFileName(folder).StartsWith(".",StringComparison.Ordinal)||(File.GetAttributes(folder)&FileAttributes.ReparsePoint)!=0)continue;
                 string assets=Path.Combine(folder,"assets"),legacy=Path.Combine(folder,"vfs");
                 bool loose=Directory.Exists(assets),pair=File.Exists(legacy+".dat")&&File.Exists(legacy+".zip");
                 if(loose&&pair)throw new IOException("Mod contains both loose assets and VFS: "+folder);
                 if(loose){var entries=new List<Entry>();var key=new StringBuilder();Walk(assets,"",entries,key);stems.Add(Cache(folder,".reriff-cache-",key.ToString(),entries));}
                 else if(pair){Regular(legacy+".dat");Regular(legacy+".zip");if(Directory.GetFiles(folder,"vfs*.dat").Length!=1)throw new IOException("Multiple VFS indexes in mod: "+folder);stems.Add(legacy);}
             }
+            if(carPlan!=null&&carPlan.Entries.Count>0)stems.Add(Cache(root,".reriff-cars-",carPlan.Fingerprint,carPlan.Entries));
             if(stems.Count>slots.Count){
                 if(slots.Count==0)throw new IOException("Numbered/mounted volumes occupy all 31 native slots");
                 int first=slots.Count-1;var merged=new SortedDictionary<string,Entry>(StringComparer.Ordinal);var key=new StringBuilder();
@@ -175,7 +190,8 @@ namespace ReRiff {
                 // Deliberately directly under mods/, never inside an individual mod.
                 string combined=Cache(root,".reriff-merged-",key.ToString(),new List<Entry>(merged.Values));stems.RemoveRange(first,stems.Count-first);stems.Add(combined);
             }
-            var plans=new List<Plan>();for(int i=0;i<stems.Count;i++){if(stems[i].Length>=250)throw new IOException("Native archive path exceeds MAX_PATH");plans.Add(new Plan{Stem=stems[i],Id=slots[i]});}return plans;
+            var plans=new List<Plan>();for(int i=0;i<stems.Count;i++){if(stems[i].Length>=250)throw new IOException("Native archive path exceeds MAX_PATH");plans.Add(new Plan{Stem=stems[i],Id=slots[i]});}
+            if(carPlan!=null)CommitCars(root,carPlan);return plans;
         }
     }
 }

@@ -23,7 +23,7 @@
     <Compile Include="ProgressionEconomy.cs" />
     <Compile Include="ProgressionPurchaseTest.cs" />
     <Compile Include="NativeReelBridge.cs" /><Compile Include="NativePickerSearch.cs" /><Compile Include="KanaSearch.cs" /><Compile Include="PickerSearchIndex.cs" /><Compile Include="LibrarySearchCache.cs" /><Compile Include="LibrarySearchScan.cs" />
-    <Compile Include="ModArchiveCache.cs" /><Compile Include="NativeModCache.cs" /><Compile Include="CustomsUnlocks.cs" /><Compile Include="CarFallback.cs" /><Compile Include="GhostCarTest.cs" /><Compile Include="../Shared/GhostCarTestFormat.cs" />
+    <Compile Include="ModArchiveCache.cs" /><Compile Include="CarSlotRegistry.cs" /><Compile Include="CarSlotMigration.cs" /><Compile Include="NativeCarConfig.cs" /><Compile Include="CarModComposer.cs" /><Compile Include="CarModStrings.cs" /><Compile Include="ModCarCache.cs" /><Compile Include="CarSaveEnvelope.cs" /><Compile Include="CarSaveRuntime.cs" /><Compile Include="NativeModCache.cs" /><Compile Include="CustomsUnlocks.cs" /><Compile Include="CarFallback.cs" /><Compile Include="GhostCarTest.cs" /><Compile Include="../Shared/GhostCarTestFormat.cs" />
     <Reference Include="System.Web.Extensions" />
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net40" Version="1.0.3" PrivateAssets="all" />
   </ItemGroup>
