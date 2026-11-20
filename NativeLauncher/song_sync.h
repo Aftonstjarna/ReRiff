@@ -28,6 +28,9 @@ extern BOOL WINAPI WinHttpCloseHandle(HINTERNET);
 extern BOOL WINAPI WinHttpSetTimeouts(HINTERNET,int,int,int,int);
 extern BOOL WINAPI WinHttpCrackUrl(LPCWSTR,DWORD,DWORD,LPURL_COMPONENTS);
 #include <stdlib.h>
+#if defined(__GNUC__)
+#pragma GCC diagnostic ignored "-Wunused-function"
+#endif
 
 typedef struct { char *data; size_t used, capacity; BOOL failed; } SongBuffer;
 static DWORD song_timeout=5000;
