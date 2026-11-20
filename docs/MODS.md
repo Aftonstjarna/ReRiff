@@ -173,3 +173,11 @@ The launcher’s Languages checkboxes move installed CJK and Latin/European
 packs between `mods/` and `mods/.disabled/`. Re-enabling reuses the retained
 files. Restart the game after changing mods or languages. Modified or
 conflicting font files are preserved and reported rather than overwritten.
+
+## Car donors and missing-car fallback
+
+A loose car package may include `origin.txt` beside `assets/` to declare its
+stock donor and an optional independent missing-car fallback. See
+[car donors and missing-car fallback](CAR-ORIGINS.md) for the format and the
+generated `car-origins.ini`. Packages without `origin.txt` keep their authored
+layout and are not given a fallback.

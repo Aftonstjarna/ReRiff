@@ -18,8 +18,38 @@ int main(void){
     for(int i=-1;i<15;i++){*(int *)(settings+324)=i;CHECK(car_fallback_target(manager,settings,"alf")==-1);}
     *(int *)(settings+324)=22;CHECK(car_fallback_target(manager,settings,"alf")==-1);
     *(int *)(settings+324)=21;CHECK(car_fallback_target(manager,settings,"alf")==0);
+    CHECK(car_fallback_resolve(manager,settings,"alf","fab")==5); /* Declared fallback wins. */
+    CHECK(car_fallback_resolve(manager,settings,"alf","")==0); /* Absent fallback uses donor. */
+    CHECK(car_fallback_resolve(manager,settings,"alf","pl1")==0); /* Missing stock fallback uses donor. */
+    CHECK(car_fallback_resolve(manager,settings,"alf","dod")==0); /* Non-stock fallback is refused. */
     *(int *)(manager+792)=23;CHECK(car_fallback_target(manager,settings,"alf")==-1);
     *(int *)(manager+792)=14;CHECK(car_fallback_target(manager,settings,"alf")==-1);
     CHECK(car_fallback_target(NULL,settings,"alf")==-1);CHECK(car_fallback_target(manager,NULL,"alf")==-1);
-    puts("PASS: missing custom selection resolves to installed stock base; installed/reused slots, invalid states and ambiguous origins refused; planning preserves saves");return 0;
+    WCHAR exe[MAX_PATH],registry[MAX_PATH],mod[MAX_PATH],file[MAX_PATH],value[16];
+    CHECK(GetModuleFileNameW(NULL,exe,MAX_PATH));WCHAR *slash=wcsrchr(exe,L'\\');CHECK(slash);slash[1]=0;
+    _snwprintf(registry,MAX_PATH,L"%lsorigin-test.ini",exe);
+    _snwprintf(mod,MAX_PATH,L"%lsmods",exe);CreateDirectoryW(mod,NULL);
+    _snwprintf(mod,MAX_PATH,L"%lsmods\\origin-test",exe);CHECK(CreateDirectoryW(mod,NULL));
+    _snwprintf(file,MAX_PATH,L"%ls\\origin.txt",mod);
+    CHECK(WritePrivateProfileStringW(L"origins",L"dod",L"alf",file));
+    CHECK(WritePrivateProfileStringW(L"fallbacks",L"dod",L"fab",file));
+    *(int *)(manager+792)=16;name(manager,15,"dod");car_origin_packages(manager,registry);
+    GetPrivateProfileStringW(L"slot_15",L"base",L"",value,16,registry);CHECK(!wcscmp(value,L"alf"));
+    GetPrivateProfileStringW(L"slot_15",L"fallback",L"",value,16,registry);CHECK(!wcscmp(value,L"fab"));
+    WCHAR other[MAX_PATH],otherFile[MAX_PATH];
+    _snwprintf(other,MAX_PATH,L"%lsmods\\origin-conflict",exe);CHECK(CreateDirectoryW(other,NULL));
+    _snwprintf(otherFile,MAX_PATH,L"%ls\\origin.txt",other);CHECK(WritePrivateProfileStringW(L"origins",L"dod",L"alf",otherFile));
+    CHECK(WritePrivateProfileStringW(L"fallbacks",L"dod",L"cor",otherFile));
+    car_origin_packages(manager,registry);GetPrivateProfileStringW(L"slot_15",L"base",L"",value,16,registry);CHECK(!wcscmp(value,L"alf"));
+    GetPrivateProfileStringW(L"slot_15",L"fallback",L"",value,16,registry);CHECK(!*value); /* Conflicting fallbacks are refused. */
+    DeleteFileW(otherFile);RemoveDirectoryW(other);
+    CHECK(WritePrivateProfileStringW(L"fallbacks",L"dod",L"bogus",file));car_origin_packages(manager,registry);
+    GetPrivateProfileStringW(L"slot_15",L"base",L"",value,16,registry);CHECK(!wcscmp(value,L"alf")); /* Invalid fallback keeps the donor. */
+    GetPrivateProfileStringW(L"slot_15",L"fallback",L"",value,16,registry);CHECK(!*value);
+    CHECK(WritePrivateProfileStringW(L"origins",L"dod",L"fab",file));CHECK(WritePrivateProfileStringW(L"fallbacks",L"dod",L"fab",file));car_origin_packages(manager,registry);
+    DeleteFileW(file);RemoveDirectoryW(mod);*(int *)(manager+792)=15;car_origin_packages(manager,registry);
+    GetPrivateProfileStringW(L"slot_15",L"base",L"",value,16,registry);CHECK(!wcscmp(value,L"fab"));
+    GetPrivateProfileStringW(L"slot_15",L"fallback",L"",value,16,registry);CHECK(!wcscmp(value,L"fab")); /* Removal retains both. */
+    DeleteFileW(registry);_snwprintf(mod,MAX_PATH,L"%lsmods",exe);RemoveDirectoryW(mod);
+    puts("PASS: missing custom selection resolves to the declared stock fallback or donor; installed/reused slots, invalid states, ambiguous origins and fallbacks refused; planning preserves saves");return 0;
 }

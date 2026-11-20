@@ -1,6 +1,6 @@
-/* Local removal regression only. The origin registry survives disabled mods.
- * Native settings setter is supplied by the hash-checked managed bridge.
- * No save layout, ownership, paint selection or shared replay is rewritten. */
+/* Native missing-car fallback for authored loose car packages.
+ * Reads the donor and optional independent fallback from each package's
+ * origin.txt and selects the stock fallback through the original setter. */
 typedef void (__cdecl *CarFallbackSetter)(void *,int);
 static CarFallbackSetter car_fallback_setter;
 __declspec(dllexport) int __cdecl ReRiffConfigureCarFallback(void *setter){
@@ -29,6 +29,60 @@ static int car_fallback_target(void *manager,void *settings,const char *origin){
     }
     return found;
 }
+/* Prefer the declared missing-car fallback, then the donor. An unavailable or
+ * invalid fallback never blocks the donor fallback. */
+static int car_fallback_resolve(void *manager,void *settings,const char *base,const char *fallback){
+    int target=fallback&&*fallback?car_fallback_target(manager,settings,fallback):-1;
+    return target>=0?target:car_fallback_target(manager,settings,base);
+}
+/* Package metadata is read once after native car names are initialized.
+ * Keep origins outside the mod so disabling/removing it retains fallback. */
+static BOOL car_origin_stock(const WCHAR *id){
+    static const WCHAR *stock[]={L"alf",L"bui",L"cor",L"rs1",L"vau",L"fab",L"hon",L"cad",L"rol",L"mer",L"mot",L"pha",L"che",L"f1r",L"pl1"};
+    for(unsigned i=0;i<15;i++)if(!wcscmp(id,stock[i]))return TRUE;
+    return FALSE;
+}
+static void car_origin_packages(void *manager,const WCHAR *registry){
+    int count=*(int *)((BYTE *)manager+792);
+    if(count<15||count>22)return;
+    WCHAR root[MAX_PATH],pattern[MAX_PATH];DWORD n=GetModuleFileNameW(NULL,root,MAX_PATH);
+    if(!n||n>=MAX_PATH)return;
+    WCHAR *slash=wcsrchr(root,L'\\');if(!slash)return;slash[1]=0;
+    if(wcslen(root)+12>=MAX_PATH)return;wcscat(root,L"mods");
+    DWORD attrs=GetFileAttributesW(root);if(attrs==INVALID_FILE_ATTRIBUTES||(attrs&FILE_ATTRIBUTE_REPARSE_POINT))return;
+    _snwprintf(pattern,MAX_PATH,L"%ls\\*",root);
+    WCHAR origins[7][16]={{0}},fallbacks[7][16]={{0}};BOOL conflict[7]={0},fallbackConflict[7]={0};
+    WIN32_FIND_DATAW fd;HANDLE find=FindFirstFileW(pattern,&fd);if(find==INVALID_HANDLE_VALUE)return;
+    do {
+        if(fd.cFileName[0]==L'.'||!(fd.dwFileAttributes&FILE_ATTRIBUTE_DIRECTORY)||(fd.dwFileAttributes&FILE_ATTRIBUTE_REPARSE_POINT))continue;
+        WCHAR path[MAX_PATH];if(wcslen(root)+wcslen(fd.cFileName)+13>=MAX_PATH)continue;
+        _snwprintf(path,MAX_PATH,L"%ls\\%ls\\origin.txt",root,fd.cFileName);
+        attrs=GetFileAttributesW(path);if(attrs==INVALID_FILE_ATTRIBUTES||(attrs&(FILE_ATTRIBUTE_REPARSE_POINT|FILE_ATTRIBUTE_DIRECTORY)))continue;
+        for(int slot=15;slot<count;slot++){
+            char id[4];if(!car_fallback_name(manager,slot,id))continue;
+            WCHAR key[4]={(WCHAR)id[0],(WCHAR)id[1],(WCHAR)id[2],0},base[16],fallback[16];
+            GetPrivateProfileStringW(L"origins",key,L"",base,16,path);
+            if(!*base)continue;
+            int i=slot-15;
+            if(!car_origin_stock(base)||(origins[i][0]&&wcscmp(origins[i],base)))conflict[i]=TRUE;
+            else wcscpy(origins[i],base);
+            GetPrivateProfileStringW(L"fallbacks",key,L"",fallback,16,path);
+            if(!*fallback)continue;
+            if(!car_origin_stock(fallback)||(fallbacks[i][0]&&wcscmp(fallbacks[i],fallback)))fallbackConflict[i]=TRUE;
+            else wcscpy(fallbacks[i],fallback);
+        }
+    }while(FindNextFileW(find,&fd));FindClose(find);
+    for(int slot=15;slot<count;slot++){
+        WCHAR section[24];_snwprintf(section,24,L"slot_%d",slot);int i=slot-15;
+        /* Clear stale mappings for reused active slots lacking valid metadata. */
+        if(!WritePrivateProfileStringW(section,L"base",conflict[i]||!*origins[i]?NULL:origins[i],registry))
+            log_line("Car origin: could not persist package donor; removal fallback unavailable.");
+        if(!WritePrivateProfileStringW(section,L"fallback",conflict[i]||fallbackConflict[i]||!*fallbacks[i]?NULL:fallbacks[i],registry))
+            log_line("Car origin: could not persist package fallback; donor fallback remains active.");
+        if(conflict[i])log_line("Car origin: invalid or conflicting package donors refused.");
+        if(fallbackConflict[i])log_line("Car origin: invalid or conflicting package fallbacks refused.");
+    }
+}
 static void car_fallback_main(void){
     if(!car_fallback_setter)return;
     BYTE *base=(BYTE *)GetModuleHandleW(NULL);
@@ -36,18 +90,25 @@ static void car_fallback_main(void){
     if(!readable(save,20)||!readable(manager,796))return;
     void *settings=*(void **)((BYTE *)save+16);if(!readable(settings,328))return;
     int selected=*(int *)((BYTE *)settings+324),count=*(int *)((BYTE *)manager+792);
-    if(selected<15||selected>=22||count<15||count>22||selected<count)return;
-    WCHAR path[MAX_PATH],section[24],origin[16];
+    if(count<15||count>22)return;
+    WCHAR path[MAX_PATH],section[24],origin[16],fallback[16];
     const WCHAR *slash=wcsrchr(config_path,L'\\');if(!slash)return;
     size_t length=(size_t)(slash-config_path)+1;
     if(length+32>=MAX_PATH)return;
     memcpy(path,config_path,length*sizeof(WCHAR));wcscpy(path+length,L"car-origins.ini");
+    static BOOL origins_scanned;
+    if(!origins_scanned){car_origin_packages(manager,path);origins_scanned=TRUE;}
+    if(selected<15||selected>=22||selected<count)return;
     _snwprintf(section,24,L"slot_%d",selected);
     GetPrivateProfileStringW(section,L"base",L"",origin,16,path);
-    char id[4];if(wcslen(origin)!=3)return;
+    GetPrivateProfileStringW(section,L"fallback",L"",fallback,16,path);
+    char id[4],fallbackId[4]={0};if(wcslen(origin)!=3)return;
     for(unsigned i=0;i<3;i++){if(origin[i]>127)return;id[i]=(char)origin[i];}id[3]=0;
-    int target=car_fallback_target(manager,settings,id);if(target<0)return;
+    /* An unusable declared fallback is ignored and the donor still applies. */
+    if(wcslen(fallback)==3){BOOL valid=TRUE;for(unsigned i=0;i<3;i++){if(fallback[i]>127)valid=FALSE;else fallbackId[i]=(char)fallback[i];}if(!valid)fallbackId[0]=0;fallbackId[3]=0;}
+    int target=car_fallback_resolve(manager,settings,id,fallbackId);if(target<0)return;
     car_fallback_setter(settings,target);
-    char message[160];snprintf(message,sizeof(message),"Car fallback: missing slot=%d selected stock base=%s slot=%d through original setter; paints and unlocks retained.",selected,id,target);
+    const char *used=fallbackId[0]&&car_fallback_target(manager,settings,fallbackId)==target?fallbackId:id;
+    char message[192];snprintf(message,sizeof(message),"Car fallback: missing slot=%d selected stock base=%s used=%s slot=%d through original setter; paints and unlocks retained.",selected,id,used,target);
     log_line(message);
 }

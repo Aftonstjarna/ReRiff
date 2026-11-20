@@ -19,7 +19,7 @@ namespace ReRiff {
             setter=(Setter)NativeReelBridge.CreateCall(method,typeof(Setter),false);
             if(ReRiffConfigureCarFallback(Marshal.GetFunctionPointerForDelegate(setter))!=1)
                 throw new IOException("Car fallback registration refused");
-            NativeReelBridge.Log("Local missing-car fallback bound to original selected-car setter; requires car-origins.ini.");
+            NativeReelBridge.Log("Local missing-car fallback bound to original selected-car setter; package origins retained in car-origins.ini.");
         }
     }
 }
