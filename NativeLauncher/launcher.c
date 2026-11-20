@@ -308,7 +308,7 @@ static BOOL launch_game(void) {
     }
     WCHAR cache_note[512];
     if(multiplayer)_snwprintf(cache_note,512,L"Song cache: %ls; server=%ls",cache_key,cache_base);
-    else _snwprintf(cache_note,512,L"Song cache: singleplayer; local only");
+    else _snwprintf(cache_note,512,L"Song cache: offline singleplayer; local only");
     cache_note[511]=0;log_message(cache_note);
     if(!song_cache_prepare(cache_key))log_message(L"Song cache: selected cache could not be prepared; using current cache.");
     if(multiplayer)sync_cached_songs(ini,cache_base);
