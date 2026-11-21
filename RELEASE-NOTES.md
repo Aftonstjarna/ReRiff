@@ -1,3 +1,22 @@
+# ReRiff 1.5.0-beta.1 — Livery mods merge by paint
+
+## In-game summary
+
+- Install livery mods for different paints of the same car at the same time.
+- Each package now contributes its selected paint instead of replacing the whole paint table.
+- Texture-only livery packages keep working, and custom car names stay intact.
+
+## Full release notes
+
+- Discover livery packages from `livery-maker.json` at the mod root. A package with both `origin.txt` and livery metadata is refused as ambiguous; car-slot packages continue through the existing composer.
+- Build the effective base from the stock archive, other enabled mods' configuration and strings, and the composed custom-car volume. Each livery package supplies only its `selected_pack_index` pack; every other pack is validated against the stock table and refused if the package changes more than one paint.
+- Deltas are discovered against the stock table and applied to the effective base. Composed custom-car names such as the Impala's `Baby` are preserved, and the matching `paint_pc.luac` / `.luac64` chunks are regenerated from the merged table.
+- Merge `strings/<bank>/<language>.str` edits index-by-index. Token order must match stock; `tokens.dat` edits are refused. Two packages editing the same name with different text are refused.
+- Copy and verify every non-configuration resource against the package's `resources[]` SHA-256 list. Identical duplicates are accepted, differing duplicates are refused.
+- Mount the merged livery volume after the composed car volume, so its complete paint table wins. The cache fingerprint covers package contents, base hashes and the composed car plan.
+- Validation: new `LiveryMergeSmoke` covers two packs, string deltas over a composed base, decals, Lua emission, cache reuse, duplicate and multi-paint refusal, texture-only packages and decal invalidation. Existing car-slot, composer, cache, ghost and client checks must pass.
+- Built on the 1.4.9 stable line; the retired 1.4.1-beta.7 branch content is unchanged below.
+
 # ReRiff 1.4.9 — Custom car and paint names without shifting stock menus
 
 ## In-game summary
