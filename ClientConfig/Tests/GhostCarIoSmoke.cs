@@ -15,7 +15,7 @@ class GhostCarIoSmoke {
         string root=Path.Combine(Path.GetTempPath(),"reriff-ghost-io-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(root);
         string archive=Path.Combine(root,"mods/zz-pulse-clone-test/vfs.zip");Directory.CreateDirectory(Path.GetDirectoryName(archive));File.WriteAllBytes(archive,new byte[]{1,2,3});
         File.WriteAllText(Path.Combine(root,"client.ini"),"[diagnostics]\ncar_ghost_test=1\n");
-        ModArchiveCache.CurrentCars=CarSlotRegistry.Plan(null,CarSlotRegistry.Package("donor-mod","overwrite=0\n[origins]\ndod=cor"));
+        ModArchiveCache.CurrentCars=CarSlotRegistry.Plan(null,CarSlotRegistry.Package("donor-mod","overwrite=0\n[origins]\nr00=cor"));
         byte[] identity=GhostCarTestFormat.Digest(new byte[]{1,2,3},3),raw=Sample();
         var type=typeof(GhostCarTest);type.GetField("folder",BindingFlags.Static|BindingFlags.NonPublic).SetValue(null,root);
         var run=type.GetMethod("Run",BindingFlags.Static|BindingFlags.NonPublic);
