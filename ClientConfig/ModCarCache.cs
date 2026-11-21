@@ -37,7 +37,7 @@ namespace ReRiff {
    if(packages.Count>0){
     string game=Path.GetDirectoryName(root);var stock=ReadPair(Path.Combine(game,"vfs"),true).ToDictionary(e=>e.Name,StringComparer.Ordinal);var memo=new Dictionary<string,byte[]>(StringComparer.Ordinal);
     // Preserve effective config/localization from other enabled mods.
-    foreach(string folder in folders){if(plan.Folders.Contains(folder)||Path.GetFileName(folder).StartsWith(".",StringComparison.Ordinal)||(File.GetAttributes(folder)&FileAttributes.ReparsePoint)!=0)continue;
+    foreach(string folder in folders){if(plan.Folders.Contains(folder)||LiveryFolder(folder)||Path.GetFileName(folder).StartsWith(".",StringComparison.Ordinal)||(File.GetAttributes(folder)&FileAttributes.ReparsePoint)!=0)continue;
      var extra=new List<Entry>();string assets=Path.Combine(folder,"assets"),stem=Path.Combine(folder,"vfs");if(Directory.Exists(assets))Walk(assets,"",extra,new StringBuilder());else if(File.Exists(stem+".dat")&&File.Exists(stem+".zip"))extra=ReadPair(stem);
      foreach(var e in extra)if(e.Name.StartsWith("scripts/config/",StringComparison.Ordinal)||e.Name.StartsWith("strings/",StringComparison.Ordinal))stock[e.Name]=e;
     }

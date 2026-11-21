@@ -178,7 +178,8 @@ namespace ReRiff {
             root=Full(root);Regular(root);var slots=new List<int>();for(int id=1;id<32;id++)if((used&(1u<<id))==0)slots.Add(id);
             var stems=new List<string>();string[] folders=Directory.GetDirectories(root);Array.Sort(folders,StringComparer.Ordinal);
             var carPlan=PlanCars(root,folders);
-            foreach(string folder in folders){if(carPlan!=null&&carPlan.Folders.Contains(folder))continue;if(Path.GetFileName(folder).StartsWith(".",StringComparison.Ordinal)||(File.GetAttributes(folder)&FileAttributes.ReparsePoint)!=0)continue;
+            var liveryPlan=PlanLiveries(root,folders,carPlan);
+            foreach(string folder in folders){if((carPlan!=null&&carPlan.Folders.Contains(folder))||(liveryPlan!=null&&liveryPlan.Folders.Contains(folder)))continue;if(Path.GetFileName(folder).StartsWith(".",StringComparison.Ordinal)||(File.GetAttributes(folder)&FileAttributes.ReparsePoint)!=0)continue;
                 string assets=Path.Combine(folder,"assets"),legacy=Path.Combine(folder,"vfs");
                 bool loose=Directory.Exists(assets),pair=File.Exists(legacy+".dat")&&File.Exists(legacy+".zip");
                 if(loose&&pair)throw new IOException("Mod contains both loose assets and VFS: "+folder);
@@ -186,6 +187,7 @@ namespace ReRiff {
                 else if(pair){Regular(legacy+".dat");Regular(legacy+".zip");if(Directory.GetFiles(folder,"vfs*.dat").Length!=1)throw new IOException("Multiple VFS indexes in mod: "+folder);stems.Add(legacy);}
             }
             if(carPlan!=null&&carPlan.Entries.Count>0)stems.Add(Cache(root,".reriff-cars-",carPlan.Fingerprint,carPlan.Entries));
+            if(liveryPlan!=null&&liveryPlan.Entries.Count>0)stems.Add(Cache(root,".reriff-liveries-",liveryPlan.Fingerprint,liveryPlan.Entries));
             if(stems.Count>slots.Count){
                 if(slots.Count==0)throw new IOException("Numbered/mounted volumes occupy all 31 native slots");
                 int first=slots.Count-1;var merged=new SortedDictionary<string,Entry>(StringComparer.Ordinal);var key=new StringBuilder();
