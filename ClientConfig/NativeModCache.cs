@@ -9,8 +9,6 @@ namespace ReRiff {
         static extern int ReRiffConfigureModCache(IntPtr callback);
         [DllImport("ReRiff.Notify.dll",CallingConvention=CallingConvention.Cdecl,ExactSpelling=true)]
         static extern void ReRiffSetCarSlotsActive(int active);
-        [DllImport("user32.dll",CharSet=CharSet.Unicode)]
-        static extern int MessageBoxW(IntPtr owner,string text,string title,uint flags);
         internal static void Configure(){if(ReRiffConfigureModCache(Marshal.GetFunctionPointerForDelegate(Callback))!=1)throw new InvalidOperationException("Mod discovery already ran; cache adapter was not registered");}
         static int Build(IntPtr root,uint used,IntPtr output,int capacity){
             try{
@@ -24,7 +22,7 @@ namespace ReRiff {
                 }
                 try{CustomsUnlocks.LoadPlan(plan);}catch(Exception error){CustomsUnlocks.Load(null);NativeReelBridge.Log("Customs music rules disabled: "+error.Message);}
                 NativeReelBridge.Log("Prepared "+plan.Count+" native mod volumes (loose caches and automatic overflow merge) in "+clock.ElapsedMilliseconds+" ms.");return plan.Count;
-             }catch(Exception error){if(ModArchiveCache.CarSlotsRequested){NativeReelBridge.Log("Automatic car preparation refused before save access: "+error);MessageBoxW(IntPtr.Zero,"ReRiff could not safely prepare custom car slots. See logs/ReRiff-game.log.","ReRiff car slots",0x10);Environment.Exit(1);return 0;}NativeReelBridge.Log("Mod cache preparation failed; retaining legacy discovery: "+error);return -1;}
+             }catch(Exception error){if(ModArchiveCache.CarSlotsRequested){NativeReelBridge.Log("Automatic car preparation refused before save access: "+error);NativeReelBridge.ShowError("ReRiff car slots","ReRiff could not safely prepare custom car slots. See logs/ReRiff-game.log.");Environment.Exit(1);return 0;}NativeReelBridge.Log("Mod cache preparation failed; retaining legacy discovery: "+error);return -1;}
         }
     }
 }

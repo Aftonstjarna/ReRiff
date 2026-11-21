@@ -26,6 +26,7 @@
 #define RERIFF_HEALTH_URL L"http://127.0.0.1:5144/"
 #endif
 #include "logging.h"
+#include "error_dialog.h"
 #define WM_COMPLETE (WM_APP + 1)
 #define WM_GAME_RUNNING (WM_APP + 2)
 enum { EXTERNAL=101, FALLBACK, TIMEOUT, POPUP, SAVE, PLAY, LOCAL, EXTERNAL_ONLY, STOP, UPDATE, EXPERIMENTAL, NETWORKING, SKIP_LAUNCHER, AUTO_UPDATE_SKIP, CJK_INSTALL, LOGGING, LATIN_INSTALL, UPDATE_DETAILS, LASTFM_ENABLED, LASTFM_PERCENT, LASTFM_LINK, LASTFM_DISCONNECT, LASTFM_SAVE, LASTFM_KEY, LASTFM_SECRET, UNINSTALL, LISTENBRAINZ_TOKEN, LISTENBRAINZ_ENABLED, LISTENBRAINZ_PERCENT, LISTENBRAINZ_SAVE, LISTENBRAINZ_GET_TOKEN, LIBRE_ENABLED, LIBRE_PERCENT, LIBRE_LINK, LIBRE_DISCONNECT, LIBRE_SAVE, LIBRE_CREDENTIAL, GRAPHICS_SAVE, LOG_CATEGORY_BASE=500 };
@@ -405,7 +406,7 @@ static BOOL save(void) {
     BOOL only=SendMessageW(only_checkbox,BM_GETCHECK,0,0)==BST_CHECKED;
     BOOL enabled=SendMessageW(networking_checkbox,BM_GETCHECK,0,0)!=BST_CHECKED;
     if ((enabled&&(!valid_url(a)||(!only&&!valid_url(b))))||!*t||*end||!(seconds>0 && seconds<=60)) {
-        MessageBoxW(window,L"Use HTTP(S) URLs and a timeout greater than 0 and at most 60 seconds.",L"Invalid settings",MB_OK|MB_ICONWARNING);return FALSE;
+        rr_show_error(window,L"Invalid settings",L"Use HTTP(S) URLs and a timeout greater than 0 and at most 60 seconds.");return FALSE;
     }
     BOOL ok=WritePrivateProfileStringW(L"server",L"external_url",a,ini)
         && WritePrivateProfileStringW(L"server",L"fallback_url",b,ini)
@@ -415,7 +416,7 @@ static BOOL save(void) {
         && WritePrivateProfileStringW(L"server",L"show_server_popup",SendMessageW(popup,BM_GETCHECK,0,0)==BST_CHECKED?L"true":L"false",ini)
         && WritePrivateProfileStringW(L"launcher",L"skip_launcher",SendMessageW(skip_checkbox,BM_GETCHECK,0,0)==BST_CHECKED?L"true":L"false",ini)
         && WritePrivateProfileStringW(L"launcher",L"auto_update_on_skip",SendMessageW(auto_update_checkbox,BM_GETCHECK,0,0)==BST_CHECKED?L"true":L"false",ini);
-    if (!ok) MessageBoxW(window,L"Could not save server.ini.",L"ReRiff",MB_OK|MB_ICONERROR);
+    if (!ok) rr_show_error(window,L"ReRiff",L"Could not save server.ini.");
     else SetWindowTextW(status,L"Settings saved. They apply on the next game start.");
     return ok;
 }

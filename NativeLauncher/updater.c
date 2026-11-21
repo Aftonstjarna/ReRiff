@@ -10,6 +10,7 @@
 #define CAP 32768
 #include "update_progress.h"
 #include "update_notice.h"
+#include "error_dialog.h"
 
 int WINAPI wWinMain(HINSTANCE instance,HINSTANCE previous,LPWSTR arguments,int show) {
     (void)instance;(void)previous;(void)arguments;(void)show;
@@ -45,7 +46,7 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE previous,LPWSTR arguments,int s
             _snwprintf(name,CAP,L"%ls\\failure",work);name[CAP-1]=0;
             if(GetFileAttributesW(name)!=INVALID_FILE_ATTRIBUTES)break;
             if(GetTickCount64()>deadline){
-                MessageBoxW(NULL,L"The updater has not reported completion. Open Diagnostics → View update details in the launcher to inspect the retained error files.",L"ReRiff update pending",MB_OK|MB_ICONERROR);return 5;
+                rr_show_error(NULL,L"ReRiff update pending",L"The updater has not reported completion. Open Diagnostics → View update details in the launcher to inspect the retained error files.");return 5;
             }
             progress_wait(NULL,100);
         }
@@ -54,7 +55,7 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE previous,LPWSTR arguments,int s
     ok=ok&&GetFileAttributesW(name)!=INVALID_FILE_ATTRIBUTES;
     if(!ok&&!automatic){
         _snwprintf(command,CAP,L"The update could not finish. Existing files were retained or rolled back. Open Diagnostics → View update details in the launcher. Temporary files: %ls",work);
-        MessageBoxW(NULL,command,L"ReRiff update failed",MB_OK|MB_ICONERROR);
+        rr_show_error(NULL,L"ReRiff update failed",command);
     }
     if(ok&&automatic)record_update_notice(game);
     if(automatic){progress_report(PROGRESS_RESUME,100);progress_pump();wcscpy(command,resume);}

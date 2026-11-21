@@ -96,7 +96,7 @@ static void car_fallback_main(void){
     void *manager=*(void **)(base+0x7f3d2c),*save=*(void **)(base+0x7ed7b8);
     if(!readable(save,20)||!readable(manager,796))return;
     if(car_migration_callback&&car_migration_callback(save)!=1){
-        MessageBoxW(NULL,L"Custom car identities could not be migrated safely. The last committed save is retained. See logs/ReRiff-game.log.",L"ReRiff car slots",MB_OK|MB_ICONERROR);ExitProcess(1);return;
+        rr_show_error(NULL,L"ReRiff car slots",L"Custom car identities could not be migrated safely. The last committed save is retained. See logs/ReRiff-game.log.");ExitProcess(1);return;
     }
     if(car_slots_active)return; /* Portable identity migration owns allocated slots. */
     void *settings=*(void **)((BYTE *)save+16);if(!readable(settings,328))return;

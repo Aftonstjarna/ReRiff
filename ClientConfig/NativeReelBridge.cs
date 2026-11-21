@@ -56,6 +56,16 @@ namespace ReRiff {
         internal static void Log(string message) {
             try {Logging.Append(Path.GetDirectoryName(typeof(ClientConfig).Assembly.Location),"ReRiff-engine-menu.log",message+Environment.NewLine);}catch(Exception) { }
         }
+        [DllImport("ReRiff.Notify.dll",CallingConvention=CallingConvention.Cdecl,CharSet=CharSet.Unicode,ExactSpelling=true)]
+        private static extern void ReRiffShowError(string title,string text);
+        [DllImport("user32.dll",CharSet=CharSet.Unicode,ExactSpelling=true)]
+        private static extern int MessageBoxW(IntPtr owner,string text,string title,uint flags);
+        // Prefer the selectable native dialog; fall back for an older helper DLL.
+        internal static void ShowError(string title,string text){
+            try{ReRiffShowError(title,text);}
+            catch(EntryPointNotFoundException){MessageBoxW(IntPtr.Zero,text,title,0x10);}
+            catch(DllNotFoundException){MessageBoxW(IntPtr.Zero,text,title,0x10);}
+        }
         internal static void Configure() {
             if(attempted)return;attempted=true;
             try {

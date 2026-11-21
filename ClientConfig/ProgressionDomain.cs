@@ -46,7 +46,7 @@ namespace ReRiff {
                 Environment.Exit(0);
             } catch(Exception error) {
                 Logging.Append(folder,"ReRiff-engine-menu.log","Progression domain preparation failed: "+error+Environment.NewLine);
-                MessageBoxW(IntPtr.Zero,"The isolated progression save could not be prepared. The game will close to avoid using the shared original save.\n\nYour original save has not been reset.\n\n"+error.Message+"\n\nSee logs/ReRiff-game.log when logging is enabled.","ReRiff experimental progression",0x10);
+                NativeReelBridge.ShowError("ReRiff experimental progression","The isolated progression save could not be prepared. The game will close to avoid using the shared original save.\n\nYour original save has not been reset.\n\n"+error.Message+"\n\nSee logs/ReRiff-game.log when logging is enabled.");
                 Environment.Exit(1);
             }
         }
