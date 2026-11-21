@@ -30,7 +30,11 @@ class ModCacheSmoke {
         File.WriteAllText(Path.Combine(root,"plan.txt"),merged[0].Stem);
         bool rejected=false;try{ModArchiveCache.Prepare(root,uint.MaxValue);}catch(IOException){rejected=true;}Check(rejected,"no free slots rejected");
         Asset(root,"bad","Upper.txt","invalid");var upper=ModArchiveCache.Prepare(root,1);Check(ModArchiveCache.Resource(upper,"upper.txt")!=null,"uppercase loose name normalized");
-        Asset(root,"bad","Case.txt","one");Asset(root,"bad","case.txt","two");rejected=false;try{ModArchiveCache.Prepare(root,1);}catch(IOException){rejected=true;}Check(rejected,"case-only duplicate rejected");Directory.Delete(Path.Combine(root,"bad"),true);
+        // Windows cannot store both spellings, so the duplicate check only runs
+        // on a case-sensitive filesystem.
+        Asset(root,"bad","Case.txt","one");
+        if(!File.Exists(Path.Combine(root,"bad","assets","case.txt"))){Asset(root,"bad","case.txt","two");rejected=false;try{ModArchiveCache.Prepare(root,1);}catch(IOException){rejected=true;}Check(rejected,"case-only duplicate rejected");}
+        Directory.Delete(Path.Combine(root,"bad"),true);
         // More than 31 mods: earlier mods retain individual priority, tail merges.
         for(int i=0;i<33;i++)Asset(root,"m"+i.ToString("D2"),"common.txt",i.ToString());
         var many=ModArchiveCache.Prepare(root,1);Check(many.Count==31,"over 31 merges");Check(Path.GetDirectoryName(many[30].Stem)==root,"overflow merge stays at root");
