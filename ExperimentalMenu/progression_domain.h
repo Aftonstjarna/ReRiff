@@ -51,9 +51,12 @@ static const char *progression_domain_route(const char *name){
 static BYTE __thiscall progression_domain_exists(void *self,const char *name){BYTE result=progression_exists(self,progression_domain_route(name));progression_domain_io(self,name,"exists",0,result);return result;}
 static BYTE __thiscall progression_domain_create(void *self,const char *name,DWORD size){BYTE result=progression_create(self,progression_domain_route(name),size);progression_domain_io(self,name,"create",size,result);return result;}
 static BYTE __thiscall progression_domain_open(void *self,const char *name,DWORD mode){
-    ghost_car_before_open(self,name,mode);
+    if(!ghost_car_before_open(self,name,mode)){
+        progression_file_target=FALSE;progression_file_mode=0;progression_file_failed=FALSE;
+        progression_domain_io(self,name,"open",mode,FALSE);return FALSE;
+    }
     BYTE result=progression_open(self,progression_domain_route(name),mode);
-    if(!result)ghost_car_target=ghost_car_patch_ready=FALSE;
+    if(!result)ghost_car_target=ghost_car_patch_ready=ghost_car_write_failed=FALSE;
     progression_file_target=result&&progression_domain_active&&name&&!strcmp(name,"save.bin");
     progression_file_mode=mode;progression_file_failed=FALSE;
     progression_domain_io(self,name,"open",mode,result);return result;
@@ -73,7 +76,7 @@ static BYTE __thiscall progression_domain_close(void *self){
     BOOL target=progression_file_target,failed=progression_file_failed;DWORD mode=progression_file_mode;
     progression_file_target=FALSE;progression_file_mode=0;
     BYTE result=progression_close(self);
-    ghost_car_after_close(result);
+    BOOL ghost_ok=ghost_car_after_close(result);
     if(target&&result&&!failed&&progression_checkpoint){
         int phase=mode==1?1:(mode==2||mode==3?2:-1),xp=0;
         if(phase>=0&&(phase!=1||!progression_load_observed)){
@@ -82,7 +85,7 @@ static BYTE __thiscall progression_domain_close(void *self){
             if(phase==1||(phase==2&&progression_domain_multiplayer))progression_load_observed=TRUE;
         }
     }
-    return result;
+    return result&&ghost_ok;
 }
 static BYTE __thiscall progression_domain_delete(void *self,const char *name){BYTE result=progression_delete(self,progression_domain_route(name));progression_domain_io(self,name,"delete",0,result);return result;}
 /* Match createSaveFiles2's native file-size table and device create call,
@@ -232,7 +235,7 @@ static BOOL progression_domain_native_xp(int *xp){
 }
 static void progression_domain_stop(const char *reason){
     log_line(reason);
-    MessageBoxW(NULL,L"The experimental progression checkpoint could not be prepared or committed safely. ReRiff will close without resetting the original save. See logs/ReRiff-game.log.",L"ReRiff experimental progression",MB_OK|MB_ICONERROR);
+    rr_show_error(NULL,L"ReRiff experimental progression",L"The experimental progression checkpoint could not be prepared or committed safely. ReRiff will close without resetting the original save. See logs/ReRiff-game.log.");
     ExitProcess(1);
 }
 __declspec(dllexport) int __cdecl ReRiffConfigureProgressionCheckpoint(ProgressCheckpointFn callback){

@@ -52,6 +52,27 @@
   betas as prereleases with `--latest=false`; experimental updates require opt-in.
 - Do not delete or draft releases automatically. Superseded betas may be removed
   when requested; preserve Git tags for the tested commits.
+- Keep `reriff/main` on the latest stable release. Publish stable builds from `reriff/main`:
+  fast-forward `reriff/main` to the tested stable branch, then let the `reriff/main` push or
+  dispatch run the release workflow. Do not publish a stable from a side branch
+  without updating `reriff/main`. `reriff/main`'s `VERSION` and history must contain the latest
+  stable tag; the `Keep main on the latest stable` workflow verifies this.
+# Server channel promotion
+
+- Server experiments are developed on `reriff/experimental-server`. A push there
+  builds and publishes the `experimental` container image and does not move
+  `latest`.
+- When a stable client update depends on experimental server changes, promote
+  both together: merge or fast-forward the tested stable branch into `reriff/main` and
+  push. The `reriff/main` push publishes the `latest` server image, and the release
+  workflow publishes the stable client. Do not promote server experiments to
+  `reriff/main` ahead of a stable client release without explicit approval.
+- After promotion, merge `reriff/main` back into `reriff/experimental-server` so the next
+  experiment starts from the released server image. Keep
+  `reriff/experimental-client` based on `reriff/main` for the next client beta.
+- `latest` and `reriff/main` describe the same released server. `experimental` is the
+  optional, movable preview channel. Tags are produced by
+  `.github/workflows/container.yml`; do not publish these channels by hand.
 
 # Upstream server restoration after stable releases
 
@@ -60,7 +81,7 @@
   `Server-Restoration` branch of `Aftonstjarna/ReRiff` for contribution to
   `rumbadebu/riffapi-local-extended`.
 - Base the contribution on current upstream code and retain the existing focused
-  restoration work. Do not merge the full ReRiff main history into this branch.
+  restoration work. Do not merge the full ReRiff reriff/main history into this branch.
   Exclude launcher, installer, client/game patches and unrelated ReRiff features;
   include server dependencies, tests and documentation needed by the restoration.
 - Run focused restoration regressions and upstream compatibility checks before

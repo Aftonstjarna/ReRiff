@@ -132,6 +132,14 @@ namespace ReRiff {
             return new Dictionary<string,object>{{"cycleXp",BitConverter.ToInt32(fields,280)},{"coins",BitConverter.ToInt32(fields,284)},
                 {"equippedCar",car},{"equippedPack",pack},{"achievements",achieved.ToArray()},{"ownedCars",cars.ToArray()},{"ownedPacks",packs.ToArray()}};
         }
+        // Use the original ownership setters; they mark progression dirty without
+        // invoking achievement/network awards.
+        internal void RestoreCarOwnership(IntPtr progression,int car,bool owned,ushort packs){
+            if(car<15||car>=22||(packs&~511)!=0)throw new IOException("Invalid custom car ownership");
+            setCar(progression,car,owned);
+            for(int pack=0;pack<9;pack++)setPack(progression,car,pack,(packs&(1<<pack))!=0);
+        }
+        internal IntPtr SaveAddress {get{return getSave();}}
         internal void SaveCurrent(){
             IntPtr current=getSave();byte[] root=Read(current,15);
             if(root[12]!=1||root[13]!=0||root[14]!=0||!save(current))throw new IOException("Native save refused progression checkpoint");

@@ -6,7 +6,7 @@ not confirmation that the other chat has received a notification.
 
 ## Experimental changes
 
-All work is in the working tree on `codex/experimental-client`; main is untouched.
+All work is in the working tree on `reriff/experimental-client`; reriff/main is untouched.
 There are also pre-existing uncommitted native graphics/UI changes. Preserve them;
 do not commit or reset the whole working tree indiscriminately.
 

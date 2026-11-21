@@ -6,7 +6,7 @@ using ReRiff;
 class GhostCarFormatSmoke {
     static void Check(bool value,string message){if(!value)throw new Exception(message);}
     static void Text(BinaryWriter writer,string text){byte[] b=Encoding.ASCII.GetBytes(text);writer.Write(b.Length);writer.Write(b);}
-    static byte[] Sample(){using(var s=new MemoryStream()){using(var w=new BinaryWriter(s)){w.Write(18);w.Write(1);w.Write(120f);Text(w,"123");w.Write(100f);Text(w,"abc");Text(w,"dod");w.Write(1);w.Write(80);w.Write(new byte[80]);return s.ToArray();}}}
+    static byte[] Sample(string car="dod",int pack=1){using(var s=new MemoryStream()){using(var w=new BinaryWriter(s)){w.Write(18);w.Write(1);w.Write(120f);Text(w,"123");w.Write(100f);Text(w,"abc");Text(w,car);w.Write(pack);w.Write(80);w.Write(new byte[80]);return s.ToArray();}}}
     static int Main(string[] args){
         byte[] mod=Enumerable.Range(0,32).Select(i=>(byte)i).ToArray(),raw=Sample(),before=(byte[])raw.Clone();
         var custom=GhostCarTestFormat.ReadHeader(raw);byte[] wire=GhostCarTestFormat.Publish(raw,mod);
@@ -19,6 +19,13 @@ class GhostCarFormatSmoke {
         byte[] other=(byte[])mod.Clone();other[0]++;Check(GhostCarTestFormat.Restore(wire,other)==null,"Different mod restored");
         Check(GhostCarTestFormat.Restore(wire,mod)==null,"Matching mod restored despite fallback-only mode");
         Check(wire.Length==raw.Length,"Custom identity trailer added");
+        byte[] customRaw=Sample("r00",5),customWire=GhostCarTestFormat.Publish(customRaw,null,id=>id=="r00"?"cor":null,false);
+        var customStock=GhostCarTestFormat.ReadHeader(customWire);Check(customStock.Car=="cor"&&customStock.Pack==0,"Allocated runtime car did not fall back to its stock donor");
+        Check(customWire.Skip(customStock.PackOffset+4).SequenceEqual(customRaw.Skip(customStock.PackOffset+4)),"Runtime fallback changed replay payload");
+        Check(ReferenceEquals(customWire,GhostCarTestFormat.Publish(customWire,null,id=>"cor",false)),"Runtime fallback is not idempotent");
+        try{GhostCarTestFormat.Publish(Sample("r06",2),null,id=>null,false);throw new Exception("Unmapped runtime car accepted");}catch(InvalidDataException){}
+        try{GhostCarTestFormat.Publish(Sample("r01",2),null,id=>"r00",false);throw new Exception("Runtime ID accepted as donor");}catch(InvalidDataException){}
+        Check(ReferenceEquals(raw,GhostCarTestFormat.Publish(raw,null,null,false)),"Legacy dod behavior bypassed its opt-in");
         for(int n=0;n<raw.Length;n++){try{GhostCarTestFormat.ReadHeader(raw.Take(n).ToArray());throw new Exception("Truncated ghost accepted");}catch(EndOfStreamException){}catch(InvalidDataException){}}
         if(args.Length>=1){
             byte[] real=File.ReadAllBytes(args[0]);var source=GhostCarTestFormat.ReadHeader(real);

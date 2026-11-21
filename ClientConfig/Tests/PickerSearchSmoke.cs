@@ -67,8 +67,8 @@ class PickerSearchSmoke {
         var retained=new LibrarySearchSnapshot(new[]{"C:/Music","D:/Music"},cache,songs,cachedIndex,false,now);
         Check(retained.Matches(new[]{"d:/music","C:/Music","C:/Music"}),"Root order, duplicate roots and case do not invalidate snapshot");
         Check(!retained.Matches(new[]{"C:/Music"})&&!retained.Matches(new[]{"C:/Music","E:/Music"}),"Removed or changed roots cannot reuse another library");
-        Check(retained.Fresh(cache,now.AddSeconds(29))&&object.ReferenceEquals(retained.Index,cachedIndex),"Warm reopen reuses built search index");
-        Check(!retained.Fresh(cache,now.AddSeconds(30))&&!retained.Fresh(cache,now.AddSeconds(-1)),"Expired and backwards-clock snapshots refresh");
+        Check(retained.Fresh(cache,now.AddMinutes(9))&&object.ReferenceEquals(retained.Index,cachedIndex),"Warm reopen reuses built search index");
+        Check(!retained.Fresh(cache,now.AddMinutes(10))&&!retained.Fresh(cache,now.AddSeconds(-1)),"Expired and backwards-clock snapshots refresh");
         Check(!retained.Fresh(wrong,now)&&!retained.Fresh(null,now),"Changed or unreadable catalogue forces refresh");
         Check(!new LibrarySearchSnapshot(new[]{"C:/Music"},cache,songs,cachedIndex,true,now).Fresh(cache,now),"Incomplete scan always retries");
         wrong=new byte[cache.Length+1];Array.Copy(cache,wrong,cache.Length);Rejected(wrong,"Trailing bytes");

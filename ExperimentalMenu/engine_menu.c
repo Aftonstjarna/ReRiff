@@ -89,6 +89,8 @@ static DWORD restart_started;
 #define SERVER_ACTION_BASE 1500
 
 #include "../NativeLauncher/logging.h"
+#include "../NativeLauncher/error_dialog.h"
+__declspec(dllexport) void __cdecl ReRiffShowError(const WCHAR *title,const WCHAR *text){rr_show_error(NULL,title,text);}
 static void log_line(const char *line) {
     if(!rr_log_ini(config_path,L"engine_menu"))return;
     rr_log_append(log_path,"engine_menu",line);

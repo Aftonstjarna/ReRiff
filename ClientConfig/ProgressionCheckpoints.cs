@@ -22,6 +22,7 @@ namespace ReRiff {
     internal static class ProgressionCheckpoints {
         internal static IProgressionRemote Remote;
         internal static Action SaveInitial;
+        internal static Action<string> PrepareCarSave,ObserveCarLoad,AfterCarLoad;
         internal static bool CanPrestige {get{return Ready&&(Remote==null||Remote.CanPrestige(checkpoint.Progress));}}
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         private delegate int NativeEvent(IntPtr path,int phase,int nativeXp);
@@ -73,7 +74,12 @@ namespace ReRiff {
             }finally{if(File.Exists(temporary))File.Delete(temporary);}
         }
         private static int Observe(IntPtr path,int phase,int nativeXp){
-            try {Process(Marshal.PtrToStringUni(path),phase,nativeXp);return 1;}
+            try {string file=Marshal.PtrToStringUni(path);
+                if(phase==2&&PrepareCarSave!=null)PrepareCarSave(file);
+                Process(file,phase,nativeXp);
+                if((phase==0||phase==1)&&ObserveCarLoad!=null)ObserveCarLoad(file);
+                if(phase==1&&AfterCarLoad!=null)AfterCarLoad(file);
+                return 1;}
             catch(Exception error){NativeReelBridge.Log("Progression checkpoint refused: "+error);return 0;}
         }
         internal static void Process(string path,int phase,int nativeXp){

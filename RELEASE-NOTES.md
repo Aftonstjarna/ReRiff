@@ -1,3 +1,86 @@
+# ReRiff 1.4.9 — Custom car and paint names without shifting stock menus
+
+## In-game summary
+
+- Show custom car and paint names again, including the Impala's "Baby".
+- Keep stock menus, achievements and result labels intact.
+
+## Full release notes
+
+- Reuse the authored car identity and its existing stock localization token when that identity is not part of the stock roster. The Impala package authors `dod`, so the composed car now keeps `car_dod` at its stock index and replaces only its text instead of adding a token in another bank.
+- Reuse the paint pack's existing `packName` tokens. The composer no longer rewrites them to synthetic `modpack` tokens, and the localization pass maps their text from the car package. Stock token IDs and string indices do not move.
+- Keep the empty-bank fallback only for authored identities that have no stock car token, so those caches still load. Names for such identities may not render, but menus never shift.
+- Treat an unknown paint-pack token as unresolved instead of refusing the whole car cache.
+- Accept retired authored identities in the car registry, so removing a mod does not invalidate `car-slots.ini`.
+- Validation: managed client build plus car-slot identity, composer, cache and save-envelope regressions. An offline composition of the Impala package keeps all 651 stock `Common` tokens, adds no tokens, and yields `car_dod = Baby` with the package's paint names.
+
+# ReRiff 1.4.8 — Persist legacy car migration immediately
+
+## In-game summary
+
+- Keep an accepted legacy car migration without waiting for a save.
+
+## Full release notes
+
+- Write the portable car identity trailer as soon as the explicit legacy migration is accepted. Previously the migration lived only in memory until a later save, so closing at the menu before a save made the next launch refuse the same save again.
+- If the immediate write fails, for example while the save device is busy, the migration remains pending and the next normal save records it.
+- Strict matching and the explicit `legacy_car_migration=1` opt-in are unchanged; mismatched or extra custom progress still refuses and preserves the save.
+- Validation: managed client build plus car-save envelope and runtime regressions. The 1.4.7 localization fix is unchanged.
+
+# ReRiff 1.4.7 — Custom-car localization fix
+
+## In-game summary
+
+- Keep stock menus intact when custom cars are installed.
+- Read custom car and paint names from a separate bank.
+
+## Full release notes
+
+- Place added car and paint localization tokens in an empty native bank instead of `Common`. Existing token IDs and stock string indices no longer shift, so menus, achievements, tips and result labels keep their text when a custom car is composed.
+- Keep the stock `Common` bank byte-identical; the car composer regression asserts this. Custom names still resolve by token name across banks.
+- Validation: full client, launcher and installer checks plus car composer, cache, slot identity and save-envelope regressions. The explicit legacy migration from 1.4.6 is unchanged.
+
+# ReRiff 1.4.6 — Legacy car-save migration and mod cache fixes
+
+## In-game summary
+
+- Load existing custom-car saves with an explicit migration.
+- Accept mixed-case assets from imported car mods.
+- Copy launcher and in-game error messages.
+
+## Full release notes
+
+- Add an explicit one-time migration for saves written before portable car identities. When every active allocated slot has matching progress, the selected custom slot has an identity, and no inactive custom slot carries state, set `legacy_car_migration=1` under `[diagnostics]` in `client.ini`, launch once and let the game save. The next save records the identities; remove the setting afterwards. Mismatched or extra custom progress is still refused and preserved, never guessed.
+- Lowercase loose mod resource names when building caches. Stock VFS indexes are lowercase even when archives preserve mixed case, so mods containing `batchTextures.brres` no longer fail with "Resource names must be lowercase ASCII". Case-only duplicate assets are refused with a clear error.
+- Replace launcher, updater and in-game error message boxes with a copyable dialog: selectable message text plus a Copy button, with a MessageBox fallback for older helper DLLs. Confirmation prompts remain native dialogs.
+- Validation: managed client, native helper, launcher, updater and installer builds pass; car-slot identity, save-envelope, mod cache and slot allocation tests pass. A legacy save is not modified until the explicit opt-in and matching check succeed.
+
+## Known limitations
+
+- The migration opt-in requires the active car-slot registry to match the save exactly. Back up the save and remove the setting after the first successful save.
+- Track audio is still read and decoded synchronously when a track is selected; the cache work remains planned for 1.5.0.
+
+# ReRiff 1.4.5 — Custom-car unlocks, server caches and fallback cars
+
+## In-game summary
+
+- Unlock custom cars with configured artist and song rules.
+- Add imported cars to the seven spare slots automatically.
+- Match re-encodes to one leaderboard by artist and title.
+
+## Full release notes
+
+- Read artist and optional title unlock rules from a custom package's manifest-matched `unlocks_pc` CFG/Lua pair, extending the original Police/Monaco music check. Unmatched, malformed or independently changed pairs keep the original behavior.
+- Key the launcher's song cache by the selected server identity. Any HTTP server, including the localhost/LAN server, is distinct; offline singleplayer uses its own cache and is never registered. The launcher now uses WinHTTP for identity sync, restoring reliable server registration.
+- Read an optional `[fallbacks]` section from each loose car package's `origin.txt`. It names the stock car shown when the custom car's slot is unavailable, independently of the donor used for assets, configuration, saves and shared ghosts. Invalid or conflicting declarations are refused; the donor is used when no fallback applies.
+- Match songs in the server catalog by normalized artist and title, retaining every observed SHA-256 as evidence. Differently encoded copies of one song, including future cache transcodes, share one leaderboard identity. A cache ID may gain a new encoding but cannot change metadata; audio with an empty title or artist still requires exact-source matching.
+- Reuse the built picker index for ten minutes and report unreadable folders, so warm picker sessions no longer rescan an unchanged library on slow mounts.
+- Report the stock ID that actually resolved a missing-car fallback, and add low-volume diagnostics for frame gaps, FLAC declared/decoded durations, picker refresh reasons, mod-volume preparation and refused ghost fixtures.
+- Validation: launcher, client, Windows loader and installer checks pass with the native and managed regressions. The high-sample-rate FLAC analysis resamples to the 44.1 kHz time base; a 96 kHz / 24-bit source (35,744,790 samples) analysed to 16,420,263 frames with zero duration delta, resolving issue #2.
+- Add automatic car-slot allocation for loose packages with `overwrite=0`. ReRiff composes the native roster, donor assets, configuration and localization into a mounted car cache, assigns slots 15–21 by stable package identity, and records assignments in `mods/car-slots.ini`. `overwrite=1` continues to replace the donor's stock slot without consuming a new one.
+- Move paint selection, ownership, usage and the selected car by stable package identity when slots change, and retain removed cars for reinstall. Saves carry their own checked identity metadata so another client's unlabelled custom progress is refused rather than guessed. Shared ghosts use the stock donor and default paint.
+- Track audio is still read and decoded synchronously when a track is selected; local caching for slow mounts and Navidrome downloads is planned for 1.5.0.
+
 # ReRiff 1.4.1-beta.7 — Per-package missing-car fallback
 
 ## In-game summary

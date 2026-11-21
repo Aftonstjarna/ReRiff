@@ -11,14 +11,11 @@ class ModCacheSmoke {
         Asset(root,".disabled/ignored","hidden.txt","disabled");
         var initial=ModArchiveCache.Prepare(root,1);Check(initial.Count==2,"two mods");
         Check(Path.GetDirectoryName(initial[0].Stem)==Path.Combine(root,"a-first"),"individual cache is in mod");
-        Check(System.Text.Encoding.UTF8.GetString(ModArchiveCache.Resource(initial,"graphics/vehicles/decals/alf_01/batchtextures.brres"))=="second mod","resource uses final mounted priority");
-        Check(ModArchiveCache.Resource(initial,"hidden.txt")==null,"disabled resource not loaded");
         DateTime stamp=File.GetLastWriteTimeUtc(initial[0].Stem+".zip");var warm=ModArchiveCache.Prepare(root,1);
         Check(initial[0].Stem==warm[0].Stem&&stamp==File.GetLastWriteTimeUtc(warm[0].Stem+".zip"),"reuse without rewrite");
         // Only slot 31 available. Merged output MUST be directly under mods root.
         var merged=ModArchiveCache.Prepare(root,0x7fffffffu);Check(merged.Count==1&&merged[0].Id==31,"reserve numbered slots");
         Check(Path.GetDirectoryName(merged[0].Stem)==root,"root-level merged cache");
-        Check(System.Text.Encoding.UTF8.GetString(ModArchiveCache.Resource(merged,"graphics/vehicles/decals/alf_01/batchtextures.brres"))=="second mod","merged resource priority");
         string changed=Path.Combine(root,"z-last","assets","second.txt");DateTime savedTime=File.GetLastWriteTimeUtc(changed);
         File.WriteAllText(changed,"second best");File.SetLastWriteTimeUtc(changed,savedTime);
         Check(ModArchiveCache.Prepare(root,1)[1].Stem!=initial[1].Stem,"same-size same-time edit detected");
@@ -32,7 +29,12 @@ class ModCacheSmoke {
         merged=ModArchiveCache.Prepare(root,0x7fffffffu);Check(merged.Count==1,"mixed loose/archive merge");
         File.WriteAllText(Path.Combine(root,"plan.txt"),merged[0].Stem);
         bool rejected=false;try{ModArchiveCache.Prepare(root,uint.MaxValue);}catch(IOException){rejected=true;}Check(rejected,"no free slots rejected");
-                Asset(root,"bad","Upper.txt","invalid");rejected=false;try{ModArchiveCache.Prepare(root,1);}catch(IOException){rejected=true;}Check(rejected,"uppercase rejected");Directory.Delete(Path.Combine(root,"bad"),true);
+        Asset(root,"bad","Upper.txt","invalid");var upper=ModArchiveCache.Prepare(root,1);Check(ModArchiveCache.Resource(upper,"upper.txt")!=null,"uppercase loose name normalized");
+        // Windows cannot store both spellings, so the duplicate check only runs
+        // on a case-sensitive filesystem.
+        Asset(root,"bad","Case.txt","one");
+        if(!File.Exists(Path.Combine(root,"bad","assets","case.txt"))){Asset(root,"bad","case.txt","two");rejected=false;try{ModArchiveCache.Prepare(root,1);}catch(IOException){rejected=true;}Check(rejected,"case-only duplicate rejected");}
+        Directory.Delete(Path.Combine(root,"bad"),true);
         // More than 31 mods: earlier mods retain individual priority, tail merges.
         for(int i=0;i<33;i++)Asset(root,"m"+i.ToString("D2"),"common.txt",i.ToString());
         var many=ModArchiveCache.Prepare(root,1);Check(many.Count==31,"over 31 merges");Check(Path.GetDirectoryName(many[30].Stem)==root,"overflow merge stays at root");

@@ -89,6 +89,16 @@ jobs:
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '8.0.x'
+      - name: Test custom-car slot identities and save metadata
+        run: |
+          for test in CarSlotsSmoke CarSaveEnvelopeSmoke; do
+            output="$RUNNER_TEMP/$test"
+            dotnet build "ClientConfig/Tests/$test.csproj" -c Release -o "$output/bin" -p:BaseIntermediateOutputPath="$output/obj/" -p:MSBuildProjectExtensionsPath="$output/obj/"
+            dotnet "$output/bin/$test.dll"
+          done
+          livery="$RUNNER_TEMP/LiveryMergeSmoke"
+          dotnet build "ClientConfig/Tests/LiveryMergeSmoke.csproj" -c Release -o "$livery/bin" -p:BaseIntermediateOutputPath="$livery/obj/" -p:MSBuildProjectExtensionsPath="$livery/obj/"
+          dotnet "$livery/bin/LiveryMergeSmoke.dll" "$RUNNER_TEMP/livery-merge-fixture"
       - name: Verify circular prestige artwork
         run: |
           python -m pip install Pillow==13.0.0

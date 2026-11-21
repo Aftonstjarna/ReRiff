@@ -1,0 +1,49 @@
+name: Keep reriff/main on the latest stable
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    if: >-
+      github.repository == 'Aftonstjarna/ReRiff' &&
+      (github.event_name != 'release' || !github.event.release.prerelease)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: reriff/main
+          fetch-depth: 0
+
+      - name: Verify reriff/main carries the latest stable
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(cat VERSION)
+          latest=$(gh release list --exclude-drafts --exclude-pre-releases --limit 1 \
+            --json tagName --jq '.[0].tagName')
+          if [ -z "$latest" ] || [ "$latest" = "null" ]; then
+            echo '::error::No stable release found'
+            exit 1
+          fi
+          latest=${latest#v}
+          if [ "$version" != "$latest" ]; then
+            echo "::error::reriff/main VERSION ($version) is not the latest stable ($latest). Fast-forward reriff/main to the stable release commit before publishing."
+            exit 1
+          fi
+          git fetch --tags --force origin
+          tag="v$latest"
+          sha=$(git rev-parse "refs/tags/$tag^{}")
+          if ! git merge-base --is-ancestor "$sha" HEAD; then
+            echo "::error::$tag ($sha) is not an ancestor of reriff/main"
+            exit 1
+          fi
+          echo "reriff/main carries $tag at $sha."
