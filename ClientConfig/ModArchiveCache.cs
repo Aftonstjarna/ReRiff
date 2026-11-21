@@ -41,8 +41,11 @@ namespace ReRiff {
         static void Walk(string root,string relative,List<Entry> entries,StringBuilder fingerprint) {
             string directory=Path.Combine(root,relative);Regular(directory);
             string[] paths=Directory.GetFileSystemEntries(directory);Array.Sort(paths,StringComparer.Ordinal);
-            foreach(string path in paths){Regular(path);string name=(relative.Length==0?"":relative+"/")+Path.GetFileName(path);Name(name);
-                if(Directory.Exists(path)){Walk(root,name,entries,fingerprint);continue;}
+            foreach(string path in paths){Regular(path);string actual=(relative.Length==0?"":relative+"/")+Path.GetFileName(path);
+                /* Cache names are lowercase; stock VFS indexes are lowercase even
+                 * when the containing ZIP preserves mixed-case file names. */
+                string name=actual.ToLowerInvariant();Name(name);
+                if(Directory.Exists(path)){Walk(root,actual,entries,fingerprint);continue;}
                 long size=new FileInfo(path).Length;if(size>uint.MaxValue)throw new IOException("ZIP64 mod assets are unsupported");
                 string hash=Digest(path);
                 fingerprint.Append(name).Append('\0').Append(hash).Append('\n');
@@ -179,7 +182,7 @@ namespace ReRiff {
                 string assets=Path.Combine(folder,"assets"),legacy=Path.Combine(folder,"vfs");
                 bool loose=Directory.Exists(assets),pair=File.Exists(legacy+".dat")&&File.Exists(legacy+".zip");
                 if(loose&&pair)throw new IOException("Mod contains both loose assets and VFS: "+folder);
-                if(loose){var entries=new List<Entry>();var key=new StringBuilder();Walk(assets,"",entries,key);stems.Add(Cache(folder,".reriff-cache-",key.ToString(),entries));}
+                if(loose){var entries=new List<Entry>();var key=new StringBuilder();Walk(assets,"",entries,key);var seen=new HashSet<string>(StringComparer.Ordinal);foreach(var entry in entries)if(!seen.Add(entry.Name))throw new IOException("Duplicate mod resource name: "+entry.Name);stems.Add(Cache(folder,".reriff-cache-",key.ToString(),entries));}
                 else if(pair){Regular(legacy+".dat");Regular(legacy+".zip");if(Directory.GetFiles(folder,"vfs*.dat").Length!=1)throw new IOException("Multiple VFS indexes in mod: "+folder);stems.Add(legacy);}
             }
             if(carPlan!=null&&carPlan.Entries.Count>0)stems.Add(Cache(root,".reriff-cars-",carPlan.Fingerprint,carPlan.Entries));
