@@ -9,6 +9,12 @@ namespace ReRiff {
   static string Map(string value,string from,string to){if(value==from)return to;return value.Replace("/"+from+"/","/"+to+"/").Replace("/"+from+"_","/"+to+"_");}
   static void Remap(NativeCarConfig.Node n,string from,string to){n.Name=Map(n.Name,from,to);if(n.Type==0)n.Text=Map(n.Text,from,to);foreach(var c in n.Children)Remap(c,from,to);}
   static NativeCarConfig.Node Clone(List<NativeCarConfig.Node> nodes,string source,string donor,string target){var node=NativeCarConfig.Find(nodes,source)??NativeCarConfig.Find(nodes,donor);if(node==null)throw new IOException("Missing donor car configuration: "+donor);var copy=node.Copy();Remap(copy,source,target);if(source!=donor)Remap(copy,donor,target);copy.Name=target;return copy;}
+  // The authoring tools use -1 for "no livery"; native stock tables use 0.
+  // The garage keeps the previous decal when it sees -1 after a livery pack.
+  internal static void NormalizeLivery(NativeCarConfig.Node node){
+   if(node.Type==1&&node.Name=="livery"&&node.Number<0)node.Number=0;
+   foreach(var child in node.Children)NormalizeLivery(child);
+  }
   static void Put(List<NativeCarConfig.Node> nodes,NativeCarConfig.Node value){int i=nodes.FindIndex(n=>n.Name==value.Name);if(i<0)nodes.Add(value);else nodes[i]=value;}
   internal static Dictionary<string,byte[]> Compose(Func<string,byte[]> stock,List<Package> packages,CarSlotRegistry.State state){
    var output=new Dictionary<string,byte[]>(StringComparer.Ordinal);var cars=state.Cars.FindAll(c=>c.Active);cars.Sort((a,b)=>a.Slot.CompareTo(b.Slot));
@@ -34,7 +40,7 @@ namespace ReRiff {
    }
    foreach(string stem in new[]{"paint","paint_pc"}){
     string path="scripts/config/"+stem+".cfg";var tree=NativeCarConfig.Read(stock(path));var paint=Require(tree,"Paints");
-    foreach(var car in cars){var src=NativeCarConfig.Read(source(car,path));var clone=Clone(Require(src,"Paints").Children,car.Source,car.Base,car.Native);if(clone.Children.Count>9)throw new IOException("Car has more than nine paint packs");Put(paint.Children,clone);}Emit(output,path,tree);
+    foreach(var car in cars){var src=NativeCarConfig.Read(source(car,path));var clone=Clone(Require(src,"Paints").Children,car.Source,car.Base,car.Native);if(clone.Children.Count>9)throw new IOException("Car has more than nine paint packs");NormalizeLivery(clone);Put(paint.Children,clone);}Emit(output,path,tree);
    }
    // Vehicle physics/audio tables vary by platform. Preserve all native tables
    // and only add an explicit per-car record where the donor has one.

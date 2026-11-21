@@ -22,6 +22,7 @@ class CarComposerSmoke {
    var authored=new CarModComposer.Package{Folder="authored",Assets=new Dictionary<string,byte[]>(),Cars=CarSlotRegistry.Package("authored","overwrite=0\n[origins]\ndod=mot")};list=new List<CarModComposer.Package>{authored};state=CarSlotRegistry.Plan(null,authored.Cars);output=CarModComposer.Compose(read,list,state);
    Check(state.Cars[0].Native=="dod","authored non-roster identity reused");var authoredRoster=NativeCarConfig.Find(NativeCarConfig.Read(output["scripts/config/vehicleselect.cfg"]),"carNames");Check(authoredRoster.Children.Count==17&&authoredRoster.Children[16].Text=="dod","authored identity appended once");Check(output.ContainsKey("graphics/vehicles/dod/lod0_livery.bdae"),"authored identity donor model");
    var authoredStrings=CarModStrings.Build(read,entries.Keys,list,state);Check(authoredStrings["strings/tokens.dat"].SequenceEqual(read("strings/tokens.dat")),"reused stock identity adds no tokens");Check(authoredStrings["strings/common/us.str"].SequenceEqual(read("strings/common/us.str")),"reused stock identity keeps common bank byte-identical");
+   var negative=NativeCarConfig.Number("livery",-1);CarModComposer.NormalizeLivery(negative);Check(negative.Number==0,"negative livery normalized to native no-decal value");
    Console.WriteLine("PASS: two donor clones, distinct native IDs/localization, CFG roundtrips and overwrite without roster growth");
   }
  }
