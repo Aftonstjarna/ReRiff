@@ -27,6 +27,17 @@ namespace ReRiff {
   }
   // The native file-close observer runs after all chunks have loaded and before
   // gaLoaderFE's existing checkPackUnlocks. Do not recursively save from load2.
+  static bool LegacyAllowed(){
+   try{string value;return ConfigFiles.Read(AppDomain.CurrentDomain.BaseDirectory,"diagnostics").TryGetValue("legacy_car_migration",out value)&&(value=="1"||value.Equals("true",StringComparison.OrdinalIgnoreCase));}catch{return false;}
+  }
+  static bool LegacyMatches(CarSlotMigration.Save input){
+   var state=Current;if(state==null)return false;var slots=new HashSet<int>();
+   foreach(var car in state.Cars)if(car.Active&&!car.Overwrite){if(car.Slot<15||car.Slot>=22||!slots.Add(car.Slot))return false;var value=input.Slots[car.Slot];if(!value.Owned&&value.Paint==0&&value.Driven==0&&value.Packs<=1)return false;}
+   if(slots.Count==0)return false;
+   if(input.Selected>=15&&!slots.Contains(input.Selected))return false;
+   for(int i=15;i<22;i++)if(!slots.Contains(i)){var value=input.Slots[i];if(value.Owned||value.Paint!=0||value.Driven!=0||value.Packs>1)return false;}
+   return true;
+  }
   internal static void Apply(IntPtr save){
    if(!Enabled||applied||busy||save==IntPtr.Zero)return;
    if(path==null)throw new IOException("Automatic car slots require ReRiff isolated save checkpoints");
@@ -36,8 +47,15 @@ namespace ReRiff {
      // A machine-wide previous registry cannot prove which layout wrote an
      // unlabelled profile (especially a save downloaded from another client).
      // Never attach an old occupant's progress to an arbitrary new package.
-     if(input.Selected>=15)throw new IOException("Legacy custom selection has no portable car identity; preserve this save for explicit migration");
-     for(int i=15;i<22;i++){var v=input.Slots[i];if(v.Owned||v.Paint!=0||v.Driven!=0||v.Packs>1)throw new IOException("Legacy custom progress has no portable car identity; preserve this save for explicit migration");}
+     // An explicit local opt-in may assert that the current active slots own
+     // this progress, but only when every active slot and no other custom slot
+     // carries legacy state.
+     bool migrated=false;
+     if(LegacyAllowed()&&LegacyMatches(input)){old=Current;migrated=true;NativeReelBridge.Log("Car slots: explicit legacy migration accepted; the next save records portable identities.");}
+     if(!migrated){
+      if(input.Selected>=15)throw new IOException("Legacy custom selection has no portable car identity; preserve this save for explicit migration, or set legacy_car_migration=1 under [diagnostics] in client.ini when the active car slots own it");
+      for(int i=15;i<22;i++){var v=input.Slots[i];if(v.Owned||v.Paint!=0||v.Driven!=0||v.Packs>1)throw new IOException("Legacy custom progress has no portable car identity; preserve this save for explicit migration, or set legacy_car_migration=1 under [diagnostics] in client.ini when the active car slots own it");}
+     }
     }
     if(loaded!=null&&loaded.State!=null)foreach(var item in loaded.State.Retired)input.Retired[item.Key]=item.Value.Copy();
     if(loaded!=null&&loaded.Layout!=null&&old.Revision==Current.Revision){

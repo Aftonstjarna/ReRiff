@@ -61,6 +61,23 @@ A new occupant starts with clean state and receives the game's native unlock
 rules. A missing selected car falls back to its donor, including on another
 ReRiff client without that mod. Stock progression is preserved.
 
+## Explicit legacy migration
+
+A save written before portable car identities carries no layout trailer. ReRiff
+refuses to guess which package owns its custom slots. If the save's custom state
+matches the active registry exactly — every active allocated slot has progress,
+the selected custom slot has an identity, and no inactive custom slot has state
+— an explicit local opt-in may assert ownership:
+
+```ini
+[diagnostics]
+legacy_car_migration=1
+```
+
+Set it in `client.ini`, launch once, and let the game save. The next save records
+the portable identities; remove the setting afterwards. Back up the save first.
+A mismatch still refuses rather than moving another package's progress.
+
 A machine-wide registry cannot prove the layout of an old unlabelled save from
 another client. Existing custom progress without portable identity metadata is
 therefore refused for automatic migration; it needs an explicit, verified
