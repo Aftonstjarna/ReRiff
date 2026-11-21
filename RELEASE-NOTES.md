@@ -1,3 +1,23 @@
+# ReRiff 1.4.6 — Legacy car-save migration and mod cache fixes
+
+## In-game summary
+
+- Load existing custom-car saves with an explicit migration.
+- Accept mixed-case assets from imported car mods.
+- Copy launcher and in-game error messages.
+
+## Full release notes
+
+- Add an explicit one-time migration for saves written before portable car identities. When every active allocated slot has matching progress, the selected custom slot has an identity, and no inactive custom slot carries state, set `legacy_car_migration=1` under `[diagnostics]` in `client.ini`, launch once and let the game save. The next save records the identities; remove the setting afterwards. Mismatched or extra custom progress is still refused and preserved, never guessed.
+- Lowercase loose mod resource names when building caches. Stock VFS indexes are lowercase even when archives preserve mixed case, so mods containing `batchTextures.brres` no longer fail with "Resource names must be lowercase ASCII". Case-only duplicate assets are refused with a clear error.
+- Replace launcher, updater and in-game error message boxes with a copyable dialog: selectable message text plus a Copy button, with a MessageBox fallback for older helper DLLs. Confirmation prompts remain native dialogs.
+- Validation: managed client, native helper, launcher, updater and installer builds pass; car-slot identity, save-envelope, mod cache and slot allocation tests pass. A legacy save is not modified until the explicit opt-in and matching check succeed.
+
+## Known limitations
+
+- The migration opt-in requires the active car-slot registry to match the save exactly. Back up the save and remove the setting after the first successful save.
+- Track audio is still read and decoded synchronously when a track is selected; the cache work remains planned for 1.5.0.
+
 # ReRiff 1.4.5 — Custom-car unlocks, server caches and fallback cars
 
 ## In-game summary
