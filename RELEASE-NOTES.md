@@ -1,3 +1,16 @@
+# ReRiff 1.4.8 — Persist legacy car migration immediately
+
+## In-game summary
+
+- Keep an accepted legacy car migration without waiting for a save.
+
+## Full release notes
+
+- Write the portable car identity trailer as soon as the explicit legacy migration is accepted. Previously the migration lived only in memory until a later save, so closing at the menu before a save made the next launch refuse the same save again.
+- If the immediate write fails, for example while the save device is busy, the migration remains pending and the next normal save records it.
+- Strict matching and the explicit `legacy_car_migration=1` opt-in are unchanged; mismatched or extra custom progress still refuses and preserves the save.
+- Validation: managed client build plus car-save envelope and runtime regressions. The 1.4.7 localization fix is unchanged.
+
 # ReRiff 1.4.7 — Custom-car localization fix
 
 ## In-game summary

@@ -43,6 +43,7 @@ namespace ReRiff {
    if(path==null)throw new IOException("Automatic car slots require ReRiff isolated save checkpoints");
    busy=true;try{
     IntPtr settings,progression;var input=Capture(save,out settings,out progression);var old=loaded!=null&&loaded.Layout!=null?loaded.Layout:Empty;
+    bool migrated=false;
     if(loaded==null||loaded.Layout==null){
      // A machine-wide previous registry cannot prove which layout wrote an
      // unlabelled profile (especially a save downloaded from another client).
@@ -50,7 +51,6 @@ namespace ReRiff {
      // An explicit local opt-in may assert that the current active slots own
      // this progress, but only when every active slot and no other custom slot
      // carries legacy state.
-     bool migrated=false;
      if(LegacyAllowed()&&LegacyMatches(input)){old=Current;migrated=true;NativeReelBridge.Log("Car slots: explicit legacy migration accepted; the next save records portable identities.");}
      if(!migrated){
       if(input.Selected>=15)throw new IOException("Legacy custom selection has no portable car identity; preserve this save for explicit migration, or set legacy_car_migration=1 under [diagnostics] in client.ini when the active car slots own it");
@@ -72,6 +72,7 @@ namespace ReRiff {
     Marshal.WriteByte(progression,4,1);
     CarFallback.Select(settings,next.Selected);retired=next.Retired;applied=true;pending=true;
     NativeReelBridge.Log("Car slots: migrated native selection, paints, ownership and usage by stable package identity.");
+    if(migrated){try{Seal(path,save);NativeReelBridge.Log("Car slots: legacy migration persisted to the save trailer.");}catch(Exception error){NativeReelBridge.Log("Car slots: legacy migration is in memory and will persist on the next save: "+error);}}
    }finally{busy=false;}
   }
   internal static void Seal(string file,IntPtr save){
