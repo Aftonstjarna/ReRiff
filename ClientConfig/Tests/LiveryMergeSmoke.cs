@@ -98,6 +98,11 @@ class LiveryMergeSmoke {
         File.WriteAllBytes(Path.Combine(b,"assets","graphics","vehicles","decals","alf_03","batchtextures.brres"),Encoding.ASCII.GetBytes("edited decal"));
         string meta=File.ReadAllText(Path.Combine(b,"livery-maker.json"));meta=meta.Replace(Hex(Encoding.ASCII.GetBytes("decal three")),Hex(Encoding.ASCII.GetBytes("edited decal")));File.WriteAllText(Path.Combine(b,"livery-maker.json"),meta);
         Check(Stem(ModArchiveCache.Prepare(root,1))!=stem,"editing a decal invalidates the livery volume");
-        Console.WriteLine("PASS livery merge: two packs, strings, decals, Lua, reuse, duplicate/multi-paint refusal and invalidation");
+        string negative=Add(root,"livery-negative","alf",2,Config(2,"No decal",-1),"alf_08",Encoding.ASCII.GetBytes("no decal"));
+        string negativeStem=Stem(ModArchiveCache.Prepare(root,1));
+        var negativePacks=NativeCarConfig.Read(Read(negativeStem,"scripts/config/paint_pc.cfg"));var negativeCar=NativeCarConfig.Find(NativeCarConfig.Find(negativePacks,"Paints").Children,"alf");
+        Check(NativeCarConfig.Find(negativeCar.Children[2].Children,"livery").Number==0,"livery merge normalizes a negative livery to zero");
+        Directory.Delete(negative,true);
+        Console.WriteLine("PASS livery merge: two packs, strings, decals, Lua, reuse, duplicate/multi-paint refusal, negative-livery normalization and invalidation");
     }
 }

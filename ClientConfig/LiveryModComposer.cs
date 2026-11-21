@@ -137,6 +137,7 @@ namespace ReRiff {
                 target.Children[package.Pack]=source.Children[package.Pack].Copy();changed=true;
             }
             if(!changed)return false;
+            CarModComposer.NormalizeLivery(paints);
             output[path]=LiveryEntry(path,NativeCarConfig.Write(roots));
             string lua="scripts/config/"+stem+".luac";output[lua]=LiveryEntry(lua,NativeCarConfig.Lua(roots,4));
             string lua64="scripts/config/"+stem+".luac64";output[lua64]=LiveryEntry(lua64,NativeCarConfig.Lua(roots,8));
