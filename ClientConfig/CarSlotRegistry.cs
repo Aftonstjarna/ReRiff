@@ -47,7 +47,15 @@ namespace ReRiff {
             // Compact active slots, retaining old relative order where possible.
             // Any movement is accompanied by identity-based save migration.
             var added=active.FindAll(c=>!c.Overwrite);added.Sort(delegate(Car a,Car b){Car x,y;int sx=old.TryGetValue(a.Key,out x)&&x.Slot>=15?x.Slot:22,sy=old.TryGetValue(b.Key,out y)&&y.Slot>=15?y.Slot:22;int order=sx.CompareTo(sy);return order!=0?order:StringComparer.Ordinal.Compare(a.Key,b.Key);});
-            for(int i=0;i<added.Count;i++){added[i].Slot=15+i;added[i].Native="r"+i.ToString("D2");}
+            var used=new HashSet<string>(StringComparer.Ordinal);
+            foreach(var car in active)if(car.Overwrite)used.Add(car.Base);
+            for(int i=0;i<added.Count;i++){
+                // Prefer the authored identity when it is not a stock car and is
+                // unique: the stock localization already has its car token.
+                string native=added[i].Source;
+                if(Array.IndexOf(Stock,native)>=0||used.Contains(native)){native=null;for(int n=0;n<7;n++){string candidate="r"+n.ToString("D2");if(!used.Contains(candidate)){native=candidate;break;}}Check(native!=null,"only seven native identities are available");}
+                added[i].Slot=15+i;added[i].Native=native;used.Add(native);
+            }
             foreach(var car in active)if(car.Overwrite){car.Slot=Array.IndexOf(Stock,car.Base);car.Native=car.Base;}
             Check(next.Cars.Count<=4096,"too many registry cars");next.Cars.Sort((a,b)=>StringComparer.Ordinal.Compare(a.Key,b.Key));next.Revision=Hash(Encode(next,false));return next;
         }
@@ -76,12 +84,12 @@ namespace ReRiff {
                 if(car.Active){
                     Check(slots.Add(slot),"duplicate active car slot");
                     if(car.Overwrite)Check(slot==donor&&car.Native==car.Base,"invalid donor replacement slot");
-                    else Check(slot>=15&&slot<22&&car.Native=="r"+(slot-15).ToString("D2"),"invalid custom car slot");
+                    else Check(slot>=15&&slot<22&&(car.Native=="r"+(slot-15).ToString("D2")||(car.Native==car.Source&&Array.IndexOf(Stock,car.Source)<0)),"invalid custom car slot");
                 }else{
                     Check(slot==-1,"inactive car occupies a slot");
                     // Plan retains the former native ID when an identity is retired.
                     if(car.Overwrite)Check(car.Native==car.Base,"invalid retired donor replacement");
-                    else Check(car.Native.Length==3&&car.Native[0]=='r'&&car.Native[1]=='0'&&car.Native[2]>='0'&&car.Native[2]<='6',"invalid retired custom car ID");
+                    else Check((car.Native.Length==3&&car.Native[0]=='r'&&car.Native[1]=='0'&&car.Native[2]>='0'&&car.Native[2]<='6')||(car.Native==car.Source&&Array.IndexOf(Stock,car.Source)<0),"invalid retired custom car ID");
                 }
                 state.Cars.Add(car);
             }

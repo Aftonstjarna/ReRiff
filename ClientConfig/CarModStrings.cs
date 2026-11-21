@@ -15,11 +15,12 @@ namespace ReRiff {
     for(int bucket=0;bucket<256;bucket++){long end=r.BaseStream.Position+sizes[bucket];Need(sizes[bucket]>=0&&end<=bytes.Length);while(r.BaseStream.Position<end){byte group=r.ReadByte();Need(group<groups);var text=new List<byte>();byte c;while((c=r.ReadByte())!=0){Need(c<128&&text.Count<200);text.Add(c);}string name=Encoding.ASCII.GetString(text.ToArray());Need(Bucket(name)==bucket);old.Add(new Token{Group=group,Name=name,Index=used[group]++});}Need(r.BaseStream.Position==end);}Need(r.BaseStream.Position==bytes.Length);for(int i=0;i<groups;i++)Need(used[i]==counts[i]);
    }
    int common=names.IndexOf("common");Need(common>=0);
-   // Put added car/paint tokens in an empty bank so existing token IDs and
-   // string indices never shift; the game resolves names across groups.
+   // Never insert into Common: its stock token order feeds compiled-in string
+   // indices. Unknown identities fall back to an empty bank, which keeps the
+   // cache loadable even though the game may not show those names.
    int addition=common;for(int i=0;i<names.Count;i++)if(i!=common&&counts[i]==0){addition=i;break;}
    var all=new List<Token>(old);var sources=new Dictionary<string,KeyValuePair<CarModComposer.Package,string>>(StringComparer.Ordinal);
-   foreach(var car in state.Cars)if(car.Active){var package=packages.Single(p=>p.Cars.Any(c=>c.Key==car.Key));string target="car_"+car.Native,source="car_"+car.Source;if(!old.Any(t=>t.Name==source))source="car_"+car.Base;Need(old.Any(t=>t.Group==common&&t.Name==source));sources[target]=new KeyValuePair<CarModComposer.Package,string>(package,source);if(!all.Any(t=>t.Name==target))all.Add(new Token{Group=(byte)addition,Name=target,Index=-1});}
+   foreach(var car in state.Cars)if(car.Active){var package=packages.Single(p=>p.Cars.Any(c=>c.Key==car.Key));string target="car_"+car.Native,source="car_"+car.Source;if(!old.Any(t=>t.Name==source))source="car_"+car.Base;Need(old.Any(t=>t.Group==common&&t.Name==source));sources[target]=new KeyValuePair<CarModComposer.Package,string>(package,source);if(!old.Any(t=>t.Name==target)&&!all.Any(t=>t.Name==target))all.Add(new Token{Group=(byte)addition,Name=target,Index=-1});}
    foreach(var car in state.Cars)if(car.Active){
     var package=packages.Single(p=>p.Cars.Any(c=>c.Key==car.Key));
     foreach(string stem in new[]{"paint","paint_pc"}){
@@ -28,9 +29,10 @@ namespace ReRiff {
      var model=NativeCarConfig.Find(paint.Children,car.Source)??NativeCarConfig.Find(paint.Children,car.Base);Need(model!=null);
      for(int i=0;i<model.Children.Count;i++){
       var label=NativeCarConfig.Find(model.Children[i].Children,"packName");if(label==null||label.Type!=0)continue;
-      string source=label.Text.ToLowerInvariant(),target=car.Native+"modpack"+(stem=="paint_pc"?"pc":"")+i;
-      Need(old.Any(t=>t.Group==common&&t.Name==source));sources[target]=new KeyValuePair<CarModComposer.Package,string>(package,source);
-      if(!all.Any(t=>t.Name==target))all.Add(new Token{Group=(byte)addition,Name=target,Index=-1});
+      string source=label.Text.ToLowerInvariant();
+      // Reuse the pack's existing stock token; unknown names stay unresolved
+      // instead of refusing the whole car cache.
+      if(old.Any(t=>t.Group==common&&t.Name==source))sources[source]=new KeyValuePair<CarModComposer.Package,string>(package,source);
      }
     }
    }

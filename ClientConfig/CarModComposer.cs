@@ -34,7 +34,7 @@ namespace ReRiff {
    }
    foreach(string stem in new[]{"paint","paint_pc"}){
     string path="scripts/config/"+stem+".cfg";var tree=NativeCarConfig.Read(stock(path));var paint=Require(tree,"Paints");
-    foreach(var car in cars){var src=NativeCarConfig.Read(source(car,path));var clone=Clone(Require(src,"Paints").Children,car.Source,car.Base,car.Native);if(clone.Children.Count>9)throw new IOException("Car has more than nine paint packs");for(int i=0;i<clone.Children.Count;i++){var label=NativeCarConfig.Find(clone.Children[i].Children,"packName");if(label!=null&&label.Type==0)label.Text=car.Native+"modpack"+(stem=="paint_pc"?"pc":"")+i;}Put(paint.Children,clone);}Emit(output,path,tree);
+    foreach(var car in cars){var src=NativeCarConfig.Read(source(car,path));var clone=Clone(Require(src,"Paints").Children,car.Source,car.Base,car.Native);if(clone.Children.Count>9)throw new IOException("Car has more than nine paint packs");Put(paint.Children,clone);}Emit(output,path,tree);
    }
    // Vehicle physics/audio tables vary by platform. Preserve all native tables
    // and only add an explicit per-car record where the donor has one.

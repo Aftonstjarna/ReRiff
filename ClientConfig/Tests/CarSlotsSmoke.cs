@@ -29,6 +29,8 @@ class CarSlotsSmoke {
   foreach(string native in new[]{"", "alf", "r01", "r07", "../"})Invalid(c=>c.Native=native);
   Invalid(c=>c.Active=false);Invalid(c=>{c.Active=false;c.Slot=-1;c.Native="r07";});
   var retired=CarSlotRegistry.Plan(valid,new CarSlotRegistry.Car[0]);Check(CarSlotRegistry.Decode(Encoded(retired)).Cars[0].Native=="r00","inactive native identity retained");
+  var authored=CarSlotRegistry.Plan(null,CarSlotRegistry.Package("authored","overwrite=0\n[origins]\ndod=mot\n"));
+  Check(authored.Cars[0].Native=="dod","authored non-stock identity reused for localization");
   var replacement=CarSlotRegistry.Plan(null,CarSlotRegistry.Package("replacement","overwrite=1\n[origins]\ndod=alf\n"));
   Check(CarSlotRegistry.Decode(Encoded(replacement)).Cars[0].Slot==0,"replacement roundtrip");
   var oldReplacement=CarSlotRegistry.Plan(replacement,new CarSlotRegistry.Car[0]);Check(CarSlotRegistry.Decode(Encoded(oldReplacement)).Cars[0].Native=="alf","retired replacement identity retained");

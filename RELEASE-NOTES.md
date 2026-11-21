@@ -1,3 +1,19 @@
+# ReRiff 1.4.9 — Custom car and paint names without shifting stock menus
+
+## In-game summary
+
+- Show custom car and paint names again, including the Impala's "Baby".
+- Keep stock menus, achievements and result labels intact.
+
+## Full release notes
+
+- Reuse the authored car identity and its existing stock localization token when that identity is not part of the stock roster. The Impala package authors `dod`, so the composed car now keeps `car_dod` at its stock index and replaces only its text instead of adding a token in another bank.
+- Reuse the paint pack's existing `packName` tokens. The composer no longer rewrites them to synthetic `modpack` tokens, and the localization pass maps their text from the car package. Stock token IDs and string indices do not move.
+- Keep the empty-bank fallback only for authored identities that have no stock car token, so those caches still load. Names for such identities may not render, but menus never shift.
+- Treat an unknown paint-pack token as unresolved instead of refusing the whole car cache.
+- Accept retired authored identities in the car registry, so removing a mod does not invalidate `car-slots.ini`.
+- Validation: managed client build plus car-slot identity, composer, cache and save-envelope regressions. An offline composition of the Impala package keeps all 651 stock `Common` tokens, adds no tokens, and yields `car_dod = Baby` with the package's paint names.
+
 # ReRiff 1.4.8 — Persist legacy car migration immediately
 
 ## In-game summary
