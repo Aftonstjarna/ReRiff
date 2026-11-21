@@ -1,3 +1,16 @@
+# ReRiff 1.4.7 — Custom-car localization fix
+
+## In-game summary
+
+- Keep stock menus intact when custom cars are installed.
+- Read custom car and paint names from a separate bank.
+
+## Full release notes
+
+- Place added car and paint localization tokens in an empty native bank instead of `Common`. Existing token IDs and stock string indices no longer shift, so menus, achievements, tips and result labels keep their text when a custom car is composed.
+- Keep the stock `Common` bank byte-identical; the car composer regression asserts this. Custom names still resolve by token name across banks.
+- Validation: full client, launcher and installer checks plus car composer, cache, slot identity and save-envelope regressions. The explicit legacy migration from 1.4.6 is unchanged.
+
 # ReRiff 1.4.6 — Legacy car-save migration and mod cache fixes
 
 ## In-game summary
