@@ -114,19 +114,24 @@ static BOOL race_track_pool_install(BYTE *base){
     }
     /* The CLR rejects method RVAs outside the mapped image ("Method has zero
      * rva"), so the relocated body has to live inside the image. The .data
-     * virtual tail at 0x7C9200..0x7FFFC0 is zero-filled and has no absolute
-     * references in the executable; use it only if it is still all zero. */
-    BYTE *memory=base+0x7c9200;
-    if(!readable(memory,RERIFF_TRACK_CTOR_BLOB_SIZE)){
-        log_line("Track ctor relocation: in-image body range is not readable.");
-        return FALSE;
-    }
-    for(unsigned i=0;i<RERIFF_TRACK_CTOR_BLOB_SIZE;i++){
-        if(memory[i]!=0){
-            char line[160];snprintf(line,sizeof(line),"Track ctor relocation refused: in-image range is not zero at +%u.",i);log_line(line);
-            return FALSE;
+     * virtual tail at 0x7C9200..0x7FFFC0 has no absolute references in the
+     * executable. Scan backwards for the last all-zero blob-sized window so
+     * early runtime-initialized globals are avoided. */
+    BYTE *map_begin=base+0x7c9200;
+    BYTE *map_end=base+0x7fffc0;
+    BYTE *memory=NULL;
+    if(readable(map_begin,(size_t)(map_end-map_begin))){
+        for(BYTE *candidate=map_end-RERIFF_TRACK_CTOR_BLOB_SIZE;candidate>=map_begin;candidate-=0x10){
+            unsigned i=0;
+            while(i<RERIFF_TRACK_CTOR_BLOB_SIZE&&candidate[i]==0)i++;
+            if(i==RERIFF_TRACK_CTOR_BLOB_SIZE){memory=candidate;break;}
         }
     }
+    if(!memory){
+        log_line("Track ctor relocation: no zero in-image range is available.");
+        return FALSE;
+    }
+    char range[128];snprintf(range,sizeof(range),"Track ctor in-image range=%08X.",(unsigned)((BYTE *)memory-base));log_line(range);
     DWORD old,ignored;
     if(!VirtualProtect(memory,RERIFF_TRACK_CTOR_BLOB_SIZE,PAGE_READWRITE,&old)){
         log_line("Track ctor relocation: in-image body range is not writable.");
