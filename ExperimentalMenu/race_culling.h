@@ -387,7 +387,7 @@ static void race_culling_strips(BYTE *base){
                 if(tb&&te&&te>=tb)mesh_t=(unsigned)((te-tb)/12);
                 mesh_visible=*((BYTE *)custom+20);
             }
-            char detail[200];snprintf(detail,sizeof(detail),"Culling strip type=%d pool=%u mesh_v=%u mesh_t=%u mesh_visible=%u.",*((int *)(strip+212)),pool,mesh_v,mesh_t,mesh_visible);log_line(detail);
+            char detail[200];snprintf(detail,sizeof(detail),"Culling strip type=%d pool=%u mesh_v=%u mesh_t=%u mesh_visible=%u cursor=%d.",*((int *)(strip+212)),pool,mesh_v,mesh_t,mesh_visible,*((int *)(strip+56)));log_line(detail);
         }
         BYTE *blocks=*(BYTE **)(strip+152),*blocks_end=*(BYTE **)(strip+156);
         if(!blocks||!blocks_end||blocks_end<blocks||(size_t)(blocks_end-blocks)>10000*88
