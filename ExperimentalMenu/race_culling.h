@@ -92,7 +92,7 @@ static void race_culling_prewarm(BYTE *base){
         strips++;
     }
     race_culling_prewarm_done=manager;
-    char line[200];snprintf(line,sizeof(line),"Photo mode visual prewarm: strips=%u steps=101 progress=%.4f pool=512.",strips,current);log_line(line);
+    char line[200];snprintf(line,sizeof(line),"Photo mode visual prewarm: strips=%u steps=101 progress=%.4f large_pool=512.",strips,current);log_line(line);
 }
 
 /* The constructor's own 64-slot pool is far too small for the photo-mode
@@ -137,7 +137,7 @@ static BOOL race_track_pool_install(BYTE *base){
     *slot=rva;
     VirtualProtect(slot,4,old,&ignored);
     FlushInstructionCache(GetCurrentProcess(),memory,RERIFF_TRACK_CTOR_BLOB_SIZE);
-    char line[192];snprintf(line,sizeof(line),"Track ctor relocated: RVA %08X -> %08X, visual pool=512, blob=%u bytes.",
+    char line[192];snprintf(line,sizeof(line),"Track ctor relocated: RVA %08X -> %08X, pool=512 for types 8/9 and 127 otherwise, blob=%u bytes.",
         0x271e78u,(unsigned)rva,(unsigned)RERIFF_TRACK_CTOR_BLOB_SIZE);log_line(line);
     installed=TRUE;
     race_track_pool_relocated=TRUE;
@@ -224,7 +224,7 @@ static BOOL install_race_culling(BYTE *base){
     BOOL use_512=!_wcsicmp(pool_value,L"true")||!_wcsicmp(pool_value,L"yes")||!wcscmp(pool_value,L"1");
     BOOL relocated=use_512?race_track_pool_install(base):FALSE;
     BOOL retained=race_culling_retain_blocks(base);
-    char detail[192];snprintf(detail,sizeof(detail),"Track culling disable enabled; trace=%d; block retention=%d; visual pool=%s.",race_culling_trace?1:0,retained?1:0,relocated?"512":"127");log_line(detail);
+    char detail[192];snprintf(detail,sizeof(detail),"Track culling disable enabled; trace=%d; block retention=%d; visual pool=%s.",race_culling_trace?1:0,retained?1:0,relocated?"512/127":"127");log_line(detail);
     return TRUE;
 }
 
