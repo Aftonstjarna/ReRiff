@@ -231,6 +231,8 @@ static BOOL readable(const void *p,size_t count) {
     return start<=end && count<=end-start;
 }
 
+#include "postfx.h"
+
 static void show_item(void *item,BYTE visible) {
     if(readable(item,404))((EnableFn)(*(void ***)item)[3])(item,visible);
 }
@@ -297,6 +299,7 @@ static void __thiscall hook_colour(void *menu,int id,const float *colour) {
 static void render(void *menu);
 static void __thiscall hook_tick(void *menu) {
     save_prompt_tick(menu);
+    postfx_frame();
     if(restarting&&GetTickCount()-restart_started>15000){
         WCHAR name[96];restart_event_name(name,96,GetCurrentProcessId(),FALSE);
         HANDLE request=OpenEventW(EVENT_MODIFY_STATE,FALSE,name);
@@ -809,6 +812,7 @@ __declspec(dllexport) BOOL __cdecl ReRiffStartEngineMenu(void) {
     if(!install_recent_tracks(base))log_line("Recent Tracks extension refused: original CIL differs.");
     if(!install_race_camera(base))log_line("Race free-look camera hook refused: client configuration or frame setup failed.");
     if(!install_race_culling(base))log_line("Track culling disable refused: unsupported image or manager fields.");
+    postfx_install(base);
     if(!install_scrobbler(base))log_line("Race tick hook refused: original race vtable differs.");
     if(!install_friend_utf8(base))log_line("Friend UTF-8 correction refused: original CIL bytes differ.");
     if(!install_lastfm_utf8(base))log_line("Last.fm UTF-8 correction refused: original CIL bytes differ.");

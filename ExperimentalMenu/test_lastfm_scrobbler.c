@@ -9,9 +9,12 @@ static void __thiscall on_visible(void *self,int view,BYTE visible){(void)self;i
 static void __cdecl toggle_hud(void){if(fake_hud){*fake_hud=*fake_hud?0:1;hud_toggles++;}}
 static void __thiscall audio_pause(void *self){(void)self;audio_pauses++;}
 static void __thiscall audio_resume(void *self){(void)self;audio_resumes++;}
+static int dof_calls,dof_enable,bloom_calls,bloom_enable;static float dof_focal,bloom_intensity;
+static void __thiscall fake_dof(void *device,BYTE enable,float focal,float focus_near,float focus_far,float a,float b,float c,int view){(void)device;(void)focus_near;(void)focus_far;(void)a;(void)b;(void)c;(void)view;dof_calls++;dof_enable=enable;dof_focal=focal;}
+static void __thiscall fake_bloom(void *device,BYTE enable,PostFxColour colour,float intensity,int view){(void)device;(void)colour;(void)view;bloom_calls++;bloom_enable=enable;bloom_intensity=intensity;}
 int main(void){
-    BYTE *base=VirtualAlloc(NULL,0x800000,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE);CHECK(base);
-    CHECK(install_scrobbler(base));CHECK(!ReRiffConfigureScrobbler(NULL));CHECK(ReRiffConfigureScrobbler(observe));CHECK(!ReRiffConfigureScrobbler(observe));
+    BYTE *base=VirtualAlloc(NULL,0x900000,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE);CHECK(base);
+    postfx_hooks_wanted=FALSE;CHECK(install_scrobbler(base));postfx_hooks_wanted=TRUE;CHECK(!ReRiffConfigureScrobbler(NULL));CHECK(ReRiffConfigureScrobbler(observe));CHECK(!ReRiffConfigureScrobbler(observe));
     void **table=(void **)(base+0x7a399c);table[2]=base+0x21ef04;table[3]=base+0x21f01f;
     CHECK(!install_scrobbler(base)&&table[2]==base+0x21ef04);
     base[0x21ef04]=base[0x21f01f]=0xff;base[0x21ef05]=base[0x21f020]=0x25;
@@ -44,6 +47,15 @@ int main(void){
     CHECK(*((BYTE *)race+12)==1&&*fake_hud==0&&hud_toggles==1&&audio_pauses==1&&*((BYTE *)audio+109)==1);
     race_photo_end(base,TRUE);CHECK(!race_photo_active&&!race_photo_paused_by_us&&!race_photo_hud_hidden&&!race_photo_music_paused);
     CHECK(*((BYTE *)race+12)==0&&*fake_hud==1&&hud_toggles==2&&audio_resumes==1&&*((BYTE *)audio+109)==0);
+    void *device=base+0x130000;void **device_vtable=(void **)(base+0x132000);
+    *(void **)(base+0x80d408)=device;*(void **)device=device_vtable;
+    ((void **)device_vtable)[58]=(void *)fake_dof;((void **)device_vtable)[70]=(void *)fake_bloom;
+    postfx_loaded=TRUE;postfx_installed=FALSE;postfx_dof_enabled=TRUE;postfx_bloom_enabled=TRUE;
+    CHECK(postfx_install(base));CHECK(((void **)device_vtable)[58]==(void *)postfx_dof_hook&&((void **)device_vtable)[70]==(void *)postfx_bloom_hook);
+    postfx_dof_hook(device,1,1.5f,2.0f,3.0f,4.0f,5.0f,6.0f,0);CHECK(dof_calls==1&&dof_enable==1&&dof_focal==1.5f);
+    postfx_set_dof(FALSE);postfx_dof_hook(device,1,1.5f,2.0f,3.0f,4.0f,5.0f,6.0f,0);CHECK(dof_calls==2&&dof_enable==0&&dof_focal==0.0f);
+    PostFxColour colour={1,1,1,1};postfx_bloom_hook(device,1,colour,0.7f,0);CHECK(bloom_calls==1&&bloom_enable==1&&bloom_intensity==0.7f);
+    postfx_set_bloom(FALSE);postfx_bloom_hook(device,1,colour,0.7f,0);CHECK(bloom_calls==2&&bloom_enable==0&&bloom_intensity==0.0f);
     VirtualFree(base,0,MEM_RELEASE);
-    puts("PASS: Last.fm race guards, native forwarding, throttling, pause entry, completion, culling visibility and photo pause/HUD state independent of progression");return 0;
+    puts("PASS: Last.fm race guards, native forwarding, throttling, pause entry, completion, culling visibility, photo pause/HUD state and post-effect hooks independent of progression");return 0;
 }

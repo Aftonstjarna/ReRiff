@@ -596,8 +596,10 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
         control(L"STATIC",L"Display mode",0,22,70,150,28,0);
         graphics_mode=control(L"COMBOBOX",L"",CBS_DROPDOWNLIST|WS_TABSTOP,190,66,370,160,0);
         graphics_choice(graphics_mode,L"Current game mode",0);graphics_choice(graphics_mode,L"Windowed",1);graphics_choice(graphics_mode,L"Borderless",2);graphics_choice(graphics_mode,L"Exclusive fullscreen",3);
-        graphics_aa=control(L"BUTTON",L"Anti-aliasing",BS_AUTOCHECKBOX|WS_TABSTOP,22,110,590,28,0);
-        graphics_culling=control(L"BUTTON",L"Disable track culling",BS_AUTOCHECKBOX|WS_TABSTOP,22,142,590,28,0);
+        graphics_aa=control(L"BUTTON",L"Anti-aliasing",BS_AUTOCHECKBOX|WS_TABSTOP,22,110,280,28,0);
+        graphics_culling=control(L"BUTTON",L"Disable track culling",BS_AUTOCHECKBOX|WS_TABSTOP,312,110,280,28,0);
+        graphics_bloom=control(L"BUTTON",L"Bloom",BS_AUTOCHECKBOX|WS_TABSTOP,22,142,280,28,0);
+        graphics_dof=control(L"BUTTON",L"Depth of field",BS_AUTOCHECKBOX|WS_TABSTOP,312,142,280,28,0);
         control(L"STATIC",L"UI scale",0,22,182,150,28,0);
         graphics_scale=control(L"COMBOBOX",L"",CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP,190,178,370,240,0);
         graphics_choice(graphics_scale,L"Automatic",0);
@@ -610,6 +612,8 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
         checkbox_help(graphics_mode,L"Windowed, borderless or exclusive fullscreen. Current game mode keeps the game's original saved fullscreen choice.");
         checkbox_help(graphics_aa,L"Enable ReRiff's anti-aliasing. Uses the same setting as the in-game Graphics menu.");
         checkbox_help(graphics_culling,L"Keep track sections and props visible even when the camera leaves the normal racing line. This disables the game's PVS track culling and may reduce performance. Enable Camera diagnostic trace in Diagnostics, then restart, to log culling activity.");
+        checkbox_help(graphics_bloom,L"Enable the game's bloom effect. This is the global default; the in-game L3+X hotkey toggles it for the current session.");
+        checkbox_help(graphics_dof,L"Enable the game's depth-of-field effect. This is the global default; the in-game L3+A hotkey toggles it for the current session.");
         checkbox_help(graphics_scale,L"Matches the in-game UI scale: Automatic, or 25–100 in steps of five. 50 is the reference size.");
         checkbox_help(graphics_recent,L"Limit the recent songs shown across Recent Tracks sort tabs. All tracks retains the complete saved catalogue. Bundled tracks are unaffected. Restart the game after changes.");
         restart_note(L"Restart the game after changing these settings",22,298,590);

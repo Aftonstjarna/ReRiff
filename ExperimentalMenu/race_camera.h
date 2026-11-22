@@ -19,6 +19,9 @@ static BOOL race_orbit_enabled;
 static BOOL race_photo_enabled,race_photo_active,race_photo_paused_by_us,race_photo_hud_hidden,race_photo_hide_hud=TRUE,race_photo_previous,race_photo_chord,race_photo_music_paused;
 static WORD race_photo_buttons[4];static int race_photo_button_count;
 static int race_photo_key=VK_F9;
+static WORD postfx_dof_buttons[4],postfx_bloom_buttons[4];static int postfx_dof_button_count,postfx_bloom_button_count;
+static int postfx_dof_key=VK_F10,postfx_bloom_key=VK_F11;
+static BOOL postfx_dof_previous,postfx_bloom_previous,postfx_hotkeys_active;
 static float race_photo_speed=8.0f;
 static float race_photo_yaw,race_photo_pitch;
 static float race_photo_position[3],race_photo_base_right[3],race_photo_base_up[3],race_photo_base_forward[3];
@@ -91,27 +94,31 @@ static int race_mouse_value(const WCHAR *value){
 }
 
 static BOOL race_button_down(WORD mask);
-static void race_photo_parse_buttons(const WCHAR *value){
-    race_photo_button_count=0;
+static int race_parse_chord(const WCHAR *value,WORD *buttons,int max){
+    int count=0;
     WCHAR text[64];wcsncpy(text,value?value:L"",63);text[63]=0;
     WCHAR *p=text;
-    while(*p&&race_photo_button_count<4){
+    while(*p&&count<max){
         while(*p==L' '||*p==L'\t'||*p==L'+'||*p==L',')p++;
         if(!*p)break;
         WCHAR *start=p;
         while(*p&&*p!=L'+'&&*p!=L','&&*p!=L' '&&*p!=L'\t')p++;
         WCHAR saved=*p;*p=0;
         WORD mask=race_button_value(start);
-        if(mask)race_photo_buttons[race_photo_button_count++]=mask;
+        if(mask)buttons[count++]=mask;
         *p=saved;
     }
+    return count;
 }
 
-static BOOL race_photo_chord_down(void){
-    if(!race_photo_button_count)return FALSE;
-    for(int i=0;i<race_photo_button_count;i++)if(!race_button_down(race_photo_buttons[i]))return FALSE;
+static BOOL race_chord_down(const WORD *buttons,int count){
+    if(!count)return FALSE;
+    for(int i=0;i<count;i++)if(!race_button_down(buttons[i]))return FALSE;
     return TRUE;
 }
+
+static void race_photo_parse_buttons(const WCHAR *value){race_photo_button_count=race_parse_chord(value,race_photo_buttons,4);}
+static BOOL race_photo_chord_down(void){return race_chord_down(race_photo_buttons,race_photo_button_count);}
 
 static BOOL race_button_down(WORD mask){
     if(!mask||!race_xinput_get)return FALSE;
@@ -120,6 +127,24 @@ static BOOL race_button_down(WORD mask){
 }
 
 static BOOL race_key_down(int key){return key&&(GetAsyncKeyState(key)&0x8000)!=0;}
+
+static void postfx_hotkeys_frame(void){
+    postfx_frame();
+    if(!postfx_hotkeys_active)return;
+    if(!race_xinput_get)race_camera_input_init();
+    BOOL dof=race_chord_down(postfx_dof_buttons,postfx_dof_button_count)||race_key_down(postfx_dof_key);
+    if(dof&&!postfx_dof_previous){
+        postfx_set_dof(!postfx_dof_enabled);
+        log_line(postfx_dof_enabled?"Depth of field enabled (hotkey).":"Depth of field disabled (hotkey).");
+    }
+    postfx_dof_previous=dof;
+    BOOL bloom=race_chord_down(postfx_bloom_buttons,postfx_bloom_button_count)||race_key_down(postfx_bloom_key);
+    if(bloom&&!postfx_bloom_previous){
+        postfx_set_bloom(!postfx_bloom_enabled);
+        log_line(postfx_bloom_enabled?"Bloom enabled (hotkey).":"Bloom disabled (hotkey).");
+    }
+    postfx_bloom_previous=bloom;
+}
 
 static void race_read_controls(const WCHAR *client){
     WCHAR value[64];
@@ -130,6 +155,11 @@ static void race_read_controls(const WCHAR *client){
     GetPrivateProfileStringW(L"controls",L"free_look_mouse",L"right",value,64,client);race_free_mouse=race_mouse_value(value);
     GetPrivateProfileStringW(L"controls",L"photo_mode_button",L"left_thumb+right_thumb",value,64,client);race_photo_parse_buttons(value);
     GetPrivateProfileStringW(L"controls",L"photo_mode_key",L"F9",value,64,client);race_photo_key=race_key_value(value);
+    GetPrivateProfileStringW(L"controls",L"dof_button",L"left_thumb+a",value,64,client);postfx_dof_button_count=race_parse_chord(value,postfx_dof_buttons,4);
+    GetPrivateProfileStringW(L"controls",L"dof_key",L"F10",value,64,client);postfx_dof_key=race_key_value(value);
+    GetPrivateProfileStringW(L"controls",L"bloom_button",L"left_thumb+x",value,64,client);postfx_bloom_button_count=race_parse_chord(value,postfx_bloom_buttons,4);
+    GetPrivateProfileStringW(L"controls",L"bloom_key",L"F11",value,64,client);postfx_bloom_key=race_key_value(value);
+    postfx_hotkeys_active=postfx_dof_button_count||postfx_dof_key||postfx_bloom_button_count||postfx_bloom_key;
 }
 
 static void race_camera_weight(void *camera,int active,float weight){

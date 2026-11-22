@@ -75,6 +75,8 @@ int wmain(int argc,WCHAR **argv){
         CHECK(IsWindowVisible(play_button)&&IsWindowVisible(status)&&IsWindowVisible(close_checkbox));
         CHECK(IsWindowVisible(graphics_resolution)==(page==PAGE_GRAPHICS));
         CHECK(IsWindowVisible(graphics_culling)==(page==PAGE_GRAPHICS));
+        CHECK(IsWindowVisible(graphics_bloom)==(page==PAGE_GRAPHICS));
+        CHECK(IsWindowVisible(graphics_dof)==(page==PAGE_GRAPHICS));
         CHECK(IsWindowVisible(controls_enable)==(page==PAGE_CONTROLS));
         CHECK(IsWindowVisible(controls_photo_enable)==(page==PAGE_CONTROLS));
         CHECK(IsWindowVisible(language_checkbox)==(page==PAGE_LANGUAGES));
@@ -86,13 +88,15 @@ int wmain(int argc,WCHAR **argv){
     CHECK(GetFocus()==graphics_resolution);
     graphics_select(graphics_mode,2);graphics_select(graphics_scale,75);graphics_select(graphics_recent,50);
     SendMessageW(graphics_aa,BM_SETCHECK,BST_CHECKED,0);SendMessageW(graphics_culling,BM_SETCHECK,BST_CHECKED,0);
+    SendMessageW(graphics_bloom,BM_SETCHECK,BST_UNCHECKED,0);SendMessageW(graphics_dof,BM_SETCHECK,BST_CHECKED,0);
     SendMessageW(host,WM_COMMAND,MAKEWPARAM(GRAPHICS_SAVE,BN_CLICKED),(LPARAM)graphics_save);
     CHECK(rr_fullscreen_mode(ini)==1&&graphics_bool(L"antialiasing"));
     CHECK(GetPrivateProfileIntW(L"graphics",L"ui_scale",0,ini)==75);
     CHECK(GetPrivateProfileIntW(L"graphics",L"recent_tracks_limit",0,ini)==50);
-    CHECK(graphics_bool(L"disable_culling"));
+    CHECK(graphics_bool(L"disable_culling"));CHECK(!graphics_bool(L"bloom"));CHECK(graphics_bool(L"depth_of_field"));
     graphics_reload();CHECK(graphics_value(graphics_recent)==50&&graphics_value(graphics_mode)==2);
     CHECK(SendMessageW(graphics_culling,BM_GETCHECK,0,0)==BST_CHECKED);
+    CHECK(SendMessageW(graphics_bloom,BM_GETCHECK,0,0)==BST_UNCHECKED);CHECK(SendMessageW(graphics_dof,BM_GETCHECK,0,0)==BST_CHECKED);
     SendMessageW(launcher_tabs,TCM_SETCURSEL,PAGE_CONTROLS,0);select_launcher_page();
     CHECK(IsWindowVisible(controls_enable)&&GetFocus()==controls_enable);
     RECT controls_save_rect,controls_status_rect;GetWindowRect(controls_save,&controls_save_rect);GetWindowRect(status_separator,&controls_status_rect);CHECK(controls_save_rect.bottom<controls_status_rect.top);
