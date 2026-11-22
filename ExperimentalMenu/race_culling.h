@@ -12,7 +12,7 @@
 typedef void (__thiscall *RaceCullingVisible)(void *,int,BYTE);
 
 static BOOL race_culling_enabled,race_culling_trace,race_culling_trace_announced;
-static unsigned race_culling_frames,race_culling_volume_count,race_culling_valid_count;
+static unsigned race_culling_frames,race_culling_volume_count,race_culling_valid_count,race_culling_forced_count;
 static RaceCullingVisible race_culling_force_visible,race_culling_on_visible;
 
 static BOOL install_race_culling(BYTE *base){
@@ -38,7 +38,7 @@ static BOOL race_culling_paused(BYTE *base){
 }
 
 static void race_culling_apply(void *manager,BOOL paused){
-    race_culling_volume_count=race_culling_valid_count=0;
+    race_culling_volume_count=race_culling_valid_count=race_culling_forced_count=0;
     if(!readable(manager,36))return;
     void **begin=*(void ***)((BYTE *)manager+28),**end=*(void ***)((BYTE *)manager+32);
     if(!begin||!end||end<begin||(BYTE *)end-(BYTE *)begin>32768)return;
@@ -51,6 +51,7 @@ static void race_culling_apply(void *manager,BOOL paused){
          * samples, so split-screen and replay views stay eligible too. */
         for(int view=0;view<12;view++)*((WORD *)((BYTE *)volume+124+view*2))=1;
         if(!paused)continue;
+        race_culling_forced_count++;
         for(int view=0;view<4;view++){
             if(race_culling_force_visible)race_culling_force_visible(volume,view,1);
             if(race_culling_on_visible)race_culling_on_visible(volume,view,1);
@@ -71,6 +72,6 @@ static void race_culling_frame(void){
     }
     if((++race_culling_frames%120)!=0)return;
     char line[220];
-    snprintf(line,sizeof(line),"Culling trace frame %u manager=%p volumes=%u valid=%u paused=%d",race_culling_frames,manager,race_culling_volume_count,race_culling_valid_count,paused?1:0);
+    snprintf(line,sizeof(line),"Culling trace frame %u manager=%p volumes=%u valid=%u forced=%u paused=%d",race_culling_frames,manager,race_culling_volume_count,race_culling_valid_count,race_culling_forced_count,paused?1:0);
     log_line(line);
 }
