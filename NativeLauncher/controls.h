@@ -1,5 +1,6 @@
-/* Launcher Controls page: free-look camera and ReRiff binding settings.
- * Values are stored in the same client.ini read by the native game hook. */
+/* Launcher Controls page: Keyboard, Controller and Hotkeys subtabs.
+ * Values are stored in the same client.ini read by the native game hook and
+ * the SDL3 XInput proxy. */
 #ifndef RERIFF_LAUNCHER_CONTROLS_H
 #define RERIFF_LAUNCHER_CONTROLS_H
 #include <stdlib.h>
@@ -7,6 +8,23 @@ static void checkbox_help(HWND,const WCHAR *);
 static HWND controls_enable,controls_fov,controls_zoom,controls_invert_x,controls_invert_y;
 static HWND controls_trace,controls_free_button,controls_free_key,controls_hud_button,controls_hud_key;
 static HWND controls_mouse,controls_photo_enable,controls_photo_button,controls_photo_key,controls_photo_hud,controls_photo_speed,controls_photo_invert_strafe,controls_save,controls_first;static WCHAR controls_ini[CAP];
+static HWND controls_controller_enabled;
+#define CONTROLLER_BINDING_COUNT 21
+static HWND controls_controller_bindings[CONTROLLER_BINDING_COUNT];
+
+typedef struct { const WCHAR *key,*label,*def; } ControllerBindingRow;
+static const ControllerBindingRow controls_controller_rows[CONTROLLER_BINDING_COUNT]={
+    {L"a",L"A",L"button:a"},{L"b",L"B",L"button:b"},{L"x",L"X",L"button:x"},{L"y",L"Y",L"button:y"},
+    {L"lb",L"Left bumper",L"button:lb"},{L"rb",L"Right bumper",L"button:rb"},
+    {L"back",L"Back",L"button:back"},{L"start",L"Start",L"button:start"},
+    {L"l3",L"Left stick click",L"button:l3"},{L"r3",L"Right stick click",L"button:r3"},
+    {L"guide",L"Guide",L"button:guide"},
+    {L"dup",L"D-pad up",L"button:dup"},{L"ddown",L"D-pad down",L"button:ddown"},
+    {L"dleft",L"D-pad left",L"button:dleft"},{L"dright",L"D-pad right",L"button:dright"},
+    {L"lx",L"Left stick X",L"axis:lx"},{L"ly",L"Left stick Y",L"axis:ly"},
+    {L"rx",L"Right stick X",L"axis:rx"},{L"ry",L"Right stick Y",L"axis:ry"},
+    {L"lt",L"Left trigger",L"axis:lt"},{L"rt",L"Right trigger",L"axis:rt"}
+};
 
 static void controls_add(HWND box,const WCHAR *text){graphics_choice(box,text,0);}
 static void controls_pick(HWND box,const WCHAR *value){
@@ -33,10 +51,23 @@ static void controls_trace_reload(void){
     path(controls_ini,L"client.ini");
     SendMessageW(controls_trace,BM_SETCHECK,GetPrivateProfileIntW(L"camera",L"race_orbit_trace",0,controls_ini)?BST_CHECKED:BST_UNCHECKED,0);
 }
+static void controls_bindings_create(HWND box){
+    static const WCHAR *options[]={
+        L"none",
+        L"button:a",L"button:b",L"button:x",L"button:y",
+        L"button:lb",L"button:rb",L"button:back",L"button:start",
+        L"button:l3",L"button:r3",L"button:guide",
+        L"button:dup",L"button:ddown",L"button:dleft",L"button:dright",
+        L"axis:lx",L"axis:lx-",L"axis:ly",L"axis:ly-",
+        L"axis:rx",L"axis:rx-",L"axis:ry",L"axis:ry-",
+        L"axis:lt",L"axis:rt"
+    };
+    for(unsigned i=0;i<sizeof(options)/sizeof(options[0]);i++)controls_add(box,options[i]);
+}
 static void controls_reload(void){
     if(!controls_enable)return;
     path(controls_ini,L"client.ini");
-    WCHAR value[64];
+    WCHAR value[128];
     SendMessageW(controls_enable,BM_SETCHECK,GetPrivateProfileIntW(L"camera",L"race_orbit",0,controls_ini)?BST_CHECKED:BST_UNCHECKED,0);
     GetPrivateProfileStringW(L"camera",L"free_fov_offset",L"0",value,64,controls_ini);SetWindowTextW(controls_fov,value);
     GetPrivateProfileStringW(L"camera",L"free_zoom",L"1.0",value,64,controls_ini);SetWindowTextW(controls_zoom,value);
@@ -53,6 +84,11 @@ static void controls_reload(void){
     GetPrivateProfileStringW(L"controls",L"photo_mode_button",L"left_thumb+right_thumb",value,64,controls_ini);controls_pick(controls_photo_button,value);
     GetPrivateProfileStringW(L"controls",L"photo_mode_key",L"F9",value,64,controls_ini);SetWindowTextW(controls_photo_key,value);
     GetPrivateProfileStringW(L"camera",L"photo_speed",L"8.0",value,64,controls_ini);SetWindowTextW(controls_photo_speed,value);
+    SendMessageW(controls_controller_enabled,BM_SETCHECK,GetPrivateProfileIntW(L"controller",L"enabled",1,controls_ini)?BST_CHECKED:BST_UNCHECKED,0);
+    for(int i=0;i<CONTROLLER_BINDING_COUNT;i++){
+        GetPrivateProfileStringW(L"controller",controls_controller_rows[i].key,controls_controller_rows[i].def,value,128,controls_ini);
+        controls_pick(controls_controller_bindings[i],value);
+    }
 }
 static BOOL controls_save_settings(void){
     path(controls_ini,L"client.ini");
@@ -83,11 +119,20 @@ static BOOL controls_save_settings(void){
         &&WritePrivateProfileStringW(L"camera",L"photo_invert_strafe",SendMessageW(controls_photo_invert_strafe,BM_GETCHECK,0,0)==BST_CHECKED?L"1":L"0",controls_ini)
         &&WritePrivateProfileStringW(L"camera",L"photo_speed",photo_speed,controls_ini)
         &&WritePrivateProfileStringW(L"controls",L"photo_mode_button",photo_button,controls_ini)
-        &&WritePrivateProfileStringW(L"controls",L"photo_mode_key",photo_key,controls_ini);
+        &&WritePrivateProfileStringW(L"controls",L"photo_mode_key",photo_key,controls_ini)
+        &&WritePrivateProfileStringW(L"controller",L"enabled",SendMessageW(controls_controller_enabled,BM_GETCHECK,0,0)==BST_CHECKED?L"1":L"0",controls_ini);
+    for(int i=0;i<CONTROLLER_BINDING_COUNT&&ok;i++){
+        WCHAR binding[64];
+        controls_text(controls_controller_bindings[i],binding,64);
+        ok=WritePrivateProfileStringW(L"controller",controls_controller_rows[i].key,binding,controls_ini)!=0;
+    }
     SetWindowTextW(status,ok?L"Controller and camera settings saved. Restart the game to apply changes.":L"Could not save all controller settings. Please try again.");
     return ok;
 }
 static void controls_create(void){
+    /* Hotkeys: ReRiff camera/photo settings and the existing controller
+     * hotkey bindings. */
+    controls_part=CONTROLS_HOTKEYS;
     controls_enable=control(L"BUTTON",L"Enable free-look camera",BS_AUTOCHECKBOX|WS_TABSTOP,22,22,280,28,0);
     control(L"STATIC",L"FOV offset (degrees)",0,22,54,150,24,0);
     controls_fov=control(L"EDIT",L"0",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,190,50,112,28,0);
@@ -102,21 +147,52 @@ static void controls_create(void){
     controls_photo_invert_strafe=control(L"BUTTON",L"Invert photo strafe X",BS_AUTOCHECKBOX|WS_TABSTOP,312,246,280,28,0);
     control(L"STATIC",L"Free-look button",0,312,22,130,24,0);
     controls_free_button=control(L"COMBOBOX",L"",CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP,452,18,160,200,0);
-    control(L"STATIC",L"Free-look key",0,312,54,130,24,0);
-    controls_free_key=control(L"EDIT",L"",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,452,50,80,28,0);
     control(L"STATIC",L"HUD button",0,312,86,130,24,0);
     controls_hud_button=control(L"COMBOBOX",L"",CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP,452,82,160,200,0);
-    control(L"STATIC",L"HUD key",0,312,118,130,24,0);
-    controls_hud_key=control(L"EDIT",L"",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,452,114,80,28,0);
     control(L"STATIC",L"Photo mode button",0,312,150,130,24,0);
     controls_photo_button=control(L"COMBOBOX",L"",CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP,452,146,160,200,0);
     SendMessageW(controls_photo_button,CB_SETDROPPEDWIDTH,220,0);
-    control(L"STATIC",L"Photo mode key",0,312,182,130,24,0);
-    controls_photo_key=control(L"EDIT",L"F9",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,452,178,80,28,0);
     control(L"STATIC",L"Photo speed",0,312,214,130,24,0);
     controls_photo_speed=control(L"EDIT",L"8.0",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,452,210,80,28,0);
     controls_save=control(L"BUTTON",L"Save settings",WS_TABSTOP,22,250,220,32,CONTROLS_SAVE);
     controls_first=controls_enable;
+    checkbox_help(controls_enable,L"Keep the normal chase camera and use the right stick/mouse to look around while free look is toggled on. Press R3 or the configured button/key to toggle. Restart the game after changes.");
+    checkbox_help(controls_invert_x,L"Invert horizontal look from the right stick or mouse. 0 in client.ini is the preferred direction; this checkbox stores 1. It does not change photo-mode strafing.");
+    checkbox_help(controls_invert_y,L"Invert vertical look from the right stick or mouse. 0 in client.ini is the preferred direction; this checkbox stores 1.");
+    checkbox_help(controls_photo_enable,L"Enable photo mode. The default controller chord is L3+R3 and the default keyboard key is F9. During a race it pauses without opening the pause menu and gives you a free camera.");
+    checkbox_help(controls_photo_hud,L"Hide the complete race HUD while photo mode is active and restore it when photo mode ends.");
+    checkbox_help(controls_photo_invert_strafe,L"Flip only the photo-mode left-stick and A/D strafe direction. This does not affect right-stick look.");
+    checkbox_help(controls_photo_button,L"Controller chord for photo mode. Separate buttons with +. The default is left_thumb+right_thumb (L3+R3).");
+    checkbox_help(controls_photo_speed,L"Free-camera speed in game units per second. Hold the right trigger or Shift for a 3x boost.");
+    checkbox_help(controls_mouse,L"Mouse button held while using free look or photo mode to capture mouse movement.");
+
+    /* Keyboard: ReRiff keyboard bindings. */
+    controls_part=CONTROLS_KEYBOARD;
+    control(L"STATIC",L"Free-look key",0,22,26,150,24,0);
+    controls_free_key=control(L"EDIT",L"",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,190,22,120,28,0);
+    control(L"STATIC",L"HUD key",0,22,58,150,24,0);
+    controls_hud_key=control(L"EDIT",L"",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,190,54,120,28,0);
+    control(L"STATIC",L"Photo mode key",0,22,90,150,24,0);
+    controls_photo_key=control(L"EDIT",L"F9",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,190,86,120,28,0);
+    control(L"BUTTON",L"Save settings",WS_TABSTOP,22,130,220,32,CONTROLS_SAVE);
+    checkbox_help(controls_free_key,L"Keyboard key that toggles free look. Leave empty to use only the controller button.");
+    checkbox_help(controls_hud_key,L"Keyboard key that toggles the HUD. Leave empty to use only the controller button.");
+    checkbox_help(controls_photo_key,L"Keyboard key that toggles photo mode. Leave empty to use only the controller chord.");
+    restart_note(L"Restart the game after changing these settings",22,174,590);
+
+    /* Controller: raw XInput remap table used by the SDL3 proxy. */
+    controls_part=CONTROLS_CONTROLLER;
+    controls_controller_enabled=control(L"BUTTON",L"Enable controller remapping",BS_AUTOCHECKBOX|WS_TABSTOP,22,22,300,28,0);
+    for(int i=0;i<CONTROLLER_BINDING_COUNT;i++){
+        int column=i<11?0:1,row=i<11?i:i-11;
+        int x=column?330:22,y=54+row*26;
+        control(L"STATIC",controls_controller_rows[i].label,0,x,y,140,24,0);
+        controls_controller_bindings[i]=control(L"COMBOBOX",L"",CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP,x+150,y-2,120,200,0);
+        controls_bindings_create(controls_controller_bindings[i]);
+    }
+    control(L"BUTTON",L"Save settings",WS_TABSTOP,22,330,220,32,CONTROLS_SAVE);
+    checkbox_help(controls_controller_enabled,L"Enable the SDL3 XInput proxy remap table. Restart the game after saving. The game receives the virtual controls selected here.");
+    restart_note(L"Restart the game after changing these settings",22,374,590);
     graphics_choice(controls_free_button,L"right_thumb",0);graphics_choice(controls_free_button,L"left_thumb",0);
     graphics_choice(controls_free_button,L"back",0);graphics_choice(controls_free_button,L"start",0);
     graphics_choice(controls_free_button,L"left_shoulder",0);graphics_choice(controls_free_button,L"right_shoulder",0);
@@ -136,16 +212,6 @@ static void controls_create(void){
     graphics_choice(controls_photo_button,L"none",0);
     graphics_choice(controls_mouse,L"right",0);graphics_choice(controls_mouse,L"left",0);
     graphics_choice(controls_mouse,L"middle",0);graphics_choice(controls_mouse,L"none",0);
-    checkbox_help(controls_enable,L"Keep the normal chase camera and use the right stick/mouse to look around while free look is toggled on. Press R3 or the configured button/key to toggle. Restart the game after changes.");
-    checkbox_help(controls_invert_x,L"Invert horizontal look from the right stick or mouse. 0 in client.ini is the preferred direction; this checkbox stores 1. It does not change photo-mode strafing.");
-    checkbox_help(controls_invert_y,L"Invert vertical look from the right stick or mouse. 0 in client.ini is the preferred direction; this checkbox stores 1.");
-    checkbox_help(controls_photo_enable,L"Enable photo mode. The default controller chord is L3+R3 and the default keyboard key is F9. During a race it pauses without opening the pause menu and gives you a free camera.");
-    checkbox_help(controls_photo_hud,L"Hide the complete race HUD while photo mode is active and restore it when photo mode ends.");
-    checkbox_help(controls_photo_invert_strafe,L"Flip only the photo-mode left-stick and A/D strafe direction. This does not affect right-stick look.");
-    checkbox_help(controls_photo_button,L"Controller chord for photo mode. Separate buttons with +. The default is left_thumb+right_thumb (L3+R3).");
-    checkbox_help(controls_photo_key,L"Keyboard key for photo mode. Leave empty to use only the controller chord.");
-    checkbox_help(controls_photo_speed,L"Free-camera speed in game units per second. Hold the right trigger or Shift for a 3x boost.");
-    checkbox_help(controls_mouse,L"Mouse button held while using free look or photo mode to capture mouse movement.");
     controls_reload();
 }
 #endif

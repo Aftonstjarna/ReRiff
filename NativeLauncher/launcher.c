@@ -47,7 +47,8 @@ static BOOL settings_observed=FALSE;
 static BOOL installed_experimental=FALSE, requested_experimental=FALSE;
 static HFONT font,restart_font;
 enum { PAGE_SERVERS, PAGE_GRAPHICS, PAGE_CONTROLS, PAGE_LANGUAGES, PAGE_SCROBBLING, PAGE_DIAGNOSTICS, PAGE_COUNT };
-static HWND scrobbling_tabs,launcher_tabs,latin_checkbox,language_checkbox,checkbox_tooltips,logging_checkbox;
+static HWND scrobbling_tabs,launcher_tabs,controls_tabs,latin_checkbox,language_checkbox,checkbox_tooltips,logging_checkbox;
+enum { CONTROLS_KEYBOARD, CONTROLS_CONTROLLER, CONTROLS_HOTKEYS, CONTROLS_PART_COUNT };
 static const WCHAR *log_categories[]={L"launcher",L"connections",L"game",L"text",L"languages",L"localserver",L"update",L"installer",L"python"};
 static const WCHAR *log_labels[]={L"Launcher",L"Connections, network and news",L"Menus, progression and saves",L"Unicode and song metadata",L"Font installation",L"Local server and helper",L"Updates",L"Installer",L"Python setup"};
 #define LOG_CATEGORY_COUNT (sizeof(log_categories)/sizeof(log_categories[0]))
@@ -56,7 +57,7 @@ static HWND diagnostic_controls[24];static unsigned diagnostic_count;static BOOL
 static HWND server_page_controls[40],language_page_controls[8];
 static unsigned server_page_count,language_page_count;
 static HWND graphics_controls[16];static unsigned graphics_count;static BOOL creating_graphics;
-static HWND controls_page_controls[32];static unsigned controls_page_count;static BOOL creating_controls;
+static HWND controls_page_controls[CONTROLS_PART_COUNT][48];static unsigned controls_page_count[CONTROLS_PART_COUNT];static int controls_part=CONTROLS_HOTKEYS;static BOOL creating_controls;
 static BOOL creating_languages,changing_language,creating_lastfm,creating_listenbrainz,creating_libre;
 static HWND libre_controls_group[12];static unsigned libre_count;
 static HWND listenbrainz_controls[12];static unsigned listenbrainz_count;
@@ -367,7 +368,7 @@ static void begin(int action) {
 }
 
 static HWND control(const WCHAR *cls,const WCHAR *text,DWORD style,int x,int y,int w,int h,int id) {
-    HWND handle=CreateWindowExW(0,cls,text,WS_CHILD|WS_VISIBLE|style,x,y+34+((creating_lastfm||creating_listenbrainz||creating_libre)?24:0),w,h,window,(HMENU)(INT_PTR)id,GetModuleHandleW(NULL),NULL);
+    HWND handle=CreateWindowExW(0,cls,text,WS_CHILD|WS_VISIBLE|style,x,y+34+((creating_lastfm||creating_listenbrainz||creating_libre)?24:0)+(creating_controls?34:0),w,h,window,(HMENU)(INT_PTR)id,GetModuleHandleW(NULL),NULL);
     /* Use the standard edit border under Wine. Its themed focus decoration
      * can remain visible above unrelated windows after the launcher loses focus.
      * Keep the native EDIT control, keyboard focus and text handling. */
@@ -380,7 +381,7 @@ static HWND control(const WCHAR *cls,const WCHAR *text,DWORD style,int x,int y,i
             FreeLibrary(theme);
         }
     }
-    if(handle){if(creating_graphics){if(graphics_count<16)graphics_controls[graphics_count++]=handle;}else if(creating_controls){if(controls_page_count<32)controls_page_controls[controls_page_count++]=handle;}else if(creating_libre){if(libre_count<12)libre_controls_group[libre_count++]=handle;}else if(creating_listenbrainz){if(listenbrainz_count<12)listenbrainz_controls[listenbrainz_count++]=handle;}else if(creating_lastfm){if(lastfm_count<16)lastfm_controls[lastfm_count++]=handle;}else if(creating_diagnostics){if(diagnostic_count<24)diagnostic_controls[diagnostic_count++]=handle;}else if(creating_languages){if(language_page_count<8)language_page_controls[language_page_count++]=handle;}else if(server_page_count<40)server_page_controls[server_page_count++]=handle;}
+    if(handle){if(creating_graphics){if(graphics_count<16)graphics_controls[graphics_count++]=handle;}else if(creating_controls){if(controls_page_count[controls_part]<48)controls_page_controls[controls_part][controls_page_count[controls_part]++]=handle;}else if(creating_libre){if(libre_count<12)libre_controls_group[libre_count++]=handle;}else if(creating_listenbrainz){if(listenbrainz_count<12)listenbrainz_controls[listenbrainz_count++]=handle;}else if(creating_lastfm){if(lastfm_count<16)lastfm_controls[lastfm_count++]=handle;}else if(creating_diagnostics){if(diagnostic_count<24)diagnostic_controls[diagnostic_count++]=handle;}else if(creating_languages){if(language_page_count<8)language_page_controls[language_page_count++]=handle;}else if(server_page_count<40)server_page_controls[server_page_count++]=handle;}
     SendMessageW(handle,WM_SETFONT,(WPARAM)font,TRUE);return handle;
 }
 
@@ -507,13 +508,16 @@ static void select_launcher_page(void){
     BOOL listenbrainz=page==PAGE_SCROBBLING&&SendMessageW(scrobbling_tabs,TCM_GETCURSEL,0,0)==1;
     BOOL libre=page==PAGE_SCROBBLING&&SendMessageW(scrobbling_tabs,TCM_GETCURSEL,0,0)==2;
     ShowWindow(scrobbling_tabs,page==PAGE_SCROBBLING?SW_SHOW:SW_HIDE);
+    ShowWindow(controls_tabs,controls?SW_SHOW:SW_HIDE);
+    int cpart=controls?(int)SendMessageW(controls_tabs,TCM_GETCURSEL,0,0):CONTROLS_HOTKEYS;
+    if(cpart<0||cpart>=CONTROLS_PART_COUNT)cpart=CONTROLS_HOTKEYS;
     SendMessageW(checkbox_tooltips,TTM_POP,0,0);
     for(unsigned i=0;i<server_page_count;i++){
         HWND item=server_page_controls[i];
         if(item!=status&&item!=play_button&&item!=close_checkbox&&item!=update_button&&item!=experimental_checkbox&&item!=launcher_progress&&item!=status_separator&&item!=footer_separator)ShowWindow(item,page!=PAGE_SERVERS?SW_HIDE:SW_SHOW);
     }
     for(unsigned i=0;i<graphics_count;i++)ShowWindow(graphics_controls[i],page==PAGE_GRAPHICS?SW_SHOW:SW_HIDE);
-    for(unsigned i=0;i<controls_page_count;i++)ShowWindow(controls_page_controls[i],controls?SW_SHOW:SW_HIDE);
+    for(int p=0;p<CONTROLS_PART_COUNT;p++)for(unsigned i=0;i<controls_page_count[p];i++)ShowWindow(controls_page_controls[p][i],(controls&&p==cpart)?SW_SHOW:SW_HIDE);
     for(unsigned i=0;i<language_page_count;i++)ShowWindow(language_page_controls[i],languages?SW_SHOW:SW_HIDE);
     for(unsigned i=0;i<diagnostic_count;i++)ShowWindow(diagnostic_controls[i],page==PAGE_DIAGNOSTICS?SW_SHOW:SW_HIDE);
     for(unsigned i=0;i<lastfm_count;i++)ShowWindow(lastfm_controls[i],lastfm?SW_SHOW:SW_HIDE);
@@ -522,7 +526,8 @@ static void select_launcher_page(void){
     if(page==PAGE_SCROBBLING){SetFocus(scrobbling_tabs);return;}
     if(controls)controls_reload();
     if(page==PAGE_DIAGNOSTICS)controls_trace_reload();
-    SetFocus(page==PAGE_GRAPHICS?graphics_resolution:controls?controls_first:page==PAGE_DIAGNOSTICS?logging_checkbox:languages?language_checkbox:external);
+    if(controls){SetFocus(cpart==CONTROLS_HOTKEYS?controls_first:controls_tabs);return;}
+    SetFocus(page==PAGE_GRAPHICS?graphics_resolution:page==PAGE_DIAGNOSTICS?logging_checkbox:languages?language_checkbox:external);
 }
 static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
     if(event==WM_ERASEBKGND){RECT area;GetClientRect(hwnd,&area);FillRect((HDC)wp,&area,GetSysColorBrush(COLOR_BTNFACE));return TRUE;}
@@ -616,6 +621,12 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
         checkbox_help(graphics_recent,L"Limit the recent songs shown across Recent Tracks sort tabs. All tracks retains the complete saved catalogue. Bundled tracks are unaffected. Restart the game after changes.");
         restart_note(L"Restart the game after changing these settings",22,298,590);
         graphics_reload();creating_graphics=FALSE;
+        controls_tabs=CreateWindowExW(0,WC_TABCONTROLW,L"",WS_CHILD|WS_TABSTOP|WS_CLIPSIBLINGS,22,40,600,28,window,NULL,GetModuleHandleW(NULL),NULL);
+        SendMessageW(controls_tabs,WM_SETFONT,(WPARAM)font,TRUE);
+        tab.pszText=L"Keyboard";SendMessageW(controls_tabs,TCM_INSERTITEMW,CONTROLS_KEYBOARD,(LPARAM)&tab);
+        tab.pszText=L"Controller";SendMessageW(controls_tabs,TCM_INSERTITEMW,CONTROLS_CONTROLLER,(LPARAM)&tab);
+        tab.pszText=L"Hotkeys";SendMessageW(controls_tabs,TCM_INSERTITEMW,CONTROLS_HOTKEYS,(LPARAM)&tab);
+        SendMessageW(controls_tabs,TCM_SETCURSEL,CONTROLS_HOTKEYS,0);
         creating_controls=TRUE;controls_create();creating_controls=FALSE;
         creating_languages=TRUE;
         language_checkbox=control(L"BUTTON",L"CJK fonts",BS_AUTOCHECKBOX|WS_TABSTOP,22,26,590,32,CJK_INSTALL);
@@ -706,7 +717,7 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
         SetTimer(hwnd,1,500,NULL);
         begin(FALSE);return 0;
     }
-    if(event==WM_NOTIFY&&(((NMHDR *)lp)->hwndFrom==launcher_tabs||((NMHDR *)lp)->hwndFrom==scrobbling_tabs)&&((NMHDR *)lp)->code==TCN_SELCHANGE){select_launcher_page();return 0;}
+    if(event==WM_NOTIFY&&(((NMHDR *)lp)->hwndFrom==launcher_tabs||((NMHDR *)lp)->hwndFrom==scrobbling_tabs||((NMHDR *)lp)->hwndFrom==controls_tabs)&&((NMHDR *)lp)->code==TCN_SELCHANGE){select_launcher_page();return 0;}
     if (event==WM_COMMAND) {
         if(LOWORD(wp)>=LOG_CATEGORY_BASE&&LOWORD(wp)<LOG_CATEGORY_BASE+LOG_CATEGORY_COUNT) {
             unsigned i=LOWORD(wp)-LOG_CATEGORY_BASE;WCHAR key[80];_snwprintf(key,80,L"log_%ls",log_categories[i]);

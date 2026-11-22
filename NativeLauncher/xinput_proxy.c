@@ -2,7 +2,10 @@
  * Implements the four ordinals imported by Riff Racer's Game.exe:
  *   2 XInputGetState, 3 XInputSetState, 5 XInputEnable,
  *   7 XInputGetBatteryInformation.
- * Identity mapping for now; the remap table will go here later.
+ *
+ * [controller] in client.ini maps each virtual XInput control to a physical
+ * SDL gamepad control. Missing keys keep the identity mapping; "none" clears
+ * the virtual control.
  */
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -12,6 +15,7 @@
 #include <string.h>
 
 #define SDL_INIT_GAMEPAD 0x00002000u
+#define MAX_BIND 4
 
 typedef struct {
     WORD wButtons;
@@ -48,13 +52,34 @@ typedef struct {
     SDL_Gamepad *(*OpenGamepad)(SDL_JoystickID);
     void (*CloseGamepad)(SDL_Gamepad *);
     int (*GamepadConnected)(SDL_Gamepad *);
-    int (*GamepadGetButton)(SDL_Gamepad *, int);
-    int16_t (*GamepadGetAxis)(SDL_Gamepad *, int);
+    int (*GetGamepadButton)(SDL_Gamepad *, int);
+    int16_t (*GetGamepadAxis)(SDL_Gamepad *, int);
     int (*RumbleGamepad)(SDL_Gamepad *, uint16_t, uint16_t, uint32_t);
     int (*GetGamepadPowerInfo)(SDL_Gamepad *, int *);
     const char *(*GetGamepadName)(SDL_Gamepad *);
     int (*SetHint)(const char *, const char *);
 } SdlApi;
+
+enum { BIND_NONE = 0, BIND_BUTTON, BIND_AXIS };
+typedef struct {
+    int kind;
+    int index;
+    int sign;
+} Binding;
+typedef struct {
+    Binding item[MAX_BIND];
+    int count;
+} BindingList;
+
+static const char *button_names[15] = {
+    "a", "b", "x", "y", "back", "guide", "start", "l3", "r3",
+    "lb", "rb", "dup", "ddown", "dleft", "dright"
+};
+static const WORD button_bits[15] = {
+    0x1000, 0x2000, 0x4000, 0x8000, 0x0020, 0x0400, 0x0010, 0x0040, 0x0080,
+    0x0100, 0x0200, 0x0001, 0x0002, 0x0004, 0x0008
+};
+static const char *axis_names[6] = { "lx", "ly", "rx", "ry", "lt", "rt" };
 
 static HINSTANCE proxy_instance;
 static SdlApi sdl;
@@ -63,6 +88,8 @@ static int sdl_ready, sdl_attempted, input_enabled = 1, logged_state;
 static DWORD packet_number;
 static char log_path[MAX_PATH];
 static WCHAR dll_dir[MAX_PATH];
+static BindingList button_map[15], axis_map[6];
+static int mapping_ready, mapping_enabled = 1;
 
 static void write_log(const char *text) {
     if (!log_path[0]) {
@@ -101,6 +128,104 @@ static void *resolve(const char *name) {
     return sdl.module ? (void *)GetProcAddress(sdl.module, name) : NULL;
 }
 
+static int name_index(const char *name, const char **names, int count) {
+    for (int i = 0; i < count; i++) if (!_stricmp(name, names[i])) return i;
+    return -1;
+}
+
+static void identity_button(BindingList *list, int index) {
+    list->count = 1;
+    list->item[0].kind = BIND_BUTTON;
+    list->item[0].index = index;
+    list->item[0].sign = 1;
+}
+static void identity_axis(BindingList *list, int index) {
+    list->count = 1;
+    list->item[0].kind = BIND_AXIS;
+    list->item[0].index = index;
+    list->item[0].sign = 1;
+}
+
+static void parse_binding(const char *text, BindingList *list, int virtual_axis) {
+    list->count = 0;
+    if (!text || !*text) return;
+    if (!_stricmp(text, "none")) return;
+    const char *colon = strchr(text, ':');
+    if (!colon) return;
+    char kind[16];
+    size_t n = (size_t)(colon - text);
+    if (n >= sizeof(kind)) return;
+    memcpy(kind, text, n);
+    kind[n] = 0;
+    const char *value = colon + 1;
+    int sign = 1;
+    size_t len = strlen(value);
+    if (len && (value[len - 1] == '+' || value[len - 1] == '-')) {
+        if (value[len - 1] == '-') sign = -1;
+        len--;
+    }
+    char name[32];
+    if (len >= sizeof(name)) return;
+    memcpy(name, value, len);
+    name[len] = 0;
+    int index;
+    if (!_stricmp(kind, "button")) {
+        index = name_index(name, button_names, 15);
+        if (index < 0) return;
+        list->count = 1;
+        list->item[0].kind = BIND_BUTTON;
+        list->item[0].index = index;
+        list->item[0].sign = sign;
+    } else if (!_stricmp(kind, "axis")) {
+        index = name_index(name, axis_names, 6);
+        if (index < 0) return;
+        if (virtual_axis >= 4 && index < 4) return; /* stick -> trigger is invalid */
+        list->count = 1;
+        list->item[0].kind = BIND_AXIS;
+        list->item[0].index = index;
+        list->item[0].sign = sign;
+    }
+}
+
+static void load_mapping(void) {
+    if (mapping_ready) return;
+    mapping_ready = 1;
+    for (int i = 0; i < 15; i++) identity_button(&button_map[i], i);
+    for (int i = 0; i < 6; i++) identity_axis(&axis_map[i], i);
+    if (!dll_dir[0]) return;
+    WCHAR ini[MAX_PATH];
+    wcsncpy(ini, dll_dir, MAX_PATH - 1);
+    ini[MAX_PATH - 1] = 0;
+    wcscat(ini, L"client.ini");
+    WCHAR value[128];
+    GetPrivateProfileStringW(L"controller", L"enabled", L"1", value, 128, ini);
+    mapping_enabled = !_wcsicmp(value, L"1") || !_wcsicmp(value, L"true") || !_wcsicmp(value, L"yes");
+    int overrides = 0;
+    for (int i = 0; i < 15; i++) {
+        WCHAR key[16];
+        MultiByteToWideChar(CP_UTF8, 0, button_names[i], -1, key, 16);
+        DWORD got = GetPrivateProfileStringW(L"controller", key, L"", value, 128, ini);
+        char binding[128];
+        WideCharToMultiByte(CP_UTF8, 0, value, got + 1, binding, sizeof(binding), NULL, NULL);
+        if (got) {
+            parse_binding(binding, &button_map[i], 0);
+            overrides++;
+        }
+    }
+    for (int i = 0; i < 6; i++) {
+        WCHAR key[16];
+        MultiByteToWideChar(CP_UTF8, 0, axis_names[i], -1, key, 16);
+        DWORD got = GetPrivateProfileStringW(L"controller", key, L"", value, 128, ini);
+        char binding[128];
+        WideCharToMultiByte(CP_UTF8, 0, value, got + 1, binding, sizeof(binding), NULL, NULL);
+        if (got) {
+            parse_binding(binding, &axis_map[i], i);
+            overrides++;
+        }
+    }
+    log_line("controller mapping enabled=%d overrides=%d", mapping_enabled, overrides);
+}
+
 static void load_sdl(void) {
     if (sdl_attempted) return;
     sdl_attempted = 1;
@@ -122,18 +247,17 @@ static void load_sdl(void) {
     sdl.OpenGamepad = resolve("SDL_OpenGamepad");
     sdl.CloseGamepad = resolve("SDL_CloseGamepad");
     sdl.GamepadConnected = resolve("SDL_GamepadConnected");
-    sdl.GamepadGetButton = resolve("SDL_GetGamepadButton");
-    sdl.GamepadGetAxis = resolve("SDL_GetGamepadAxis");
+    sdl.GetGamepadButton = resolve("SDL_GetGamepadButton");
+    sdl.GetGamepadAxis = resolve("SDL_GetGamepadAxis");
     sdl.RumbleGamepad = resolve("SDL_RumbleGamepad");
     sdl.GetGamepadPowerInfo = resolve("SDL_GetGamepadPowerInfo");
     sdl.GetGamepadName = resolve("SDL_GetGamepadName");
     sdl.SetHint = resolve("SDL_SetHint");
     if (!sdl.Init || !sdl.UpdateGamepads || !sdl.GetGamepads || !sdl.OpenGamepad ||
-        !sdl.GamepadGetButton || !sdl.GamepadGetAxis) {
+        !sdl.GetGamepadButton || !sdl.GetGamepadAxis) {
         log_line("SDL3 exports are incomplete");
         return;
     }
-    /* Keep SDL away from XInput, which would recurse through this proxy. */
     if (sdl.SetHint) {
         sdl.SetHint("SDL_JOYSTICK_XINPUT", "0");
         sdl.SetHint("SDL_JOYSTICK_HIDAPI", "1");
@@ -145,6 +269,7 @@ static void load_sdl(void) {
     }
     sdl_ready = 1;
     log_line("SDL3 gamepad backend ready");
+    load_mapping();
 }
 
 static void close_pad(int i) {
@@ -175,37 +300,56 @@ static void refresh_pads(void) {
     if (ids && sdl.Free) sdl.Free(ids);
 }
 
-static WORD buttons(SDL_Gamepad *pad) {
-    WORD b = 0;
-    if (sdl.GamepadGetButton(pad, 0)) b |= 0x1000;  /* south / A */
-    if (sdl.GamepadGetButton(pad, 1)) b |= 0x2000;  /* east / B */
-    if (sdl.GamepadGetButton(pad, 2)) b |= 0x4000;  /* west / X */
-    if (sdl.GamepadGetButton(pad, 3)) b |= 0x8000;  /* north / Y */
-    if (sdl.GamepadGetButton(pad, 4)) b |= 0x0020;  /* back */
-    if (sdl.GamepadGetButton(pad, 5)) b |= 0x0400;  /* guide */
-    if (sdl.GamepadGetButton(pad, 6)) b |= 0x0010;  /* start */
-    if (sdl.GamepadGetButton(pad, 7)) b |= 0x0040;  /* left stick */
-    if (sdl.GamepadGetButton(pad, 8)) b |= 0x0080;  /* right stick */
-    if (sdl.GamepadGetButton(pad, 9)) b |= 0x0100;  /* left shoulder */
-    if (sdl.GamepadGetButton(pad, 10)) b |= 0x0200; /* right shoulder */
-    if (sdl.GamepadGetButton(pad, 11)) b |= 0x0001; /* dpad up */
-    if (sdl.GamepadGetButton(pad, 12)) b |= 0x0002; /* dpad down */
-    if (sdl.GamepadGetButton(pad, 13)) b |= 0x0004; /* dpad left */
-    if (sdl.GamepadGetButton(pad, 14)) b |= 0x0008; /* dpad right */
-    return b;
+static int physical_button(SDL_Gamepad *pad, int index) {
+    return sdl.GetGamepadButton(pad, index) ? 1 : 0;
+}
+static int physical_axis(SDL_Gamepad *pad, int index) {
+    return sdl.GetGamepadAxis(pad, index);
 }
 
-static BYTE trigger(SDL_Gamepad *pad, int axis) {
-    int value = sdl.GamepadGetAxis(pad, axis);
-    if (value < 0) value = 0;
-    return (BYTE)((value * 255) / 32767);
+static int binding_active(SDL_Gamepad *pad, const Binding *bind, int virtual_axis) {
+    if (bind->kind == BIND_BUTTON) return physical_button(pad, bind->index);
+    if (bind->kind == BIND_AXIS) {
+        int value = physical_axis(pad, bind->index) * bind->sign;
+        if (virtual_axis >= 4) return value > 16384;
+        return value > 8192;
+    }
+    return 0;
 }
 
-static SHORT stick(SDL_Gamepad *pad, int axis) {
-    int value = sdl.GamepadGetAxis(pad, axis);
-    if (value > 32767) value = 32767;
-    if (value < -32768) value = -32768;
-    return (SHORT)value;
+static int virtual_button(SDL_Gamepad *pad, int index) {
+    if (!mapping_enabled) return physical_button(pad, index);
+    if (!button_map[index].count) return 0;
+    const Binding *bind = &button_map[index].item[0];
+    if (bind->kind == BIND_BUTTON) return physical_button(pad, bind->index);
+    return binding_active(pad, bind, 0);
+}
+
+static int virtual_axis(SDL_Gamepad *pad, int index) {
+    if (!mapping_enabled) return physical_axis(pad, index);
+    if (!axis_map[index].count) return 0;
+    const Binding *bind = &axis_map[index].item[0];
+    if (bind->kind == BIND_BUTTON) return physical_button(pad, bind->index) ? 32767 * bind->sign : 0;
+    if (bind->kind == BIND_AXIS) {
+        int value = physical_axis(pad, bind->index) * bind->sign;
+        if (index >= 4) {
+            if (bind->index >= 4) return value < 0 ? 0 : value;
+            return value < 0 ? 0 : value;
+        }
+        return value;
+    }
+    return 0;
+}
+
+static BYTE trigger_value(int axis) {
+    if (axis < 0) axis = 0;
+    if (axis > 32767) axis = 32767;
+    return (BYTE)((axis * 255) / 32767);
+}
+static SHORT stick_value(int axis) {
+    if (axis > 32767) axis = 32767;
+    if (axis < -32768) axis = -32768;
+    return (SHORT)axis;
 }
 
 __declspec(dllexport) DWORD WINAPI XInputGetState(DWORD index, XINPUT_STATE *state) {
@@ -217,13 +361,15 @@ __declspec(dllexport) DWORD WINAPI XInputGetState(DWORD index, XINPUT_STATE *sta
     if (index >= 4 || !pads[index]) return ERROR_DEVICE_NOT_CONNECTED;
     memset(state, 0, sizeof(*state));
     state->dwPacketNumber = ++packet_number;
-    state->Gamepad.wButtons = buttons(pads[index]);
-    state->Gamepad.bLeftTrigger = trigger(pads[index], 4);
-    state->Gamepad.bRightTrigger = trigger(pads[index], 5);
-    state->Gamepad.sThumbLX = stick(pads[index], 0);
-    state->Gamepad.sThumbLY = stick(pads[index], 1);
-    state->Gamepad.sThumbRX = stick(pads[index], 2);
-    state->Gamepad.sThumbRY = stick(pads[index], 3);
+    WORD buttons = 0;
+    for (int i = 0; i < 15; i++) if (virtual_button(pads[index], i)) buttons |= button_bits[i];
+    state->Gamepad.wButtons = buttons;
+    state->Gamepad.bLeftTrigger = trigger_value(virtual_axis(pads[index], 4));
+    state->Gamepad.bRightTrigger = trigger_value(virtual_axis(pads[index], 5));
+    state->Gamepad.sThumbLX = stick_value(virtual_axis(pads[index], 0));
+    state->Gamepad.sThumbLY = stick_value(virtual_axis(pads[index], 1));
+    state->Gamepad.sThumbRX = stick_value(virtual_axis(pads[index], 2));
+    state->Gamepad.sThumbRY = stick_value(virtual_axis(pads[index], 3));
     if (!logged_state) {
         logged_state = 1;
         log_line("first state buttons=%04X lt=%u rt=%u lx=%d ly=%d rx=%d ry=%d",
@@ -253,8 +399,8 @@ __declspec(dllexport) DWORD WINAPI XInputGetBatteryInformation(DWORD index, BYTE
     if (!battery) return ERROR_INVALID_PARAMETER;
     if (index >= 4) return ERROR_DEVICE_NOT_CONNECTED;
     memset(battery, 0, sizeof(*battery));
-    battery->BatteryType = 1;  /* wired */
-    battery->BatteryLevel = 3; /* full */
+    battery->BatteryType = 1;
+    battery->BatteryLevel = 3;
     if (type == 0) {
         load_sdl();
         refresh_pads();
@@ -262,7 +408,7 @@ __declspec(dllexport) DWORD WINAPI XInputGetBatteryInformation(DWORD index, BYTE
             int percent = 0;
             int power = sdl.GetGamepadPowerInfo(pads[index], &percent);
             if (power == 1 || power == 3 || power == 4) {
-                battery->BatteryType = 0; /* battery */
+                battery->BatteryType = 0;
                 battery->BatteryLevel = percent > 75 ? 3 : percent > 40 ? 2 : percent > 10 ? 1 : 0;
             }
         }
