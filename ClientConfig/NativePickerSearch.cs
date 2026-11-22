@@ -37,6 +37,7 @@ namespace ReRiff {
         private static Session current;
         private static LibrarySearchSnapshot library;
         private static readonly Random random=new Random();
+        private static string lastRandomPath;
         [DllImport("kernel32.dll",CharSet=CharSet.Unicode,ExactSpelling=true)]
         private static extern uint GetLongPathNameW(string path,StringBuilder output,uint capacity);
         private static string LongPath(string path) {
@@ -239,9 +240,13 @@ namespace ReRiff {
             }
             if(matches.Count==0)return 0;
             LibrarySearchSong chosen;
-            lock(gate)chosen=matches[random.Next(matches.Count)];
+            int index;
+            lock(gate)index=random.Next(matches.Count);
+            if(matches.Count>1&&string.Equals(matches[index].Filename,lastRandomPath,StringComparison.OrdinalIgnoreCase))
+                index=(index+1+random.Next(matches.Count-1))%matches.Count;
+            chosen=matches[index];
             int result=SelectSong(session,chosen);
-            if(result==1)NativeReelBridge.Log("Picker random roll: candidates="+matches.Count+" path="+chosen.Filename.Substring(4));
+            if(result==1){lastRandomPath=chosen.Filename;NativeReelBridge.Log("Picker random roll: candidates="+matches.Count+" path="+chosen.Filename.Substring(4));}
             return result;
         }
         private static int Dispatch(int operation,IntPtr menu,IntPtr text,int argument) {

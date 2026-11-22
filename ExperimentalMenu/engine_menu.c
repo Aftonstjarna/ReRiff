@@ -612,6 +612,7 @@ static void picker_search_after(void *menu);
 static void picker_search_forget(void *menu);
 static void picker_random_tick(void *menu);
 static void picker_random_forget(void *menu);
+static volatile LONG picker_random_request;
 #include "ui_scale.h"
 #include "picker_search.h"
 #include "picker_random.h"

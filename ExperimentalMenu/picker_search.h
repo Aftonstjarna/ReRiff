@@ -57,6 +57,9 @@ static BOOL picker_search_message(HWND window,UINT message,WPARAM key,LPARAM fla
     if(message==WM_KEYDOWN&&key=='F'&&(GetKeyState(VK_CONTROL)&0x8000)){
         InterlockedExchange(&picker_search_request,1);return TRUE;
     }
+    if(message==WM_KEYDOWN&&key=='R'&&(GetKeyState(VK_CONTROL)&0x8000)){
+        InterlockedExchange(&picker_random_request,1);return TRUE;
+    }
     if(message==WM_LBUTTONDOWN){
         /* Accept editing like Enter/A and consume the click so it cannot
            also activate a result row underneath the search field. */
@@ -155,7 +158,7 @@ static void picker_search_after(void *menu){
     if(!readable(picker_search_field,484))return;
     WCHAR line[256];
     if(text_entry_inline)text_entry_line(line,picker_search_columns,GetTickCount());
-    else if(!picker_search_query[0])wcscpy(line,L"Search music (Y / Ctrl+F)  R3 (Random Song)");
+    else if(!picker_search_query[0])wcscpy(line,L"Search music (Y / Ctrl+F)  R3 / Ctrl+R (Shuffle)");
     else {
         WCHAR state[80];int count=picker_search_status;
         if(count==-1)wcscpy(state,L"Searching");else if(count==-2)wcscpy(state,L"Search unavailable");

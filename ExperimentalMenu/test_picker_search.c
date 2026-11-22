@@ -18,6 +18,7 @@ int main(void){
     CHECK(!scroll_window);picker_search_before(owner);CHECK(scroll_window==window);
     BYTE keyboard[256]={0};keyboard[VK_CONTROL]=0x80;CHECK(SetKeyboardState(keyboard));
     SendMessageW(window,WM_KEYDOWN,'F',0);CHECK(picker_search_request==1);
+    InterlockedExchange(&picker_random_request,0);SendMessageW(window,WM_KEYDOWN,'R',0);CHECK(picker_random_request==1);InterlockedExchange(&picker_random_request,0);
     memset(keyboard,0,sizeof(keyboard));CHECK(SetKeyboardState(keyboard));
     CHECK(picker_search_before(owner)&&text_entry_inline&&text_entry_active);
     SendMessageW(window,WM_KILLFOCUS,0,0);CHECK(text_entry_inline&&!text_entry_action);

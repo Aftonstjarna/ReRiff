@@ -73,6 +73,8 @@ static void picker_random_tick(void *menu){
     HWND window=display_window();
     BOOL foreground=IsWindow(window)&&!IsIconic(window)&&GetForegroundWindow()==window;
     if(!foreground){picker_random_previous=FALSE;picker_random_pending=FALSE;return;}
+    LONG requested=InterlockedExchange(&picker_random_request,0);
+    if(requested)picker_random_start(menu);
     if(picker_random_pending&&(DWORD)(GetTickCount()-picker_random_pending_at)>=250){
         if((LONG)(GetTickCount()-picker_random_deadline)>=0){
             picker_random_pending=FALSE;
