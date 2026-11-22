@@ -23,7 +23,7 @@ static WORD postfx_dof_buttons[4],postfx_bloom_buttons[4];static int postfx_dof_
 static int postfx_dof_key=VK_F10,postfx_bloom_key=VK_F11;
 static BOOL postfx_dof_previous,postfx_bloom_previous,postfx_hotkeys_active;
 static float race_photo_speed=8.0f;
-static float race_photo_yaw,race_photo_pitch;
+static float race_photo_yaw,race_photo_pitch,race_photo_roll;
 static unsigned race_photo_clip_frames;
 static float race_photo_far_clip,race_photo_saved_far;
 static void *race_photo_clip_camera;
@@ -446,7 +446,7 @@ static BOOL race_photo_begin(BYTE *base){
         race_photo_base_forward[row]=matrix[6+row];
         race_photo_position[row]=matrix[9+row];
     }
-    race_photo_yaw=0;race_photo_pitch=0;
+    race_photo_yaw=0;race_photo_pitch=0;race_photo_roll=0;
     *((BYTE *)race+12)=1;
     race_photo_paused_by_us=TRUE;
     log_line("Photo mode: pause byte set.");
@@ -463,7 +463,7 @@ static BOOL race_photo_begin(BYTE *base){
 
 static void race_photo_end(BYTE *base,BOOL resume){
     if(!race_photo_active)return;
-    race_photo_active=FALSE;
+    race_photo_active=FALSE;race_photo_roll=0;
     if(race_photo_clip_camera&&readable(race_photo_clip_camera,16)&&race_photo_saved_far>0)
         *((float *)((BYTE *)race_photo_clip_camera+12))=race_photo_saved_far;
     race_photo_clip_camera=NULL;
@@ -480,7 +480,7 @@ static void race_photo_end(BYTE *base,BOOL resume){
 
 static void race_photo_race_enter(void){
     race_photo_active=FALSE;race_photo_paused_by_us=FALSE;race_photo_hud_hidden=FALSE;race_photo_music_paused=FALSE;
-    race_photo_previous=FALSE;race_photo_chord=FALSE;race_photo_clip_camera=NULL;
+    race_photo_previous=FALSE;race_photo_chord=FALSE;race_photo_clip_camera=NULL;race_photo_roll=0;
 }
 
 static void race_photo_disable(void){
@@ -488,16 +488,20 @@ static void race_photo_disable(void){
     race_photo_end((BYTE *)GetModuleHandleW(NULL),TRUE);
 }
 
-static void race_photo_move(float *x,float *y,float *z,BOOL *boost){
-    *x=*y=*z=0;*boost=FALSE;
+static void race_photo_move(float *x,float *y,float *z,float *roll,BOOL *boost){
+    *x=*y=*z=*roll=0;*boost=FALSE;
     if(race_xinput_get){
         XINPUT_STATE state;
         if(race_xinput_get(0,&state)==ERROR_SUCCESS){
             int lx=state.Gamepad.sThumbLX,ly=state.Gamepad.sThumbLY;
             if(lx>7849)*x=(lx-7849)/24766.0f;else if(lx<-7849)*x=(lx+7849)/24766.0f;
             if(ly>7849)*y=(ly-7849)/24766.0f;else if(ly<-7849)*y=(ly+7849)/24766.0f;
-            if(state.Gamepad.wButtons&XINPUT_GAMEPAD_LEFT_SHOULDER)*z-=1.0f;
-            if(state.Gamepad.wButtons&XINPUT_GAMEPAD_RIGHT_SHOULDER)*z+=1.0f;
+            /* LB/RB roll the photo camera around its forward axis. */
+            if(state.Gamepad.wButtons&XINPUT_GAMEPAD_LEFT_SHOULDER)*roll-=1.0f;
+            if(state.Gamepad.wButtons&XINPUT_GAMEPAD_RIGHT_SHOULDER)*roll+=1.0f;
+            /* Face buttons handle vertical movement now. */
+            if(state.Gamepad.wButtons&XINPUT_GAMEPAD_A)*z+=1.0f;
+            if(state.Gamepad.wButtons&XINPUT_GAMEPAD_B)*z-=1.0f;
             if(state.Gamepad.bRightTrigger>30)*boost=TRUE;
         }
     }
@@ -565,8 +569,15 @@ static void race_photo_update(BYTE *base,float dt){
     race_camera_rotate(upVector,pitchAxis,race_photo_pitch);
     race_camera_rotate(forwardVector,pitchAxis,race_photo_pitch);
     race_photo_normalize(rightVector);race_photo_normalize(upVector);race_photo_normalize(forwardVector);
-    float moveX,moveY,moveZ;BOOL boost;
-    race_photo_move(&moveX,&moveY,&moveZ,&boost);
+    float moveX,moveY,moveZ,rollInput;BOOL boost;
+    race_photo_move(&moveX,&moveY,&moveZ,&rollInput,&boost);
+    race_photo_roll+=rollInput*1.8f*dt;
+    while(race_photo_roll>3.14159265f)race_photo_roll-=6.28318531f;
+    while(race_photo_roll<-3.14159265f)race_photo_roll+=6.28318531f;
+    float rollAxis[3]={forwardVector[0],forwardVector[1],forwardVector[2]};
+    race_camera_rotate(rightVector,rollAxis,race_photo_roll);
+    race_camera_rotate(upVector,rollAxis,race_photo_roll);
+    race_photo_normalize(rightVector);race_photo_normalize(upVector);race_photo_normalize(forwardVector);
     float movement[3];
     /* The camera basis stores its horizontal axis opposite the input
      * direction used by the game's default left-stick movement. Keep
@@ -591,8 +602,8 @@ static void race_photo_update(BYTE *base,float dt){
     }
     if(race_camera_trace&&(++race_photo_clip_frames%180)==0)race_photo_trace_clip(camera,set_index);
     if(race_camera_trace&&(++race_camera_frames%90)==0){
-        char line[180];
-        snprintf(line,sizeof(line),"Photo camera trace frame %u set=%d pos=%.2f,%.2f,%.2f yaw=%.2f pitch=%.2f",race_camera_frames,set_index,race_photo_position[0],race_photo_position[1],race_photo_position[2],race_photo_yaw,race_photo_pitch);
+        char line[220];
+        snprintf(line,sizeof(line),"Photo camera trace frame %u set=%d pos=%.2f,%.2f,%.2f yaw=%.2f pitch=%.2f roll=%.2f",race_camera_frames,set_index,race_photo_position[0],race_photo_position[1],race_photo_position[2],race_photo_yaw,race_photo_pitch,race_photo_roll);
         log_line(line);
     }
 }
