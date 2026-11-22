@@ -27,7 +27,7 @@ static void graphics_reload(void){
     if(width>=800&&height>=600&&graphics_value(graphics_resolution)!=resolution){WCHAR label[64];_snwprintf(label,64,L"%u × %u",width,height);graphics_choice(graphics_resolution,label,resolution);graphics_select(graphics_resolution,resolution);}
     graphics_select(graphics_mode,rr_fullscreen_mode(file)+1);
     SendMessageW(graphics_aa,BM_SETCHECK,graphics_bool(L"antialiasing")?BST_CHECKED:BST_UNCHECKED,0);
-    SendMessageW(graphics_culling,BM_SETCHECK,graphics_bool(L"disable_culling")?BST_CHECKED:BST_UNCHECKED,0);
+    if(graphics_culling)SendMessageW(graphics_culling,BM_SETCHECK,graphics_bool(L"disable_culling")?BST_CHECKED:BST_UNCHECKED,0);
     SendMessageW(graphics_bloom,BM_SETCHECK,graphics_bool_default(L"bloom")?BST_CHECKED:BST_UNCHECKED,0);
     SendMessageW(graphics_dof,BM_SETCHECK,graphics_bool_default(L"depth_of_field")?BST_CHECKED:BST_UNCHECKED,0);
     graphics_select(graphics_scale,GetPrivateProfileIntW(L"graphics",L"ui_scale",0,file));
@@ -44,7 +44,7 @@ static BOOL graphics_save_settings(void){
         &&WritePrivateProfileStringW(L"graphics",L"render_height",height,file)
         &&rr_save_fullscreen_mode(file,(int)mode-1)
         &&WritePrivateProfileStringW(L"graphics",L"antialiasing",SendMessageW(graphics_aa,BM_GETCHECK,0,0)==BST_CHECKED?L"true":L"false",file)
-        &&WritePrivateProfileStringW(L"graphics",L"disable_culling",SendMessageW(graphics_culling,BM_GETCHECK,0,0)==BST_CHECKED?L"true":L"false",file)
+        &&(!graphics_culling||WritePrivateProfileStringW(L"graphics",L"disable_culling",SendMessageW(graphics_culling,BM_GETCHECK,0,0)==BST_CHECKED?L"true":L"false",file))
         &&WritePrivateProfileStringW(L"graphics",L"bloom",SendMessageW(graphics_bloom,BM_GETCHECK,0,0)==BST_CHECKED?L"true":L"false",file)
         &&WritePrivateProfileStringW(L"graphics",L"depth_of_field",SendMessageW(graphics_dof,BM_GETCHECK,0,0)==BST_CHECKED?L"true":L"false",file)
         &&WritePrivateProfileStringW(L"graphics",L"ui_scale",size,file)
