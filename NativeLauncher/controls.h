@@ -407,6 +407,9 @@ static void controls_capture_tick(void){
         int magnitude=value<0?-value:value;
         if(magnitude>controls_axis_threshold(i)){
             int sign=i>=4?1:(value<0?-1:1);
+            /* A virtual axis stores the physical axis direction, not an
+             * inversion. Y conversion happens once in the proxy. */
+            if(controls_capture_row>=15)sign=1;
             controls_capture_store(BINDING_AXIS,i,sign);
             return;
         }

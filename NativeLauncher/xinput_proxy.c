@@ -402,9 +402,10 @@ __declspec(dllexport) DWORD WINAPI XInputGetState(DWORD index, XINPUT_STATE *sta
     state->Gamepad.bLeftTrigger = trigger_value(virtual_axis(pads[index], 4));
     state->Gamepad.bRightTrigger = trigger_value(virtual_axis(pads[index], 5));
     state->Gamepad.sThumbLX = stick_value(virtual_axis(pads[index], 0));
-    state->Gamepad.sThumbLY = stick_value(virtual_axis(pads[index], 1));
+    /* SDL's Y axes grow downward; XInput's grow upward. */
+    state->Gamepad.sThumbLY = stick_value(-virtual_axis(pads[index], 1));
     state->Gamepad.sThumbRX = stick_value(virtual_axis(pads[index], 2));
-    state->Gamepad.sThumbRY = stick_value(virtual_axis(pads[index], 3));
+    state->Gamepad.sThumbRY = stick_value(-virtual_axis(pads[index], 3));
     if (!logged_state) {
         logged_state = 1;
         log_line("first state buttons=%04X lt=%u rt=%u lx=%d ly=%d rx=%d ry=%d",
