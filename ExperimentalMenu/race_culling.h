@@ -22,6 +22,21 @@ __declspec(dllexport) int __cdecl ReRiffConfigureCullingVisible(void *callback){
     if(!callback)return 0;race_culling_visual=(RaceCullingVisualVisible)callback;return 1;
 }
 
+/* tickBlocks retires the oldest block through the branch at IL_01e7. Turn
+ * that beq into an unconditional br so blocks accumulate for photo mode;
+ * the post-tick visual pass keeps their visuals visible. Applied before the
+ * first race tick so the CLR has not compiled this method yet. */
+static BOOL race_culling_retain_blocks(BYTE *base){
+    BYTE *site=base+0x26c624;
+    static const BYTE expected[]={0x11,0x08,0x15,0x2e,0x33};
+    if(!readable(site,sizeof(expected))||memcmp(site,expected,sizeof(expected)))return FALSE;
+    DWORD old,ignored;
+    if(!VirtualProtect(site,sizeof(expected),PAGE_READWRITE,&old))return FALSE;
+    site[3]=0x2b;
+    VirtualProtect(site,sizeof(expected),old,&ignored);
+    return TRUE;
+}
+
 static BOOL install_race_culling(BYTE *base){
     WCHAR value[16];
     WCHAR client[MAX_PATH];wcsncpy(client,config_path,MAX_PATH-1);client[MAX_PATH-1]=0;
@@ -34,7 +49,8 @@ static BOOL install_race_culling(BYTE *base){
     if(!readable(base+0x278ea0,8)||!readable(base+0x27959c,8))return FALSE;
     race_culling_force_visible=(RaceCullingVisible)(base+0x278ea0);
     race_culling_on_visible=(RaceCullingVisible)(base+0x27959c);
-    char detail[128];snprintf(detail,sizeof(detail),"Track culling disable enabled; trace=%d.",race_culling_trace?1:0);log_line(detail);
+    BOOL retained=race_culling_retain_blocks(base);
+    char detail[160];snprintf(detail,sizeof(detail),"Track culling disable enabled; trace=%d; block retention=%d.",race_culling_trace?1:0,retained?1:0);log_line(detail);
     return TRUE;
 }
 
