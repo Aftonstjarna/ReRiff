@@ -112,12 +112,23 @@ static BOOL race_track_pool_install(BYTE *base){
         char line[160];snprintf(line,sizeof(line),"Track ctor relocation skipped: MethodDef RVA is %08X.",(unsigned)*slot);log_line(line);
         return FALSE;
     }
-    void *memory=VirtualAlloc(NULL,RERIFF_TRACK_CTOR_BLOB_SIZE,MEM_COMMIT|MEM_RESERVE,PAGE_EXECUTE_READWRITE);
+    /* Prefer the page range immediately after the mapped image. This keeps
+     * the redirected RVA adjacent to the image instead of in an arbitrary
+     * heap address; fall back to any executable allocation if it is taken. */
+    void *memory=NULL;
+    if(readable(base+0x3c,4)){
+        DWORD e_lfanew=*(DWORD *)(base+0x3c);
+        if(readable(base+e_lfanew+0x18+0x38,4)){
+            DWORD image_size=*(DWORD *)(base+e_lfanew+0x18+0x38);
+            BYTE *preferred=(BYTE *)(base+((image_size+0xfff)&~0xfffu));
+            memory=VirtualAlloc(preferred,RERIFF_TRACK_CTOR_BLOB_SIZE,MEM_COMMIT|MEM_RESERVE,PAGE_EXECUTE_READWRITE);
+        }
+    }
+    if(!memory)memory=VirtualAlloc(NULL,RERIFF_TRACK_CTOR_BLOB_SIZE,MEM_COMMIT|MEM_RESERVE,PAGE_EXECUTE_READWRITE);
     if(!memory){
         log_line("Track ctor relocation: VirtualAlloc failed.");
         return FALSE;
-    }
-    memcpy(memory,race_track_ctor_blob,RERIFF_TRACK_CTOR_BLOB_SIZE);
+    }    memcpy(memory,race_track_ctor_blob,RERIFF_TRACK_CTOR_BLOB_SIZE);
     DWORD rva=(DWORD)((BYTE *)memory-base),old,ignored;
     if(!VirtualProtect(slot,4,PAGE_READWRITE,&old)){
         log_line("Track ctor relocation: metadata page is not writable.");
