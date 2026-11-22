@@ -50,9 +50,12 @@ static void race_culling_prewarm(BYTE *base){
     void *local=*(void **)list;
     if(!readable(local,8))return;
     void *tracker=*(void **)((BYTE *)local+4);
-    if(!readable(tracker,4))return;
+    if(!readable(tracker,124))return;
     void *node=race_culling_back_node(tracker,NULL,NULL);
     if(!node)return;
+    float total=*((float *)((BYTE *)tracker+116)),position=*((float *)((BYTE *)tracker+120));
+    float current=total>0.01f?position/total:0.0f;
+    if(!(current>=0.0f&&current<=1.0f))current=0.0f;
     void **begin=*(void ***)((BYTE *)manager+2720),**end=*(void ***)((BYTE *)manager+2724);
     if(!begin||!end||end<begin||(size_t)((BYTE *)end-(BYTE *)begin)>256*sizeof(void *))return;
     unsigned strips=0;
@@ -60,9 +63,11 @@ static void race_culling_prewarm(BYTE *base){
         BYTE *strip=(BYTE *)*item;
         if(!readable(strip,424))continue;
         for(int step=0;step<=100;step++)race_culling_strip_tick(strip,1,0,step/100.0f,node);
+        /* Leave each strip's live block set at the car's actual progress. */
+        race_culling_strip_tick(strip,1,0,current,node);
         strips++;
     }
-    char line[160];snprintf(line,sizeof(line),"Photo mode visual prewarm: strips=%u steps=101 node=%p pool=127.",strips,node);log_line(line);
+    char line[192];snprintf(line,sizeof(line),"Photo mode visual prewarm: strips=%u steps=101 node=%p progress=%.4f pool=127.",strips,node,current);log_line(line);
 }
 
 /* gaTrackStrip.{ctor} creates three 64-entry pools: the elVisual3d vector at
@@ -216,9 +221,12 @@ static void race_culling_strips(BYTE *base){
             ||((size_t)(blocks_end-blocks)%88)||!readable(blocks,(size_t)(blocks_end-blocks)))continue;
         void **visuals=*(void ***)(strip+164);
         if(!visuals||!readable(visuals,4))continue;
+        unsigned strip_blocks=0,strip_unique=0;BYTE strip_seen[256]={0};
         for(BYTE *block=blocks;block<blocks_end;block+=88){
             int index=*((int *)(block+80));
             if(index<0||index>=10000)continue;
+            strip_blocks++;
+            if(index<256&&!strip_seen[index]){strip_seen[index]=1;strip_unique++;}
             float progress=*((float *)(block+76));
             if(race_culling_strip_block_count==0||progress<race_culling_block_min)race_culling_block_min=progress;
             if(race_culling_strip_block_count==0||progress>race_culling_block_max)race_culling_block_max=progress;
@@ -237,6 +245,11 @@ static void race_culling_strips(BYTE *base){
             *((BYTE *)visual+20)=1;
             race_culling_visual(visual,1);
             race_culling_strip_forced++;
+        }
+        if(race_culling_trace&&(race_culling_frames%120)==0){
+            void **pool_begin=*(void ***)(strip+164),**pool_end=*(void ***)(strip+168);
+            unsigned pool=pool_begin&&pool_end&&pool_end>=pool_begin?(unsigned)(pool_end-pool_begin):0;
+            char detail[160];snprintf(detail,sizeof(detail),"Culling strip type=%d blocks=%u unique=%u current=%d pool=%u.",*((int *)(strip+212)),strip_blocks,strip_unique,*((int *)(strip+188)),pool);log_line(detail);
         }
     }
 }
