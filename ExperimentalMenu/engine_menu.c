@@ -84,6 +84,9 @@ static WCHAR heading[96]=L"Servers — applies after restart";
 static volatile LONG installed;
 static BOOL restarting,exiting;
 static DWORD restart_started;
+/* Defined with the culling controller after the photo camera; photo entry
+ * uses it to generate the full strip range on demand. */
+static void race_culling_prewarm(BYTE *base);
 #include "../NativeLauncher/restart_protocol.h"
 #define SERVERS_ID 1500
 #define SERVER_ACTION_BASE 1500

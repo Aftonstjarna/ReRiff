@@ -21,6 +21,7 @@ namespace ReRiff {
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void Overlay(IntPtr manager,int state);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int AlphabetJump(IntPtr menu,int letter);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void CullingVisible(IntPtr visual,bool visible);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void CullingTrackTick(IntPtr manager,IntPtr progress);
         [DllImport("ReRiff.Notify.dll",CallingConvention=CallingConvention.Cdecl,ExactSpelling=true)]
         private static extern int ReRiffConfigurePickerAlphabet(IntPtr callback);
         private static readonly List<Delegate> Roots = new List<Delegate>();
@@ -28,6 +29,8 @@ namespace ReRiff {
         private static readonly CullingVisible cullingCallback=ObserveCulling;
         [DllImport("ReRiff.Notify.dll",CallingConvention=CallingConvention.Cdecl,ExactSpelling=true)]
         private static extern int ReRiffConfigureCullingVisible(IntPtr callback);
+        [DllImport("ReRiff.Notify.dll",CallingConvention=CallingConvention.Cdecl,ExactSpelling=true)]
+        private static extern int ReRiffConfigureCullingTrackTick(IntPtr callback);
         private static void ObserveCulling(IntPtr visual,bool visible){
             try{if(cullingOriginal!=null&&visual!=IntPtr.Zero)cullingOriginal(visual,visible);}catch{}
         }
@@ -140,6 +143,14 @@ namespace ReRiff {
                     if(ReRiffConfigureCullingVisible(Marshal.GetFunctionPointerForDelegate(cullingCallback))!=1)throw new IOException("Culling visibility registration refused");
                     Log("Original prop visibility bound for culling disable.");
                 }catch(Exception error){Log("Culling prop visibility unavailable: "+error);}
+                try{
+                    var tick=game.GetMethods(BindingFlags.Static|BindingFlags.Public|BindingFlags.NonPublic)
+                        .SingleOrDefault(m=>m.Name=="gaTrackManager.tickDynamicTrack"&&m.GetParameters().Length==2);
+                    if(tick==null)throw new IOException("Track strip tick signature differs");
+                    var callback=(CullingTrackTick)CreateCall(tick,typeof(CullingTrackTick),false);Roots.Add(callback);
+                    if(ReRiffConfigureCullingTrackTick(Marshal.GetFunctionPointerForDelegate(callback))!=1)throw new IOException("Track strip tick registration refused");
+                    Log("Track strip tick bound for photo prewarm.");
+                }catch(Exception error){Log("Track strip prewarm unavailable: "+error);}
                 try {CustomsUnlocks.Configure(game);}catch(Exception e){Log("Customs unlock setup failed: "+e.Message);}
                 try {HudToggle.Configure(game);}catch(Exception error){Log("HUD Select toggle unavailable: "+error);}
                 try {ProgressionNative.Configure(game);}

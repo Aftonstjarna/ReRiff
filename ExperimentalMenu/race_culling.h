@@ -11,6 +11,7 @@
  */
 typedef void (__thiscall *RaceCullingVisible)(void *,int,BYTE);
 typedef void (__cdecl *RaceCullingVisualVisible)(void *,BYTE);
+typedef void (__cdecl *RaceCullingTrackTick)(void *,float *);
 
 static BOOL race_culling_enabled,race_culling_trace,race_culling_trace_announced,race_culling_visual_announced;
 static unsigned race_culling_frames,race_culling_volume_count,race_culling_valid_count,race_culling_forced_count,race_culling_prop_count,race_culling_prop_forced;
@@ -18,8 +19,27 @@ static unsigned race_culling_ramp_count,race_culling_ramp_forced,race_culling_cu
 static unsigned race_culling_strip_count,race_culling_strip_block_count,race_culling_strip_forced;
 static RaceCullingVisible race_culling_force_visible,race_culling_on_visible;
 static RaceCullingVisualVisible race_culling_visual;
+static RaceCullingTrackTick race_culling_track_tick;
+static void *race_culling_prewarm_manager;
 __declspec(dllexport) int __cdecl ReRiffConfigureCullingVisible(void *callback){
     if(!callback)return 0;race_culling_visual=(RaceCullingVisualVisible)callback;return 1;
+}
+__declspec(dllexport) int __cdecl ReRiffConfigureCullingTrackTick(void *callback){
+    if(!callback)return 0;race_culling_track_tick=(RaceCullingTrackTick)callback;return 1;
+}
+/* gaTrackManager.tickDynamicTrack accepts a forced progress pointer. Drive it
+ * through the entire track once on photo-mode entry; retained blocks remain
+ * resident because tickBlocks no longer retires them. */
+static void race_culling_prewarm(BYTE *base){
+    if(!race_culling_enabled||!race_culling_track_tick||!readable(base+0x7dce7c,4))return;
+    void *manager=*(void **)(base+0x7dce7c);
+    if(!readable(manager,2736)||manager==race_culling_prewarm_manager)return;
+    for(int step=0;step<=100;step++){
+        float progress=step/100.0f;
+        race_culling_track_tick(manager,&progress);
+    }
+    race_culling_prewarm_manager=manager;
+    log_line("Photo mode track prewarm: 101 progress steps.");
 }
 
 /* tickBlocks retires the oldest block through the branch at IL_01e7. Turn
