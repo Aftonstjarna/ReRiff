@@ -14,8 +14,6 @@ typedef void (__cdecl *RaceCullingVisualVisible)(void *,BYTE);
 typedef void (__cdecl *RaceCullingTrackTick)(void *,float *);
 typedef void (__cdecl *RaceCullingStripTick)(void *,BYTE,BYTE,float,void *);
 typedef void *(__cdecl *RaceCullingBackNode)(void *,void **,float *);
-typedef void (__cdecl *RaceCullingResize)(void *,unsigned);
-typedef void *(__cdecl *RaceCullingStripCtor)(void *,int);
 
 static BOOL race_culling_enabled,race_culling_trace,race_culling_trace_announced,race_culling_visual_announced;
 static unsigned race_culling_frames,race_culling_volume_count,race_culling_valid_count,race_culling_forced_count,race_culling_prop_count,race_culling_prop_forced;
@@ -29,9 +27,6 @@ static RaceCullingVisualVisible race_culling_visual;
 static RaceCullingTrackTick race_culling_track_tick;
 static RaceCullingStripTick race_culling_strip_tick;
 static RaceCullingBackNode race_culling_back_node;
-static RaceCullingResize race_culling_visual_resize,race_culling_flags_resize;
-static RaceCullingStripCtor race_culling_strip_ctor;
-static void *race_culling_expanded_manager;
 __declspec(dllexport) int __cdecl ReRiffConfigureCullingVisible(void *callback){
     if(!callback)return 0;race_culling_visual=(RaceCullingVisualVisible)callback;return 1;
 }
@@ -44,93 +39,13 @@ __declspec(dllexport) int __cdecl ReRiffConfigureCullingStripTick(void *callback
 __declspec(dllexport) int __cdecl ReRiffConfigureCullingBackNode(void *callback){
     if(!callback)return 0;race_culling_back_node=(RaceCullingBackNode)callback;return 1;
 }
-__declspec(dllexport) int __cdecl ReRiffConfigureCullingPool(void *ctor,void *visual_resize,void *flags_resize){
-    if(!ctor||!visual_resize||!flags_resize)return 0;
-    race_culling_strip_ctor=(RaceCullingStripCtor)ctor;
-    race_culling_visual_resize=(RaceCullingResize)visual_resize;
-    race_culling_flags_resize=(RaceCullingResize)flags_resize;
-    return 1;
-}
-static void *race_culling_prewarm_done;
 static void race_culling_prewarm(BYTE *base){
-    if(!race_culling_enabled||!race_culling_strip_tick||!race_culling_back_node||!race_culling_strip_ctor
-        ||!race_culling_visual_resize||!race_culling_flags_resize||!readable(base+0x7dce7c,4))return;
-    void *manager=*(void **)(base+0x7dce7c);
-    if(!readable(manager,2736)||manager==race_culling_prewarm_done)return;
-    if(!readable(base+0x7d5930,4))return;
-    void *players=*(void **)(base+0x7d5930);
-    if(!readable(players,52))return;
-    void *list=*(void **)((BYTE *)players+48);
-    if(!readable(list,4))return;
-    void *local=*(void **)list;
-    if(!readable(local,8))return;
-    void *tracker=*(void **)((BYTE *)local+4);
-    if(!readable(tracker,124))return;
-    void *node=race_culling_back_node(tracker,NULL,NULL);
-    if(!node)return;
-    void **begin=*(void ***)((BYTE *)manager+2720),**end=*(void ***)((BYTE *)manager+2724);
-    if(!begin||!end||end<begin||(size_t)((BYTE *)end-(BYTE *)begin)>256*sizeof(void *))return;
-
-    unsigned expanded=0;
-    if(manager!=race_culling_expanded_manager){
-        for(void **item=begin;item<end;item++){
-            BYTE *strip=(BYTE *)*item;
-            if(!readable(strip,424))continue;
-            int type=*((int *)(strip+212));
-            if(type!=8&&type!=9)continue; /* the two pools that exceed 127 */
-            BYTE *vis_begin=*(BYTE **)(strip+164),*vis_end=*(BYTE **)(strip+168);
-            if(!vis_begin||!vis_end||vis_end<vis_begin)continue;
-            unsigned pool=(unsigned)((vis_end-vis_begin)/4);
-            if(pool<1||pool>512)continue;
-            unsigned pools=5; /* 5 * 127 = 635 slots */
-            unsigned newsize=pools*pool;
-            void *extras[4]={0};
-            BOOL ok=TRUE;
-            for(unsigned i=0;i<pools-1&&ok;i++){
-                BYTE *extra=(BYTE *)VirtualAlloc(NULL,424,MEM_COMMIT|MEM_RESERVE,PAGE_READWRITE);
-                if(!extra||!race_culling_strip_ctor(extra,type)){ok=FALSE;break;}
-                BYTE *eb=*(BYTE **)(extra+164),*ee=*(BYTE **)(extra+168);
-                if(!eb||!ee||ee<eb||(unsigned)((ee-eb)/4)!=pool){ok=FALSE;break;}
-                extras[i]=extra;
-            }
-            if(!ok)continue;
-            race_culling_visual_resize((BYTE *)strip+164,newsize);
-            race_culling_flags_resize((BYTE *)strip+176,newsize);
-            void **dest=*(void ***)((BYTE *)strip+164);
-            BYTE *flags=*(BYTE **)((BYTE *)strip+176);
-            if(!dest||!flags)continue;
-            for(unsigned i=0;i<pools-1;i++){
-                BYTE *extra=extras[i];
-                void **src=*(void ***)((BYTE *)extra+164);
-                BYTE *src_flags=*(BYTE **)((BYTE *)extra+176);
-                if(!src||!src_flags)continue;
-                memcpy(dest+(i+1)*pool,src,pool*sizeof(void *));
-                memcpy(flags+(i+1)*pool*8,src_flags,pool*8);
-            }
-            BYTE *blocks=*(BYTE **)(strip+152),*blocks_end=*(BYTE **)(strip+156);
-            if(blocks&&blocks_end>=blocks&&!((blocks_end-blocks)%88)){
-                unsigned count=(unsigned)((blocks_end-blocks)/88);
-                for(unsigned i=0;i<count;i++)*((int *)(blocks+i*88+80))=i;
-                *((int *)(strip+188))=count%newsize;
-            }
-            expanded++;
-        }
-        race_culling_expanded_manager=manager;
+    (void)base;
+    static BOOL warned;
+    if(!warned){
+        warned=TRUE;
+        log_line("Photo mode prewarm disabled: strip 9 needs 323 visuals and strip 8 needs 289; pool is 127.");
     }
-
-    float total=*((float *)((BYTE *)tracker+116)),position=*((float *)((BYTE *)tracker+120));
-    float current=total>0.01f?position/total:0.0f;
-    if(!(current>=0.0f&&current<=1.0f))current=0.0f;
-    unsigned strips=0;
-    for(void **item=begin;item<end;item++){
-        BYTE *strip=(BYTE *)*item;
-        if(!readable(strip,424))continue;
-        for(int step=0;step<=100;step++)race_culling_strip_tick(strip,1,0,step/100.0f,node);
-        race_culling_strip_tick(strip,1,0,current,node);
-        strips++;
-    }
-    race_culling_prewarm_done=manager;
-    char line[200];snprintf(line,sizeof(line),"Photo mode visual prewarm: strips=%u steps=101 expanded=%u progress=%.4f pool=635.",strips,expanded,current);log_line(line);
 }
 
 /* gaTrackStrip.{ctor} creates three 64-entry pools: the elVisual3d vector at
@@ -157,14 +72,8 @@ static BOOL race_culling_expand_pool(BYTE *base){
  * the post-tick visual pass keeps their visuals visible. Applied before the
  * first race tick so the CLR has not compiled this method yet. */
 static BOOL race_culling_retain_blocks(BYTE *base){
-    BYTE *site=base+0x26c624;
-    static const BYTE expected[]={0x11,0x08,0x15,0x2e,0x33};
-    if(!readable(site,sizeof(expected))||memcmp(site,expected,sizeof(expected)))return FALSE;
-    DWORD old,ignored;
-    if(!VirtualProtect(site,sizeof(expected),PAGE_READWRITE,&old))return FALSE;
-    site[3]=0x2b;
-    VirtualProtect(site,sizeof(expected),old,&ignored);
-    return TRUE;
+    (void)base;
+    return FALSE;
 }
 static BOOL install_race_culling(BYTE *base){
     WCHAR value[16];
