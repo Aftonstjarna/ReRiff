@@ -39,6 +39,14 @@ static void __thiscall postfx_bloom_hook(void *device,BYTE enable,PostFxColour c
     if(postfx_bloom_original)postfx_bloom_original(device,enable,colour,intensity,view);
 }
 
+static BOOL postfx_executable(const void *p,size_t count){
+    MEMORY_BASIC_INFORMATION info;
+    if(!p||!VirtualQuery(p,&info,sizeof(info))||info.State!=MEM_COMMIT)return FALSE;
+    if(!(info.Protect&(PAGE_EXECUTE|PAGE_EXECUTE_READ|PAGE_EXECUTE_READWRITE|PAGE_EXECUTE_WRITECOPY)))return FALSE;
+    uintptr_t start=(uintptr_t)p,end=(uintptr_t)info.BaseAddress+info.RegionSize;
+    return start<=end&&count<=end-start;
+}
+
 static BOOL postfx_install(BYTE *base){
     postfx_load();
     if(postfx_installed)return TRUE;
@@ -49,14 +57,14 @@ static BOOL postfx_install(BYTE *base){
     if(!readable(vtable,284))return FALSE;
     PostFxDofFn dof=(PostFxDofFn)vtable[58];
     PostFxBloomFn bloom=(PostFxBloomFn)vtable[70];
-    if(!readable((void *)dof,8)||!readable((void *)bloom,8))return FALSE;
+    if(!postfx_executable((void *)dof,8)||!postfx_executable((void *)bloom,8))return FALSE;
     DWORD old,ignored;
     if(!VirtualProtect(vtable,284,PAGE_READWRITE,&old))return FALSE;
     postfx_dof_original=dof;postfx_bloom_original=bloom;
     vtable[58]=(void *)postfx_dof_hook;vtable[70]=(void *)postfx_bloom_hook;
     VirtualProtect(vtable,284,old,&ignored);
     postfx_installed=TRUE;
-    char detail[160];snprintf(detail,sizeof(detail),"Post-effect toggles ready; dof=%d bloom=%d vtable=%p.",postfx_dof_enabled?1:0,postfx_bloom_enabled?1:0,vtable);log_line(detail);
+    char detail[200];snprintf(detail,sizeof(detail),"Post-effect toggles ready; dof=%d bloom=%d vtable=%p dof_fn=%p bloom_fn=%p.",postfx_dof_enabled?1:0,postfx_bloom_enabled?1:0,vtable,(void *)dof,(void *)bloom);log_line(detail);
     return TRUE;
 }
 
