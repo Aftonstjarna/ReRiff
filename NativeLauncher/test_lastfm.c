@@ -102,11 +102,14 @@ int wmain(int argc,WCHAR **argv){
     SendMessageW(controls_enable,BM_SETCHECK,BST_CHECKED,0);
     SetWindowTextW(controls_fov,L"-5");SetWindowTextW(controls_zoom,L"1.25");
     SendMessageW(controls_invert_x,BM_SETCHECK,BST_CHECKED,0);SendMessageW(controls_invert_y,BM_SETCHECK,BST_UNCHECKED,0);
-    controls_pick(controls_free_button,L"right_thumb");SetWindowTextW(controls_free_key,L"V");
-    controls_pick(controls_hud_button,L"back");SetWindowTextW(controls_hud_key,L"H");
+    SetWindowTextW(controls_free_key,L"V");
+    SetWindowTextW(controls_hud_key,L"H");
     controls_pick(controls_mouse,L"middle");
+    CHECK(WritePrivateProfileStringW(L"controls",L"free_look_button",L"left_thumb",controls_ini));
+    CHECK(WritePrivateProfileStringW(L"controls",L"hud_button",L"start",controls_ini));
+    CHECK(WritePrivateProfileStringW(L"controls",L"photo_mode_button",L"a+b",controls_ini));
     SendMessageW(controls_photo_enable,BM_SETCHECK,BST_CHECKED,0);SendMessageW(controls_photo_hud,BM_SETCHECK,BST_UNCHECKED,0);SendMessageW(controls_photo_invert_strafe,BM_SETCHECK,BST_CHECKED,0);
-    controls_pick(controls_photo_button,L"left_thumb+right_thumb");SetWindowTextW(controls_photo_key,L"P");SetWindowTextW(controls_photo_speed,L"12.5");
+    SetWindowTextW(controls_photo_key,L"P");SetWindowTextW(controls_photo_speed,L"12.5");
     SendMessageW(host,WM_COMMAND,MAKEWPARAM(CONTROLS_SAVE,BN_CLICKED),(LPARAM)controls_save);
     WCHAR client[CAP];path(client,L"client.ini");
     CHECK(GetPrivateProfileIntW(L"camera",L"race_orbit",0,client)==1&&GetPrivateProfileIntW(L"camera",L"invert_x",0,client)==1);
@@ -118,7 +121,9 @@ int wmain(int argc,WCHAR **argv){
     GetPrivateProfileStringW(L"controls",L"free_look_key",L"",value,64,client);CHECK(!wcscmp(value,L"V"));
     GetPrivateProfileStringW(L"controls",L"hud_key",L"",value,64,client);CHECK(!wcscmp(value,L"H"));
     GetPrivateProfileStringW(L"controls",L"free_look_mouse",L"",value,64,client);CHECK(!wcscmp(value,L"middle"));
-    GetPrivateProfileStringW(L"controls",L"photo_mode_button",L"",value,64,client);CHECK(!wcscmp(value,L"left_thumb+right_thumb"));
+    GetPrivateProfileStringW(L"controls",L"free_look_button",L"",value,64,client);CHECK(!wcscmp(value,L"left_thumb"));
+    GetPrivateProfileStringW(L"controls",L"hud_button",L"",value,64,client);CHECK(!wcscmp(value,L"start"));
+    GetPrivateProfileStringW(L"controls",L"photo_mode_button",L"",value,64,client);CHECK(!wcscmp(value,L"a+b"));
     GetPrivateProfileStringW(L"controls",L"photo_mode_key",L"",value,64,client);CHECK(!wcscmp(value,L"P"));
     controls_reload();
     CHECK(SendMessageW(controls_photo_enable,BM_GETCHECK,0,0)==BST_CHECKED);
@@ -126,7 +131,6 @@ int wmain(int argc,WCHAR **argv){
     CHECK(SendMessageW(controls_photo_invert_strafe,BM_GETCHECK,0,0)==BST_CHECKED);
     GetWindowTextW(controls_photo_key,value,64);CHECK(!wcscmp(value,L"P"));
     GetWindowTextW(controls_photo_speed,value,64);CHECK(!wcscmp(value,L"12.5"));
-    controls_text(controls_photo_button,value,64);CHECK(!wcscmp(value,L"left_thumb+right_thumb"));
     for(int mode=0;mode<=2;mode++){
         CHECK(rr_save_fullscreen_mode(ini,mode));CHECK(rr_fullscreen_mode(ini)==mode);
         GetPrivateProfileStringW(L"graphics",L"borderless",L"missing",value,64,ini);CHECK(!wcscmp(value,L"missing"));

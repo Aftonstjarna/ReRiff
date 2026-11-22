@@ -8,8 +8,8 @@
 #include <stdlib.h>
 static void checkbox_help(HWND,const WCHAR *);
 static HWND controls_enable,controls_fov,controls_zoom,controls_invert_x,controls_invert_y;
-static HWND controls_trace,controls_free_button,controls_free_key,controls_hud_button,controls_hud_key;
-static HWND controls_mouse,controls_photo_enable,controls_photo_button,controls_photo_key,controls_photo_hud,controls_photo_speed,controls_photo_invert_strafe,controls_save,controls_first;static WCHAR controls_ini[CAP];
+static HWND controls_trace,controls_free_key,controls_hud_key;
+static HWND controls_mouse,controls_photo_enable,controls_photo_key,controls_photo_hud,controls_photo_speed,controls_photo_invert_strafe,controls_save,controls_first;static WCHAR controls_ini[CAP];
 static HWND controls_controller_enabled;
 #define CONTROLLER_BINDING_COUNT 21
 static HWND controls_controller_bindings[CONTROLLER_BINDING_COUNT];
@@ -442,15 +442,12 @@ static void controls_reload(void){
     GetPrivateProfileStringW(L"camera",L"free_zoom",L"1.0",value,64,controls_ini);SetWindowTextW(controls_zoom,value);
     SendMessageW(controls_invert_x,BM_SETCHECK,GetPrivateProfileIntW(L"camera",L"invert_x",0,controls_ini)?BST_CHECKED:BST_UNCHECKED,0);
     SendMessageW(controls_invert_y,BM_SETCHECK,GetPrivateProfileIntW(L"camera",L"invert_y",0,controls_ini)?BST_CHECKED:BST_UNCHECKED,0);
-    GetPrivateProfileStringW(L"controls",L"free_look_button",L"right_thumb",value,64,controls_ini);controls_pick(controls_free_button,value);
     GetPrivateProfileStringW(L"controls",L"free_look_key",L"",value,64,controls_ini);SetWindowTextW(controls_free_key,value);
-    GetPrivateProfileStringW(L"controls",L"hud_button",L"back",value,64,controls_ini);controls_pick(controls_hud_button,value);
     GetPrivateProfileStringW(L"controls",L"hud_key",L"",value,64,controls_ini);SetWindowTextW(controls_hud_key,value);
     GetPrivateProfileStringW(L"controls",L"free_look_mouse",L"right",value,64,controls_ini);controls_pick(controls_mouse,value);
     SendMessageW(controls_photo_enable,BM_SETCHECK,GetPrivateProfileIntW(L"camera",L"photo_mode",0,controls_ini)?BST_CHECKED:BST_UNCHECKED,0);
     SendMessageW(controls_photo_hud,BM_SETCHECK,GetPrivateProfileIntW(L"camera",L"photo_hide_hud",1,controls_ini)?BST_CHECKED:BST_UNCHECKED,0);
     SendMessageW(controls_photo_invert_strafe,BM_SETCHECK,GetPrivateProfileIntW(L"camera",L"photo_invert_strafe",0,controls_ini)?BST_CHECKED:BST_UNCHECKED,0);
-    GetPrivateProfileStringW(L"controls",L"photo_mode_button",L"left_thumb+right_thumb",value,64,controls_ini);controls_pick(controls_photo_button,value);
     GetPrivateProfileStringW(L"controls",L"photo_mode_key",L"F9",value,64,controls_ini);SetWindowTextW(controls_photo_key,value);
     GetPrivateProfileStringW(L"camera",L"photo_speed",L"8.0",value,64,controls_ini);SetWindowTextW(controls_photo_speed,value);
     SendMessageW(controls_controller_enabled,BM_SETCHECK,GetPrivateProfileIntW(L"controller",L"enabled",1,controls_ini)?BST_CHECKED:BST_UNCHECKED,0);
@@ -464,12 +461,12 @@ static void controls_reload(void){
 }
 static BOOL controls_save_settings(void){
     path(controls_ini,L"client.ini");
-    WCHAR fov[32],zoom[32],free_button[64],free_key[64],hud_button[64],hud_key[64],mouse[64],photo_button[64],photo_key[64],photo_speed[32];
+    WCHAR fov[32],zoom[32],free_key[64],hud_key[64],mouse[64],photo_key[64],photo_speed[32];
     GetWindowTextW(controls_fov,fov,32);GetWindowTextW(controls_zoom,zoom,32);
-    controls_text(controls_free_button,free_button,64);GetWindowTextW(controls_free_key,free_key,64);
-    controls_text(controls_hud_button,hud_button,64);GetWindowTextW(controls_hud_key,hud_key,64);
+    GetWindowTextW(controls_free_key,free_key,64);
+    GetWindowTextW(controls_hud_key,hud_key,64);
     controls_text(controls_mouse,mouse,64);
-    controls_text(controls_photo_button,photo_button,64);GetWindowTextW(controls_photo_key,photo_key,64);
+    GetWindowTextW(controls_photo_key,photo_key,64);
     GetWindowTextW(controls_photo_speed,photo_speed,32);
     float fov_value=(float)_wtof(fov),zoom_value=(float)_wtof(zoom),speed_value=(float)_wtof(photo_speed);
     if(fov_value<-100)fov_value=-100;if(fov_value>100)fov_value=100;
@@ -481,16 +478,13 @@ static BOOL controls_save_settings(void){
         &&WritePrivateProfileStringW(L"camera",L"free_zoom",zoom,controls_ini)
         &&WritePrivateProfileStringW(L"camera",L"invert_x",SendMessageW(controls_invert_x,BM_GETCHECK,0,0)==BST_CHECKED?L"1":L"0",controls_ini)
         &&WritePrivateProfileStringW(L"camera",L"invert_y",SendMessageW(controls_invert_y,BM_GETCHECK,0,0)==BST_CHECKED?L"1":L"0",controls_ini)
-        &&WritePrivateProfileStringW(L"controls",L"free_look_button",free_button,controls_ini)
         &&WritePrivateProfileStringW(L"controls",L"free_look_key",free_key,controls_ini)
-        &&WritePrivateProfileStringW(L"controls",L"hud_button",hud_button,controls_ini)
         &&WritePrivateProfileStringW(L"controls",L"hud_key",hud_key,controls_ini)
         &&WritePrivateProfileStringW(L"controls",L"free_look_mouse",mouse,controls_ini)
         &&WritePrivateProfileStringW(L"camera",L"photo_mode",SendMessageW(controls_photo_enable,BM_GETCHECK,0,0)==BST_CHECKED?L"1":L"0",controls_ini)
         &&WritePrivateProfileStringW(L"camera",L"photo_hide_hud",SendMessageW(controls_photo_hud,BM_GETCHECK,0,0)==BST_CHECKED?L"1":L"0",controls_ini)
         &&WritePrivateProfileStringW(L"camera",L"photo_invert_strafe",SendMessageW(controls_photo_invert_strafe,BM_GETCHECK,0,0)==BST_CHECKED?L"1":L"0",controls_ini)
         &&WritePrivateProfileStringW(L"camera",L"photo_speed",photo_speed,controls_ini)
-        &&WritePrivateProfileStringW(L"controls",L"photo_mode_button",photo_button,controls_ini)
         &&WritePrivateProfileStringW(L"controls",L"photo_mode_key",photo_key,controls_ini)
         &&WritePrivateProfileStringW(L"controller",L"enabled",SendMessageW(controls_controller_enabled,BM_GETCHECK,0,0)==BST_CHECKED?L"1":L"0",controls_ini);
     for(int i=0;i<CONTROLLER_BINDING_COUNT&&ok;i++){
@@ -502,8 +496,9 @@ static BOOL controls_save_settings(void){
     return ok;
 }
 static void controls_create(void){
-    /* Hotkeys: ReRiff camera/photo settings and the existing controller
-     * hotkey bindings. */
+    /* Hotkeys: ReRiff camera/photo settings. Controller buttons are remapped
+     * on the Controller tab, so this page only edits keyboard and camera
+     * options. */
     controls_part=CONTROLS_HOTKEYS;
     controls_enable=control(L"BUTTON",L"Enable free-look camera",BS_AUTOCHECKBOX|WS_TABSTOP,22,22,280,28,0);
     control(L"STATIC",L"FOV offset (degrees)",0,22,54,150,24,0);
@@ -516,25 +511,18 @@ static void controls_create(void){
     controls_mouse=control(L"COMBOBOX",L"",CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP,190,146,112,160,0);
     controls_photo_enable=control(L"BUTTON",L"Enable photo mode",BS_AUTOCHECKBOX|WS_TABSTOP,22,178,280,28,0);
     controls_photo_hud=control(L"BUTTON",L"Hide HUD in photo mode",BS_AUTOCHECKBOX|WS_TABSTOP,22,210,280,28,0);
-    controls_photo_invert_strafe=control(L"BUTTON",L"Invert photo strafe X",BS_AUTOCHECKBOX|WS_TABSTOP,312,246,280,28,0);
-    control(L"STATIC",L"Free-look button",0,312,22,130,24,0);
-    controls_free_button=control(L"COMBOBOX",L"",CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP,452,18,160,200,0);
-    control(L"STATIC",L"HUD button",0,312,86,130,24,0);
-    controls_hud_button=control(L"COMBOBOX",L"",CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP,452,82,160,200,0);
-    control(L"STATIC",L"Photo mode button",0,312,150,130,24,0);
-    controls_photo_button=control(L"COMBOBOX",L"",CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP,452,146,160,200,0);
-    SendMessageW(controls_photo_button,CB_SETDROPPEDWIDTH,220,0);
-    control(L"STATIC",L"Photo speed",0,312,214,130,24,0);
-    controls_photo_speed=control(L"EDIT",L"8.0",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,452,210,80,28,0);
+    control(L"STATIC",L"Photo speed",0,312,174,130,24,0);
+    controls_photo_speed=control(L"EDIT",L"8.0",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,452,170,80,28,0);
+    controls_photo_invert_strafe=control(L"BUTTON",L"Invert photo strafe X",BS_AUTOCHECKBOX|WS_TABSTOP,312,206,280,28,0);
+    restart_note(L"Controller buttons are on the Controller tab",312,246,300);
     controls_save=control(L"BUTTON",L"Save settings",WS_TABSTOP,22,240,220,32,CONTROLS_SAVE);
     controls_first=controls_enable;
-    checkbox_help(controls_enable,L"Keep the normal chase camera and use the right stick/mouse to look around while free look is toggled on. Press R3 or the configured button/key to toggle. Restart the game after changes.");
+    checkbox_help(controls_enable,L"Keep the normal chase camera and use the right stick/mouse to look around while free look is toggled on. Press R3 (remap it on the Controller tab) or the configured key to toggle. Restart the game after changes.");
     checkbox_help(controls_invert_x,L"Invert horizontal look from the right stick or mouse. 0 in client.ini is the preferred direction; this checkbox stores 1. It does not change photo-mode strafing.");
     checkbox_help(controls_invert_y,L"Invert vertical look from the right stick or mouse. 0 in client.ini is the preferred direction; this checkbox stores 1.");
-    checkbox_help(controls_photo_enable,L"Enable photo mode. The default controller chord is L3+R3 and the default keyboard key is F9. During a race it pauses without opening the pause menu and gives you a free camera.");
+    checkbox_help(controls_photo_enable,L"Enable photo mode. The default controller chord is L3+R3 (remap those on the Controller tab) and the default keyboard key is F9. During a race it pauses without opening the pause menu and gives you a free camera.");
     checkbox_help(controls_photo_hud,L"Hide the complete race HUD while photo mode is active and restore it when photo mode ends.");
     checkbox_help(controls_photo_invert_strafe,L"Flip only the photo-mode left-stick and A/D strafe direction. This does not affect right-stick look.");
-    checkbox_help(controls_photo_button,L"Controller chord for photo mode. Separate buttons with +. The default is left_thumb+right_thumb (L3+R3).");
     checkbox_help(controls_photo_speed,L"Free-camera speed in game units per second. Hold the right trigger or Shift for a 3x boost.");
     checkbox_help(controls_mouse,L"Mouse button held while using free look or photo mode to capture mouse movement.");
 
@@ -566,23 +554,6 @@ static void controls_create(void){
     controls_save=control(L"BUTTON",L"Save settings",WS_TABSTOP,14,210,210,30,CONTROLS_SAVE);
     checkbox_help(controls_controller_enabled,L"Enable the SDL3 XInput proxy remap table. Restart the game after saving. The game receives the virtual controls selected on this tab. Chords such as L3+R3 require every listed button.");
     restart_note(L"Click a binding, press one button or a chord, then release. Delete clears it.",14,246,630);
-    graphics_choice(controls_free_button,L"right_thumb",0);graphics_choice(controls_free_button,L"left_thumb",0);
-    graphics_choice(controls_free_button,L"back",0);graphics_choice(controls_free_button,L"start",0);
-    graphics_choice(controls_free_button,L"left_shoulder",0);graphics_choice(controls_free_button,L"right_shoulder",0);
-    graphics_choice(controls_free_button,L"a",0);graphics_choice(controls_free_button,L"b",0);
-    graphics_choice(controls_free_button,L"x",0);graphics_choice(controls_free_button,L"y",0);
-    graphics_choice(controls_free_button,L"dpad_up",0);graphics_choice(controls_free_button,L"dpad_down",0);
-    graphics_choice(controls_free_button,L"dpad_left",0);graphics_choice(controls_free_button,L"dpad_right",0);
-    graphics_choice(controls_free_button,L"none",0);
-    for(int i=0;i<(int)SendMessageW(controls_free_button,CB_GETCOUNT,0,0);i++){
-        WCHAR text[64];SendMessageW(controls_free_button,CB_GETLBTEXT,i,(LPARAM)text);controls_add(controls_hud_button,text);
-    }
-    graphics_choice(controls_photo_button,L"left_thumb+right_thumb",0);
-    for(int i=0;i<(int)SendMessageW(controls_free_button,CB_GETCOUNT,0,0);i++){
-        WCHAR text[64];SendMessageW(controls_free_button,CB_GETLBTEXT,i,(LPARAM)text);
-        if(wcscmp(text,L"none"))controls_add(controls_photo_button,text);
-    }
-    graphics_choice(controls_photo_button,L"none",0);
     graphics_choice(controls_mouse,L"right",0);graphics_choice(controls_mouse,L"left",0);
     graphics_choice(controls_mouse,L"middle",0);graphics_choice(controls_mouse,L"none",0);
     controls_reload();
