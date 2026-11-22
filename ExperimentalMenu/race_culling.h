@@ -337,6 +337,20 @@ static void race_culling_strips(BYTE *base){
     for(void **item=begin;item<end;item++){
         BYTE *strip=(BYTE *)*item;
         if(!readable(strip,424))continue;
+        if(race_culling_trace&&(race_culling_frames%120)==0){
+            void **pool_begin=*(void ***)(strip+164),**pool_end=*(void ***)(strip+168);
+            unsigned pool=pool_begin&&pool_end&&pool_end>=pool_begin?(unsigned)(pool_end-pool_begin):0;
+            unsigned mesh_v=0,mesh_t=0;BYTE mesh_visible=0;
+            BYTE *custom=*(BYTE **)(strip+256);
+            if(custom&&readable(custom,180)){
+                BYTE *vb=*(BYTE **)(custom+156),*ve=*(BYTE **)(custom+160);
+                BYTE *tb=*(BYTE **)(custom+168),*te=*(BYTE **)(custom+172);
+                if(vb&&ve&&ve>=vb)mesh_v=(unsigned)((ve-vb)/40);
+                if(tb&&te&&te>=tb)mesh_t=(unsigned)((te-tb)/12);
+                mesh_visible=*((BYTE *)custom+20);
+            }
+            char detail[200];snprintf(detail,sizeof(detail),"Culling strip type=%d pool=%u mesh_v=%u mesh_t=%u mesh_visible=%u.",*((int *)(strip+212)),pool,mesh_v,mesh_t,mesh_visible);log_line(detail);
+        }
         BYTE *blocks=*(BYTE **)(strip+152),*blocks_end=*(BYTE **)(strip+156);
         if(!blocks||!blocks_end||blocks_end<blocks||(size_t)(blocks_end-blocks)>10000*88
             ||((size_t)(blocks_end-blocks)%88)||!readable(blocks,(size_t)(blocks_end-blocks)))continue;
