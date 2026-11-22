@@ -66,17 +66,20 @@ static const WCHAR *controls_axis_names[CONTROLS_AXIS_COUNT]={L"lx",L"ly",L"rx",
 static const WCHAR *controls_axis_short[CONTROLS_AXIS_COUNT]={L"LX",L"LY",L"RX",L"RY",L"LT",L"RT"};
 
 typedef struct { const WCHAR *key,*label,*def; } ControllerBindingRow;
+/* Labels describe the vanilla action each virtual XInput control performs.
+ * The capture button on the right shows the physical SDL coordinate. */
 static const ControllerBindingRow controls_controller_rows[CONTROLLER_BINDING_COUNT]={
-    {L"a",L"A",L"button:a"},{L"b",L"B",L"button:b"},{L"x",L"X",L"button:x"},{L"y",L"Y",L"button:y"},
-    {L"lb",L"Left bumper",L"button:lb"},{L"rb",L"Right bumper",L"button:rb"},
-    {L"back",L"Back",L"button:back"},{L"start",L"Start",L"button:start"},
-    {L"l3",L"L3 click",L"button:l3"},{L"r3",L"R3 click",L"button:r3"},
+    {L"a",L"Boost",L"button:a"},{L"b",L"Cancel",L"button:b"},
+    {L"x",L"Drift",L"button:x"},{L"y",L"Camera",L"button:y"},
+    {L"lb",L"Steer L",L"button:lb"},{L"rb",L"Steer R",L"button:rb"},
+    {L"back",L"Restart",L"button:back"},{L"start",L"Pause",L"button:start"},
+    {L"l3",L"Photo chord",L"button:l3"},{L"r3",L"Free look",L"button:r3"},
     {L"guide",L"Guide",L"button:guide"},
-    {L"dup",L"D-pad up",L"button:dup"},{L"ddown",L"D-pad down",L"button:ddown"},
-    {L"dleft",L"D-pad left",L"button:dleft"},{L"dright",L"D-pad right",L"button:dright"},
-    {L"lx",L"Left stick X",L"axis:lx"},{L"ly",L"Left stick Y",L"axis:ly"},
-    {L"rx",L"Right stick X",L"axis:rx"},{L"ry",L"Right stick Y",L"axis:ry"},
-    {L"lt",L"Left trigger",L"axis:lt"},{L"rt",L"Right trigger",L"axis:rt"}
+    {L"dup",L"Menu up",L"button:dup"},{L"ddown",L"Menu down",L"button:ddown"},
+    {L"dleft",L"Menu left",L"button:dleft"},{L"dright",L"Menu right",L"button:dright"},
+    {L"lx",L"Steer",L"axis:lx"},{L"ly",L"Unused",L"axis:ly"},
+    {L"rx",L"Look X",L"axis:rx"},{L"ry",L"Look Y",L"axis:ry"},
+    {L"lt",L"Brake",L"axis:lt"},{L"rt",L"Accelerate",L"axis:rt"}
 };
 
 static int controls_name_index(const WCHAR *name,const WCHAR **names,int count){
