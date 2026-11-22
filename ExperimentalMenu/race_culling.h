@@ -20,26 +20,23 @@ static unsigned race_culling_strip_count,race_culling_strip_block_count,race_cul
 static RaceCullingVisible race_culling_force_visible,race_culling_on_visible;
 static RaceCullingVisualVisible race_culling_visual;
 static RaceCullingTrackTick race_culling_track_tick;
-static void *race_culling_prewarm_manager;
 __declspec(dllexport) int __cdecl ReRiffConfigureCullingVisible(void *callback){
     if(!callback)return 0;race_culling_visual=(RaceCullingVisualVisible)callback;return 1;
 }
 __declspec(dllexport) int __cdecl ReRiffConfigureCullingTrackTick(void *callback){
     if(!callback)return 0;race_culling_track_tick=(RaceCullingTrackTick)callback;return 1;
 }
-/* gaTrackManager.tickDynamicTrack accepts a forced progress pointer. Drive it
- * through the entire track once on photo-mode entry; retained blocks remain
- * resident because tickBlocks no longer retires them. */
+/* gaTrackManager.tickDynamicTrack advances the strip collision state as well
+ * as the visuals. Forcing progress here removes the car's current collision
+ * and unloads the live track, so the bound tick is not called. A future
+ * prewarm must invoke gaTrackStrip.tick with collision disabled instead. */
 static void race_culling_prewarm(BYTE *base){
-    if(!race_culling_enabled||!race_culling_track_tick||!readable(base+0x7dce7c,4))return;
-    void *manager=*(void **)(base+0x7dce7c);
-    if(!readable(manager,2736)||manager==race_culling_prewarm_manager)return;
-    for(int step=0;step<=100;step++){
-        float progress=step/100.0f;
-        race_culling_track_tick(manager,&progress);
+    (void)base;
+    static BOOL warned;
+    if(!warned){
+        warned=TRUE;
+        log_line("Photo mode track prewarm disabled: forced progress would move collision strips.");
     }
-    race_culling_prewarm_manager=manager;
-    log_line("Photo mode track prewarm: 101 progress steps.");
 }
 
 /* tickBlocks retires the oldest block through the branch at IL_01e7. Turn
