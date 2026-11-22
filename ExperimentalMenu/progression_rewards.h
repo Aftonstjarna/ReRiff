@@ -52,7 +52,7 @@ static void __thiscall reward_race_enter(void *menu,int state){
      * actual singleplayer mode, so this also supports non-isolated saves. */
     progression_ghost_after_race();
     scrobble_completed();
-    race_camera_disable();
+    race_camera_disable();race_photo_disable();
     void *previous=reward_race_context;DWORD previous_thread=reward_context_thread;
     if(progression_domain_active&&progression_load_observed&&readable(menu,400)){
         /* XP/results preparation has completed. Recheck earned main-level

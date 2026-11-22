@@ -15,6 +15,15 @@
 #include <stdlib.h>
 
 static BOOL race_camera_installed,race_camera_announced,race_camera_frame_logged;static unsigned race_camera_frames;
+static BOOL race_orbit_enabled;
+static BOOL race_photo_enabled,race_photo_active,race_photo_paused_by_us,race_photo_hud_hidden,race_photo_hide_hud=TRUE,race_photo_previous,race_photo_chord;
+static WORD race_photo_buttons[4];static int race_photo_button_count;
+static int race_photo_key=VK_F9;
+static float race_photo_speed=8.0f;
+static float race_photo_yaw,race_photo_pitch;
+static float race_photo_position[3],race_photo_base_right[3],race_photo_base_up[3],race_photo_base_forward[3];
+typedef void (__thiscall *RaceSetPaused)(void *,BYTE);
+static RaceSetPaused race_set_paused;
 static int race_camera_mode=3;
 static DWORD race_camera_last_tick;
 static float race_camera_yaw,race_camera_idle;
@@ -83,6 +92,29 @@ static int race_mouse_value(const WCHAR *value){
     return VK_RBUTTON;
 }
 
+static BOOL race_button_down(WORD mask);
+static void race_photo_parse_buttons(const WCHAR *value){
+    race_photo_button_count=0;
+    WCHAR text[64];wcsncpy(text,value?value:L"",63);text[63]=0;
+    WCHAR *p=text;
+    while(*p&&race_photo_button_count<4){
+        while(*p==L' '||*p==L'\t'||*p==L'+'||*p==L',')p++;
+        if(!*p)break;
+        WCHAR *start=p;
+        while(*p&&*p!=L'+'&&*p!=L','&&*p!=L' '&&*p!=L'\t')p++;
+        WCHAR saved=*p;*p=0;
+        WORD mask=race_button_value(start);
+        if(mask)race_photo_buttons[race_photo_button_count++]=mask;
+        *p=saved;
+    }
+}
+
+static BOOL race_photo_chord_down(void){
+    if(!race_photo_button_count)return FALSE;
+    for(int i=0;i<race_photo_button_count;i++)if(!race_button_down(race_photo_buttons[i]))return FALSE;
+    return TRUE;
+}
+
 static BOOL race_button_down(WORD mask){
     if(!mask||!race_xinput_get)return FALSE;
     XINPUT_STATE state;
@@ -98,6 +130,8 @@ static void race_read_controls(const WCHAR *client){
     GetPrivateProfileStringW(L"controls",L"free_look_key",L"",value,64,client);race_free_key=race_key_value(value);
     GetPrivateProfileStringW(L"controls",L"hud_key",L"",value,64,client);race_hud_key=race_key_value(value);
     GetPrivateProfileStringW(L"controls",L"free_look_mouse",L"right",value,64,client);race_free_mouse=race_mouse_value(value);
+    GetPrivateProfileStringW(L"controls",L"photo_mode_button",L"left_thumb+right_thumb",value,64,client);race_photo_parse_buttons(value);
+    GetPrivateProfileStringW(L"controls",L"photo_mode_key",L"F9",value,64,client);race_photo_key=race_key_value(value);
 }
 
 static void race_camera_weight(void *camera,int active,float weight){
@@ -299,6 +333,173 @@ static void race_camera_activate(void *set,float dt,int index){
     }
 }
 
+typedef void (__cdecl *RaceHudToggle)(void);
+static RaceHudToggle race_hud_toggle;
+
+static void race_photo_normalize(float *v){
+    float length=(float)sqrt(v[0]*v[0]+v[1]*v[1]+v[2]*v[2]);
+    if(length>0.00001f){v[0]/=length;v[1]/=length;v[2]/=length;}
+}
+
+static void *race_photo_final_camera(BYTE *base,int *set_index){
+    if(!readable(base+0x7cb408,4))return NULL;
+    void *manager=*(void **)(base+0x7cb408);
+    if(!readable(manager,4))return NULL;
+    for(int index=0;index<12;index++){
+        void *set=((void **)manager)[index];
+        if(!set||!readable(set,12))continue;
+        void *viewport=*(void **)((BYTE *)set+8);
+        if(!readable(viewport,432))continue;
+        void *camera=*(void **)((BYTE *)viewport+428);
+        if(!readable(camera,116))continue;
+        if(set_index)*set_index=index;
+        return camera;
+    }
+    return NULL;
+}
+
+static void race_photo_restore_hud(BYTE *base){
+    if(race_photo_hud_hidden&&readable(base+0x7a2f48,1)&&!*((BYTE *)base+0x7a2f48)&&race_hud_toggle)race_hud_toggle();
+    race_photo_hud_hidden=FALSE;
+}
+
+static BOOL race_photo_begin(BYTE *base){
+    if(!readable(base+0x7d6668,4))return FALSE;
+    void *race=*(void **)(base+0x7d6668);
+    if(!readable(race,13)||*((BYTE *)race+12)){log_line("Photo mode refused: the race is already paused.");return FALSE;}
+    int set_index=-1;void *camera=race_photo_final_camera(base,&set_index);
+    if(!camera){log_line("Photo mode refused: no final race camera is available.");return FALSE;}
+    float *matrix=(float *)((BYTE *)camera+68);
+    for(int row=0;row<3;row++){
+        race_photo_base_right[row]=matrix[row];
+        race_photo_base_up[row]=matrix[3+row];
+        race_photo_base_forward[row]=matrix[6+row];
+        race_photo_position[row]=matrix[9+row];
+    }
+    race_photo_yaw=0;race_photo_pitch=0;
+    if(race_set_paused)race_set_paused(race,1);else *((BYTE *)race+12)=1;
+    race_photo_paused_by_us=TRUE;
+    if(race_photo_hide_hud&&readable(base+0x7a2f48,1)&&*((BYTE *)base+0x7a2f48)&&race_hud_toggle){
+        race_hud_toggle();race_photo_hud_hidden=TRUE;
+    }
+    race_photo_active=TRUE;
+    race_camera_free=FALSE;race_camera_restored=FALSE;race_camera_reset=TRUE;
+    char line[128];snprintf(line,sizeof(line),"Photo mode enabled; race paused, camera set %d.",set_index);log_line(line);
+    return TRUE;
+}
+
+static void race_photo_end(BYTE *base,BOOL resume){
+    if(!race_photo_active)return;
+    race_photo_active=FALSE;
+    race_photo_restore_hud(base);
+    if(resume&&race_photo_paused_by_us&&readable(base+0x7d6668,4)){
+        void *race=*(void **)(base+0x7d6668);
+        if(readable(race,13)&&*((BYTE *)race+12)){
+            if(race_set_paused)race_set_paused(race,0);else *((BYTE *)race+12)=0;
+        }
+    }
+    race_photo_paused_by_us=FALSE;
+    race_camera_free=FALSE;race_camera_restored=FALSE;race_camera_reset=TRUE;
+    log_line("Photo mode disabled; normal camera restored.");
+}
+
+static void race_photo_race_enter(void){
+    race_photo_active=FALSE;race_photo_paused_by_us=FALSE;race_photo_hud_hidden=FALSE;
+    race_photo_previous=FALSE;race_photo_chord=FALSE;
+}
+
+static void race_photo_disable(void){
+    if(!race_photo_active)return;
+    race_photo_end((BYTE *)GetModuleHandleW(NULL),TRUE);
+}
+
+static void race_photo_move(float *x,float *y,float *z,BOOL *boost){
+    *x=*y=*z=0;*boost=FALSE;
+    if(race_xinput_get){
+        XINPUT_STATE state;
+        if(race_xinput_get(0,&state)==ERROR_SUCCESS){
+            int lx=state.Gamepad.sThumbLX,ly=state.Gamepad.sThumbLY;
+            if(lx>7849)*x=(lx-7849)/24766.0f;else if(lx<-7849)*x=(lx+7849)/24766.0f;
+            if(ly>7849)*y=(ly-7849)/24766.0f;else if(ly<-7849)*y=(ly+7849)/24766.0f;
+            if(state.Gamepad.wButtons&XINPUT_GAMEPAD_LEFT_SHOULDER)*z-=1.0f;
+            if(state.Gamepad.wButtons&XINPUT_GAMEPAD_RIGHT_SHOULDER)*z+=1.0f;
+            if(state.Gamepad.bRightTrigger>30)*boost=TRUE;
+        }
+    }
+    if(race_key_down('W'))*y+=1.0f;if(race_key_down('S'))*y-=1.0f;
+    if(race_key_down('D'))*x+=1.0f;if(race_key_down('A'))*x-=1.0f;
+    if(race_key_down('E'))*z+=1.0f;if(race_key_down('Q'))*z-=1.0f;
+    if(race_key_down(VK_SPACE))*z+=1.0f;
+    if(race_key_down(VK_LCONTROL)||race_key_down(VK_CONTROL))*z-=1.0f;
+    if(race_key_down(VK_SHIFT))*boost=TRUE;
+}
+
+static void race_photo_update(BYTE *base,float dt){
+    float stickX,stickY,dx,dy;BOOL right;
+    race_camera_axes(&stickX,&stickY,&dx,&dy,&right);
+    if((stickX!=0)||(stickY!=0)||(right&&(dx!=0||dy!=0))){
+        float yawDelta=stickX*2.5f*dt+dx*0.0045f;
+        float pitchDelta=(-stickY*2.0f*dt)-dy*0.0045f;
+        race_photo_yaw+=(race_camera_invert_x?yawDelta:-yawDelta);
+        race_photo_pitch+=(race_camera_invert_y?-pitchDelta:pitchDelta);
+    }
+    if(race_photo_pitch>1.45f)race_photo_pitch=1.45f;
+    if(race_photo_pitch<-1.45f)race_photo_pitch=-1.45f;
+    while(race_photo_yaw>3.14159265f)race_photo_yaw-=6.28318531f;
+    while(race_photo_yaw<-3.14159265f)race_photo_yaw+=6.28318531f;
+    float rightVector[3]={race_photo_base_right[0],race_photo_base_right[1],race_photo_base_right[2]};
+    float upVector[3]={race_photo_base_up[0],race_photo_base_up[1],race_photo_base_up[2]};
+    float forwardVector[3]={race_photo_base_forward[0],race_photo_base_forward[1],race_photo_base_forward[2]};
+    const float worldUp[3]={0,1,0};
+    race_camera_rotate(rightVector,worldUp,race_photo_yaw);
+    race_camera_rotate(upVector,worldUp,race_photo_yaw);
+    race_camera_rotate(forwardVector,worldUp,race_photo_yaw);
+    float pitchAxis[3]={rightVector[0],rightVector[1],rightVector[2]};
+    race_camera_rotate(rightVector,pitchAxis,race_photo_pitch);
+    race_camera_rotate(upVector,pitchAxis,race_photo_pitch);
+    race_camera_rotate(forwardVector,pitchAxis,race_photo_pitch);
+    race_photo_normalize(rightVector);race_photo_normalize(upVector);race_photo_normalize(forwardVector);
+    float moveX,moveY,moveZ;BOOL boost;
+    race_photo_move(&moveX,&moveY,&moveZ,&boost);
+    float movement[3];
+    for(int axis=0;axis<3;axis++)movement[axis]=rightVector[axis]*moveX+forwardVector[axis]*moveY+worldUp[axis]*moveZ;
+    float length=(float)sqrt(movement[0]*movement[0]+movement[1]*movement[1]+movement[2]*movement[2]);
+    if(length>1.0f){movement[0]/=length;movement[1]/=length;movement[2]/=length;}
+    float speed=race_photo_speed*(boost?3.0f:1.0f);
+    for(int axis=0;axis<3;axis++)race_photo_position[axis]+=movement[axis]*speed*dt;
+    int set_index=-1;void *camera=race_photo_final_camera(base,&set_index);
+    if(!camera){race_photo_end(base,TRUE);return;}
+    float *matrix=(float *)((BYTE *)camera+68);
+    for(int row=0;row<3;row++){
+        matrix[row]=rightVector[row];
+        matrix[3+row]=upVector[row];
+        matrix[6+row]=forwardVector[row];
+        matrix[9+row]=race_photo_position[row];
+    }
+    if(race_camera_trace&&(++race_camera_frames%90)==0){
+        char line[180];
+        snprintf(line,sizeof(line),"Photo camera trace frame %u set=%d pos=%.2f,%.2f,%.2f yaw=%.2f pitch=%.2f",race_camera_frames,set_index,race_photo_position[0],race_photo_position[1],race_photo_position[2],race_photo_yaw,race_photo_pitch);
+        log_line(line);
+    }
+}
+
+static void race_photo_frame(BYTE *base,float dt){
+    race_photo_chord=FALSE;
+    if(!race_photo_enabled)return;
+    BOOL chord=race_photo_chord_down()||race_key_down(race_photo_key);
+    race_photo_chord=chord;
+    if(chord&&!race_photo_previous){
+        if(race_photo_active)race_photo_end(base,TRUE);
+        else race_photo_begin(base);
+    }
+    race_photo_previous=chord;
+    if(!race_photo_active)return;
+    if(!readable(base+0x7d6668,4)){race_photo_end(base,FALSE);return;}
+    void *race=*(void **)(base+0x7d6668);
+    if(!readable(race,13)||!*((BYTE *)race+12)){race_photo_end(base,FALSE);return;}
+    race_photo_update(base,dt);
+}
+
 /* Called from the proven race-tick vtable wrapper. The original
  * gaCameraManager.tick still runs and ticks the cameras; this pass only
  * activates the orbit camera and writes its fields before the next tick. */
@@ -317,7 +518,10 @@ static void race_camera_frame(void){
     float dt=race_camera_last_tick?(now-race_camera_last_tick)/1000.0f:0.016f;
     if(dt<0.0f||dt>0.05f)dt=0.016f;
     race_camera_last_tick=now;
+    race_photo_frame(base,dt);
     BOOL r3=race_button_down(race_free_button)||race_key_down(race_free_key);
+    if(race_photo_active||race_photo_chord){race_r3_previous=r3;return;}
+    if(!race_orbit_enabled)return;
     if(r3&&!race_r3_previous){
         race_camera_free=!race_camera_free;race_camera_reset=TRUE;race_camera_pitch=0;race_camera_restored=FALSE;
         if(race_camera_free)for(int index=0;index<12;index++)race_normal_mode[index]=0;
@@ -372,8 +576,6 @@ static void race_camera_frame(void){
     }
 }
 
-typedef void (__cdecl *RaceHudToggle)(void);
-static RaceHudToggle race_hud_toggle;
 static BOOL race_hud_select_previous;
 __declspec(dllexport) int __cdecl ReRiffConfigureHudToggle(void *callback){
     if(!callback)return 0;race_hud_toggle=(RaceHudToggle)callback;return 1;
@@ -387,20 +589,30 @@ static void race_hud_frame(void){
 }
 
 static BOOL install_race_camera(BYTE *base){
-    (void)base;
     WCHAR client[MAX_PATH];wcscpy(client,config_path);WCHAR *slash=wcsrchr(client,L'\\');if(slash)wcscpy(slash+1,L"client.ini");
     race_read_controls(client);
-    if(!GetPrivateProfileIntW(L"camera",L"race_orbit",0,client))return TRUE;
+    BOOL orbit=GetPrivateProfileIntW(L"camera",L"race_orbit",0,client)!=0;
+    BOOL photo=GetPrivateProfileIntW(L"camera",L"photo_mode",0,client)!=0;
+    if(!orbit&&!photo)return TRUE;
     if(race_camera_installed)return TRUE;
+    race_orbit_enabled=orbit;race_photo_enabled=photo;
     race_camera_mode=GetPrivateProfileIntW(L"camera",L"race_orbit_mode",3,client);race_camera_trace=GetPrivateProfileIntW(L"camera",L"race_orbit_trace",0,client);
-    WCHAR value[32];
-    GetPrivateProfileStringW(L"camera",L"free_fov_offset",L"0",value,32,client);race_camera_fov_offset=(float)wcstod(value,NULL);
-    GetPrivateProfileStringW(L"camera",L"free_zoom",L"1",value,32,client);race_camera_zoom=(float)wcstod(value,NULL);
+    WCHAR value[64];
+    GetPrivateProfileStringW(L"camera",L"free_fov_offset",L"0",value,64,client);race_camera_fov_offset=(float)wcstod(value,NULL);
+    GetPrivateProfileStringW(L"camera",L"free_zoom",L"1",value,64,client);race_camera_zoom=(float)wcstod(value,NULL);
     if(race_camera_zoom<0.25f)race_camera_zoom=0.25f;if(race_camera_zoom>4.0f)race_camera_zoom=4.0f;
     race_camera_invert_x=GetPrivateProfileIntW(L"camera",L"invert_x",0,client)!=0;
     race_camera_invert_y=GetPrivateProfileIntW(L"camera",L"invert_y",0,client)!=0;
+    if(race_photo_enabled){
+        GetPrivateProfileStringW(L"camera",L"photo_speed",L"8.0",value,64,client);race_photo_speed=(float)wcstod(value,NULL);
+        if(race_photo_speed<1.0f)race_photo_speed=1.0f;if(race_photo_speed>100.0f)race_photo_speed=100.0f;
+        race_photo_hide_hud=GetPrivateProfileIntW(L"camera",L"photo_hide_hud",1,client)!=0;
+        if(!readable(base+0x21f3d4,8)){race_photo_enabled=FALSE;log_line("Photo mode refused: the pause entry differs from the supported game.");}
+        else race_set_paused=(RaceSetPaused)(base+0x21f3d4);
+    }
+    if(!race_orbit_enabled&&!race_photo_enabled)return TRUE;
     race_camera_input_init();
     race_camera_installed=TRUE;
-    char detail[220];snprintf(detail,sizeof(detail),"Race free-look camera hook ready; mode=%d fov_offset=%.1f zoom=%.2f invert_x=%d invert_y=%d.",race_camera_mode,race_camera_fov_offset,race_camera_zoom,race_camera_invert_x,race_camera_invert_y);log_line(detail);
+    char detail[240];snprintf(detail,sizeof(detail),"Race camera hook ready; free_look=%d photo=%d mode=%d fov_offset=%.1f zoom=%.2f invert_x=%d invert_y=%d photo_speed=%.1f.",race_orbit_enabled?1:0,race_photo_enabled?1:0,race_camera_mode,race_camera_fov_offset,race_camera_zoom,race_camera_invert_x,race_camera_invert_y,race_photo_speed);log_line(detail);
     return TRUE;
 }

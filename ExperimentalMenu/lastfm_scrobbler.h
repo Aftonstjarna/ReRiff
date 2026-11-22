@@ -15,7 +15,7 @@ static void __thiscall scrobble_tick(void *self){
     scrobble_tick_original(self);race_camera_frame();race_hud_frame();race_culling_frame();DWORD now=GetTickCount();
     if(scrobble_observer&&(DWORD)(now-scrobble_last_tick)>=250){scrobble_last_tick=now;scrobble_observer(0,0);}
 }
-static void __thiscall scrobble_enter(void *self,int previous){scrobble_enter_original(self,previous);if(scrobble_observer)scrobble_observer(1,previous);}
+static void __thiscall scrobble_enter(void *self,int previous){scrobble_enter_original(self,previous);race_photo_race_enter();if(scrobble_observer)scrobble_observer(1,previous);}
 static BOOL install_scrobbler(BYTE *base){
     if(!scrobble_observer&&!race_camera_installed&&!race_hud_toggle&&!race_culling_enabled)return TRUE;
     void **table=(void **)(base+0x7a399c);BYTE *enter=base+0x21ef04,*tick=base+0x21f01f;

@@ -609,7 +609,7 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
         checkbox_help(graphics_resolution,L"Use a display resolution reported by Windows or Proton. Current game resolution keeps the game's saved resolution. Restart the game after changes.");
         checkbox_help(graphics_mode,L"Windowed, borderless or exclusive fullscreen. Current game mode keeps the game's original saved fullscreen choice.");
         checkbox_help(graphics_aa,L"Enable ReRiff's anti-aliasing. Uses the same setting as the in-game Graphics menu.");
-        checkbox_help(graphics_culling,L"Keep track sections and props visible even when the camera leaves the normal racing line. This disables the game's PVS track culling and may reduce performance. Restart the game after changes.");
+        checkbox_help(graphics_culling,L"Keep track sections and props visible even when the camera leaves the normal racing line. This disables the game's PVS track culling and may reduce performance. Enable Camera diagnostic trace in Diagnostics, then restart, to log culling activity.");
         checkbox_help(graphics_scale,L"Matches the in-game UI scale: Automatic, or 25–100 in steps of five. 50 is the reference size.");
         checkbox_help(graphics_recent,L"Limit the recent songs shown across Recent Tracks sort tabs. All tracks retains the complete saved catalogue. Bundled tracks are unaffected. Restart the game after changes.");
         restart_note(L"Restart the game after changing these settings",22,298,590);
@@ -623,7 +623,7 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
         creating_diagnostics=TRUE;
         logging_checkbox=control(L"BUTTON",L"Enable diagnostic logging",BS_AUTOCHECKBOX|WS_TABSTOP,22,26,590,32,LOGGING);
         controls_trace=control(L"BUTTON",L"Camera diagnostic trace",BS_AUTOCHECKBOX|WS_TABSTOP,22,60,590,28,CONTROLS_TRACE);
-        checkbox_help(controls_trace,L"Write detailed camera set and camera traces to the game log. Use only for diagnostics; it adds log I/O every 90 frames.");
+        checkbox_help(controls_trace,L"Write detailed camera set, camera and track-culling traces to the game log. Use only for diagnostics; it adds log I/O every 90-120 frames.");
         for(unsigned i=0;i<LOG_CATEGORY_COUNT;i++)
             log_checkboxes[i]=control(L"BUTTON",log_labels[i],BS_AUTOCHECKBOX|WS_TABSTOP,22+(i%2)*300,96+(i/2)*32,290,28,LOG_CATEGORY_BASE+i);
         control(L"BUTTON",L"View update details",WS_TABSTOP,22,290,200,32,UPDATE_DETAILS);
