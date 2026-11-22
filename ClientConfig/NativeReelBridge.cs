@@ -24,6 +24,7 @@ namespace ReRiff {
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void CullingTrackTick(IntPtr manager,IntPtr progress);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void CullingStripTick(IntPtr strip,bool updateVisual,bool updateCollision,float progress,IntPtr node);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate IntPtr CullingBackNode(IntPtr tracker,IntPtr forward,IntPtr nodeT);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate IntPtr CullingStripCtor(IntPtr storage,int type);
         [DllImport("ReRiff.Notify.dll",CallingConvention=CallingConvention.Cdecl,ExactSpelling=true)]
         private static extern int ReRiffConfigurePickerAlphabet(IntPtr callback);
         private static readonly List<Delegate> Roots = new List<Delegate>();
@@ -37,6 +38,8 @@ namespace ReRiff {
         private static extern int ReRiffConfigureCullingStripTick(IntPtr callback);
         [DllImport("ReRiff.Notify.dll",CallingConvention=CallingConvention.Cdecl,ExactSpelling=true)]
         private static extern int ReRiffConfigureCullingBackNode(IntPtr callback);
+        [DllImport("ReRiff.Notify.dll",CallingConvention=CallingConvention.Cdecl,ExactSpelling=true)]
+        private static extern int ReRiffConfigureCullingStripCtor(IntPtr callback);
         [DllImport("ReRiff.Notify.dll",CallingConvention=CallingConvention.Cdecl,ExactSpelling=true)]
         private static extern int ReRiffTrackPoolRelocated();
         [DllImport("ReRiff.Notify.dll",CallingConvention=CallingConvention.Cdecl,ExactSpelling=true)]
@@ -192,11 +195,15 @@ namespace ReRiff {
                         .SingleOrDefault(m=>m.Name=="gaTrackStrip.tick"&&m.GetParameters().Length==5);
                     var backNode=game.GetMethods(BindingFlags.Static|BindingFlags.Public|BindingFlags.NonPublic)
                         .SingleOrDefault(m=>m.Name=="gaNodeTracker.getBackNode"&&m.GetParameters().Length==3);
-                    if(stripTick==null||backNode==null)throw new IOException("Visual prewarm bindings differ");
+                    var stripCtor=game.GetMethods(BindingFlags.Static|BindingFlags.Public|BindingFlags.NonPublic)
+                        .SingleOrDefault(m=>m.Name=="gaTrackStrip.{ctor}"&&m.GetParameters().Length==2);
+                    if(stripTick==null||backNode==null||stripCtor==null)throw new IOException("Visual prewarm bindings differ");
                     var stripCallback=(CullingStripTick)CreateCall(stripTick,typeof(CullingStripTick),false);Roots.Add(stripCallback);
                     var nodeCallback=(CullingBackNode)CreateCall(backNode,typeof(CullingBackNode),false);Roots.Add(nodeCallback);
+                    var ctorCallback=(CullingStripCtor)CreateCall(stripCtor,typeof(CullingStripCtor),false);Roots.Add(ctorCallback);
                     if(ReRiffConfigureCullingStripTick(Marshal.GetFunctionPointerForDelegate(stripCallback))!=1
-                        ||ReRiffConfigureCullingBackNode(Marshal.GetFunctionPointerForDelegate(nodeCallback))!=1)
+                        ||ReRiffConfigureCullingBackNode(Marshal.GetFunctionPointerForDelegate(nodeCallback))!=1
+                        ||ReRiffConfigureCullingStripCtor(Marshal.GetFunctionPointerForDelegate(ctorCallback))!=1)
                         throw new IOException("Visual prewarm registration refused");
                     Log("Visual-only track prewarm bound with collision disabled.");
                 }catch(Exception error){Log("Visual-only track prewarm unavailable: "+error);}

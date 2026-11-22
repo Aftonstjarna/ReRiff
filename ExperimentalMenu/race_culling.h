@@ -33,6 +33,12 @@ static RaceCullingContextDirty race_culling_context_dirty;
 static RaceCullingTrackTick race_culling_track_tick;
 static RaceCullingStripTick race_culling_strip_tick;
 static RaceCullingBackNode race_culling_back_node;
+typedef void *(__cdecl *RaceCullingStripCtor)(void *,int);
+typedef void (__thiscall *RaceCullingSetCollision)(void *,BYTE);
+static RaceCullingStripCtor race_culling_strip_ctor;
+static RaceCullingSetCollision race_culling_set_collision;
+static void *race_culling_road_chunks[64];
+static unsigned race_culling_road_chunk_count;
 __declspec(dllexport) int __cdecl ReRiffConfigureCullingVisible(void *callback){
     if(!callback)return 0;race_culling_visual=(RaceCullingVisualVisible)callback;return 1;
 }
@@ -45,6 +51,73 @@ __declspec(dllexport) int __cdecl ReRiffConfigureCullingStripTick(void *callback
 __declspec(dllexport) int __cdecl ReRiffConfigureCullingBackNode(void *callback){
     if(!callback)return 0;race_culling_back_node=(RaceCullingBackNode)callback;return 1;
 }
+__declspec(dllexport) int __cdecl ReRiffConfigureCullingStripCtor(void *callback){
+    if(!callback)return 0;race_culling_strip_ctor=(RaceCullingStripCtor)callback;return 1;
+}
+static void race_culling_force_custom(BYTE *strip,BOOL visible){
+    BYTE *custom=*(BYTE **)(strip+256);
+    if(!custom||!readable(custom,180))return;
+    *((BYTE *)custom+20)=visible?1:0;
+    if(!visible)return;
+    *((BYTE *)custom+137)&=(BYTE)~1;
+    *((DWORD *)((BYTE *)custom+128))=0x0FFF;
+    BYTE *shader=*(BYTE **)(custom+152);
+    if(shader&&readable(shader,1592)){
+        *((float *)(shader+1576))=0.0f;
+        *((float *)(shader+1580))=100000.0f;
+        *((float *)(shader+1584))=0.0f;
+        *((float *)(shader+1588))=100000.0f;
+        *((float *)(shader+1604))=1.0f;
+        *((float *)(shader+1608))=1.0f;
+        *((float *)(shader+1612))=1.0f;
+    }
+}
+static void race_culling_road_chunks_build(BYTE *base,BYTE *main,void *node){
+    (void)base;
+    if(!race_culling_strip_ctor||!race_culling_strip_tick||race_culling_road_chunk_count)return;
+    int total=*((int *)(main+56));
+    if(total<=0||total>20000){
+        char detail[128];snprintf(detail,sizeof(detail),"Road chunks skipped: total_blocks=%d.",total);log_line(detail);
+        return;
+    }
+    const unsigned chunk=200;
+    for(int start=0;start<total;start+=(int)chunk){
+        if(race_culling_road_chunk_count>=64)break;
+        BYTE *extra=(BYTE *)VirtualAlloc(NULL,424,MEM_COMMIT|MEM_RESERVE,PAGE_READWRITE);
+        if(!extra)break;
+        if(!race_culling_strip_ctor(extra,0))continue;
+        /* The constructor makes an empty strip. Reuse the road spline,
+         * segment flags and spawn rates from the live road strip. */
+        memcpy(extra+64,main+64,72);
+        memcpy(extra+136,main+136,12);
+        memcpy(extra+216,main+216,16);
+        *((int *)(extra+56))=start;
+        *((int *)(extra+48))=0;
+        void *body=*(void **)(extra+264);
+        if(body&&race_culling_set_collision)race_culling_set_collision(body,0);
+        int finish=start+(int)chunk;
+        if(finish>total)finish=total;
+        float progress=(float)finish/(float)total;
+        race_culling_strip_tick(extra,1,0,progress,node);
+        BYTE *custom=*(BYTE **)(extra+256);
+        if(custom&&readable(custom,180)){
+            if(race_culling_context_dirty){
+                BOOL have_next=readable(custom+12,4);
+                DWORD next=have_next?*(DWORD *)(custom+12):0;
+                if(have_next)*(DWORD *)(custom+12)=0;
+                race_culling_context_dirty(custom);
+                if(have_next)*(DWORD *)(custom+12)=next;
+            }
+            race_culling_force_custom(extra,1);
+        }
+        race_culling_road_chunks[race_culling_road_chunk_count++]=extra;
+    }
+    char detail[160];snprintf(detail,sizeof(detail),"Road chunks built: total_blocks=%d chunks=%u chunk_blocks=%u.",total,race_culling_road_chunk_count,chunk);log_line(detail);
+}
+static void race_culling_road_chunks_apply(void){
+    for(unsigned i=0;i<race_culling_road_chunk_count;i++)race_culling_force_custom((BYTE *)race_culling_road_chunks[i],1);
+}
+
 static void race_culling_prewarm(BYTE *base){
     if(!race_culling_enabled||!race_track_pool_relocated||!race_culling_strip_tick||!race_culling_back_node
         ||!readable(base+0x7dce7c,4))return;
@@ -86,9 +159,11 @@ static void race_culling_prewarm(BYTE *base){
     float current=total>0.01f?position/total:0.0f;
     if(!(current>=0.0f&&current<=1.0f))current=0.0f;
     unsigned strips=0;
+    BYTE *main_road=NULL;
     for(void **item=begin;item<end;item++){
         BYTE *strip=(BYTE *)*item;
         if(!readable(strip,424))continue;
+        if(*((int *)(strip+212))==0)main_road=strip;
         for(int step=0;step<=100;step++)race_culling_strip_tick(strip,1,0,step/100.0f,node);
         race_culling_strip_tick(strip,1,0,current,node);
         BYTE *custom=*(BYTE **)(strip+256);
@@ -103,6 +178,7 @@ static void race_culling_prewarm(BYTE *base){
         }
         strips++;
     }
+    if(main_road)race_culling_road_chunks_build(base,main_road,node);
     race_culling_prewarm_done=manager;
     char line[200];snprintf(line,sizeof(line),"Photo mode visual prewarm: strips=%u steps=101 progress=%.4f large_pool=512.",strips,current);log_line(line);
 }
@@ -246,6 +322,7 @@ static BOOL install_race_culling(BYTE *base){
     race_culling_force_visible=(RaceCullingVisible)(base+0x278ea0);
     race_culling_on_visible=(RaceCullingVisible)(base+0x27959c);
     race_culling_context_dirty=(RaceCullingContextDirty)(base+0x53580);
+    race_culling_set_collision=(RaceCullingSetCollision)(base+0x3bc80);
     BOOL expanded=race_culling_expand_pool(base);
     race_culling_pool_expanded=expanded;
     WCHAR pool_value[16];
@@ -351,30 +428,11 @@ static void race_culling_strips(BYTE *base){
         BYTE *strip=(BYTE *)*item;
         if(!readable(strip,424))continue;
         /* The custom road/wall/zone mesh is one elVisualCustom at strip+256.
-         * Prewarming fills the mesh, but its bounding volume is left at the
-         * last spawned segment, so the backed-out camera culls the whole
-         * surface. Keep it visible and clear the setCullable bit (137.0). */
-        BYTE *custom=*(BYTE **)(strip+256);
-        if(custom&&readable(custom,180)){
-            *((BYTE *)custom+20)=1;
-            *((BYTE *)custom+137)&=(BYTE)~1;
-            *((DWORD *)((BYTE *)custom+128))=0x0FFF;
-            BYTE *shader=*(BYTE **)(custom+152);
-            if(shader&&readable(shader,1592)){
-                if(race_culling_trace&&(race_culling_frames%120)==0){
-                    char window[200];snprintf(window,sizeof(window),"Culling mesh type=%d shader_window=%.3f..%.3f fade=%.3f..%.3f.",
-                        *((int *)(strip+212)),*((float *)(shader+1576)),*((float *)(shader+1580)),
-                        *((float *)(shader+1584)),*((float *)(shader+1588)));log_line(window);
-                }
-                *((float *)(shader+1576))=0.0f;
-                *((float *)(shader+1580))=100000.0f;
-                *((float *)(shader+1584))=0.0f;
-                *((float *)(shader+1588))=100000.0f;
-                *((float *)(shader+1604))=1.0f;
-                *((float *)(shader+1608))=1.0f;
-                *((float *)(shader+1612))=1.0f;
-            }
-        }
+         * When the road is split into chunks the original type-0 mesh is
+         * hidden; everything else is forced visible and its fade window is
+         * widened for the backed-out camera. */
+        int strip_type=*((int *)(strip+212));
+        race_culling_force_custom(strip,!(strip_type==0&&race_culling_road_chunk_count>0));
         if(race_culling_trace&&(race_culling_frames%120)==0){
             void **pool_begin=*(void ***)(strip+164),**pool_end=*(void ***)(strip+168);
             unsigned pool=pool_begin&&pool_end&&pool_end>=pool_begin?(unsigned)(pool_end-pool_begin):0;
@@ -452,6 +510,7 @@ static void race_culling_frame(void){
     BOOL paused=race_culling_paused(base);
     race_culling_apply(manager,paused);
     race_culling_strips(base);
+    race_culling_road_chunks_apply();
     if((++race_culling_frames%10)==0){race_culling_props(base);race_culling_ramps(base);}
     if(!race_culling_trace)return;
     if(!race_culling_trace_announced){
