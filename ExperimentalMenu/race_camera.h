@@ -723,7 +723,10 @@ static BOOL race_hud_patch_native_toggle(BYTE *base){
     if(!readable(site,sizeof(expected))||memcmp(site,expected,sizeof(expected)))return FALSE;
     DWORD old,ignored;
     if(!VirtualProtect(site,sizeof(expected),PAGE_READWRITE,&old))return FALSE;
-    memset(site,0,sizeof(expected));
+    /* The original method left the manager pointer on the evaluation stack
+     * for the call. A plain NOP run would unbalance the stack during JIT, so
+     * replace the call with pop + padding instead. */
+    site[0]=0x26;site[1]=0;site[2]=0;site[3]=0;site[4]=0;
     VirtualProtect(site,sizeof(expected),old,&ignored);
     return TRUE;
 }
