@@ -1,3 +1,22 @@
+# ReRiff 1.5.0-beta.6 — Shuffle picker and permanent-level bar fix
+
+## In-game summary
+
+- In the song picker, **R3** or **Ctrl+R** shuffles: it picks a random file from the current folder and its subfolders, skips folders, starts the song, and avoids repeating the last random song when other candidates exist.
+- The picker header now reads: `Search (Y / Ctrl+F)  Shuffle (R3 / Ctrl+R)`.
+- The Profile main-level bar now uses the native fractional level, so it moves within the current level instead of appearing full.
+- The beta.5 photo mode, complete HUD hiding, DOF/bloom toggles and launcher Controls/Graphics options remain.
+
+## Full release notes
+
+- Add R3/Ctrl+R shuffle to the native file picker. It uses the existing recursive picker-search snapshot (MyMusic, saved music roots and the currently open folder), filters to files under the current folder tree, and starts the chosen song through the original `onFileSelected` path.
+- Folders are never selected. Search-filtered pickers shuffle within the current result context. If the chosen file is the same as the previous random song and another candidate exists, it re-rolls among the other candidates.
+- Add the `Search (Y / Ctrl+F)  Shuffle (R3 / Ctrl+R)` header hint. Ctrl+R is consumed by the picker search window hook and triggers the same shuffle path as R3.
+- Fix the permanent-level Profile bar. `gaDriverLevel.getDriverProfileLevel` returns the level plus fractional progress; the display had been looking up a separate table and could pin the bar at `1.000`. It now uses the native fraction directly. At 71,563,334 XP and level 33, the bar shows about 86% toward the 75,000,000 threshold instead of 100%.
+- Keep the recursive shuffle scan asynchronous. R3/Ctrl+R retries for a short window while the library snapshot is still being built, then reports when no files exist under the current folder.
+- Known limitation: the experimental track-culling switch still reports `volumes=0` on the tested tracks. The culling retarget is being worked on separately and is not claimed as fixed in this beta.
+- Validation: native picker alphabet/search tests, Ctrl+R request test, managed ClientConfig build, launcher/native checks, and the existing beta.5 checks. The beta.5 photo-mode, HUD, post-effect and launcher notes remain in the section below.
+
 # ReRiff 1.5.0-beta.5 — Photo mode, post-effect switches and HUD fixes
 
 ## In-game summary
