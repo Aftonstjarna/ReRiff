@@ -23,7 +23,7 @@ int main(void){
  SendMessageW(logging_checkbox,BM_SETCHECK,BST_UNCHECKED,0);SendMessageW(hwnd,WM_COMMAND,LOGGING,0);
  SendMessageW(logging_checkbox,BM_SETCHECK,BST_CHECKED,0);SendMessageW(hwnd,WM_COMMAND,LOGGING,0);
  assert(SendMessageW(log_checkboxes[0],BM_GETCHECK,0,0)==BST_UNCHECKED);
- assert(LOG_CATEGORY_COUNT==9&&diagnostic_count==LOG_CATEGORY_COUNT+4);
+ assert(LOG_CATEGORY_COUNT==9&&diagnostic_count==LOG_CATEGORY_COUNT+5);
  HWND uninstall=GetDlgItem(hwnd,UNINSTALL);assert(uninstall);
  for(int page=0;page<PAGE_COUNT;page++){
   SendMessageW(launcher_tabs,TCM_SETCURSEL,page,0);select_launcher_page();
