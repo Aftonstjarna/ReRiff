@@ -28,6 +28,8 @@ static BOOL race_track_pool_relocated;
 static void *race_culling_prewarm_done;
 static RaceCullingVisible race_culling_force_visible,race_culling_on_visible;
 static RaceCullingVisualVisible race_culling_visual;
+typedef void (__cdecl *RaceCullingContextDirty)(void *);
+static RaceCullingContextDirty race_culling_context_dirty;
 static RaceCullingTrackTick race_culling_track_tick;
 static RaceCullingStripTick race_culling_strip_tick;
 static RaceCullingBackNode race_culling_back_node;
@@ -89,6 +91,8 @@ static void race_culling_prewarm(BYTE *base){
         if(!readable(strip,424))continue;
         for(int step=0;step<=100;step++)race_culling_strip_tick(strip,1,0,step/100.0f,node);
         race_culling_strip_tick(strip,1,0,current,node);
+        BYTE *custom=*(BYTE **)(strip+256);
+        if(race_culling_context_dirty&&custom&&readable(custom,180))race_culling_context_dirty(custom);
         strips++;
     }
     race_culling_prewarm_done=manager;
@@ -233,6 +237,7 @@ static BOOL install_race_culling(BYTE *base){
     if(!readable(base+0x278ea0,8)||!readable(base+0x27959c,8))return FALSE;
     race_culling_force_visible=(RaceCullingVisible)(base+0x278ea0);
     race_culling_on_visible=(RaceCullingVisible)(base+0x27959c);
+    race_culling_context_dirty=(RaceCullingContextDirty)(base+0x53580);
     BOOL expanded=race_culling_expand_pool(base);
     race_culling_pool_expanded=expanded;
     WCHAR pool_value[16];
