@@ -454,7 +454,6 @@ static BOOL race_photo_begin(BYTE *base){
         race_photo_position[row]=matrix[9+row];
     }
     race_photo_yaw=0;race_photo_pitch=0;race_photo_roll=0;
-    race_culling_prewarm(base);
     *((BYTE *)race+12)=1;
     race_photo_paused_by_us=TRUE;
     log_line("Photo mode: pause byte set.");

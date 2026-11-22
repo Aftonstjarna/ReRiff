@@ -82,27 +82,24 @@ static void race_culling_force_custom(BYTE *strip,BOOL visible){
         }
     }
 }
-static void race_culling_road_chunks_build(BYTE *base,BYTE *main,void *node){
+static void race_culling_road_chunks_build_range(BYTE *base,BYTE *main,void *node,int range_start,int range_end,int master_total){
     (void)base;
-    if(!race_culling_strip_ctor||!race_culling_strip_tick||race_culling_road_chunk_count)return;
+    if(!race_culling_strip_ctor||!race_culling_strip_tick||master_total<=0)return;
+    if(range_start<0)range_start=0;
+    if(range_end>master_total)range_end=master_total;
+    if(range_start>=range_end)return;
     BYTE *main_custom=*(BYTE **)(main+256);
     if(!main_custom||!readable(main_custom,180)){
         log_line("Road chunks skipped: live road visual is not readable.");
         return;
     }
-    int total=*((int *)(main+56));
-    if(total<=0||total>20000){
-        char detail[128];snprintf(detail,sizeof(detail),"Road chunks skipped: total_blocks=%d.",total);log_line(detail);
-        return;
-    }
     const unsigned chunk=200;
-    for(int start=0;start<total;start+=(int)chunk){
+    unsigned added=0;
+    for(int start=range_start;start<range_end;start+=(int)chunk){
         if(race_culling_road_chunk_count>=64)break;
         BYTE *extra=(BYTE *)VirtualAlloc(NULL,424,MEM_COMMIT|MEM_RESERVE,PAGE_READWRITE);
         if(!extra)break;
         if(!race_culling_strip_ctor(extra,0))continue;
-        /* The constructor makes an empty strip. Reuse the road spline,
-         * segment flags and spawn rates from the live road strip. */
         memcpy(extra+64,main+64,72);
         memcpy(extra+136,main+136,12);
         memcpy(extra+216,main+216,16);
@@ -113,13 +110,11 @@ static void race_culling_road_chunks_build(BYTE *base,BYTE *main,void *node){
         void *body=*(void **)(extra+264);
         if(body&&race_culling_set_collision)race_culling_set_collision(body,0);
         int finish=start+(int)chunk;
-        if(finish>total)finish=total;
-        float progress=(float)finish/(float)total;
+        if(finish>range_end)finish=range_end;
+        float progress=(float)finish/(float)master_total;
         race_culling_strip_tick(extra,1,0,progress,node);
         BYTE *custom=*(BYTE **)(extra+256);
         if(custom&&readable(custom,180)){
-            /* Reuse the live road material and shader so every chunk has the
-             * same texture, colour and beat response as the original road. */
             memcpy(custom+32,main_custom+32,16);
             if(readable(main_custom+152,4))*(DWORD *)(custom+152)=*(DWORD *)(main_custom+152);
             if(race_culling_context_dirty){
@@ -138,24 +133,19 @@ static void race_culling_road_chunks_build(BYTE *base,BYTE *main,void *node){
             if(vb&&ve&&ve>=vb)cv=(unsigned)((ve-vb)/40);
             if(tb&&te&&te>=tb)ct=(unsigned)((te-tb)/12);
         }
-        char detail[220];snprintf(detail,sizeof(detail),"Road chunk %u start=%d spawn=%d finish=%d cursor=%d verts=%u tris=%u.",
-            race_culling_road_chunk_count,start,spawn_start,finish,extra?*((int *)(extra+56)):0,cv,ct);log_line(detail);
+        char detail[220];snprintf(detail,sizeof(detail),"Road chunk %u range=%d..%d start=%d spawn=%d finish=%d cursor=%d verts=%u tris=%u.",
+            race_culling_road_chunk_count,range_start,range_end,start,spawn_start,finish,extra?*((int *)(extra+56)):0,cv,ct);log_line(detail);
         race_culling_road_chunks[race_culling_road_chunk_count++]=extra;
+        added++;
     }
-    char detail[160];snprintf(detail,sizeof(detail),"Road chunks built: total_blocks=%d chunks=%u chunk_blocks=%u.",total,race_culling_road_chunk_count,chunk);log_line(detail);
+    char detail[180];snprintf(detail,sizeof(detail),"Road chunks built: range=%d..%d total_blocks=%d added=%u all=%u.",
+        range_start,range_end,master_total,added,race_culling_road_chunk_count);log_line(detail);
 }
 static void race_culling_road_chunks_apply(void){
     for(unsigned i=0;i<race_culling_road_chunk_count;i++)race_culling_force_custom((BYTE *)race_culling_road_chunks[i],1);
 }
 
 static void race_culling_prewarm(BYTE *base){
-    (void)base;
-    static BOOL disabled_logged;
-    if(!disabled_logged){
-        disabled_logged=TRUE;
-        log_line("Photo mode prewarm disabled.");
-    }
-    return;
     if(!race_culling_enabled||!race_track_pool_relocated||!race_culling_strip_tick||!race_culling_back_node
         ||!readable(base+0x7dce7c,4))return;
     void *manager=*(void **)(base+0x7dce7c);
@@ -174,9 +164,6 @@ static void race_culling_prewarm(BYTE *base){
     void **begin=*(void ***)((BYTE *)manager+2720),**end=*(void ***)((BYTE *)manager+2724);
     if(!begin||!end||end<begin||(size_t)((BYTE *)end-(BYTE *)begin)>256*sizeof(void *))return;
 
-    /* The MethodDef patch only takes effect if the CLR had not already
-     * compiled the constructor. Bail out rather than overflow a 127-slot
-     * pool and make the track vanish. */
     unsigned small=0;
     for(void **item=begin;item<end;item++){
         BYTE *strip=(BYTE *)*item;
@@ -188,7 +175,7 @@ static void race_culling_prewarm(BYTE *base){
         if(pool<512)small++;
     }
     if(small){
-        char detail[160];snprintf(detail,sizeof(detail),"Photo mode prewarm skipped: %u large strips still have a small pool.",small);log_line(detail);
+        char detail[160];snprintf(detail,sizeof(detail),"Track prewarm skipped: %u large strips still have a small pool.",small);log_line(detail);
         return;
     }
 
@@ -197,16 +184,22 @@ static void race_culling_prewarm(BYTE *base){
     if(!(current>=0.0f&&current<=1.0f))current=0.0f;
     unsigned strips=0;
     BYTE *main_road=NULL;
+    int main_cursor=0;
     for(void **item=begin;item<end;item++){
         BYTE *strip=(BYTE *)*item;
         if(!readable(strip,424))continue;
-        if(*((int *)(strip+212))==0)main_road=strip;
+        if(*((int *)(strip+212))==0){
+            /* Do not sweep the live road strip; its current window is the
+             * near-camera surface that must stay intact. */
+            main_road=strip;
+            main_cursor=*((int *)(strip+56));
+            strips++;
+            continue;
+        }
         for(int step=0;step<=100;step++)race_culling_strip_tick(strip,1,0,step/100.0f,node);
         race_culling_strip_tick(strip,1,0,current,node);
         BYTE *custom=*(BYTE **)(strip+256);
         if(race_culling_context_dirty&&custom&&readable(custom,180)){
-            /* setContextDirty walks the visual's +0xc chain. A stale chain
-             * entry can fault during prewarm; mark only this visual. */
             BOOL have_next=readable(custom+12,4);
             DWORD next=have_next?*(DWORD *)(custom+12):0;
             if(have_next)*(DWORD *)(custom+12)=0;
@@ -215,9 +208,43 @@ static void race_culling_prewarm(BYTE *base){
         }
         strips++;
     }
-    if(main_road)race_culling_road_chunks_build(base,main_road,node);
+
+    int master_total=0;
+    if(main_road&&race_culling_strip_ctor){
+        BYTE *capture=(BYTE *)VirtualAlloc(NULL,424,MEM_COMMIT|MEM_RESERVE,PAGE_READWRITE);
+        if(capture&&race_culling_strip_ctor(capture,0)){
+            memcpy(capture+64,main_road+64,72);
+            memcpy(capture+136,main_road+136,12);
+            memcpy(capture+216,main_road+216,16);
+            *((int *)(capture+56))=0;
+            *((int *)(capture+48))=0;
+            void *body=*(void **)(capture+264);
+            if(body&&race_culling_set_collision)race_culling_set_collision(body,0);
+            for(int step=0;step<=100;step++)race_culling_strip_tick(capture,1,0,step/100.0f,node);
+            master_total=*((int *)(capture+56));
+            BYTE *cc=*(BYTE **)(capture+256);
+            if(cc&&readable(cc,180))*((BYTE *)cc+20)=0;
+            for(int off=268;off<=300;off+=32){
+                for(int i=0;i<8;i++){
+                    void *visual=*(void **)(capture+off+i*4);
+                    if(visual&&readable(visual,132))*((BYTE *)visual+20)=0;
+                }
+            }
+            char detail[160];snprintf(detail,sizeof(detail),"Road capture: total_blocks=%d main_cursor=%d.",master_total,main_cursor);log_line(detail);
+        }
+    }
+    if(main_road&&master_total>0){
+        int window_start=main_cursor-232;
+        if(window_start<0)window_start=0;
+        if(window_start>0)race_culling_road_chunks_build_range(base,main_road,node,0,window_start,master_total);
+        if(main_cursor<master_total)race_culling_road_chunks_build_range(base,main_road,node,main_cursor,master_total,master_total);
+    }else{
+        log_line("Track prewarm deferred: road data is not ready.");
+        return;
+    }
     race_culling_prewarm_done=manager;
-    char line[200];snprintf(line,sizeof(line),"Photo mode visual prewarm: strips=%u steps=101 progress=%.4f large_pool=512.",strips,current);log_line(line);
+    char line[220];snprintf(line,sizeof(line),"Track prewarm: strips=%u progress=%.4f main_cursor=%d total=%d chunks=%u.",
+        strips,current,main_cursor,master_total,race_culling_road_chunk_count);log_line(line);
 }
 
 /* The constructor's own 64-slot pool is far too small for the photo-mode
@@ -541,6 +568,7 @@ static void race_culling_counts(BYTE *base){
 static void race_culling_frame(void){
     if(!race_culling_enabled)return;
     BYTE *base=(BYTE *)GetModuleHandleW(NULL);
+    race_culling_prewarm(base);
     void *manager=readable(base+0x7df324,4)?*(void **)(base+0x7df324):NULL;
     BOOL paused=race_culling_paused(base);
     race_culling_apply(manager,paused);
