@@ -112,24 +112,29 @@ static BOOL race_track_pool_install(BYTE *base){
         char line[160];snprintf(line,sizeof(line),"Track ctor relocation skipped: MethodDef RVA is %08X.",(unsigned)*slot);log_line(line);
         return FALSE;
     }
-    /* Prefer the page range immediately after the mapped image. This keeps
-     * the redirected RVA adjacent to the image instead of in an arbitrary
-     * heap address; fall back to any executable allocation if it is taken. */
-    void *memory=NULL;
-    if(readable(base+0x3c,4)){
-        DWORD e_lfanew=*(DWORD *)(base+0x3c);
-        if(readable(base+e_lfanew+0x18+0x38,4)){
-            DWORD image_size=*(DWORD *)(base+e_lfanew+0x18+0x38);
-            BYTE *preferred=(BYTE *)(base+((image_size+0xfff)&~0xfffu));
-            memory=VirtualAlloc(preferred,RERIFF_TRACK_CTOR_BLOB_SIZE,MEM_COMMIT|MEM_RESERVE,PAGE_EXECUTE_READWRITE);
+    /* The CLR rejects method RVAs outside the mapped image ("Method has zero
+     * rva"), so the relocated body has to live inside the image. The .data
+     * virtual tail at 0x7C9200..0x7FFFC0 is zero-filled and has no absolute
+     * references in the executable; use it only if it is still all zero. */
+    BYTE *memory=base+0x7c9200;
+    if(!readable(memory,RERIFF_TRACK_CTOR_BLOB_SIZE)){
+        log_line("Track ctor relocation: in-image body range is not readable.");
+        return FALSE;
+    }
+    for(unsigned i=0;i<RERIFF_TRACK_CTOR_BLOB_SIZE;i++){
+        if(memory[i]!=0){
+            char line[160];snprintf(line,sizeof(line),"Track ctor relocation refused: in-image range is not zero at +%u.",i);log_line(line);
+            return FALSE;
         }
     }
-    if(!memory)memory=VirtualAlloc(NULL,RERIFF_TRACK_CTOR_BLOB_SIZE,MEM_COMMIT|MEM_RESERVE,PAGE_EXECUTE_READWRITE);
-    if(!memory){
-        log_line("Track ctor relocation: VirtualAlloc failed.");
+    DWORD old,ignored;
+    if(!VirtualProtect(memory,RERIFF_TRACK_CTOR_BLOB_SIZE,PAGE_READWRITE,&old)){
+        log_line("Track ctor relocation: in-image body range is not writable.");
         return FALSE;
-    }    memcpy(memory,race_track_ctor_blob,RERIFF_TRACK_CTOR_BLOB_SIZE);
-    DWORD rva=(DWORD)((BYTE *)memory-base),old,ignored;
+    }
+    memcpy(memory,race_track_ctor_blob,RERIFF_TRACK_CTOR_BLOB_SIZE);
+    VirtualProtect(memory,RERIFF_TRACK_CTOR_BLOB_SIZE,old,&ignored);
+    DWORD rva=(DWORD)(memory-base);
     if(!VirtualProtect(slot,4,PAGE_READWRITE,&old)){
         log_line("Track ctor relocation: metadata page is not writable.");
         return FALSE;
