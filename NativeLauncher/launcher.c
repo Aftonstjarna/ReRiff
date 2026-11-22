@@ -456,6 +456,7 @@ static void reload_log_controls(void) {
 
 #include "graphics.h"
 #include "controls.h"
+#include "gamepad_prompts.h"
 
 static void reload_settings_controls(void) {
     graphics_reload();
@@ -537,7 +538,10 @@ static void select_launcher_page(void){
 static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
     if(event==WM_ERASEBKGND){RECT area;GetClientRect(hwnd,&area);FillRect((HDC)wp,&area,GetSysColorBrush(COLOR_BTNFACE));return TRUE;}
     if(event==WM_CTLCOLORSTATIC||event==WM_CTLCOLORBTN){SetBkColor((HDC)wp,GetSysColor(COLOR_BTNFACE));return (LRESULT)GetSysColorBrush(COLOR_BTNFACE);}
-    if(event==WM_DRAWITEM&&rr_brand_draw((const DRAWITEMSTRUCT *)lp))return TRUE;
+    if(event==WM_DRAWITEM){
+        const DRAWITEMSTRUCT *item=(const DRAWITEMSTRUCT *)lp;
+        if(rr_brand_draw(item)||gamepad_prompt_draw(item))return TRUE;
+    }
     if (event==WM_CREATE) {
         SetWindowLongPtrW(hwnd,GWL_STYLE,GetWindowLongPtrW(hwnd,GWL_STYLE)|WS_CLIPCHILDREN);
         rr_brand_icon(hwnd);
@@ -877,6 +881,13 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE previous,LPWSTR command,int sho
         CW_USEDEFAULT,CW_USEDEFAULT,660,631,NULL,NULL,instance,NULL);
     if (!handle) return 1;
     ShowWindow(handle,show);UpdateWindow(handle);
-    MSG msg;while (GetMessageW(&msg,NULL,0,0)>0) {if (!IsDialogMessageW(handle,&msg)) {TranslateMessage(&msg);DispatchMessageW(&msg);}}
+    MSG msg;while (GetMessageW(&msg,NULL,0,0)>0) {
+        if (msg.message==WM_KEYDOWN&&msg.wParam==VK_ESCAPE&&(controls_capture_row>=0||controls_key_capture_row>=0)) {
+            controls_capture_cancel();controls_key_capture_cancel();
+            SetWindowTextW(status,L"Binding capture cancelled.");
+            continue;
+        }
+        if (!IsDialogMessageW(handle,&msg)) {TranslateMessage(&msg);DispatchMessageW(&msg);}
+    }
     return (int)msg.wParam;
 }

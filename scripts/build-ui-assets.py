@@ -6,6 +6,12 @@ import struct
 from PIL import Image, ImageFilter, ImageOps
 ROOT=Path(__file__).resolve().parents[1]
 
+PROMPT_ORDER=['a','b','x','y','dpad_up','dpad_down','dpad_left','dpad_right',
+             'lb','rb','lt','rt','ls','ls_up','ls_down','ls_left',
+             'ls_right','l3','rs','rs_up','rs_down','rs_left',
+             'rs_right','r3','start','back','guide','misc',
+             'p1','p2','p3','p4','touchpad']
+
 def write_bitmap(logo,path):
     width,height=logo.size;pixels=bytearray()
     for y in range(height-1,-1,-1):
@@ -41,6 +47,17 @@ def build(output):
         outline.alpha_composite(padded)
         outline.save(output/'reriff-logo-button.png')
         write_bitmap(outline,output/'reriff-logo-button.bmp')
-    return output/'reriff.ico',output/'reriff-logo.bmp'
+    promptdir=ROOT/'images/prompts/png'
+    sheet=Image.new('RGBA',(8*32,5*32),(0,0,0,0))
+    for index,name in enumerate(PROMPT_ORDER):
+        with Image.open(promptdir/(name+'.png')) as source:
+            glyph=source.convert('RGBA')
+            if glyph.size!=(32,32):
+                glyph.thumbnail((32,32),Image.Resampling.LANCZOS)
+        x=(index%8)*32+(32-glyph.width)//2
+        y=(index//8)*32+(32-glyph.height)//2
+        sheet.alpha_composite(glyph,(x,y))
+    write_bitmap(sheet,output/'prompts.bmp')
+    return output/'reriff.ico',output/'reriff-logo.bmp',output/'prompts.bmp'
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--output',type=Path,default=ROOT/'build/ui-assets');args=parser.parse_args();print(*build(args.output),sep='\n')

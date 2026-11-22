@@ -198,6 +198,7 @@ static void controls_binding_update_text(int row){
     WCHAR text[96];
     controls_binding_text(row,text,96);
     SetWindowTextW(controls_controller_bindings[row],text);
+    InvalidateRect(controls_controller_bindings[row],NULL,TRUE);
 }
 static void controls_binding_store(int row,int kind,int index,int sign){
     if(row<0||row>=CONTROLLER_BINDING_COUNT)return;
@@ -424,6 +425,7 @@ static void controls_capture_begin(int row){
     controls_capture_wait_release=TRUE;
     controls_capture_seen=0;
     SetWindowTextW(controls_controller_bindings[row],L"Press a button...");
+    InvalidateRect(controls_controller_bindings[row],NULL,TRUE);
     SetWindowTextW(status,L"Press a controller button or a chord, or move a stick/trigger. Release all buttons to save. Delete clears; Escape cancels.");
     SetFocus(controls_controller_bindings[row]);
     if(window)SetTimer(window,CONTROLS_CAPTURE_TIMER,16,NULL);
@@ -810,7 +812,7 @@ static void controls_create(void){
         int column=i/7,row=i%7;
         int x=6+column*216,y=22+row*26;
         control(L"STATIC",controls_controller_rows[i].label,0,x,y+2,94,24,0);
-        controls_controller_bindings[i]=control(L"BUTTON",L"",WS_TABSTOP,x+96,y,112,24,CONTROLLER_CAPTURE_BASE+i);
+        controls_controller_bindings[i]=control(L"BUTTON",L"",BS_OWNERDRAW|WS_TABSTOP,x+96,y,112,24,CONTROLLER_CAPTURE_BASE+i);
         controls_capture_button_old_proc=(WNDPROC)SetWindowLongPtrW(controls_controller_bindings[i],GWLP_WNDPROC,(LONG_PTR)controls_capture_button_proc);
     }
     controls_controller_enabled=control(L"BUTTON",L"Enable controller remapping",BS_AUTOCHECKBOX|WS_TABSTOP,290,210,350,28,0);
