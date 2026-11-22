@@ -22,6 +22,7 @@ namespace ReRiff {
                 if (!initialized) {
                     string folder = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
                     AppDomain.CurrentDomain.FirstChanceException += RecordNetworkException;
+                    AppDomain.CurrentDomain.UnhandledException += RecordUnhandledException;
                     selected = Select(folder);
                     initialized = true;
                     StartEngineMenu();
@@ -43,12 +44,19 @@ namespace ReRiff {
 
         public static bool CanSend() { return GetServer() != Disabled; }
 
+        private static void RecordUnhandledException(object sender, UnhandledExceptionEventArgs args) {
+            try {
+                NativeReelBridge.Log("UNHANDLED: " + (args.ExceptionObject ?? "null") + "; terminating=" + args.IsTerminating);
+            } catch (Exception) { }
+        }
+
         private static void RecordNetworkException(object sender, System.Runtime.ExceptionServices.FirstChanceExceptionEventArgs args) {
             Exception error = args.Exception;
             if (recordingException || !(error is WebException || error is FileLoadException
                 || error is FileNotFoundException || error is BadImageFormatException
                 || error is InvalidProgramException || error is TypeLoadException
                 || error is MissingMethodException || error is System.Security.SecurityException
+                || error is OutOfMemoryException || error is AccessViolationException
                 || error.GetType().FullName.StartsWith("Parse.", StringComparison.Ordinal))) return;
             recordingException = true;
             try {

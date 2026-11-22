@@ -99,6 +99,34 @@ static void log_line(const char *line) {
     rr_log_append(log_path,"engine_menu",line);
 }
 
+/* Last-resort fault record. The normal log path takes a mutex and reads INI
+ * files; this handler writes one bare line so a native access violation still
+ * leaves the faulting RVA in the game log. */
+static BOOL fatal_handler_installed;
+static LONG WINAPI reriff_fatal_exception(EXCEPTION_POINTERS *info) {
+    if(!info||!info->ExceptionRecord)return EXCEPTION_CONTINUE_SEARCH;
+    DWORD code=info->ExceptionRecord->ExceptionCode;
+    if(code!=0xC0000005&&code!=0xC00000FD&&code!=0xC000001D&&code!=0xC0000094&&code!=0xC0000409)
+        return EXCEPTION_CONTINUE_SEARCH;
+    BYTE *base=(BYTE *)GetModuleHandleW(NULL);
+    void *address=info->ExceptionRecord->ExceptionAddress;
+    unsigned rva=(unsigned)((BYTE *)address-base);
+    char line[256];
+    snprintf(line,sizeof(line),"Fatal exception code=%08X address=%p rva=%08X.",
+        (unsigned)code,address,rva);
+    if(*log_path){
+        HANDLE file=CreateFileW(log_path,FILE_APPEND_DATA,FILE_SHARE_READ|FILE_SHARE_WRITE,
+            NULL,OPEN_ALWAYS,FILE_ATTRIBUTE_NORMAL,NULL);
+        if(file!=INVALID_HANDLE_VALUE){
+            DWORD written;
+            WriteFile(file,line,(DWORD)strlen(line),&written,NULL);
+            WriteFile(file,"\r\n",2,&written,NULL);
+            CloseHandle(file);
+        }
+    }
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+
 /* Refresh the readable label only after the managed side authenticated the
  * ReRiff UUID. Optional diagnostics must not initialize Steam or change login. */
 __declspec(dllexport) void __cdecl ReRiffRefreshDiagnosticIdentity(void) {
@@ -806,6 +834,7 @@ __declspec(dllexport) BOOL __cdecl ReRiffStartEngineMenu(void) {
     wcscpy(log_path,config_path); wcscat(log_path,L"logs\\ReRiff-game.log");
     wcscat(config_path,L"server.ini");
     if(rr_log_ini(config_path,L"engine_menu")){WCHAR logs[MAX_PATH];wcscpy(logs,log_path);WCHAR *end=wcsrchr(logs,L'\\');if(end){*end=0;CreateDirectoryW(logs,NULL);}}
+    if(!fatal_handler_installed){AddVectoredExceptionHandler(1,reriff_fatal_exception);fatal_handler_installed=TRUE;}
     BYTE *base=(BYTE *)GetModuleHandleW(NULL);
     if(!supported_file(path)){log_line("Refused: unsupported Game.exe file hash or size.");return FALSE;}
     if(!validate_image(base)){
