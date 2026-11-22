@@ -60,10 +60,11 @@ namespace ReRiff {
                 if(Single.IsNaN(result)||Single.IsInfinity(result)||result<0||result>40)throw new IOException("Invalid original profile level");
                 if(ProgressionBalance.Current.MainLevelCap>0)barFill=ProgressionBalance.Current.MainLevelFill((decimal)(double)result);
                 else{
-                    int index=0;
-                    while(index+1<count&&xp>=(ulong)thresholds[index+1])index++;
-                    int low=thresholds[index],high=thresholds[index+1];
-                    if(high>low)barFill=(float)((xp-(ulong)low)/(double)(high-low));
+                    /* getDriverProfileLevel returns level + fraction inside the
+                     * current native interval. Use that fraction directly; the
+                     * earlier table lookup could disagree with the native helper
+                     * and pin the bar at 1.0. */
+                    barFill=(float)((double)result-Math.Floor((double)result));
                 }
                 if(barFill<0f)barFill=0f;if(barFill>1f)barFill=1f;
                 return (decimal)(double)result;
