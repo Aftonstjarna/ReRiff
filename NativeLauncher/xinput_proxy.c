@@ -71,11 +71,20 @@ typedef struct {
     int count;
 } BindingList;
 
-static const char *button_names[15] = {
+#define VIRTUAL_BUTTON_COUNT 15
+#define PHYSICAL_BUTTON_COUNT 21
+static const char *virtual_button_names[VIRTUAL_BUTTON_COUNT] = {
     "a", "b", "x", "y", "back", "guide", "start", "l3", "r3",
     "lb", "rb", "dup", "ddown", "dleft", "dright"
 };
-static const WORD button_bits[15] = {
+/* SDL_GamepadButton order. The first 15 names match the virtual XInput
+ * controls, so the launcher can store physical coordinates by name. */
+static const char *physical_button_names[PHYSICAL_BUTTON_COUNT] = {
+    "a", "b", "x", "y", "back", "guide", "start", "l3", "r3",
+    "lb", "rb", "dup", "ddown", "dleft", "dright",
+    "misc1", "paddle1", "paddle2", "paddle3", "paddle4", "touchpad"
+};
+static const WORD button_bits[VIRTUAL_BUTTON_COUNT] = {
     0x1000, 0x2000, 0x4000, 0x8000, 0x0020, 0x0400, 0x0010, 0x0040, 0x0080,
     0x0100, 0x0200, 0x0001, 0x0002, 0x0004, 0x0008
 };
@@ -146,15 +155,14 @@ static void identity_axis(BindingList *list, int index) {
     list->item[0].sign = 1;
 }
 
-static void parse_binding(const char *text, BindingList *list, int virtual_axis) {
-    list->count = 0;
-    if (!text || !*text) return;
-    if (!_stricmp(text, "none")) return;
+/* Parses either a single binding or a chord such as
+ * "button:l3+button:r3". Every part must be active for the chord to count. */
+static int parse_binding_part(const char *text, Binding *out) {
     const char *colon = strchr(text, ':');
-    if (!colon) return;
+    if (!colon) return 0;
     char kind[16];
     size_t n = (size_t)(colon - text);
-    if (n >= sizeof(kind)) return;
+    if (n >= sizeof(kind)) return 0;
     memcpy(kind, text, n);
     kind[n] = 0;
     const char *value = colon + 1;
@@ -165,32 +173,52 @@ static void parse_binding(const char *text, BindingList *list, int virtual_axis)
         len--;
     }
     char name[32];
-    if (len >= sizeof(name)) return;
+    if (len >= sizeof(name)) return 0;
     memcpy(name, value, len);
     name[len] = 0;
     int index;
     if (!_stricmp(kind, "button")) {
-        index = name_index(name, button_names, 15);
-        if (index < 0) return;
-        list->count = 1;
-        list->item[0].kind = BIND_BUTTON;
-        list->item[0].index = index;
-        list->item[0].sign = sign;
-    } else if (!_stricmp(kind, "axis")) {
+        index = name_index(name, physical_button_names, PHYSICAL_BUTTON_COUNT);
+        if (index < 0) return 0;
+        out->kind = BIND_BUTTON;
+        out->index = index;
+        out->sign = sign;
+        return 1;
+    }
+    if (!_stricmp(kind, "axis")) {
         index = name_index(name, axis_names, 6);
-        if (index < 0) return;
-        if (virtual_axis >= 4 && index < 4) return; /* stick -> trigger is invalid */
-        list->count = 1;
-        list->item[0].kind = BIND_AXIS;
-        list->item[0].index = index;
-        list->item[0].sign = sign;
+        if (index < 0) return 0;
+        out->kind = BIND_AXIS;
+        out->index = index;
+        out->sign = sign;
+        return 1;
+    }
+    return 0;
+}
+
+static void parse_binding(const char *text, BindingList *list) {
+    list->count = 0;
+    if (!text || !*text) return;
+    if (!_stricmp(text, "none")) return;
+    const char *cursor = text;
+    for (;;) {
+        const char *separator = strchr(cursor, '+');
+        size_t len = separator ? (size_t)(separator - cursor) : strlen(cursor);
+        char part[64];
+        if (!len || len >= sizeof(part)) { list->count = 0; return; }
+        memcpy(part, cursor, len);
+        part[len] = 0;
+        if (!parse_binding_part(part, &list->item[list->count])) { list->count = 0; return; }
+        list->count++;
+        if (!separator || list->count >= MAX_BIND) break;
+        cursor = separator + 1;
     }
 }
 
 static void load_mapping(void) {
     if (mapping_ready) return;
     mapping_ready = 1;
-    for (int i = 0; i < 15; i++) identity_button(&button_map[i], i);
+    for (int i = 0; i < VIRTUAL_BUTTON_COUNT; i++) identity_button(&button_map[i], i);
     for (int i = 0; i < 6; i++) identity_axis(&axis_map[i], i);
     if (!dll_dir[0]) return;
     WCHAR ini[MAX_PATH];
@@ -201,14 +229,15 @@ static void load_mapping(void) {
     GetPrivateProfileStringW(L"controller", L"enabled", L"1", value, 128, ini);
     mapping_enabled = !_wcsicmp(value, L"1") || !_wcsicmp(value, L"true") || !_wcsicmp(value, L"yes");
     int overrides = 0;
-    for (int i = 0; i < 15; i++) {
+    for (int i = 0; i < VIRTUAL_BUTTON_COUNT; i++) {
         WCHAR key[16];
-        MultiByteToWideChar(CP_UTF8, 0, button_names[i], -1, key, 16);
+        MultiByteToWideChar(CP_UTF8, 0, virtual_button_names[i], -1, key, 16);
         DWORD got = GetPrivateProfileStringW(L"controller", key, L"", value, 128, ini);
         char binding[128];
         WideCharToMultiByte(CP_UTF8, 0, value, got + 1, binding, sizeof(binding), NULL, NULL);
         if (got) {
-            parse_binding(binding, &button_map[i], 0);
+            parse_binding(binding, &button_map[i]);
+            log_line("controller %s=%s parts=%d", virtual_button_names[i], binding, button_map[i].count);
             overrides++;
         }
     }
@@ -219,7 +248,8 @@ static void load_mapping(void) {
         char binding[128];
         WideCharToMultiByte(CP_UTF8, 0, value, got + 1, binding, sizeof(binding), NULL, NULL);
         if (got) {
-            parse_binding(binding, &axis_map[i], i);
+            parse_binding(binding, &axis_map[i]);
+            log_line("controller %s=%s parts=%d", axis_names[i], binding, axis_map[i].count);
             overrides++;
         }
     }
@@ -320,9 +350,10 @@ static int binding_active(SDL_Gamepad *pad, const Binding *bind, int virtual_axi
 static int virtual_button(SDL_Gamepad *pad, int index) {
     if (!mapping_enabled) return physical_button(pad, index);
     if (!button_map[index].count) return 0;
-    const Binding *bind = &button_map[index].item[0];
-    if (bind->kind == BIND_BUTTON) return physical_button(pad, bind->index);
-    return binding_active(pad, bind, 0);
+    for (int i = 0; i < button_map[index].count; i++) {
+        if (!binding_active(pad, &button_map[index].item[i], 0)) return 0;
+    }
+    return 1;
 }
 
 static int virtual_axis(SDL_Gamepad *pad, int index) {
@@ -362,7 +393,7 @@ __declspec(dllexport) DWORD WINAPI XInputGetState(DWORD index, XINPUT_STATE *sta
     memset(state, 0, sizeof(*state));
     state->dwPacketNumber = ++packet_number;
     WORD buttons = 0;
-    for (int i = 0; i < 15; i++) if (virtual_button(pads[index], i)) buttons |= button_bits[i];
+    for (int i = 0; i < VIRTUAL_BUTTON_COUNT; i++) if (virtual_button(pads[index], i)) buttons |= button_bits[i];
     state->Gamepad.wButtons = buttons;
     state->Gamepad.bLeftTrigger = trigger_value(virtual_axis(pads[index], 4));
     state->Gamepad.bRightTrigger = trigger_value(virtual_axis(pads[index], 5));

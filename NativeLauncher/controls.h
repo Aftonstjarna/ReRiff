@@ -1,6 +1,8 @@
 /* Launcher Controls page: Keyboard, Controller and Hotkeys subtabs.
  * Values are stored in the same client.ini read by the native game hook and
- * the SDL3 XInput proxy. */
+ * the SDL3 XInput proxy. Controller rows capture physical SDL gamepad
+ * coordinates (button index or axis index + direction) instead of using a
+ * fixed dropdown list. */
 #ifndef RERIFF_LAUNCHER_CONTROLS_H
 #define RERIFF_LAUNCHER_CONTROLS_H
 #include <stdlib.h>
@@ -12,12 +14,63 @@ static HWND controls_controller_enabled;
 #define CONTROLLER_BINDING_COUNT 21
 static HWND controls_controller_bindings[CONTROLLER_BINDING_COUNT];
 
+/* ------------------------------------------------------------------ */
+/* Controller capture                                                  */
+/* ------------------------------------------------------------------ */
+#define CONTROLS_CAPTURE_TIMER 2
+#define CONTROLS_BUTTON_COUNT 21
+#define CONTROLS_AXIS_COUNT 6
+#define BINDING_NONE 0
+#define BINDING_BUTTON 1
+#define BINDING_AXIS 2
+
+typedef struct SDL_Gamepad SDL_Gamepad;
+typedef unsigned int ControlsJoystickID;
+typedef struct {
+    HMODULE module;
+    int (*Init)(unsigned int);
+    void (*Quit)(void);
+    void (*UpdateGamepads)(void);
+    ControlsJoystickID *(*GetGamepads)(int *);
+    void (*Free)(void *);
+    SDL_Gamepad *(*OpenGamepad)(ControlsJoystickID);
+    void (*CloseGamepad)(SDL_Gamepad *);
+    int (*GamepadConnected)(SDL_Gamepad *);
+    int (*GetGamepadButton)(SDL_Gamepad *,int);
+    int (*GetGamepadAxis)(SDL_Gamepad *,int);
+    int (*SetHint)(const char *,const char *);
+} ControlsSdlApi;
+
+static ControlsSdlApi controls_sdl;
+static SDL_Gamepad *controls_pad;
+static BOOL controls_sdl_ready,controls_sdl_attempted,controls_capture_wait_release;
+static int controls_capture_row=-1;
+static unsigned controls_capture_seen;
+#define CONTROLS_MAX_CHORD 4
+static int controls_binding_count[CONTROLLER_BINDING_COUNT];
+static int controls_binding_kind[CONTROLLER_BINDING_COUNT][CONTROLS_MAX_CHORD];
+static int controls_binding_index[CONTROLLER_BINDING_COUNT][CONTROLS_MAX_CHORD];
+static int controls_binding_sign[CONTROLLER_BINDING_COUNT][CONTROLS_MAX_CHORD];
+
+/* SDL_GamepadButton order. */
+static const WCHAR *controls_button_names[CONTROLS_BUTTON_COUNT]={
+    L"a",L"b",L"x",L"y",L"back",L"guide",L"start",L"l3",L"r3",L"lb",L"rb",
+    L"dup",L"ddown",L"dleft",L"dright",L"misc1",L"paddle1",L"paddle2",L"paddle3",L"paddle4",L"touchpad"
+};
+static const WCHAR *controls_button_short[CONTROLS_BUTTON_COUNT]={
+    L"A",L"B",L"X",L"Y",L"Back",L"Guide",L"Start",L"L3",L"R3",L"LB",L"RB",
+    L"D-up",L"D-down",L"D-left",L"D-right",L"Misc",L"P1",L"P2",L"P3",L"P4",L"Touchpad"
+};
+/* SDL_GamepadAxis order. */
+static const WCHAR *controls_axis_names[CONTROLS_AXIS_COUNT]={L"lx",L"ly",L"rx",L"ry",L"lt",L"rt"};
+static const WCHAR *controls_axis_short[CONTROLS_AXIS_COUNT]={L"LX",L"LY",L"RX",L"RY",L"LT",L"RT"};
+
 typedef struct { const WCHAR *key,*label,*def; } ControllerBindingRow;
 static const ControllerBindingRow controls_controller_rows[CONTROLLER_BINDING_COUNT]={
     {L"a",L"A",L"button:a"},{L"b",L"B",L"button:b"},{L"x",L"X",L"button:x"},{L"y",L"Y",L"button:y"},
     {L"lb",L"Left bumper",L"button:lb"},{L"rb",L"Right bumper",L"button:rb"},
     {L"back",L"Back",L"button:back"},{L"start",L"Start",L"button:start"},
-    {L"l3",L"Left stick click",L"button:l3"},{L"r3",L"Right stick click",L"button:r3"},
+    {L"l3",L"L3 click",L"button:l3"},{L"r3",L"R3 click",L"button:r3"},
     {L"guide",L"Guide",L"button:guide"},
     {L"dup",L"D-pad up",L"button:dup"},{L"ddown",L"D-pad down",L"button:ddown"},
     {L"dleft",L"D-pad left",L"button:dleft"},{L"dright",L"D-pad right",L"button:dright"},
@@ -26,6 +79,332 @@ static const ControllerBindingRow controls_controller_rows[CONTROLLER_BINDING_CO
     {L"lt",L"Left trigger",L"axis:lt"},{L"rt",L"Right trigger",L"axis:rt"}
 };
 
+static int controls_name_index(const WCHAR *name,const WCHAR **names,int count){
+    for(int i=0;i<count;i++)if(!_wcsicmp(name,names[i]))return i;
+    return -1;
+}
+static BOOL controls_parse_binding_part(const WCHAR *text,int *kind,int *index,int *sign){
+    *kind=BINDING_NONE;*index=0;*sign=1;
+    const WCHAR *colon=wcschr(text,L':');
+    if(!colon)return FALSE;
+    WCHAR type[16];
+    size_t length=(size_t)(colon-text);
+    if(length>=sizeof(type)/sizeof(type[0]))return FALSE;
+    memcpy(type,text,length*sizeof(WCHAR));type[length]=0;
+    WCHAR name[32];
+    wcsncpy(name,colon+1,31);name[31]=0;
+    size_t used=wcslen(name);
+    if(used&&(name[used-1]==L'+'||name[used-1]==L'-')){
+        *sign=name[used-1]==L'-'?-1:1;
+        name[--used]=0;
+    }
+    int found;
+    if(!_wcsicmp(type,L"button")){
+        found=controls_name_index(name,controls_button_names,CONTROLS_BUTTON_COUNT);
+        if(found<0)return FALSE;
+        *kind=BINDING_BUTTON;*index=found;return TRUE;
+    }
+    if(!_wcsicmp(type,L"axis")){
+        found=controls_name_index(name,controls_axis_names,CONTROLS_AXIS_COUNT);
+        if(found<0)return FALSE;
+        *kind=BINDING_AXIS;*index=found;return TRUE;
+    }
+    return FALSE;
+}
+/* The next chord separator is a '+' followed by another control, so an axis
+ * direction suffix such as "axis:ly-" or "axis:lx+" is not split. */
+static const WCHAR *controls_next_separator(const WCHAR *text){
+    for(const WCHAR *cursor=text;*cursor;cursor++){
+        if(*cursor==L'+'&&(!_wcsnicmp(cursor+1,L"button:",7)||!_wcsnicmp(cursor+1,L"axis:",5)))return cursor;
+    }
+    return NULL;
+}
+static BOOL controls_parse_binding(const WCHAR *text,int *count,int *kinds,int *indexes,int *signs){
+    *count=0;
+    if(!text||!*text||!_wcsicmp(text,L"none"))return TRUE;
+    const WCHAR *cursor=text;
+    while(*cursor&&*count<CONTROLS_MAX_CHORD){
+        const WCHAR *separator=controls_next_separator(cursor);
+        size_t length=separator?(size_t)(separator-cursor):wcslen(cursor);
+        WCHAR part[64];
+        if(!length||length>=64)return FALSE;
+        memcpy(part,cursor,length*sizeof(WCHAR));part[length]=0;
+        if(!controls_parse_binding_part(part,&kinds[*count],&indexes[*count],&signs[*count]))return FALSE;
+        (*count)++;
+        if(!separator)break;
+        cursor=separator+1;
+    }
+    return TRUE;
+}
+static void controls_binding_text(int row,WCHAR *out,size_t size){
+    out[0]=0;
+    if(controls_binding_count[row]==0){
+        wcsncpy(out,L"Unbound",size);out[size-1]=0;return;
+    }
+    size_t used=0;
+    for(int i=0;i<controls_binding_count[row];i++){
+        WCHAR label[24];
+        if(controls_binding_kind[row][i]==BINDING_BUTTON){
+            _snwprintf(label,24,L"%ls",controls_button_short[controls_binding_index[row][i]]);
+        }else{
+            _snwprintf(label,24,L"%ls%ls",controls_axis_short[controls_binding_index[row][i]],
+                controls_binding_sign[row][i]<0?L"-":L"+");
+        }
+        _snwprintf(out+used,size-used,L"%ls%ls",i?L"+":L"",label);
+        used=wcslen(out);
+        if(used>=size)return;
+    }
+    _snwprintf(out+used,size-used,L" (");
+    used=wcslen(out);
+    for(int i=0;i<controls_binding_count[row];i++){
+        WCHAR coord[16];
+        _snwprintf(coord,16,L"%ls%d",controls_binding_kind[row][i]==BINDING_BUTTON?L"b":L"a",
+            controls_binding_index[row][i]);
+        _snwprintf(out+used,size-used,L"%ls%ls",i?L"+":L"",coord);
+        used=wcslen(out);
+        if(used>=size)return;
+    }
+    _snwprintf(out+used,size-used,L")");
+}
+static void controls_binding_update_text(int row){
+    WCHAR text[96];
+    controls_binding_text(row,text,96);
+    SetWindowTextW(controls_controller_bindings[row],text);
+}
+static void controls_binding_store(int row,int kind,int index,int sign){
+    if(row<0||row>=CONTROLLER_BINDING_COUNT)return;
+    if(kind==BINDING_NONE){
+        controls_binding_count[row]=0;
+    }else{
+        controls_binding_count[row]=1;
+        controls_binding_kind[row][0]=kind;
+        controls_binding_index[row][0]=index;
+        controls_binding_sign[row][0]=sign;
+    }
+    controls_binding_update_text(row);
+}
+static void controls_binding_store_chord(int row,const unsigned mask){
+    if(row<0||row>=CONTROLLER_BINDING_COUNT)return;
+    int count=0;
+    for(int i=0;i<CONTROLS_BUTTON_COUNT&&count<CONTROLS_MAX_CHORD;i++){
+        if(mask&(1u<<i)){
+            controls_binding_kind[row][count]=BINDING_BUTTON;
+            controls_binding_index[row][count]=i;
+            controls_binding_sign[row][count]=1;
+            count++;
+        }
+    }
+    /* A virtual axis consumes one physical source; chords are for buttons. */
+    if(row>=15&&count>1)count=1;
+    controls_binding_count[row]=count;
+    controls_binding_update_text(row);
+}
+static void controls_binding_canonical(int row,WCHAR *out,size_t size){
+    out[0]=0;
+    if(controls_binding_count[row]==0){
+        wcsncpy(out,L"none",size);out[size-1]=0;return;
+    }
+    size_t used=0;
+    for(int i=0;i<controls_binding_count[row];i++){
+        WCHAR part[32];
+        if(controls_binding_kind[row][i]==BINDING_BUTTON){
+            _snwprintf(part,32,L"button:%ls",controls_button_names[controls_binding_index[row][i]]);
+        }else{
+            _snwprintf(part,32,L"axis:%ls%ls",controls_axis_names[controls_binding_index[row][i]],
+                controls_binding_sign[row][i]<0?L"-":L"");
+        }
+        _snwprintf(out+used,size-used,L"%ls%ls",i?L"+":L"",part);
+        used=wcslen(out);
+        if(used>=size)return;
+    }
+}
+static void controls_binding_assign(int row,int count,const int *kinds,const int *indexes,const int *signs){
+    if(row<0||row>=CONTROLLER_BINDING_COUNT)return;
+    if(count<0)count=0;
+    if(count>CONTROLS_MAX_CHORD)count=CONTROLS_MAX_CHORD;
+    if(row>=15&&count>1)count=1;
+    controls_binding_count[row]=count;
+    for(int i=0;i<count;i++){
+        controls_binding_kind[row][i]=kinds[i];
+        controls_binding_index[row][i]=indexes[i];
+        controls_binding_sign[row][i]=signs[i];
+    }
+    controls_binding_update_text(row);
+}
+static void controls_sdl_bind(void *target,size_t size,HMODULE module,const char *name){
+    FARPROC symbol=GetProcAddress(module,name);
+    memset(target,0,size);
+    memcpy(target,&symbol,size<sizeof(symbol)?size:sizeof(symbol));
+}
+#define CONTROLS_SDL_BIND(field,name) controls_sdl_bind(&controls_sdl.field,sizeof(controls_sdl.field),module,name)
+static int controls_sdl_init(void){
+    if(controls_sdl_attempted)return controls_sdl_ready;
+    controls_sdl_attempted=TRUE;
+    WCHAR dll[CAP];path(dll,L"SDL3.dll");
+    controls_sdl.module=LoadLibraryW(dll);
+    if(!controls_sdl.module)controls_sdl.module=LoadLibraryW(L"SDL3.dll");
+    if(!controls_sdl.module){
+        SetWindowTextW(status,L"Could not load SDL3.dll. Install it beside the launcher, then try again.");
+        return FALSE;
+    }
+    HMODULE module=controls_sdl.module;
+    CONTROLS_SDL_BIND(Init,"SDL_Init");
+    CONTROLS_SDL_BIND(Quit,"SDL_Quit");
+    CONTROLS_SDL_BIND(UpdateGamepads,"SDL_UpdateGamepads");
+    CONTROLS_SDL_BIND(GetGamepads,"SDL_GetGamepads");
+    CONTROLS_SDL_BIND(Free,"SDL_free");
+    CONTROLS_SDL_BIND(OpenGamepad,"SDL_OpenGamepad");
+    CONTROLS_SDL_BIND(CloseGamepad,"SDL_CloseGamepad");
+    CONTROLS_SDL_BIND(GamepadConnected,"SDL_GamepadConnected");
+    CONTROLS_SDL_BIND(GetGamepadButton,"SDL_GetGamepadButton");
+    CONTROLS_SDL_BIND(GetGamepadAxis,"SDL_GetGamepadAxis");
+    CONTROLS_SDL_BIND(SetHint,"SDL_SetHint");
+    if(!controls_sdl.Init||!controls_sdl.UpdateGamepads||!controls_sdl.GetGamepads||
+       !controls_sdl.OpenGamepad||!controls_sdl.GetGamepadButton||!controls_sdl.GetGamepadAxis){
+        SetWindowTextW(status,L"SDL3.dll does not provide the gamepad functions the launcher needs.");
+        return FALSE;
+    }
+    if(controls_sdl.SetHint){
+        /* Never route SDL back through the XInput proxy in this folder. */
+        controls_sdl.SetHint("SDL_JOYSTICK_XINPUT","0");
+        controls_sdl.SetHint("SDL_JOYSTICK_HIDAPI","1");
+        controls_sdl.SetHint("SDL_JOYSTICK_RAWINPUT","1");
+        controls_sdl.SetHint("SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS","1");
+    }
+    if(!controls_sdl.Init(0x00002000u)){
+        SetWindowTextW(status,L"SDL could not initialize the gamepad backend.");
+        return FALSE;
+    }
+    controls_sdl_ready=TRUE;
+    return TRUE;
+}
+static int controls_sdl_refresh(void){
+    if(!controls_sdl_ready)return 0;
+    controls_sdl.UpdateGamepads();
+    if(controls_pad&&controls_sdl.GamepadConnected&&controls_sdl.GamepadConnected(controls_pad))return 1;
+    if(controls_pad){
+        if(controls_sdl.CloseGamepad)controls_sdl.CloseGamepad(controls_pad);
+        controls_pad=NULL;
+    }
+    int count=0;
+    ControlsJoystickID *ids=controls_sdl.GetGamepads(&count);
+    if(ids&&count>0)controls_pad=controls_sdl.OpenGamepad(ids[0]);
+    if(ids)controls_sdl.Free(ids);
+    return controls_pad?1:0;
+}
+static int controls_axis_threshold(int axis){return axis>=4?6000:16000;}
+static int controls_pad_active(void){
+    for(int i=0;i<CONTROLS_BUTTON_COUNT;i++)if(controls_sdl.GetGamepadButton(controls_pad,i))return 1;
+    for(int i=0;i<CONTROLS_AXIS_COUNT;i++){
+        int value=controls_sdl.GetGamepadAxis(controls_pad,i);
+        if((value<0?-value:value)>controls_axis_threshold(i))return 1;
+    }
+    return 0;
+}
+static void controls_capture_end(void){
+    if(window)KillTimer(window,CONTROLS_CAPTURE_TIMER);
+    controls_capture_row=-1;
+    controls_capture_wait_release=FALSE;
+    controls_capture_seen=0;
+}
+static void controls_capture_cancel(void){
+    if(controls_capture_row>=0)controls_binding_update_text(controls_capture_row);
+    controls_capture_end();
+}
+static void controls_capture_progress(unsigned mask){
+    if(controls_capture_row<0)return;
+    WCHAR text[96];size_t used=0;text[0]=0;
+    for(int i=0;i<CONTROLS_BUTTON_COUNT;i++){
+        if(mask&(1u<<i)){
+            _snwprintf(text+used,96-used,L"%ls%ls",used?L"+":L"",controls_button_short[i]);
+            used=wcslen(text);
+        }
+    }
+    _snwprintf(text+used,96-used,L"...");
+    SetWindowTextW(controls_controller_bindings[controls_capture_row],text);
+}
+static void controls_capture_finish(const WCHAR *message){
+    controls_capture_end();
+    SetWindowTextW(status,message);
+}
+static void controls_capture_store(int kind,int index,int sign){
+    int row=controls_capture_row;
+    if(row<0)return;
+    controls_binding_store(row,kind,index,sign);
+    controls_capture_finish(L"Binding captured. Save settings to apply it to the game.");
+}
+static void controls_capture_store_chord(unsigned mask){
+    int row=controls_capture_row;
+    if(row<0||!mask)return;
+    controls_binding_store_chord(row,mask);
+    controls_capture_finish(L"Binding captured. Save settings to apply it to the game.");
+}
+static void controls_capture_tick(void){
+    if(controls_capture_row<0)return;
+    if(!controls_sdl_init()){controls_capture_cancel();return;}
+    if(!controls_sdl_refresh()){
+        SetWindowTextW(status,L"Connect a controller, then press a button to bind it.");
+        return;
+    }
+    if(controls_capture_wait_release){
+        if(controls_pad_active())return;
+        controls_capture_wait_release=FALSE;
+    }
+    unsigned pressed=0;
+    for(int i=0;i<CONTROLS_BUTTON_COUNT;i++){
+        if(controls_sdl.GetGamepadButton(controls_pad,i))pressed|=1u<<i;
+    }
+    if(controls_capture_seen||pressed){
+        controls_capture_seen|=pressed;
+        if(pressed){controls_capture_progress(controls_capture_seen);return;}
+        /* Every chord button was released: commit the whole chord. */
+        unsigned chord=controls_capture_seen;
+        controls_capture_seen=0;
+        controls_capture_store_chord(chord);
+        return;
+    }
+    for(int i=0;i<CONTROLS_AXIS_COUNT;i++){
+        int value=controls_sdl.GetGamepadAxis(controls_pad,i);
+        int magnitude=value<0?-value:value;
+        if(magnitude>controls_axis_threshold(i)){
+            int sign=i>=4?1:(value<0?-1:1);
+            controls_capture_store(BINDING_AXIS,i,sign);
+            return;
+        }
+    }
+}
+static void controls_capture_begin(int row){
+    if(busy||row<0||row>=CONTROLLER_BINDING_COUNT)return;
+    if(controls_capture_row==row){controls_capture_cancel();SetWindowTextW(status,L"Binding capture cancelled.");return;}
+    controls_capture_cancel();
+    if(!controls_sdl_init())return;
+    controls_capture_row=row;
+    controls_capture_wait_release=TRUE;
+    controls_capture_seen=0;
+    SetWindowTextW(controls_controller_bindings[row],L"Press a button...");
+    SetWindowTextW(status,L"Press a controller button or a chord, or move a stick/trigger. Release all buttons to save. Delete clears; Escape cancels.");
+    SetFocus(controls_controller_bindings[row]);
+    if(window)SetTimer(window,CONTROLS_CAPTURE_TIMER,16,NULL);
+}
+static BOOL controls_capture_key(int key){
+    if(controls_capture_row<0)return FALSE;
+    if(key==VK_ESCAPE){controls_capture_cancel();SetWindowTextW(status,L"Binding capture cancelled.");return TRUE;}
+    if(key==VK_DELETE||key==VK_BACK){controls_capture_store(BINDING_NONE,0,1);return TRUE;}
+    return FALSE;
+}
+static WNDPROC controls_capture_button_old_proc;
+static LRESULT CALLBACK controls_capture_button_proc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
+    if(msg==WM_KEYDOWN&&controls_capture_key((int)wp))return 0;
+    return CallWindowProcW(controls_capture_button_old_proc,hwnd,msg,wp,lp);
+}
+/* Called when the Controls page or one of its subtabs is left. */
+static void controls_leave(void){
+    if(controls_capture_row>=0)controls_capture_cancel();
+}
+
+/* ------------------------------------------------------------------ */
+/* Existing camera/hotkey helpers                                      */
+/* ------------------------------------------------------------------ */
 static void controls_add(HWND box,const WCHAR *text){graphics_choice(box,text,0);}
 static void controls_pick(HWND box,const WCHAR *value){
     int count=(int)SendMessageW(box,CB_GETCOUNT,0,0);
@@ -51,19 +430,6 @@ static void controls_trace_reload(void){
     path(controls_ini,L"client.ini");
     SendMessageW(controls_trace,BM_SETCHECK,GetPrivateProfileIntW(L"camera",L"race_orbit_trace",0,controls_ini)?BST_CHECKED:BST_UNCHECKED,0);
 }
-static void controls_bindings_create(HWND box){
-    static const WCHAR *options[]={
-        L"none",
-        L"button:a",L"button:b",L"button:x",L"button:y",
-        L"button:lb",L"button:rb",L"button:back",L"button:start",
-        L"button:l3",L"button:r3",L"button:guide",
-        L"button:dup",L"button:ddown",L"button:dleft",L"button:dright",
-        L"axis:lx",L"axis:lx-",L"axis:ly",L"axis:ly-",
-        L"axis:rx",L"axis:rx-",L"axis:ry",L"axis:ry-",
-        L"axis:lt",L"axis:rt"
-    };
-    for(unsigned i=0;i<sizeof(options)/sizeof(options[0]);i++)controls_add(box,options[i]);
-}
 static void controls_reload(void){
     if(!controls_enable)return;
     path(controls_ini,L"client.ini");
@@ -86,8 +452,11 @@ static void controls_reload(void){
     GetPrivateProfileStringW(L"camera",L"photo_speed",L"8.0",value,64,controls_ini);SetWindowTextW(controls_photo_speed,value);
     SendMessageW(controls_controller_enabled,BM_SETCHECK,GetPrivateProfileIntW(L"controller",L"enabled",1,controls_ini)?BST_CHECKED:BST_UNCHECKED,0);
     for(int i=0;i<CONTROLLER_BINDING_COUNT;i++){
+        int count,kinds[CONTROLS_MAX_CHORD],indexes[CONTROLS_MAX_CHORD],signs[CONTROLS_MAX_CHORD];
+        memset(kinds,0,sizeof(kinds));memset(indexes,0,sizeof(indexes));memset(signs,0,sizeof(signs));
         GetPrivateProfileStringW(L"controller",controls_controller_rows[i].key,controls_controller_rows[i].def,value,128,controls_ini);
-        controls_pick(controls_controller_bindings[i],value);
+        if(!controls_parse_binding(value,&count,kinds,indexes,signs))count=0;
+        controls_binding_assign(i,count,kinds,indexes,signs);
     }
 }
 static BOOL controls_save_settings(void){
@@ -123,7 +492,7 @@ static BOOL controls_save_settings(void){
         &&WritePrivateProfileStringW(L"controller",L"enabled",SendMessageW(controls_controller_enabled,BM_GETCHECK,0,0)==BST_CHECKED?L"1":L"0",controls_ini);
     for(int i=0;i<CONTROLLER_BINDING_COUNT&&ok;i++){
         WCHAR binding[64];
-        controls_text(controls_controller_bindings[i],binding,64);
+        controls_binding_canonical(i,binding,64);
         ok=WritePrivateProfileStringW(L"controller",controls_controller_rows[i].key,binding,controls_ini)!=0;
     }
     SetWindowTextW(status,ok?L"Controller and camera settings saved. Restart the game to apply changes.":L"Could not save all controller settings. Please try again.");
@@ -154,7 +523,7 @@ static void controls_create(void){
     SendMessageW(controls_photo_button,CB_SETDROPPEDWIDTH,220,0);
     control(L"STATIC",L"Photo speed",0,312,214,130,24,0);
     controls_photo_speed=control(L"EDIT",L"8.0",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,452,210,80,28,0);
-    controls_save=control(L"BUTTON",L"Save settings",WS_TABSTOP,22,250,220,32,CONTROLS_SAVE);
+    controls_save=control(L"BUTTON",L"Save settings",WS_TABSTOP,22,240,220,32,CONTROLS_SAVE);
     controls_first=controls_enable;
     checkbox_help(controls_enable,L"Keep the normal chase camera and use the right stick/mouse to look around while free look is toggled on. Press R3 or the configured button/key to toggle. Restart the game after changes.");
     checkbox_help(controls_invert_x,L"Invert horizontal look from the right stick or mouse. 0 in client.ini is the preferred direction; this checkbox stores 1. It does not change photo-mode strafing.");
@@ -180,19 +549,20 @@ static void controls_create(void){
     checkbox_help(controls_photo_key,L"Keyboard key that toggles photo mode. Leave empty to use only the controller chord.");
     restart_note(L"Restart the game after changing these settings",22,174,590);
 
-    /* Controller: raw XInput remap table used by the SDL3 proxy. */
+    /* Controller: click a row, then press the physical SDL control to bind.
+     * Three columns keep the table clear of the launcher status area. */
     controls_part=CONTROLS_CONTROLLER;
-    controls_controller_enabled=control(L"BUTTON",L"Enable controller remapping",BS_AUTOCHECKBOX|WS_TABSTOP,22,22,300,28,0);
     for(int i=0;i<CONTROLLER_BINDING_COUNT;i++){
-        int column=i<11?0:1,row=i<11?i:i-11;
-        int x=column?330:22,y=54+row*26;
-        control(L"STATIC",controls_controller_rows[i].label,0,x,y,140,24,0);
-        controls_controller_bindings[i]=control(L"COMBOBOX",L"",CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP,x+150,y-2,120,200,0);
-        controls_bindings_create(controls_controller_bindings[i]);
+        int column=i/7,row=i%7;
+        int x=6+column*216,y=22+row*26;
+        control(L"STATIC",controls_controller_rows[i].label,0,x,y+2,94,24,0);
+        controls_controller_bindings[i]=control(L"BUTTON",L"",WS_TABSTOP,x+96,y,112,24,CONTROLLER_CAPTURE_BASE+i);
+        controls_capture_button_old_proc=(WNDPROC)SetWindowLongPtrW(controls_controller_bindings[i],GWLP_WNDPROC,(LONG_PTR)controls_capture_button_proc);
     }
-    control(L"BUTTON",L"Save settings",WS_TABSTOP,22,330,220,32,CONTROLS_SAVE);
-    checkbox_help(controls_controller_enabled,L"Enable the SDL3 XInput proxy remap table. Restart the game after saving. The game receives the virtual controls selected here.");
-    restart_note(L"Restart the game after changing these settings",22,374,590);
+    controls_controller_enabled=control(L"BUTTON",L"Enable controller remapping",BS_AUTOCHECKBOX|WS_TABSTOP,250,210,390,28,0);
+    controls_save=control(L"BUTTON",L"Save settings",WS_TABSTOP,14,210,210,30,CONTROLS_SAVE);
+    checkbox_help(controls_controller_enabled,L"Enable the SDL3 XInput proxy remap table. Restart the game after saving. The game receives the virtual controls selected on this tab. Chords such as L3+R3 require every listed button.");
+    restart_note(L"Click a binding, press one button or a chord, then release. Delete clears it.",14,246,630);
     graphics_choice(controls_free_button,L"right_thumb",0);graphics_choice(controls_free_button,L"left_thumb",0);
     graphics_choice(controls_free_button,L"back",0);graphics_choice(controls_free_button,L"start",0);
     graphics_choice(controls_free_button,L"left_shoulder",0);graphics_choice(controls_free_button,L"right_shoulder",0);

@@ -29,7 +29,7 @@
 #include "error_dialog.h"
 #define WM_COMPLETE (WM_APP + 1)
 #define WM_GAME_RUNNING (WM_APP + 2)
-enum { EXTERNAL=101, FALLBACK, TIMEOUT, POPUP, SAVE, PLAY, LOCAL, EXTERNAL_ONLY, STOP, UPDATE, EXPERIMENTAL, NETWORKING, SKIP_LAUNCHER, AUTO_UPDATE_SKIP, CLOSE_LAUNCHER, CJK_INSTALL, LOGGING, LATIN_INSTALL, UPDATE_DETAILS, LASTFM_ENABLED, LASTFM_PERCENT, LASTFM_LINK, LASTFM_DISCONNECT, LASTFM_SAVE, LASTFM_KEY, LASTFM_SECRET, UNINSTALL, LISTENBRAINZ_TOKEN, LISTENBRAINZ_ENABLED, LISTENBRAINZ_PERCENT, LISTENBRAINZ_SAVE, LISTENBRAINZ_GET_TOKEN, LIBRE_ENABLED, LIBRE_PERCENT, LIBRE_LINK, LIBRE_DISCONNECT, LIBRE_SAVE, LIBRE_CREDENTIAL, GRAPHICS_SAVE, CONTROLS_SAVE, CONTROLS_TRACE, LOG_CATEGORY_BASE=500 };
+enum { EXTERNAL=101, FALLBACK, TIMEOUT, POPUP, SAVE, PLAY, LOCAL, EXTERNAL_ONLY, STOP, UPDATE, EXPERIMENTAL, NETWORKING, SKIP_LAUNCHER, AUTO_UPDATE_SKIP, CLOSE_LAUNCHER, CJK_INSTALL, LOGGING, LATIN_INSTALL, UPDATE_DETAILS, LASTFM_ENABLED, LASTFM_PERCENT, LASTFM_LINK, LASTFM_DISCONNECT, LASTFM_SAVE, LASTFM_KEY, LASTFM_SECRET, UNINSTALL, LISTENBRAINZ_TOKEN, LISTENBRAINZ_ENABLED, LISTENBRAINZ_PERCENT, LISTENBRAINZ_SAVE, LISTENBRAINZ_GET_TOKEN, LIBRE_ENABLED, LIBRE_PERCENT, LIBRE_LINK, LIBRE_DISCONNECT, LIBRE_SAVE, LIBRE_CREDENTIAL, GRAPHICS_SAVE, CONTROLS_SAVE, CONTROLS_TRACE, LOG_CATEGORY_BASE=500, CONTROLLER_CAPTURE_BASE=600 };
 #include "branding.h"
 
 static WCHAR folder[CAP], ini[CAP], message[1024];
@@ -368,7 +368,7 @@ static void begin(int action) {
 }
 
 static HWND control(const WCHAR *cls,const WCHAR *text,DWORD style,int x,int y,int w,int h,int id) {
-    HWND handle=CreateWindowExW(0,cls,text,WS_CHILD|WS_VISIBLE|style,x,y+34+((creating_lastfm||creating_listenbrainz||creating_libre)?24:0)+(creating_controls?34:0),w,h,window,(HMENU)(INT_PTR)id,GetModuleHandleW(NULL),NULL);
+    HWND handle=CreateWindowExW(0,cls,text,WS_CHILD|WS_VISIBLE|style,x,y+34+((creating_lastfm||creating_listenbrainz||creating_libre)?24:0)+(creating_controls?58:0),w,h,window,(HMENU)(INT_PTR)id,GetModuleHandleW(NULL),NULL);
     /* Use the standard edit border under Wine. Its themed focus decoration
      * can remain visible above unrelated windows after the launcher loses focus.
      * Keep the native EDIT control, keyboard focus and text handling. */
@@ -503,7 +503,10 @@ static void checkbox_help(HWND checkbox,const WCHAR *text) {
     SendMessageW(checkbox_tooltips,TTM_ADDTOOLW,0,(LPARAM)&tool);
 }
 static void select_launcher_page(void){
+    static int previous_page=-1;
     int page=(int)SendMessageW(launcher_tabs,TCM_GETCURSEL,0,0);BOOL languages=page==PAGE_LANGUAGES;BOOL controls=page==PAGE_CONTROLS;
+    BOOL reload_controls=controls&&previous_page!=PAGE_CONTROLS;
+    previous_page=page;
     BOOL lastfm=page==PAGE_SCROBBLING&&SendMessageW(scrobbling_tabs,TCM_GETCURSEL,0,0)==0;
     BOOL listenbrainz=page==PAGE_SCROBBLING&&SendMessageW(scrobbling_tabs,TCM_GETCURSEL,0,0)==1;
     BOOL libre=page==PAGE_SCROBBLING&&SendMessageW(scrobbling_tabs,TCM_GETCURSEL,0,0)==2;
@@ -511,6 +514,7 @@ static void select_launcher_page(void){
     ShowWindow(controls_tabs,controls?SW_SHOW:SW_HIDE);
     int cpart=controls?(int)SendMessageW(controls_tabs,TCM_GETCURSEL,0,0):CONTROLS_HOTKEYS;
     if(cpart<0||cpart>=CONTROLS_PART_COUNT)cpart=CONTROLS_HOTKEYS;
+    if(!controls||cpart!=CONTROLS_CONTROLLER)controls_leave();
     SendMessageW(checkbox_tooltips,TTM_POP,0,0);
     for(unsigned i=0;i<server_page_count;i++){
         HWND item=server_page_controls[i];
@@ -524,9 +528,9 @@ static void select_launcher_page(void){
     for(unsigned i=0;i<listenbrainz_count;i++)ShowWindow(listenbrainz_controls[i],listenbrainz?SW_SHOW:SW_HIDE);
     for(unsigned i=0;i<libre_count;i++)ShowWindow(libre_controls_group[i],libre?SW_SHOW:SW_HIDE);
     if(page==PAGE_SCROBBLING){SetFocus(scrobbling_tabs);return;}
-    if(controls)controls_reload();
+    if(controls&&reload_controls)controls_reload();
     if(page==PAGE_DIAGNOSTICS)controls_trace_reload();
-    if(controls){SetFocus(cpart==CONTROLS_HOTKEYS?controls_first:controls_tabs);return;}
+    if(controls){SetFocus(cpart==CONTROLS_HOTKEYS?controls_first:cpart==CONTROLS_CONTROLLER?controls_controller_bindings[0]:controls_tabs);return;}
     SetFocus(page==PAGE_GRAPHICS?graphics_resolution:page==PAGE_DIAGNOSTICS?logging_checkbox:languages?language_checkbox:external);
 }
 static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
@@ -719,6 +723,10 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
     }
     if(event==WM_NOTIFY&&(((NMHDR *)lp)->hwndFrom==launcher_tabs||((NMHDR *)lp)->hwndFrom==scrobbling_tabs||((NMHDR *)lp)->hwndFrom==controls_tabs)&&((NMHDR *)lp)->code==TCN_SELCHANGE){select_launcher_page();return 0;}
     if (event==WM_COMMAND) {
+        if(LOWORD(wp)>=CONTROLLER_CAPTURE_BASE&&LOWORD(wp)<CONTROLLER_CAPTURE_BASE+CONTROLLER_BINDING_COUNT){
+            if(HIWORD(wp)==BN_CLICKED&&!busy)controls_capture_begin(LOWORD(wp)-CONTROLLER_CAPTURE_BASE);
+            return 0;
+        }
         if(LOWORD(wp)>=LOG_CATEGORY_BASE&&LOWORD(wp)<LOG_CATEGORY_BASE+LOG_CATEGORY_COUNT) {
             unsigned i=LOWORD(wp)-LOG_CATEGORY_BASE;WCHAR key[80];_snwprintf(key,80,L"log_%ls",log_categories[i]);
             BOOL enabled=SendMessageW(log_checkboxes[i],BM_GETCHECK,0,0)==BST_CHECKED;
@@ -785,6 +793,8 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
             case PLAY:begin(TRUE);break;
         }return 0;
     }
+    if(event==WM_KEYDOWN&&controls_capture_key((int)wp))return 0;
+    if(event==WM_TIMER&&wp==CONTROLS_CAPTURE_TIMER){controls_capture_tick();return 0;}
     if(event==WM_TIMER&&wp==1){refresh_changed_settings();if(SendMessageW(launcher_tabs,TCM_GETCURSEL,0,0)==PAGE_SCROBBLING&&SendMessageW(scrobbling_tabs,TCM_GETCURSEL,0,0)==0&&lfm_poll_due(GetTickCount()))begin(9);if(SendMessageW(launcher_tabs,TCM_GETCURSEL,0,0)==PAGE_SCROBBLING&&SendMessageW(scrobbling_tabs,TCM_GETCURSEL,0,0)==2&&libre_poll_due(GetTickCount()))begin(12);return 0;}
     if(event==WM_ACTIVATE&&LOWORD(wp)!=WA_INACTIVE)refresh_changed_settings();
     if(event==RERIFF_PROGRESS_EVENT){if(busy)progress_set_bar(launcher_progress,(int)(INT_PTR)lp);return 0;}
@@ -810,7 +820,7 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
         if (busy) { SetWindowTextW(status,L"Wait for server startup or close the game before closing this launcher.");return 0; }
         DestroyWindow(hwnd);return 0;
     }
-    if (event==WM_DESTROY) { progress_sink=NULL;KillTimer(hwnd,1);rr_brand_cleanup();DeleteObject(font);PostQuitMessage(0);return 0; }
+    if (event==WM_DESTROY) { progress_sink=NULL;KillTimer(hwnd,1);KillTimer(hwnd,CONTROLS_CAPTURE_TIMER);rr_brand_cleanup();DeleteObject(font);PostQuitMessage(0);return 0; }
     return DefWindowProcW(hwnd,event,wp,lp);
 }
 
