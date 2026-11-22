@@ -137,6 +137,7 @@ static BOOL race_track_pool_install(BYTE *base){
     *slot=rva;
     VirtualProtect(slot,4,old,&ignored);
     FlushInstructionCache(GetCurrentProcess(),memory,RERIFF_TRACK_CTOR_BLOB_SIZE);
+    char readback[128];snprintf(readback,sizeof(readback),"Track ctor RVA readback=%08X.",(unsigned)*slot);log_line(readback);
     char line[192];snprintf(line,sizeof(line),"Track ctor relocated: RVA %08X -> %08X, pool=512 for types 8/9 and 127 otherwise, blob=%u bytes.",
         0x271e78u,(unsigned)rva,(unsigned)RERIFF_TRACK_CTOR_BLOB_SIZE);log_line(line);
     installed=TRUE;
@@ -149,6 +150,11 @@ static BOOL race_track_pool_install(BYTE *base){
  * leave the 127-slot fallback in place instead of crashing at song load. */
 __declspec(dllexport) int __cdecl ReRiffTrackPoolRelocated(void){
     return race_track_pool_relocated?1:0;
+}
+__declspec(dllexport) unsigned __cdecl ReRiffTrackPoolRva(void){
+    BYTE *base=(BYTE *)GetModuleHandleW(NULL);
+    if(!readable(base+RERIFF_TRACK_CTOR_RVA_FIELD,4))return 0;
+    return *(unsigned *)(base+RERIFF_TRACK_CTOR_RVA_FIELD);
 }
 __declspec(dllexport) void __cdecl ReRiffTrackPoolValidated(void){
     if(race_track_pool_relocated)log_line("Track ctor relocation JIT-validated.");
