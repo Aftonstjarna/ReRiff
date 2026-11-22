@@ -68,6 +68,19 @@ static void race_culling_force_custom(BYTE *strip,BOOL visible){
         *((float *)(shader+1584))=0.0f;
         *((float *)(shader+1588))=100000.0f;
     }
+    /* The road rails/signs are the elSSP<elVisual3d> arrays at +268 and +300. */
+    for(int off=268;off<=300;off+=32){
+        for(int i=0;i<8;i++){
+            void **slot=(void **)(strip+off+i*4);
+            if(!readable(slot,4))continue;
+            void *rail=*slot;
+            if(!rail||!readable(rail,132))continue;
+            *((BYTE *)rail+20)=visible?1:0;
+            if(!visible)continue;
+            *((BYTE *)rail+137)&=(BYTE)~1;
+            *((DWORD *)((BYTE *)rail+128))=0x0FFF;
+        }
+    }
 }
 static void race_culling_road_chunks_build(BYTE *base,BYTE *main,void *node){
     (void)base;
@@ -118,6 +131,15 @@ static void race_culling_road_chunks_build(BYTE *base,BYTE *main,void *node){
             }
             race_culling_force_custom(extra,1);
         }
+        unsigned cv=0,ct=0;
+        if(custom&&readable(custom,180)){
+            BYTE *vb=*(BYTE **)(custom+156),*ve=*(BYTE **)(custom+160);
+            BYTE *tb=*(BYTE **)(custom+168),*te=*(BYTE **)(custom+172);
+            if(vb&&ve&&ve>=vb)cv=(unsigned)((ve-vb)/40);
+            if(tb&&te&&te>=tb)ct=(unsigned)((te-tb)/12);
+        }
+        char detail[220];snprintf(detail,sizeof(detail),"Road chunk %u start=%d spawn=%d finish=%d cursor=%d verts=%u tris=%u.",
+            race_culling_road_chunk_count,start,spawn_start,finish,extra?*((int *)(extra+56)):0,cv,ct);log_line(detail);
         race_culling_road_chunks[race_culling_road_chunk_count++]=extra;
     }
     char detail[160];snprintf(detail,sizeof(detail),"Road chunks built: total_blocks=%d chunks=%u chunk_blocks=%u.",total,race_culling_road_chunk_count,chunk);log_line(detail);
@@ -440,7 +462,8 @@ static void race_culling_strips(BYTE *base){
          * hidden; everything else is forced visible and its fade window is
          * widened for the backed-out camera. */
         int strip_type=*((int *)(strip+212));
-        race_culling_force_custom(strip,!(strip_type==0&&race_culling_road_chunk_count>0));
+        (void)strip_type;
+        race_culling_force_custom(strip,1);
         if(race_culling_trace&&(race_culling_frames%120)==0){
             void **pool_begin=*(void ***)(strip+164),**pool_end=*(void ***)(strip+168);
             unsigned pool=pool_begin&&pool_end&&pool_end>=pool_begin?(unsigned)(pool_end-pool_begin):0;
