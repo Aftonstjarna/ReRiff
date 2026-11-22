@@ -8,8 +8,33 @@
 #include <stdlib.h>
 static void checkbox_help(HWND,const WCHAR *);
 static HWND controls_enable,controls_fov,controls_zoom,controls_invert_x,controls_invert_y;
-static HWND controls_trace,controls_free_key,controls_hud_key;
-static HWND controls_mouse,controls_photo_enable,controls_photo_key,controls_photo_hud,controls_photo_speed,controls_photo_invert_strafe,controls_save,controls_first;static WCHAR controls_ini[CAP];
+static HWND controls_trace;
+static HWND controls_photo_enable,controls_photo_hud,controls_photo_speed,controls_photo_invert_strafe,controls_save,controls_first;static WCHAR controls_ini[CAP];
+#define KEYBOARD_ACTION_COUNT 14
+#define KEYBOARD_CAPTURE_TIMER 3
+enum { KEYBOARD_VIRTUAL, KEYBOARD_HOTKEY, KEYBOARD_MOUSE };
+typedef struct { const WCHAR *key,*label; int virtual_key,kind,default_value; } KeyboardActionRow;
+static HWND controls_keyboard_enabled,controls_keyboard_first,controls_keyboard_mouse;
+static HWND controls_keyboard_bindings[KEYBOARD_ACTION_COUNT];
+static int controls_key_values[KEYBOARD_ACTION_COUNT];
+static int controls_key_capture_row=-1;
+static BOOL controls_key_wait_release;
+static const KeyboardActionRow controls_keyboard_rows[KEYBOARD_ACTION_COUNT]={
+    {L"accelerate",L"Accelerate / Menu up",VK_UP,KEYBOARD_VIRTUAL,VK_UP},
+    {L"brake",L"Brake / Menu down",VK_DOWN,KEYBOARD_VIRTUAL,VK_DOWN},
+    {L"left",L"Steer / Menu left",VK_LEFT,KEYBOARD_VIRTUAL,VK_LEFT},
+    {L"right",L"Steer / Menu right",VK_RIGHT,KEYBOARD_VIRTUAL,VK_RIGHT},
+    {L"boost",L"Boost",VK_SHIFT,KEYBOARD_VIRTUAL,VK_SHIFT},
+    {L"drift",L"Drift",VK_SPACE,KEYBOARD_VIRTUAL,VK_SPACE},
+    {L"camera",L"Camera / Menu tab",VK_TAB,KEYBOARD_VIRTUAL,VK_TAB},
+    {L"confirm",L"Confirm",VK_RETURN,KEYBOARD_VIRTUAL,VK_RETURN},
+    {L"pause",L"Pause / Back",VK_ESCAPE,KEYBOARD_VIRTUAL,VK_ESCAPE},
+    {L"restart",L"Restart",'R',KEYBOARD_VIRTUAL,'R'},
+    {L"free_look",L"Free look (ReRiff)",0,KEYBOARD_HOTKEY,0},
+    {L"hud",L"HUD (ReRiff)",0,KEYBOARD_HOTKEY,0},
+    {L"photo_mode",L"Photo mode (ReRiff)",0,KEYBOARD_HOTKEY,VK_F9},
+    {L"mouse_look",L"Mouse look (ReRiff)",0,KEYBOARD_MOUSE,VK_RBUTTON}
+};
 static HWND controls_controller_enabled;
 #define CONTROLLER_BINDING_COUNT 21
 static HWND controls_controller_bindings[CONTROLLER_BINDING_COUNT];
@@ -401,8 +426,150 @@ static LRESULT CALLBACK controls_capture_button_proc(HWND hwnd,UINT msg,WPARAM w
     return CallWindowProcW(controls_capture_button_old_proc,hwnd,msg,wp,lp);
 }
 /* Called when the Controls page or one of its subtabs is left. */
+static int controls_key_value(const WCHAR *value){
+    if(!value||!*value||!_wcsicmp(value,L"none"))return 0;
+    const WCHAR *number=value;
+    if(!_wcsnicmp(number,L"key:",4))number+=4;
+    WCHAR *end=NULL;unsigned long vk=wcstoul(number,&end,0);
+    if(end&&!*end&&vk==0)return 0;
+    if(end&&!*end&&vk<256)return (int)vk;
+    if(value[0]&&!value[1]){
+        if(value[0]>='a'&&value[0]<='z')return (int)(value[0]-32);
+        if((value[0]>='A'&&value[0]<='Z')||(value[0]>='0'&&value[0]<='9'))return (int)value[0];
+    }
+    if((value[0]=='F'||value[0]=='f')&&value[1]){
+        int number_value=_wtoi(value+1);
+        if(number_value>=1&&number_value<=24)return VK_F1+number_value-1;
+    }
+    static const struct {const WCHAR *name;int key;} table[]={
+        {L"space",VK_SPACE},{L"enter",VK_RETURN},{L"return",VK_RETURN},{L"tab",VK_TAB},
+        {L"escape",VK_ESCAPE},{L"esc",VK_ESCAPE},{L"backspace",VK_BACK},{L"insert",VK_INSERT},
+        {L"delete",VK_DELETE},{L"del",VK_DELETE},{L"home",VK_HOME},{L"end",VK_END},
+        {L"pageup",VK_PRIOR},{L"pgup",VK_PRIOR},{L"pagedown",VK_NEXT},{L"pgdn",VK_NEXT},
+        {L"up",VK_UP},{L"down",VK_DOWN},{L"left",VK_LEFT},{L"right",VK_RIGHT},
+        {L"shift",VK_SHIFT},{L"lshift",VK_LSHIFT},{L"rshift",VK_RSHIFT},
+        {L"ctrl",VK_CONTROL},{L"control",VK_CONTROL},{L"lctrl",VK_LCONTROL},{L"rctrl",VK_RCONTROL},
+        {L"alt",VK_MENU},{L"lalt",VK_LMENU},{L"ralt",VK_RMENU},
+        {L"numpad0",VK_NUMPAD0},{L"numpad1",VK_NUMPAD1},{L"numpad2",VK_NUMPAD2},{L"numpad3",VK_NUMPAD3},
+        {L"numpad4",VK_NUMPAD4},{L"numpad5",VK_NUMPAD5},{L"numpad6",VK_NUMPAD6},{L"numpad7",VK_NUMPAD7},
+        {L"numpad8",VK_NUMPAD8},{L"numpad9",VK_NUMPAD9},{L"multiply",VK_MULTIPLY},{L"add",VK_ADD},
+        {L"subtract",VK_SUBTRACT},{L"decimal",VK_DECIMAL},{L"divide",VK_DIVIDE}};
+    for(unsigned i=0;i<sizeof(table)/sizeof(table[0]);i++)if(!_wcsicmp(value,table[i].name))return table[i].key;
+    return 0;
+}
+static void controls_key_name(int vk,WCHAR *out,int size){
+    if(!vk){wcsncpy(out,L"Unbound",size);out[size-1]=0;return;}
+    if(vk==VK_LBUTTON){wcsncpy(out,L"Left mouse",size);out[size-1]=0;return;}
+    if(vk==VK_RBUTTON){wcsncpy(out,L"Right mouse",size);out[size-1]=0;return;}
+    if(vk==VK_MBUTTON){wcsncpy(out,L"Middle mouse",size);out[size-1]=0;return;}
+    if(vk==VK_XBUTTON1){wcsncpy(out,L"Mouse 4",size);out[size-1]=0;return;}
+    if(vk==VK_XBUTTON2){wcsncpy(out,L"Mouse 5",size);out[size-1]=0;return;}
+    if((vk>='A'&&vk<='Z')||(vk>='0'&&vk<='9')){out[0]=(WCHAR)vk;out[1]=0;return;}
+    if(vk>=VK_F1&&vk<=VK_F24){_snwprintf(out,size,L"F%d",vk-VK_F1+1);return;}
+    static const struct {int key;const WCHAR *name;} table[]={
+        {VK_SPACE,L"Space"},{VK_RETURN,L"Enter"},{VK_TAB,L"Tab"},{VK_ESCAPE,L"Esc"},
+        {VK_BACK,L"Backspace"},{VK_INSERT,L"Insert"},{VK_DELETE,L"Delete"},
+        {VK_HOME,L"Home"},{VK_END,L"End"},{VK_PRIOR,L"Page Up"},{VK_NEXT,L"Page Down"},
+        {VK_UP,L"Up"},{VK_DOWN,L"Down"},{VK_LEFT,L"Left"},{VK_RIGHT,L"Right"},
+        {VK_SHIFT,L"Shift"},{VK_LSHIFT,L"Left Shift"},{VK_RSHIFT,L"Right Shift"},
+        {VK_CONTROL,L"Ctrl"},{VK_LCONTROL,L"Left Ctrl"},{VK_RCONTROL,L"Right Ctrl"},
+        {VK_MENU,L"Alt"},{VK_LMENU,L"Left Alt"},{VK_RMENU,L"Right Alt"},
+        {VK_NUMPAD0,L"Numpad 0"},{VK_NUMPAD1,L"Numpad 1"},{VK_NUMPAD2,L"Numpad 2"},
+        {VK_NUMPAD3,L"Numpad 3"},{VK_NUMPAD4,L"Numpad 4"},{VK_NUMPAD5,L"Numpad 5"},
+        {VK_NUMPAD6,L"Numpad 6"},{VK_NUMPAD7,L"Numpad 7"},{VK_NUMPAD8,L"Numpad 8"},
+        {VK_NUMPAD9,L"Numpad 9"},{VK_MULTIPLY,L"Numpad *"},{VK_ADD,L"Numpad +"},
+        {VK_SUBTRACT,L"Numpad -"},{VK_DECIMAL,L"Numpad ."},{VK_DIVIDE,L"Numpad /"},
+        {VK_OEM_1,L";"},{VK_OEM_PLUS,L"="},{VK_OEM_COMMA,L","},{VK_OEM_MINUS,L"-"},
+        {VK_OEM_PERIOD,L"."},{VK_OEM_2,L"/"},{VK_OEM_3,L"`"},{VK_OEM_4,L"["},
+        {VK_OEM_5,L"\\"},{VK_OEM_6,L"]"},{VK_OEM_7,L"'"}};
+    for(unsigned i=0;i<sizeof(table)/sizeof(table[0]);i++){
+        if(table[i].key==vk){wcsncpy(out,table[i].name,size);out[size-1]=0;return;}
+    }
+    UINT scan=MapVirtualKeyW((UINT)vk,MAPVK_VK_TO_VSC);
+    LONG param=(LONG)(scan<<16);
+    if(scan&&GetKeyNameTextW(param,out,size)>0)return;
+    _snwprintf(out,size,L"VK 0x%02X",vk);
+}
+static void controls_keyboard_update_text(int row){
+    if(row<0||row>=KEYBOARD_ACTION_COUNT||controls_keyboard_rows[row].kind==KEYBOARD_MOUSE)return;
+    WCHAR text[64];controls_key_name(controls_key_values[row],text,64);
+    SetWindowTextW(controls_keyboard_bindings[row],text);
+}
+static BOOL controls_keyboard_any_down(BOOL include_mouse){
+    for(int vk=1;vk<255;vk++){
+        if(!include_mouse&&(vk==VK_LBUTTON||vk==VK_RBUTTON||vk==VK_MBUTTON||vk==VK_XBUTTON1||vk==VK_XBUTTON2))continue;
+        if(GetAsyncKeyState(vk)&0x8000)return TRUE;
+    }
+    return FALSE;
+}
+static void controls_key_capture_end(void){
+    if(window)KillTimer(window,KEYBOARD_CAPTURE_TIMER);
+    controls_key_capture_row=-1;
+    controls_key_wait_release=FALSE;
+}
+static void controls_key_capture_cancel(void){
+    if(controls_key_capture_row>=0)controls_keyboard_update_text(controls_key_capture_row);
+    controls_key_capture_end();
+}
+static void controls_keyboard_assign(int row,int vk){
+    if(row<0||row>=KEYBOARD_ACTION_COUNT)return;
+    controls_key_values[row]=vk;
+    if(controls_keyboard_rows[row].kind==KEYBOARD_VIRTUAL&&vk){
+        for(int i=0;i<KEYBOARD_ACTION_COUNT;i++){
+            if(i!=row&&controls_keyboard_rows[i].kind==KEYBOARD_VIRTUAL&&controls_key_values[i]==vk){
+                controls_key_values[i]=0;controls_keyboard_update_text(i);
+            }
+        }
+    }
+    controls_keyboard_update_text(row);
+}
+static void controls_key_capture_store(int vk){
+    int row=controls_key_capture_row;
+    if(row<0)return;
+    controls_keyboard_assign(row,vk);
+    controls_key_capture_end();
+    SetWindowTextW(status,vk?L"Key captured. Save settings to apply it to the game.":L"Binding cleared. Save settings to apply it.");
+}
+static void controls_key_capture_tick(void){
+    if(controls_key_capture_row<0)return;
+    if(controls_key_wait_release){
+        if(controls_keyboard_any_down(TRUE))return;
+        controls_key_wait_release=FALSE;
+    }
+    for(int vk=1;vk<255;vk++){
+        if(vk==VK_LBUTTON||vk==VK_RBUTTON||vk==VK_MBUTTON||vk==VK_XBUTTON1||vk==VK_XBUTTON2)continue;
+        if(GetAsyncKeyState(vk)&0x8000){controls_key_capture_store(vk);return;}
+    }
+}
+static void controls_key_capture_begin(int row){
+    if(busy||row<0||row>=KEYBOARD_ACTION_COUNT||controls_keyboard_rows[row].kind==KEYBOARD_MOUSE)return;
+    if(controls_key_capture_row==row){controls_key_capture_cancel();SetWindowTextW(status,L"Key capture cancelled.");return;}
+    controls_key_capture_cancel();
+    controls_capture_cancel();
+    controls_key_capture_row=row;
+    controls_key_wait_release=TRUE;
+    SetWindowTextW(controls_keyboard_bindings[row],L"Press a key...");
+    SetWindowTextW(status,L"Press a keyboard key. Delete clears; Escape cancels.");
+    SetFocus(controls_keyboard_bindings[row]);
+    if(window)SetTimer(window,KEYBOARD_CAPTURE_TIMER,16,NULL);
+}
+static BOOL controls_key_capture_key(int key){
+    if(controls_key_capture_row<0)return FALSE;
+    if(key==VK_ESCAPE){controls_key_capture_cancel();SetWindowTextW(status,L"Key capture cancelled.");return TRUE;}
+    if(key==VK_DELETE||key==VK_BACK){controls_key_capture_store(0);return TRUE;}
+    return FALSE;
+}
+static WNDPROC controls_key_button_old_proc;
+static LRESULT CALLBACK controls_key_button_proc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
+    if(msg==WM_KEYDOWN&&controls_key_capture_row>=0){
+        controls_key_capture_key((int)wp);
+        return 0;
+    }
+    return CallWindowProcW(controls_key_button_old_proc,hwnd,msg,wp,lp);
+}
 static void controls_leave(void){
     if(controls_capture_row>=0)controls_capture_cancel();
+    if(controls_key_capture_row>=0)controls_key_capture_cancel();
 }
 
 /* ------------------------------------------------------------------ */
@@ -433,6 +600,79 @@ static void controls_trace_reload(void){
     path(controls_ini,L"client.ini");
     SendMessageW(controls_trace,BM_SETCHECK,GetPrivateProfileIntW(L"camera",L"race_orbit_trace",0,controls_ini)?BST_CHECKED:BST_UNCHECKED,0);
 }
+static BOOL controls_ini_value(const WCHAR *section,const WCHAR *key,const WCHAR *fallback,WCHAR *out,int size){
+    WCHAR probe[2]={1,0};
+    DWORD got=GetPrivateProfileStringW(section,key,probe,out,size,controls_ini);
+    if(got==1&&out[0]==1){
+        wcsncpy(out,fallback,size);out[size-1]=0;
+        return FALSE;
+    }
+    return TRUE;
+}
+static const WCHAR *controls_hotkey_ini_key(int row){
+    if(row==10)return L"free_look_key";
+    if(row==11)return L"hud_key";
+    return L"photo_mode_key";
+}
+static void controls_keyboard_reload(void){
+    if(!controls_keyboard_enabled)return;
+    path(controls_ini,L"client.ini");
+    SendMessageW(controls_keyboard_enabled,BM_SETCHECK,GetPrivateProfileIntW(L"keyboard",L"enabled",1,controls_ini)?BST_CHECKED:BST_UNCHECKED,0);
+    WCHAR value[64];
+    for(int i=0;i<KEYBOARD_ACTION_COUNT;i++){
+        if(controls_keyboard_rows[i].kind==KEYBOARD_VIRTUAL){
+            if(controls_ini_value(L"keyboard",controls_keyboard_rows[i].key,L"",value,64))
+                controls_key_values[i]=controls_key_value(value);
+            else
+                controls_key_values[i]=controls_keyboard_rows[i].default_value;
+            controls_keyboard_update_text(i);
+        }else if(controls_keyboard_rows[i].kind==KEYBOARD_HOTKEY){
+            WCHAR fallback[16];
+            if(controls_keyboard_rows[i].default_value)_snwprintf(fallback,16,L"%d",controls_keyboard_rows[i].default_value);
+            else wcsncpy(fallback,L"none",16);
+            fallback[15]=0;
+            controls_ini_value(L"controls",controls_hotkey_ini_key(i),fallback,value,64);
+            controls_key_values[i]=controls_key_value(value);
+            controls_keyboard_update_text(i);
+        }else{
+            controls_ini_value(L"controls",L"free_look_mouse",L"right",value,64);
+            controls_pick(controls_keyboard_mouse,value);
+        }
+    }
+}
+static BOOL controls_keyboard_save(void){
+    path(controls_ini,L"client.ini");
+    for(int i=0;i<KEYBOARD_ACTION_COUNT;i++){
+        if(controls_keyboard_rows[i].kind!=KEYBOARD_VIRTUAL||!controls_key_values[i])continue;
+        for(int j=i+1;j<KEYBOARD_ACTION_COUNT;j++){
+            if(controls_keyboard_rows[j].kind==KEYBOARD_VIRTUAL&&controls_key_values[j]==controls_key_values[i]){
+                SetWindowTextW(status,L"Choose a unique key for each keyboard action.");
+                return FALSE;
+            }
+        }
+    }
+    BOOL ok=WritePrivateProfileStringW(L"keyboard",L"enabled",SendMessageW(controls_keyboard_enabled,BM_GETCHECK,0,0)==BST_CHECKED?L"1":L"0",controls_ini)!=0;
+    for(int i=0;i<KEYBOARD_ACTION_COUNT&&ok;i++){
+        if(controls_keyboard_rows[i].kind==KEYBOARD_VIRTUAL){
+            WCHAR text[32];
+            if(controls_key_values[i])_snwprintf(text,32,L"key:%d",controls_key_values[i]);
+            else wcsncpy(text,L"none",32);
+            text[31]=0;
+            ok=WritePrivateProfileStringW(L"keyboard",controls_keyboard_rows[i].key,text,controls_ini)!=0;
+        }else if(controls_keyboard_rows[i].kind==KEYBOARD_HOTKEY){
+            WCHAR text[16];
+            if(controls_key_values[i])_snwprintf(text,16,L"%d",controls_key_values[i]);
+            else text[0]=0;
+            text[15]=0;
+            ok=WritePrivateProfileStringW(L"controls",controls_hotkey_ini_key(i),text,controls_ini)!=0;
+        }
+    }
+    if(ok){
+        WCHAR mouse[32];controls_text(controls_keyboard_mouse,mouse,32);
+        ok=WritePrivateProfileStringW(L"controls",L"free_look_mouse",mouse,controls_ini)!=0;
+    }
+    return ok;
+}
 static void controls_reload(void){
     if(!controls_enable)return;
     path(controls_ini,L"client.ini");
@@ -442,13 +682,9 @@ static void controls_reload(void){
     GetPrivateProfileStringW(L"camera",L"free_zoom",L"1.0",value,64,controls_ini);SetWindowTextW(controls_zoom,value);
     SendMessageW(controls_invert_x,BM_SETCHECK,GetPrivateProfileIntW(L"camera",L"invert_x",0,controls_ini)?BST_CHECKED:BST_UNCHECKED,0);
     SendMessageW(controls_invert_y,BM_SETCHECK,GetPrivateProfileIntW(L"camera",L"invert_y",0,controls_ini)?BST_CHECKED:BST_UNCHECKED,0);
-    GetPrivateProfileStringW(L"controls",L"free_look_key",L"",value,64,controls_ini);SetWindowTextW(controls_free_key,value);
-    GetPrivateProfileStringW(L"controls",L"hud_key",L"",value,64,controls_ini);SetWindowTextW(controls_hud_key,value);
-    GetPrivateProfileStringW(L"controls",L"free_look_mouse",L"right",value,64,controls_ini);controls_pick(controls_mouse,value);
     SendMessageW(controls_photo_enable,BM_SETCHECK,GetPrivateProfileIntW(L"camera",L"photo_mode",0,controls_ini)?BST_CHECKED:BST_UNCHECKED,0);
     SendMessageW(controls_photo_hud,BM_SETCHECK,GetPrivateProfileIntW(L"camera",L"photo_hide_hud",1,controls_ini)?BST_CHECKED:BST_UNCHECKED,0);
     SendMessageW(controls_photo_invert_strafe,BM_SETCHECK,GetPrivateProfileIntW(L"camera",L"photo_invert_strafe",0,controls_ini)?BST_CHECKED:BST_UNCHECKED,0);
-    GetPrivateProfileStringW(L"controls",L"photo_mode_key",L"F9",value,64,controls_ini);SetWindowTextW(controls_photo_key,value);
     GetPrivateProfileStringW(L"camera",L"photo_speed",L"8.0",value,64,controls_ini);SetWindowTextW(controls_photo_speed,value);
     SendMessageW(controls_controller_enabled,BM_SETCHECK,GetPrivateProfileIntW(L"controller",L"enabled",1,controls_ini)?BST_CHECKED:BST_UNCHECKED,0);
     for(int i=0;i<CONTROLLER_BINDING_COUNT;i++){
@@ -458,15 +694,13 @@ static void controls_reload(void){
         if(!controls_parse_binding(value,&count,kinds,indexes,signs))count=0;
         controls_binding_assign(i,count,kinds,indexes,signs);
     }
+    controls_keyboard_reload();
 }
 static BOOL controls_save_settings(void){
     path(controls_ini,L"client.ini");
-    WCHAR fov[32],zoom[32],free_key[64],hud_key[64],mouse[64],photo_key[64],photo_speed[32];
+    if(!controls_keyboard_save())return FALSE;
+    WCHAR fov[32],zoom[32],photo_speed[32];
     GetWindowTextW(controls_fov,fov,32);GetWindowTextW(controls_zoom,zoom,32);
-    GetWindowTextW(controls_free_key,free_key,64);
-    GetWindowTextW(controls_hud_key,hud_key,64);
-    controls_text(controls_mouse,mouse,64);
-    GetWindowTextW(controls_photo_key,photo_key,64);
     GetWindowTextW(controls_photo_speed,photo_speed,32);
     float fov_value=(float)_wtof(fov),zoom_value=(float)_wtof(zoom),speed_value=(float)_wtof(photo_speed);
     if(fov_value<-100)fov_value=-100;if(fov_value>100)fov_value=100;
@@ -478,21 +712,17 @@ static BOOL controls_save_settings(void){
         &&WritePrivateProfileStringW(L"camera",L"free_zoom",zoom,controls_ini)
         &&WritePrivateProfileStringW(L"camera",L"invert_x",SendMessageW(controls_invert_x,BM_GETCHECK,0,0)==BST_CHECKED?L"1":L"0",controls_ini)
         &&WritePrivateProfileStringW(L"camera",L"invert_y",SendMessageW(controls_invert_y,BM_GETCHECK,0,0)==BST_CHECKED?L"1":L"0",controls_ini)
-        &&WritePrivateProfileStringW(L"controls",L"free_look_key",free_key,controls_ini)
-        &&WritePrivateProfileStringW(L"controls",L"hud_key",hud_key,controls_ini)
-        &&WritePrivateProfileStringW(L"controls",L"free_look_mouse",mouse,controls_ini)
         &&WritePrivateProfileStringW(L"camera",L"photo_mode",SendMessageW(controls_photo_enable,BM_GETCHECK,0,0)==BST_CHECKED?L"1":L"0",controls_ini)
         &&WritePrivateProfileStringW(L"camera",L"photo_hide_hud",SendMessageW(controls_photo_hud,BM_GETCHECK,0,0)==BST_CHECKED?L"1":L"0",controls_ini)
         &&WritePrivateProfileStringW(L"camera",L"photo_invert_strafe",SendMessageW(controls_photo_invert_strafe,BM_GETCHECK,0,0)==BST_CHECKED?L"1":L"0",controls_ini)
         &&WritePrivateProfileStringW(L"camera",L"photo_speed",photo_speed,controls_ini)
-        &&WritePrivateProfileStringW(L"controls",L"photo_mode_key",photo_key,controls_ini)
         &&WritePrivateProfileStringW(L"controller",L"enabled",SendMessageW(controls_controller_enabled,BM_GETCHECK,0,0)==BST_CHECKED?L"1":L"0",controls_ini);
     for(int i=0;i<CONTROLLER_BINDING_COUNT&&ok;i++){
         WCHAR binding[64];
         controls_binding_canonical(i,binding,64);
         ok=WritePrivateProfileStringW(L"controller",controls_controller_rows[i].key,binding,controls_ini)!=0;
     }
-    SetWindowTextW(status,ok?L"Controller and camera settings saved. Restart the game to apply changes.":L"Could not save all controller settings. Please try again.");
+    SetWindowTextW(status,ok?L"Input and camera settings saved. Restart the game to apply changes.":L"Could not save all input settings. Please try again.");
     return ok;
 }
 static void controls_create(void){
@@ -507,8 +737,6 @@ static void controls_create(void){
     controls_zoom=control(L"EDIT",L"1.0",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,190,82,112,28,0);
     controls_invert_x=control(L"BUTTON",L"Invert look X",BS_AUTOCHECKBOX|WS_TABSTOP,22,114,130,28,0);
     controls_invert_y=control(L"BUTTON",L"Invert look Y",BS_AUTOCHECKBOX|WS_TABSTOP,164,114,138,28,0);
-    control(L"STATIC",L"Mouse look button",0,22,150,150,24,0);
-    controls_mouse=control(L"COMBOBOX",L"",CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP,190,146,112,160,0);
     controls_photo_enable=control(L"BUTTON",L"Enable photo mode",BS_AUTOCHECKBOX|WS_TABSTOP,22,178,280,28,0);
     controls_photo_hud=control(L"BUTTON",L"Hide HUD in photo mode",BS_AUTOCHECKBOX|WS_TABSTOP,22,210,280,28,0);
     control(L"STATIC",L"Photo speed",0,312,174,130,24,0);
@@ -524,21 +752,31 @@ static void controls_create(void){
     checkbox_help(controls_photo_hud,L"Hide the complete race HUD while photo mode is active and restore it when photo mode ends.");
     checkbox_help(controls_photo_invert_strafe,L"Flip only the photo-mode left-stick and A/D strafe direction. This does not affect right-stick look.");
     checkbox_help(controls_photo_speed,L"Free-camera speed in game units per second. Hold the right trigger or Shift for a 3x boost.");
-    checkbox_help(controls_mouse,L"Mouse button held while using free look or photo mode to capture mouse movement.");
 
-    /* Keyboard: ReRiff keyboard bindings. */
+    /* Keyboard: virtual game keys plus ReRiff hotkeys. Each row captures a
+     * physical keyboard key; virtual rows send the vanilla key to the game. */
     controls_part=CONTROLS_KEYBOARD;
-    control(L"STATIC",L"Free-look key",0,22,26,150,24,0);
-    controls_free_key=control(L"EDIT",L"",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,190,22,120,28,0);
-    control(L"STATIC",L"HUD key",0,22,58,150,24,0);
-    controls_hud_key=control(L"EDIT",L"",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,190,54,120,28,0);
-    control(L"STATIC",L"Photo mode key",0,22,90,150,24,0);
-    controls_photo_key=control(L"EDIT",L"F9",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,190,86,120,28,0);
-    control(L"BUTTON",L"Save settings",WS_TABSTOP,22,130,220,32,CONTROLS_SAVE);
-    checkbox_help(controls_free_key,L"Keyboard key that toggles free look. Leave empty to use only the controller button.");
-    checkbox_help(controls_hud_key,L"Keyboard key that toggles the HUD. Leave empty to use only the controller button.");
-    checkbox_help(controls_photo_key,L"Keyboard key that toggles photo mode. Leave empty to use only the controller chord.");
-    restart_note(L"Restart the game after changing these settings",22,174,590);
+    controls_keyboard_enabled=control(L"BUTTON",L"Enable virtual keyboard mapping",BS_AUTOCHECKBOX|WS_TABSTOP,14,22,300,26,0);
+    for(int i=0;i<KEYBOARD_ACTION_COUNT;i++){
+        int column=i/7,row=i%7;
+        int x=14+column*322,y=54+row*24;
+        control(L"STATIC",controls_keyboard_rows[i].label,0,x,y+2,170,22,0);
+        if(controls_keyboard_rows[i].kind==KEYBOARD_MOUSE){
+            controls_keyboard_mouse=control(L"COMBOBOX",L"",CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP,x+176,y,130,160,0);
+            graphics_choice(controls_keyboard_mouse,L"right",0);
+            graphics_choice(controls_keyboard_mouse,L"left",0);
+            graphics_choice(controls_keyboard_mouse,L"middle",0);
+            graphics_choice(controls_keyboard_mouse,L"none",0);
+        }else{
+            controls_keyboard_bindings[i]=control(L"BUTTON",L"",WS_TABSTOP,x+176,y,130,22,KEYBOARD_CAPTURE_BASE+i);
+            controls_key_button_old_proc=(WNDPROC)SetWindowLongPtrW(controls_keyboard_bindings[i],GWLP_WNDPROC,(LONG_PTR)controls_key_button_proc);
+        }
+    }
+    controls_keyboard_first=controls_keyboard_bindings[0];
+    control(L"BUTTON",L"Save settings",WS_TABSTOP,14,224,210,30,CONTROLS_SAVE);
+    checkbox_help(controls_keyboard_enabled,L"Remap the game's keyboard keys. Virtual rows send the vanilla key to the game; the button shows your physical key. Restart the game after saving.");
+    checkbox_help(controls_keyboard_mouse,L"Mouse button held while using free look or photo mode to capture mouse movement.");
+    restart_note(L"Click a binding, press a key, then release. Delete clears it.",232,226,400);
 
     /* Controller: click a row, then press the physical SDL control to bind.
      * Three columns keep the table clear of the launcher status area. */
@@ -554,8 +792,6 @@ static void controls_create(void){
     controls_save=control(L"BUTTON",L"Save settings",WS_TABSTOP,14,210,210,30,CONTROLS_SAVE);
     checkbox_help(controls_controller_enabled,L"Enable the SDL3 XInput proxy remap table. Restart the game after saving. The game receives the virtual controls selected on this tab. Chords such as L3+R3 require every listed button.");
     restart_note(L"Click a binding, press one button or a chord, then release. Delete clears it.",14,246,630);
-    graphics_choice(controls_mouse,L"right",0);graphics_choice(controls_mouse,L"left",0);
-    graphics_choice(controls_mouse,L"middle",0);graphics_choice(controls_mouse,L"none",0);
     controls_reload();
 }
 #endif

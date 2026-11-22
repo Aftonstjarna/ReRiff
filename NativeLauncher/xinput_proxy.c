@@ -13,6 +13,7 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
+#include <wchar.h>
 
 #define SDL_INIT_GAMEPAD 0x00002000u
 #define MAX_BIND 4
@@ -383,8 +384,11 @@ static SHORT stick_value(int axis) {
     return (SHORT)axis;
 }
 
+static void keyboard_init(void);
+
 __declspec(dllexport) DWORD WINAPI XInputGetState(DWORD index, XINPUT_STATE *state) {
     if (!state) return ERROR_INVALID_PARAMETER;
+    keyboard_init();
     if (!input_enabled) return ERROR_DEVICE_NOT_CONNECTED;
     load_sdl();
     if (!sdl_ready) return ERROR_DEVICE_NOT_CONNECTED;
@@ -463,12 +467,209 @@ __declspec(dllexport) DWORD WINAPI XInputGetDSoundAudioDeviceGuids(DWORD index, 
     return ERROR_DEVICE_NOT_CONNECTED;
 }
 
+
+static void keyboard_init(void);
+
+/* ------------------------------------------------------------------ */
+/* Keyboard virtual mapping                                            */
+/* ------------------------------------------------------------------ */
+#define MAX_KEYBOARD_MAP 24
+typedef struct {
+    int physical;      /* physical VK, or -1 for explicitly unbound */
+    int virtual_key;   /* vanilla VK the game polls */
+} KeyboardMap;
+
+static KeyboardMap keyboard_map[MAX_KEYBOARD_MAP];
+static int keyboard_map_count;
+static unsigned char keyboard_virtual_mapped[256];
+static unsigned char keyboard_physical_used[256];
+static unsigned char keyboard_edge[256];
+static int keyboard_enabled = 1, keyboard_has_remap, keyboard_ready;
+static volatile LONG keyboard_started;
+typedef SHORT (WINAPI *GetAsyncKeyStateProc)(int);
+typedef SHORT (WINAPI *GetKeyStateProc)(int);
+static GetAsyncKeyStateProc real_get_async_key_state;
+static GetKeyStateProc real_get_key_state;
+
+static const struct { const char *name; int vk; } keyboard_actions[] = {
+    { "accelerate", VK_UP },
+    { "brake", VK_DOWN },
+    { "left", VK_LEFT },
+    { "right", VK_RIGHT },
+    { "boost", VK_SHIFT },
+    { "drift", VK_SPACE },
+    { "camera", VK_TAB },
+    { "confirm", VK_RETURN },
+    { "pause", VK_ESCAPE },
+    { "restart", 'R' }
+};
+
+static int parse_keyboard_value(const WCHAR *text) {
+    if (!text || !*text || !_wcsicmp(text, L"none")) return -1;
+    const WCHAR *number = text;
+    if (!_wcsnicmp(number, L"key:", 4)) number += 4;
+    WCHAR *end = NULL;
+    unsigned long value = wcstoul(number, &end, 0);
+    if (!end || *end || value == 0 || value > 255) return -2;
+    return (int)value;
+}
+
+static void load_keyboard_mapping(void) {
+    memset(keyboard_map, 0, sizeof(keyboard_map));
+    memset(keyboard_virtual_mapped, 0, sizeof(keyboard_virtual_mapped));
+    memset(keyboard_physical_used, 0, sizeof(keyboard_physical_used));
+    memset(keyboard_edge, 0, sizeof(keyboard_edge));
+    keyboard_map_count = 0;
+    keyboard_has_remap = 0;
+    if (!dll_dir[0]) return;
+    WCHAR ini[MAX_PATH];
+    wcsncpy(ini, dll_dir, MAX_PATH - 1);
+    ini[MAX_PATH - 1] = 0;
+    wcscat(ini, L"client.ini");
+    WCHAR value[64];
+    GetPrivateProfileStringW(L"keyboard", L"enabled", L"1", value, 64, ini);
+    keyboard_enabled = !_wcsicmp(value, L"1") || !_wcsicmp(value, L"true") || !_wcsicmp(value, L"yes");
+    int overrides = 0;
+    for (unsigned i = 0; i < sizeof(keyboard_actions) / sizeof(keyboard_actions[0]); i++) {
+        WCHAR key[32];
+        MultiByteToWideChar(CP_UTF8, 0, keyboard_actions[i].name, -1, key, 32);
+        DWORD got = GetPrivateProfileStringW(L"keyboard", key, L"", value, 64, ini);
+        if (!got) continue;
+        int physical = parse_keyboard_value(value);
+        if (physical == -2) continue;
+        if (keyboard_map_count < MAX_KEYBOARD_MAP) {
+            keyboard_map[keyboard_map_count].physical = physical;
+            keyboard_map[keyboard_map_count].virtual_key = keyboard_actions[i].vk;
+            keyboard_map_count++;
+            overrides++;
+            log_line("keyboard %s physical=%d virtual=%d", keyboard_actions[i].name, physical, keyboard_actions[i].vk);
+        }
+    }
+    for (int i = 0; i < keyboard_map_count; i++) {
+        int physical = keyboard_map[i].physical;
+        int virtual_key = keyboard_map[i].virtual_key;
+        keyboard_virtual_mapped[virtual_key] = 1;
+        if (physical < 0) {
+            keyboard_physical_used[virtual_key] = 1;
+            keyboard_has_remap = 1;
+        } else if (physical != virtual_key) {
+            keyboard_physical_used[physical] = 1;
+            keyboard_has_remap = 1;
+        }
+    }
+    log_line("keyboard mapping enabled=%d entries=%d remap=%d", keyboard_enabled, overrides, keyboard_has_remap);
+}
+
+static SHORT WINAPI keyboard_get_async_key_state(int key) {
+    if (!keyboard_ready || !keyboard_enabled || key < 0 || key > 255)
+        return real_get_async_key_state ? real_get_async_key_state(key) : 0;
+    if (keyboard_virtual_mapped[key]) {
+        int down = 0;
+        for (int i = 0; i < keyboard_map_count; i++) {
+            if (keyboard_map[i].virtual_key != key || keyboard_map[i].physical < 0) continue;
+            if (real_get_async_key_state(keyboard_map[i].physical) & 0x8000) {
+                down = 1;
+                break;
+            }
+        }
+        if (!down) {
+            keyboard_edge[key] = 0;
+            return 0;
+        }
+        SHORT state = (SHORT)0x8000;
+        if (!keyboard_edge[key]) state |= 1;
+        keyboard_edge[key] = 1;
+        return state;
+    }
+    if (keyboard_physical_used[key]) return 0;
+    return real_get_async_key_state(key);
+}
+
+static SHORT WINAPI keyboard_get_key_state(int key) {
+    if (!keyboard_ready || !keyboard_enabled || key < 0 || key > 255)
+        return real_get_key_state ? real_get_key_state(key) : 0;
+    if (keyboard_virtual_mapped[key]) {
+        for (int i = 0; i < keyboard_map_count; i++) {
+            if (keyboard_map[i].virtual_key != key || keyboard_map[i].physical < 0) continue;
+            if (real_get_async_key_state(keyboard_map[i].physical) & 0x8000) return (SHORT)0x8000;
+        }
+        return 0;
+    }
+    if (keyboard_physical_used[key]) return 0;
+    return real_get_key_state(key);
+}
+
+static int patch_import_function(HMODULE module, const char *dll_name, const char *function_name, void *replacement) {
+    if (!module) return 0;
+    IMAGE_DOS_HEADER *dos = (IMAGE_DOS_HEADER *)module;
+    if (dos->e_magic != IMAGE_DOS_SIGNATURE) return 0;
+    IMAGE_NT_HEADERS *nt = (IMAGE_NT_HEADERS *)((BYTE *)module + dos->e_lfanew);
+    if (nt->Signature != IMAGE_NT_SIGNATURE) return 0;
+    IMAGE_DATA_DIRECTORY *directory = &nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
+    if (!directory->VirtualAddress) return 0;
+    IMAGE_IMPORT_DESCRIPTOR *descriptor = (IMAGE_IMPORT_DESCRIPTOR *)((BYTE *)module + directory->VirtualAddress);
+    for (; descriptor->Name; descriptor++) {
+        const char *module_name = (const char *)((BYTE *)module + descriptor->Name);
+        if (_stricmp(module_name, dll_name)) continue;
+        if (!descriptor->OriginalFirstThunk || !descriptor->FirstThunk) continue;
+        IMAGE_THUNK_DATA *names = (IMAGE_THUNK_DATA *)((BYTE *)module + descriptor->OriginalFirstThunk);
+        IMAGE_THUNK_DATA *iat = (IMAGE_THUNK_DATA *)((BYTE *)module + descriptor->FirstThunk);
+        for (; names->u1.AddressOfData; names++, iat++) {
+            if (names->u1.Ordinal & IMAGE_ORDINAL_FLAG) continue;
+            IMAGE_IMPORT_BY_NAME *import = (IMAGE_IMPORT_BY_NAME *)((BYTE *)module + names->u1.AddressOfData);
+            if (strcmp((const char *)import->Name, function_name)) continue;
+            DWORD old_protect;
+            if (!VirtualProtect(&iat->u1.Function, sizeof(iat->u1.Function), PAGE_READWRITE, &old_protect)) return 0;
+            iat->u1.Function = (DWORD)(DWORD_PTR)replacement;
+            VirtualProtect(&iat->u1.Function, sizeof(iat->u1.Function), old_protect, &old_protect);
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static void bind_keyboard_export(void *target, size_t size, HMODULE module, const char *name) {
+    FARPROC symbol = GetProcAddress(module, name);
+    memset(target, 0, size);
+    memcpy(target, &symbol, size < sizeof(symbol) ? size : sizeof(symbol));
+}
+
+static void keyboard_init(void) {
+    if (InterlockedCompareExchange(&keyboard_started, 1, 0) != 0) return;
+    load_keyboard_mapping();
+    keyboard_ready = 1;
+    if (!keyboard_enabled || !keyboard_has_remap) return;
+    HMODULE user32 = GetModuleHandleW(L"user32.dll");
+    if (!user32) user32 = LoadLibraryW(L"user32.dll");
+    if (!user32) {
+        log_line("keyboard hook: user32.dll not available");
+        return;
+    }
+    bind_keyboard_export(&real_get_async_key_state, sizeof(real_get_async_key_state), user32, "GetAsyncKeyState");
+    bind_keyboard_export(&real_get_key_state, sizeof(real_get_key_state), user32, "GetKeyState");
+    if (!real_get_async_key_state || !real_get_key_state) {
+        log_line("keyboard hook: key state exports not found");
+        return;
+    }
+    HMODULE main = GetModuleHandleW(NULL);
+    int async_hooked = patch_import_function(main, "USER32.dll", "GetAsyncKeyState", (void *)keyboard_get_async_key_state);
+    int key_hooked = patch_import_function(main, "USER32.dll", "GetKeyState", (void *)keyboard_get_key_state);
+    log_line("keyboard IAT hooked async=%d key=%d", async_hooked, key_hooked);
+}
+
+static DWORD WINAPI keyboard_init_thread(LPVOID parameter) {
+    (void)parameter;
+    keyboard_init();
+    return 0;
+}
+
 BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, LPVOID reserved) {
     (void)reserved;
     if (reason == DLL_PROCESS_ATTACH) {
         proxy_instance = instance;
         DisableThreadLibraryCalls(instance);
         write_log("XINPUT1_3 SDL3 proxy loaded");
+        CreateThread(NULL, 0, keyboard_init_thread, NULL, 0, NULL);
     }
     return TRUE;
 }

@@ -29,7 +29,7 @@
 #include "error_dialog.h"
 #define WM_COMPLETE (WM_APP + 1)
 #define WM_GAME_RUNNING (WM_APP + 2)
-enum { EXTERNAL=101, FALLBACK, TIMEOUT, POPUP, SAVE, PLAY, LOCAL, EXTERNAL_ONLY, STOP, UPDATE, EXPERIMENTAL, NETWORKING, SKIP_LAUNCHER, AUTO_UPDATE_SKIP, CLOSE_LAUNCHER, CJK_INSTALL, LOGGING, LATIN_INSTALL, UPDATE_DETAILS, LASTFM_ENABLED, LASTFM_PERCENT, LASTFM_LINK, LASTFM_DISCONNECT, LASTFM_SAVE, LASTFM_KEY, LASTFM_SECRET, UNINSTALL, LISTENBRAINZ_TOKEN, LISTENBRAINZ_ENABLED, LISTENBRAINZ_PERCENT, LISTENBRAINZ_SAVE, LISTENBRAINZ_GET_TOKEN, LIBRE_ENABLED, LIBRE_PERCENT, LIBRE_LINK, LIBRE_DISCONNECT, LIBRE_SAVE, LIBRE_CREDENTIAL, GRAPHICS_SAVE, CONTROLS_SAVE, CONTROLS_TRACE, LOG_CATEGORY_BASE=500, CONTROLLER_CAPTURE_BASE=600 };
+enum { EXTERNAL=101, FALLBACK, TIMEOUT, POPUP, SAVE, PLAY, LOCAL, EXTERNAL_ONLY, STOP, UPDATE, EXPERIMENTAL, NETWORKING, SKIP_LAUNCHER, AUTO_UPDATE_SKIP, CLOSE_LAUNCHER, CJK_INSTALL, LOGGING, LATIN_INSTALL, UPDATE_DETAILS, LASTFM_ENABLED, LASTFM_PERCENT, LASTFM_LINK, LASTFM_DISCONNECT, LASTFM_SAVE, LASTFM_KEY, LASTFM_SECRET, UNINSTALL, LISTENBRAINZ_TOKEN, LISTENBRAINZ_ENABLED, LISTENBRAINZ_PERCENT, LISTENBRAINZ_SAVE, LISTENBRAINZ_GET_TOKEN, LIBRE_ENABLED, LIBRE_PERCENT, LIBRE_LINK, LIBRE_DISCONNECT, LIBRE_SAVE, LIBRE_CREDENTIAL, GRAPHICS_SAVE, CONTROLS_SAVE, CONTROLS_TRACE, LOG_CATEGORY_BASE=500, CONTROLLER_CAPTURE_BASE=600, KEYBOARD_CAPTURE_BASE=700 };
 #include "branding.h"
 
 static WCHAR folder[CAP], ini[CAP], message[1024];
@@ -515,6 +515,7 @@ static void select_launcher_page(void){
     int cpart=controls?(int)SendMessageW(controls_tabs,TCM_GETCURSEL,0,0):CONTROLS_HOTKEYS;
     if(cpart<0||cpart>=CONTROLS_PART_COUNT)cpart=CONTROLS_HOTKEYS;
     if(!controls||cpart!=CONTROLS_CONTROLLER)controls_leave();
+    else controls_key_capture_cancel();
     SendMessageW(checkbox_tooltips,TTM_POP,0,0);
     for(unsigned i=0;i<server_page_count;i++){
         HWND item=server_page_controls[i];
@@ -530,7 +531,7 @@ static void select_launcher_page(void){
     if(page==PAGE_SCROBBLING){SetFocus(scrobbling_tabs);return;}
     if(controls&&reload_controls)controls_reload();
     if(page==PAGE_DIAGNOSTICS)controls_trace_reload();
-    if(controls){SetFocus(cpart==CONTROLS_HOTKEYS?controls_first:cpart==CONTROLS_CONTROLLER?controls_controller_bindings[0]:controls_tabs);return;}
+    if(controls){SetFocus(cpart==CONTROLS_HOTKEYS?controls_first:cpart==CONTROLS_CONTROLLER?controls_controller_bindings[0]:controls_keyboard_first);return;}
     SetFocus(page==PAGE_GRAPHICS?graphics_resolution:page==PAGE_DIAGNOSTICS?logging_checkbox:languages?language_checkbox:external);
 }
 static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
@@ -727,6 +728,10 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
             if(HIWORD(wp)==BN_CLICKED&&!busy)controls_capture_begin(LOWORD(wp)-CONTROLLER_CAPTURE_BASE);
             return 0;
         }
+        if(LOWORD(wp)>=KEYBOARD_CAPTURE_BASE&&LOWORD(wp)<KEYBOARD_CAPTURE_BASE+KEYBOARD_ACTION_COUNT){
+            if(HIWORD(wp)==BN_CLICKED&&!busy)controls_key_capture_begin(LOWORD(wp)-KEYBOARD_CAPTURE_BASE);
+            return 0;
+        }
         if(LOWORD(wp)>=LOG_CATEGORY_BASE&&LOWORD(wp)<LOG_CATEGORY_BASE+LOG_CATEGORY_COUNT) {
             unsigned i=LOWORD(wp)-LOG_CATEGORY_BASE;WCHAR key[80];_snwprintf(key,80,L"log_%ls",log_categories[i]);
             BOOL enabled=SendMessageW(log_checkboxes[i],BM_GETCHECK,0,0)==BST_CHECKED;
@@ -793,8 +798,9 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
             case PLAY:begin(TRUE);break;
         }return 0;
     }
-    if(event==WM_KEYDOWN&&controls_capture_key((int)wp))return 0;
+    if(event==WM_KEYDOWN&&(controls_capture_key((int)wp)||controls_key_capture_key((int)wp)))return 0;
     if(event==WM_TIMER&&wp==CONTROLS_CAPTURE_TIMER){controls_capture_tick();return 0;}
+    if(event==WM_TIMER&&wp==KEYBOARD_CAPTURE_TIMER){controls_key_capture_tick();return 0;}
     if(event==WM_TIMER&&wp==1){refresh_changed_settings();if(SendMessageW(launcher_tabs,TCM_GETCURSEL,0,0)==PAGE_SCROBBLING&&SendMessageW(scrobbling_tabs,TCM_GETCURSEL,0,0)==0&&lfm_poll_due(GetTickCount()))begin(9);if(SendMessageW(launcher_tabs,TCM_GETCURSEL,0,0)==PAGE_SCROBBLING&&SendMessageW(scrobbling_tabs,TCM_GETCURSEL,0,0)==2&&libre_poll_due(GetTickCount()))begin(12);return 0;}
     if(event==WM_ACTIVATE&&LOWORD(wp)!=WA_INACTIVE)refresh_changed_settings();
     if(event==RERIFF_PROGRESS_EVENT){if(busy)progress_set_bar(launcher_progress,(int)(INT_PTR)lp);return 0;}
@@ -820,7 +826,7 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
         if (busy) { SetWindowTextW(status,L"Wait for server startup or close the game before closing this launcher.");return 0; }
         DestroyWindow(hwnd);return 0;
     }
-    if (event==WM_DESTROY) { progress_sink=NULL;KillTimer(hwnd,1);KillTimer(hwnd,CONTROLS_CAPTURE_TIMER);rr_brand_cleanup();DeleteObject(font);PostQuitMessage(0);return 0; }
+    if (event==WM_DESTROY) { progress_sink=NULL;KillTimer(hwnd,1);KillTimer(hwnd,CONTROLS_CAPTURE_TIMER);KillTimer(hwnd,KEYBOARD_CAPTURE_TIMER);rr_brand_cleanup();DeleteObject(font);PostQuitMessage(0);return 0; }
     return DefWindowProcW(hwnd,event,wp,lp);
 }
 
