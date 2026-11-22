@@ -20,9 +20,17 @@ namespace ReRiff {
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void Scrollbar(IntPtr reel, float x, float top, float bottom, int pcScale, IntPtr width);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void Overlay(IntPtr manager,int state);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int AlphabetJump(IntPtr menu,int letter);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void CullingVisible(IntPtr visual,bool visible);
         [DllImport("ReRiff.Notify.dll",CallingConvention=CallingConvention.Cdecl,ExactSpelling=true)]
         private static extern int ReRiffConfigurePickerAlphabet(IntPtr callback);
         private static readonly List<Delegate> Roots = new List<Delegate>();
+        private static CullingVisible cullingOriginal;
+        private static readonly CullingVisible cullingCallback=ObserveCulling;
+        [DllImport("ReRiff.Notify.dll",CallingConvention=CallingConvention.Cdecl,ExactSpelling=true)]
+        private static extern int ReRiffConfigureCullingVisible(IntPtr callback);
+        private static void ObserveCulling(IntPtr visual,bool visible){
+            try{if(cullingOriginal!=null&&visual!=IntPtr.Zero)cullingOriginal(visual,visible);}catch{}
+        }
         private static bool attempted;
         [DllImport("ReRiff.Notify.dll", CallingConvention=CallingConvention.Cdecl, ExactSpelling=true)]
         private static extern int ReRiffConfigureNativeReel([In] IntPtr[] methods, int count);
@@ -124,6 +132,14 @@ namespace ReRiff {
                 catch(Exception error){Log("Ghost car test unavailable: "+error);}
                 try {NativePickerSearch.Configure(game);}
                 catch(Exception error){Log("Picker search unavailable: "+error);}
+                try {
+                    var visible=game.GetMethods(BindingFlags.Static|BindingFlags.Public|BindingFlags.NonPublic)
+                        .SingleOrDefault(m=>m.Name=="elVisual.setVisible");
+                    if(visible==null||visible.GetParameters().Length!=2)throw new IOException("Original prop visibility signature differs");
+                    cullingOriginal=(CullingVisible)CreateCall(visible,typeof(CullingVisible),false);Roots.Add(cullingOriginal);
+                    if(ReRiffConfigureCullingVisible(Marshal.GetFunctionPointerForDelegate(cullingCallback))!=1)throw new IOException("Culling visibility registration refused");
+                    Log("Original prop visibility bound for culling disable.");
+                }catch(Exception error){Log("Culling prop visibility unavailable: "+error);}
                 try {CustomsUnlocks.Configure(game);}catch(Exception e){Log("Customs unlock setup failed: "+e.Message);}
                 try {HudToggle.Configure(game);}catch(Exception error){Log("HUD Select toggle unavailable: "+error);}
                 try {ProgressionNative.Configure(game);}

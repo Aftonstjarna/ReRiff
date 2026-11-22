@@ -10,10 +10,15 @@
  * Opt-in: [graphics] disable_culling=1 in client.ini. Restart to apply.
  */
 typedef void (__thiscall *RaceCullingVisible)(void *,int,BYTE);
+typedef void (__cdecl *RaceCullingVisualVisible)(void *,BYTE);
 
-static BOOL race_culling_enabled,race_culling_trace,race_culling_trace_announced;
-static unsigned race_culling_frames,race_culling_volume_count,race_culling_valid_count,race_culling_forced_count;
+static BOOL race_culling_enabled,race_culling_trace,race_culling_trace_announced,race_culling_visual_announced;
+static unsigned race_culling_frames,race_culling_volume_count,race_culling_valid_count,race_culling_forced_count,race_culling_prop_count,race_culling_prop_forced;
 static RaceCullingVisible race_culling_force_visible,race_culling_on_visible;
+static RaceCullingVisualVisible race_culling_visual;
+__declspec(dllexport) int __cdecl ReRiffConfigureCullingVisible(void *callback){
+    if(!callback)return 0;race_culling_visual=(RaceCullingVisualVisible)callback;return 1;
+}
 
 static BOOL install_race_culling(BYTE *base){
     WCHAR value[16];
@@ -59,19 +64,46 @@ static void race_culling_apply(void *manager,BOOL paused){
     }
 }
 
+static void race_culling_props(BYTE *base){
+    race_culling_prop_count=race_culling_prop_forced=0;
+    if(!race_culling_visual){
+        if(!race_culling_visual_announced){race_culling_visual_announced=TRUE;log_line("Culling prop visibility bridge unavailable; trigger culling fallback only.");}
+        return;
+    }
+    if(!readable(base+0x7e3080,4))return;
+    void *manager=*(void **)(base+0x7e3080);
+    if(!readable(manager,456))return;
+    void **begin=*(void ***)((BYTE *)manager+448),**end=*(void ***)((BYTE *)manager+452);
+    if(!begin||!end||end<begin||(BYTE *)end-(BYTE *)begin>20000*4)return;
+    race_culling_prop_count=(unsigned)(end-begin);
+    for(void **item=begin;item<end;item++){
+        void *prop=*item;
+        if(!readable(prop,572))continue;
+        void *visual=*(void **)((BYTE *)prop+288);
+        if(!readable(visual,132))continue;
+        *((BYTE *)prop+496)=0;
+        *((BYTE *)prop+464)=0xFF;
+        *((DWORD *)((BYTE *)visual+128))=0x0FFF;
+        *((BYTE *)visual+20)=1;
+        race_culling_visual(visual,1);
+        race_culling_prop_forced++;
+    }
+}
+
 static void race_culling_frame(void){
     if(!race_culling_enabled)return;
     BYTE *base=(BYTE *)GetModuleHandleW(NULL);
     void *manager=readable(base+0x7df324,4)?*(void **)(base+0x7df324):NULL;
     BOOL paused=race_culling_paused(base);
     race_culling_apply(manager,paused);
+    if((++race_culling_frames%10)==0)race_culling_props(base);
     if(!race_culling_trace)return;
     if(!race_culling_trace_announced){
         race_culling_trace_announced=TRUE;
         log_line("Culling trace enabled.");
     }
-    if((++race_culling_frames%120)!=0)return;
-    char line[220];
-    snprintf(line,sizeof(line),"Culling trace frame %u manager=%p volumes=%u valid=%u forced=%u paused=%d",race_culling_frames,manager,race_culling_volume_count,race_culling_valid_count,race_culling_forced_count,paused?1:0);
+    if((race_culling_frames%120)!=0)return;
+    char line[260];
+    snprintf(line,sizeof(line),"Culling trace frame %u manager=%p volumes=%u valid=%u forced=%u props=%u prop_forced=%u paused=%d",race_culling_frames,manager,race_culling_volume_count,race_culling_valid_count,race_culling_forced_count,race_culling_prop_count,race_culling_prop_forced,paused?1:0);
     log_line(line);
 }
