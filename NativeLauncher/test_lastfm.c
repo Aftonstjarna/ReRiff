@@ -174,10 +174,14 @@ int wmain(int argc,WCHAR **argv){
     CHECK(lfm_read_credential(L"session_key",value)&&!*value);GetPrivateProfileStringW(L"lastfm",L"enabled",L"",value,64,ini);CHECK(!wcscmp(value,L"false"));
     lfm_unlink();GetPrivateProfileStringW(L"lastfm",L"session_key",L"",value,64,ini);CHECK(!*value);CHECK(lfm_read_credential(L"api_key",value)&&lfm_hex(value));
     SendMessageW(launcher_tabs,TCM_SETCURSEL,0,0);select_launcher_page();CHECK(!IsWindowVisible(lfm_enabled)&&!IsWindowVisible(lfm_key_field)&&!IsWindowVisible(lfm_secret_field)&&!IsWindowVisible(lfm_save)&&IsWindowVisible(external));
+    SendMessageW(close_checkbox,BM_SETCHECK,BST_CHECKED,0);
+    SendMessageW(host,WM_COMMAND,MAKEWPARAM(CLOSE_LAUNCHER,BN_CLICKED),(LPARAM)close_checkbox);
+    GetPrivateProfileStringW(L"launcher",L"close_on_game_start",L"",value,64,ini);CHECK(!wcscmp(value,L"true"));
+    SendMessageW(close_checkbox,BM_SETCHECK,BST_UNCHECKED,0);
+    SendMessageW(host,WM_COMMAND,MAKEWPARAM(CLOSE_LAUNCHER,BN_CLICKED),(LPARAM)close_checkbox);
+    GetPrivateProfileStringW(L"launcher",L"close_on_game_start",L"",value,64,ini);CHECK(!wcscmp(value,L"false"));
     SendMessageW(close_checkbox,BM_SETCHECK,BST_CHECKED,0);CHECK(save());
     GetPrivateProfileStringW(L"launcher",L"close_on_game_start",L"",value,64,ini);CHECK(!wcscmp(value,L"true"));
-    SendMessageW(close_checkbox,BM_SETCHECK,BST_UNCHECKED,0);CHECK(save());
-    GetPrivateProfileStringW(L"launcher",L"close_on_game_start",L"",value,64,ini);CHECK(!wcscmp(value,L"false"));
     DestroyWindow(host);
     path(file,L"client.ini");DeleteFileW(file);DeleteFileW(ini);RemoveDirectoryW(folder);
     puts("PASS: Last.fm, ListenBrainz and Libre.fm subtabs, DPAPI sessions, thresholds, persistence, layout and disconnect");return 0;

@@ -714,6 +714,14 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
         case GRAPHICS_SAVE: if(!busy)graphics_save_settings();break;
         case CONTROLS_SAVE: if(!busy)controls_save_settings();break;
         case CONTROLS_TRACE: if(!busy){BOOL ok=controls_trace_toggle();SetWindowTextW(status,ok?L"Camera diagnostic trace setting saved. Restart the game to apply.":L"Could not save the camera trace setting.");}break;
+        case CLOSE_LAUNCHER:
+            if(HIWORD(wp)==BN_CLICKED){
+                BOOL enabled=SendMessageW(close_checkbox,BM_GETCHECK,0,0)==BST_CHECKED;
+                BOOL ok=WritePrivateProfileStringW(L"launcher",L"close_on_game_start",enabled?L"true":L"false",ini);
+                if(ok){settings_observed=read_settings_signature(&settings_signature);SetWindowTextW(status,enabled?L"Launcher will close when the game starts.":L"Launcher will minimize when the game starts.");}
+                else SetWindowTextW(status,L"Could not save the launcher setting.");
+            }
+            break;
             case RERIFF_BRAND_CONTROL:
                 if(HIWORD(wp)==BN_CLICKED)ShellExecuteW(hwnd,L"open",L"https://github.com/Aftonstjarna/ReRiff",NULL,NULL,SW_SHOWNORMAL);
                 break;
