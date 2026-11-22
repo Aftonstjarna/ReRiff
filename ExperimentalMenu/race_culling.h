@@ -35,8 +35,10 @@ static RaceCullingStripTick race_culling_strip_tick;
 static RaceCullingBackNode race_culling_back_node;
 typedef void *(__cdecl *RaceCullingStripCtor)(void *,int);
 typedef void (__thiscall *RaceCullingSetCollision)(void *,BYTE);
+typedef void *(__cdecl *RaceCullingOperatorNew)(size_t);
 static RaceCullingStripCtor race_culling_strip_ctor;
 static RaceCullingSetCollision race_culling_set_collision;
+static RaceCullingOperatorNew race_culling_operator_new;
 static void *race_culling_road_chunks[64];
 static unsigned race_culling_road_chunk_count;
 __declspec(dllexport) int __cdecl ReRiffConfigureCullingVisible(void *callback){
@@ -82,64 +84,89 @@ static void race_culling_force_custom(BYTE *strip,BOOL visible){
         }
     }
 }
-static void race_culling_road_chunks_build_range(BYTE *base,BYTE *main,void *node,int range_start,int range_end,int master_total){
+static void race_culling_road_chunks_split(BYTE *base,BYTE *main,BYTE *capture_custom,int vertex_start,int vertex_end,int master_total){
     (void)base;
-    if(!race_culling_strip_ctor||!race_culling_strip_tick||master_total<=0)return;
-    if(range_start<0)range_start=0;
-    if(range_end>master_total)range_end=master_total;
-    if(range_start>=range_end)return;
+    if(!race_culling_strip_ctor||!capture_custom||master_total<=0)return;
     BYTE *main_custom=*(BYTE **)(main+256);
     if(!main_custom||!readable(main_custom,180)){
         log_line("Road chunks skipped: live road visual is not readable.");
         return;
     }
-    const unsigned chunk=200;
+    BYTE *cvb=*(BYTE **)(capture_custom+156),*cve=*(BYTE **)(capture_custom+160);
+    BYTE *ctb=*(BYTE **)(capture_custom+168),*cte=*(BYTE **)(capture_custom+172);
+    if(!cvb||!cve||cve<cvb||!ctb||!cte||cte<ctb){
+        log_line("Road chunks skipped: capture mesh is not readable.");
+        return;
+    }
+    unsigned total_verts=(unsigned)((cve-cvb)/40);
+    unsigned used=(unsigned)master_total*9;
+    if(used>total_verts)used=total_verts;
+    unsigned total_tris=(unsigned)((cte-ctb)/12);
+    if(vertex_start<0)vertex_start=0;
+    if(vertex_end>(int)used)vertex_end=(int)used;
+    if(vertex_start>=vertex_end)return;
+    const unsigned chunk_verts=2000,overlap=32,stride=chunk_verts-overlap;
     unsigned added=0;
-    for(int start=range_start;start<range_end;start+=(int)chunk){
+    for(unsigned start=(unsigned)vertex_start;start<(unsigned)vertex_end;start+=stride){
         if(race_culling_road_chunk_count>=64)break;
+        unsigned end=start+chunk_verts;
+        if(end>(unsigned)vertex_end)end=(unsigned)vertex_end;
+        unsigned ext_start=start>overlap?start-overlap:0;
+        unsigned ext_end=end+overlap;
+        if(ext_end>used)ext_end=used;
+        unsigned nt=0;
+        for(unsigned t=0;t<total_tris;t++){
+            int *tri=(int *)(ctb+t*12);
+            int a=tri[0],b=tri[1],c=tri[2];
+            if(a>=(int)ext_start&&a<(int)ext_end&&b>=(int)ext_start&&b<(int)ext_end&&c>=(int)ext_start&&c<(int)ext_end)nt++;
+        }
+        if(!nt)continue;
         BYTE *extra=(BYTE *)VirtualAlloc(NULL,424,MEM_COMMIT|MEM_RESERVE,PAGE_READWRITE);
         if(!extra)break;
         if(!race_culling_strip_ctor(extra,0))continue;
-        memcpy(extra+64,main+64,72);
-        memcpy(extra+136,main+136,12);
-        memcpy(extra+216,main+216,16);
-        int spawn_start=start-2;
-        if(spawn_start<0)spawn_start=0;
-        *((int *)(extra+56))=spawn_start;
-        *((int *)(extra+48))=0;
         void *body=*(void **)(extra+264);
         if(body&&race_culling_set_collision)race_culling_set_collision(body,0);
-        int finish=start+(int)chunk;
-        if(finish>range_end)finish=range_end;
-        float progress=(float)finish/(float)master_total;
-        race_culling_strip_tick(extra,1,0,progress,node);
         BYTE *custom=*(BYTE **)(extra+256);
-        if(custom&&readable(custom,180)){
-            memcpy(custom+32,main_custom+32,16);
-            if(readable(main_custom+152,4))*(DWORD *)(custom+152)=*(DWORD *)(main_custom+152);
-            if(race_culling_context_dirty){
-                BOOL have_next=readable(custom+12,4);
-                DWORD next=have_next?*(DWORD *)(custom+12):0;
-                if(have_next)*(DWORD *)(custom+12)=0;
-                race_culling_context_dirty(custom);
-                if(have_next)*(DWORD *)(custom+12)=next;
-            }
-            race_culling_force_custom(extra,1);
+        if(!custom||!readable(custom,180))continue;
+        memcpy(custom+32,main_custom+32,16);
+        if(readable(main_custom+152,4))*(DWORD *)(custom+152)=*(DWORD *)(main_custom+152);
+        unsigned vcount=ext_end-ext_start;
+        BYTE *vbuf=race_culling_operator_new?(BYTE *)race_culling_operator_new((size_t)vcount*40):NULL;
+        BYTE *tbuf=race_culling_operator_new?(BYTE *)race_culling_operator_new((size_t)nt*12):NULL;
+        if(!vbuf||!tbuf)continue;
+        memcpy(vbuf,cvb+(size_t)ext_start*40,(size_t)vcount*40);
+        unsigned k=0;
+        for(unsigned t=0;t<total_tris;t++){
+            int *tri=(int *)(ctb+t*12);
+            int a=tri[0],b=tri[1],c=tri[2];
+            if(a<(int)ext_start||a>=(int)ext_end||b<(int)ext_start||b>=(int)ext_end||c<(int)ext_start||c>=(int)ext_end)continue;
+            int *dst=(int *)(tbuf+(size_t)k*12);
+            dst[0]=a-(int)ext_start;
+            dst[1]=b-(int)ext_start;
+            dst[2]=c-(int)ext_start;
+            k++;
         }
-        unsigned cv=0,ct=0;
-        if(custom&&readable(custom,180)){
-            BYTE *vb=*(BYTE **)(custom+156),*ve=*(BYTE **)(custom+160);
-            BYTE *tb=*(BYTE **)(custom+168),*te=*(BYTE **)(custom+172);
-            if(vb&&ve&&ve>=vb)cv=(unsigned)((ve-vb)/40);
-            if(tb&&te&&te>=tb)ct=(unsigned)((te-tb)/12);
+        *(BYTE **)(custom+156)=vbuf;
+        *(BYTE **)(custom+160)=vbuf+(size_t)vcount*40;
+        *(BYTE **)(custom+164)=vbuf+(size_t)vcount*40;
+        *(BYTE **)(custom+168)=tbuf;
+        *(BYTE **)(custom+172)=tbuf+(size_t)nt*12;
+        *(BYTE **)(custom+176)=tbuf+(size_t)nt*12;
+        if(race_culling_context_dirty){
+            BOOL have_next=readable(custom+12,4);
+            DWORD next=have_next?*(DWORD *)(custom+12):0;
+            if(have_next)*(DWORD *)(custom+12)=0;
+            race_culling_context_dirty(custom);
+            if(have_next)*(DWORD *)(custom+12)=next;
         }
-        char detail[220];snprintf(detail,sizeof(detail),"Road chunk %u range=%d..%d start=%d spawn=%d finish=%d cursor=%d verts=%u tris=%u.",
-            race_culling_road_chunk_count,range_start,range_end,start,spawn_start,finish,extra?*((int *)(extra+56)):0,cv,ct);log_line(detail);
+        race_culling_force_custom(extra,1);
+        char detail[200];snprintf(detail,sizeof(detail),"Road chunk %u exact verts=%u..%u tris=%u cursor=%d.",
+            race_culling_road_chunk_count,ext_start,ext_end,nt,extra?*((int *)(extra+56)):0);log_line(detail);
         race_culling_road_chunks[race_culling_road_chunk_count++]=extra;
         added++;
     }
     char detail[180];snprintf(detail,sizeof(detail),"Road chunks built: range=%d..%d total_blocks=%d added=%u all=%u.",
-        range_start,range_end,master_total,added,race_culling_road_chunk_count);log_line(detail);
+        vertex_start,vertex_end,master_total,added,race_culling_road_chunk_count);log_line(detail);
 }
 static void race_culling_road_chunks_apply(void){
     for(unsigned i=0;i<race_culling_road_chunk_count;i++)race_culling_force_custom((BYTE *)race_culling_road_chunks[i],1);
@@ -215,6 +242,7 @@ static void race_culling_prewarm(BYTE *base){
     }
 
     int master_total=0;
+    BYTE *capture_custom=NULL;
     if(main_road&&race_culling_strip_ctor){
         BYTE *capture=(BYTE *)VirtualAlloc(NULL,424,MEM_COMMIT|MEM_RESERVE,PAGE_READWRITE);
         if(capture&&race_culling_strip_ctor(capture,0)){
@@ -225,24 +253,33 @@ static void race_culling_prewarm(BYTE *base){
             *((int *)(capture+48))=0;
             void *body=*(void **)(capture+264);
             if(body&&race_culling_set_collision)race_culling_set_collision(body,0);
+            capture_custom=*(BYTE **)(capture+256);
+            if(capture_custom&&readable(capture_custom,180)){
+                const unsigned cap=40000;
+                BYTE *vbig=race_culling_operator_new?(BYTE *)race_culling_operator_new((size_t)cap*40):NULL;
+                if(vbig){
+                    *(BYTE **)(capture_custom+156)=vbig;
+                    *(BYTE **)(capture_custom+160)=vbig+(size_t)cap*40;
+                    *(BYTE **)(capture_custom+164)=vbig+(size_t)cap*40;
+                }
+            }
             for(int step=0;step<=100;step++)race_culling_strip_tick(capture,1,0,step/100.0f,node);
             master_total=*((int *)(capture+56));
-            BYTE *cc=*(BYTE **)(capture+256);
-            if(cc&&readable(cc,180))*((BYTE *)cc+20)=0;
+            if(capture_custom&&readable(capture_custom,180))*((BYTE *)capture_custom+20)=0;
             for(int off=268;off<=300;off+=32){
                 for(int i=0;i<8;i++){
                     void *visual=*(void **)(capture+off+i*4);
                     if(visual&&readable(visual,132))*((BYTE *)visual+20)=0;
                 }
             }
-            char detail[160];snprintf(detail,sizeof(detail),"Road capture: total_blocks=%d main_cursor=%d.",master_total,main_cursor);log_line(detail);
+            char detail[180];snprintf(detail,sizeof(detail),"Road capture: total_blocks=%d main_cursor=%d verts=%u.",master_total,main_cursor,capture_custom? (unsigned)((*(BYTE **)(capture_custom+160)-*(BYTE **)(capture_custom+156))/40):0);log_line(detail);
         }
     }
-    if(main_road&&master_total>0){
+    if(main_road&&master_total>0&&capture_custom){
         int window_start=main_cursor-232;
         if(window_start<0)window_start=0;
-        if(window_start>0)race_culling_road_chunks_build_range(base,main_road,node,0,window_start,master_total);
-        if(main_cursor<master_total)race_culling_road_chunks_build_range(base,main_road,node,main_cursor,master_total,master_total);
+        if(window_start>0)race_culling_road_chunks_split(base,main_road,capture_custom,0,window_start*9,master_total);
+        if(main_cursor<master_total)race_culling_road_chunks_split(base,main_road,capture_custom,main_cursor*9,master_total*9,master_total);
     }else{
         log_line("Track prewarm deferred: road data is not ready.");
         return;
@@ -392,6 +429,7 @@ static BOOL install_race_culling(BYTE *base){
     race_culling_on_visible=(RaceCullingVisible)(base+0x27959c);
     race_culling_context_dirty=(RaceCullingContextDirty)(base+0x53580);
     race_culling_set_collision=(RaceCullingSetCollision)(base+0x3bc80);
+    if(readable(base+0x52d4b4,4))race_culling_operator_new=(RaceCullingOperatorNew)*(void **)(base+0x52d4b4);
     BOOL expanded=race_culling_expand_pool(base);
     race_culling_pool_expanded=expanded;
     WCHAR pool_value[16];
