@@ -1,3 +1,22 @@
+# ReRiff 1.5.0-beta.3 — Experimental race free-look camera
+
+## In-game summary
+
+- Press the right stick (R3) to toggle free look on the normal chase camera.
+- Right stick X/Y and the mouse (hold RMB) look around the car.
+- Free look automatically yields to the finish and results cameras.
+- Tune FOV, distance, and X/Y inversion in `client.ini`.
+
+## Full release notes
+
+- Add an experimental native free-look layer for the normal race camera. It keeps the normal camera's already-ticked matrix, then applies yaw/pitch around the car, so the normal camera's distance and field of view are preserved while looking around.
+- Toggle with the controller's right-stick click (R3). While enabled, right-stick X/Y and the mouse (right mouse button held, cursor recentered) control yaw and pitch. The camera recenters behind the car after a short idle; toggling off restores the normal camera immediately.
+- Free look does not override game-controlled camera transitions. A pending camera switch is left alone, and the results entry disables free look before the end camera appears.
+- Add `[camera]` settings in `client.ini`: `race_orbit` (opt-in), `free_fov_offset` (degrees added to the normal camera FOV), `free_zoom` (camera distance multiplier), `invert_x`, and `invert_y` (`0` is the preferred direction, `1` is inverted). `race_orbit_trace=1` enables the diagnostic trace.
+- Install the race-tick camera frame even when no scrobbling provider is configured; the scrobble observer and enter callbacks are now null-safe. This keeps the camera independent of Last.fm/ListenBrainz.
+- Keep the camera hook idle when free look is off: only the R3 poll runs, and the normal camera is restored once. The diagnostic trace is opt-in and off by default.
+- Validation: native client build; in-game tests for normal camera, R3 toggle, right-stick and mouse yaw/pitch, FOV/distance matching, finish-line yield, and results-camera restore. Existing livery-merge, car-slot, save, cache and client checks remain in the beta.2 line below.
+
 # ReRiff 1.5.0-beta.2 — Custom paint livery fix
 
 ## In-game summary

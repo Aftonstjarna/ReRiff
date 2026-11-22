@@ -734,6 +734,7 @@ static BOOL cjk_component_enabled(void){return cjk_pack_enabled()||latin_pack_en
 #include "progression_economy.h"
 #include "progression_rank.h"
 #include "progression_ghost.h"
+#include "race_camera.h"
 #include "lastfm_scrobbler.h"
 #include "progression_rewards.h"
 #include "customs_unlocks.h"
@@ -805,7 +806,8 @@ __declspec(dllexport) BOOL __cdecl ReRiffStartEngineMenu(void) {
         (const WCHAR *)(uintptr_t)&ReRiffStartEngineMenu,&pinned)) return FALSE;
     if(!install_mods_vfs(base,path))log_line("Mods VFS hook refused: native archive loader differs.");
     if(!install_recent_tracks(base))log_line("Recent Tracks extension refused: original CIL differs.");
-    if(!install_scrobbler(base))log_line("Scrobbling playback hook refused: original race differs.");
+    if(!install_race_camera(base))log_line("Race free-look camera hook refused: client configuration or frame setup failed.");
+    if(!install_scrobbler(base))log_line("Race tick hook refused: original race vtable differs.");
     if(!install_friend_utf8(base))log_line("Friend UTF-8 correction refused: original CIL bytes differ.");
     if(!install_lastfm_utf8(base))log_line("Last.fm UTF-8 correction refused: original CIL bytes differ.");
     if(!install_progression_economy(base))log_line("Economy trace wrappers refused: original CIL differs.");
