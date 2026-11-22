@@ -12,31 +12,56 @@
 typedef void (__thiscall *RaceCullingVisible)(void *,int,BYTE);
 typedef void (__cdecl *RaceCullingVisualVisible)(void *,BYTE);
 typedef void (__cdecl *RaceCullingTrackTick)(void *,float *);
+typedef void (__cdecl *RaceCullingStripTick)(void *,BYTE,BYTE,float,void *);
+typedef void *(__cdecl *RaceCullingBackNode)(void *,void **,float *);
 
 static BOOL race_culling_enabled,race_culling_trace,race_culling_trace_announced,race_culling_visual_announced;
 static unsigned race_culling_frames,race_culling_volume_count,race_culling_valid_count,race_culling_forced_count,race_culling_prop_count,race_culling_prop_forced;
 static unsigned race_culling_ramp_count,race_culling_ramp_forced,race_culling_cuboid_count,race_culling_segment_count;
 static unsigned race_culling_strip_count,race_culling_strip_block_count,race_culling_strip_forced;
+static unsigned race_culling_block_unique,race_culling_block_duplicate;
+static float race_culling_block_min,race_culling_block_max;
 static RaceCullingVisible race_culling_force_visible,race_culling_on_visible;
 static RaceCullingVisualVisible race_culling_visual;
 static RaceCullingTrackTick race_culling_track_tick;
+static RaceCullingStripTick race_culling_strip_tick;
+static RaceCullingBackNode race_culling_back_node;
 __declspec(dllexport) int __cdecl ReRiffConfigureCullingVisible(void *callback){
     if(!callback)return 0;race_culling_visual=(RaceCullingVisualVisible)callback;return 1;
 }
 __declspec(dllexport) int __cdecl ReRiffConfigureCullingTrackTick(void *callback){
     if(!callback)return 0;race_culling_track_tick=(RaceCullingTrackTick)callback;return 1;
 }
-/* gaTrackManager.tickDynamicTrack advances the strip collision state as well
- * as the visuals. Forcing progress here removes the car's current collision
- * and unloads the live track, so the bound tick is not called. A future
- * prewarm must invoke gaTrackStrip.tick with collision disabled instead. */
+__declspec(dllexport) int __cdecl ReRiffConfigureCullingStripTick(void *callback){
+    if(!callback)return 0;race_culling_strip_tick=(RaceCullingStripTick)callback;return 1;
+}
+__declspec(dllexport) int __cdecl ReRiffConfigureCullingBackNode(void *callback){
+    if(!callback)return 0;race_culling_back_node=(RaceCullingBackNode)callback;return 1;
+}
 static void race_culling_prewarm(BYTE *base){
-    (void)base;
-    static BOOL warned;
-    if(!warned){
-        warned=TRUE;
-        log_line("Photo mode track prewarm disabled: forced progress would move collision strips.");
+    if(!race_culling_enabled||!race_culling_strip_tick||!race_culling_back_node||!readable(base+0x7dce7c,4))return;
+    void *manager=*(void **)(base+0x7dce7c);
+    if(!readable(manager,2736)||!readable(base+0x7d5930,4))return;
+    void *players=*(void **)(base+0x7d5930);
+    if(!readable(players,52))return;
+    void *list=*(void **)((BYTE *)players+48);
+    if(!readable(list,4))return;
+    void *local=*(void **)list;
+    if(!readable(local,8))return;
+    void *tracker=*(void **)((BYTE *)local+4);
+    if(!readable(tracker,4))return;
+    void *node=race_culling_back_node(tracker,NULL,NULL);
+    if(!node)return;
+    void **begin=*(void ***)((BYTE *)manager+2720),**end=*(void ***)((BYTE *)manager+2724);
+    if(!begin||!end||end<begin||(size_t)((BYTE *)end-(BYTE *)begin)>256*sizeof(void *))return;
+    unsigned strips=0;
+    for(void **item=begin;item<end;item++){
+        BYTE *strip=(BYTE *)*item;
+        if(!readable(strip,424))continue;
+        for(int step=0;step<=100;step++)race_culling_strip_tick(strip,1,0,step/100.0f,node);
+        strips++;
     }
+    char line[160];snprintf(line,sizeof(line),"Photo mode visual prewarm: strips=%u steps=101 node=%p.",strips,node);log_line(line);
 }
 
 /* tickBlocks retires the oldest block through the branch at IL_01e7. Turn
@@ -150,7 +175,11 @@ static void race_culling_ramps(BYTE *base){
  * visuals after the original tick so distance-based hiding cannot remove the
  * road surface. The strip vector is trackManager+2720 (clearTrackPhys). */
 static void race_culling_strips(BYTE *base){
+    static BYTE seen[10000];
     race_culling_strip_count=race_culling_strip_block_count=race_culling_strip_forced=0;
+    race_culling_block_unique=race_culling_block_duplicate=0;
+    race_culling_block_min=race_culling_block_max=0;
+    memset(seen,0,sizeof(seen));
     if(!race_culling_visual||!readable(base+0x7dce7c,4))return;
     void *manager=*(void **)(base+0x7dce7c);
     if(!readable(manager,2732))return;
@@ -168,6 +197,11 @@ static void race_culling_strips(BYTE *base){
         for(BYTE *block=blocks;block<blocks_end;block+=88){
             int index=*((int *)(block+80));
             if(index<0||index>=10000)continue;
+            float progress=*((float *)(block+76));
+            if(race_culling_strip_block_count==0||progress<race_culling_block_min)race_culling_block_min=progress;
+            if(race_culling_strip_block_count==0||progress>race_culling_block_max)race_culling_block_max=progress;
+            if(seen[index])race_culling_block_duplicate++;
+            else{seen[index]=1;race_culling_block_unique++;}
             void **slot=(void **)((BYTE *)visuals+index*4);
             if(!readable(slot,4))continue;
             void *visual=*slot;
@@ -218,7 +252,7 @@ static void race_culling_frame(void){
     }
     race_culling_counts(base);
     if((race_culling_frames%120)!=0)return;
-    char line[480];
-    snprintf(line,sizeof(line),"Culling trace frame %u manager=%p volumes=%u valid=%u forced=%u props=%u prop_forced=%u ramps=%u ramp_forced=%u strips=%u blocks=%u block_forced=%u cuboids=%u segments=%u paused=%d",race_culling_frames,manager,race_culling_volume_count,race_culling_valid_count,race_culling_forced_count,race_culling_prop_count,race_culling_prop_forced,race_culling_ramp_count,race_culling_ramp_forced,race_culling_strip_count,race_culling_strip_block_count,race_culling_strip_forced,race_culling_cuboid_count,race_culling_segment_count,paused?1:0);
+    char line[560];
+    snprintf(line,sizeof(line),"Culling trace frame %u manager=%p volumes=%u valid=%u forced=%u props=%u prop_forced=%u ramps=%u ramp_forced=%u strips=%u blocks=%u block_forced=%u block_span=%.3f..%.3f block_unique=%u block_dup=%u cuboids=%u segments=%u paused=%d",race_culling_frames,manager,race_culling_volume_count,race_culling_valid_count,race_culling_forced_count,race_culling_prop_count,race_culling_prop_forced,race_culling_ramp_count,race_culling_ramp_forced,race_culling_strip_count,race_culling_strip_block_count,race_culling_strip_forced,race_culling_block_min,race_culling_block_max,race_culling_block_unique,race_culling_block_duplicate,race_culling_cuboid_count,race_culling_segment_count,paused?1:0);
     log_line(line);
 }

@@ -22,6 +22,8 @@ namespace ReRiff {
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int AlphabetJump(IntPtr menu,int letter);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void CullingVisible(IntPtr visual,bool visible);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void CullingTrackTick(IntPtr manager,IntPtr progress);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void CullingStripTick(IntPtr strip,bool updateVisual,bool updateCollision,float progress,IntPtr node);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate IntPtr CullingBackNode(IntPtr tracker,IntPtr forward,IntPtr nodeT);
         [DllImport("ReRiff.Notify.dll",CallingConvention=CallingConvention.Cdecl,ExactSpelling=true)]
         private static extern int ReRiffConfigurePickerAlphabet(IntPtr callback);
         private static readonly List<Delegate> Roots = new List<Delegate>();
@@ -31,6 +33,10 @@ namespace ReRiff {
         private static extern int ReRiffConfigureCullingVisible(IntPtr callback);
         [DllImport("ReRiff.Notify.dll",CallingConvention=CallingConvention.Cdecl,ExactSpelling=true)]
         private static extern int ReRiffConfigureCullingTrackTick(IntPtr callback);
+        [DllImport("ReRiff.Notify.dll",CallingConvention=CallingConvention.Cdecl,ExactSpelling=true)]
+        private static extern int ReRiffConfigureCullingStripTick(IntPtr callback);
+        [DllImport("ReRiff.Notify.dll",CallingConvention=CallingConvention.Cdecl,ExactSpelling=true)]
+        private static extern int ReRiffConfigureCullingBackNode(IntPtr callback);
         private static void ObserveCulling(IntPtr visual,bool visible){
             try{if(cullingOriginal!=null&&visual!=IntPtr.Zero)cullingOriginal(visual,visible);}catch{}
         }
@@ -151,6 +157,19 @@ namespace ReRiff {
                     if(ReRiffConfigureCullingTrackTick(Marshal.GetFunctionPointerForDelegate(callback))!=1)throw new IOException("Track strip tick registration refused");
                     Log("Track strip tick bound for photo prewarm.");
                 }catch(Exception error){Log("Track strip prewarm unavailable: "+error);}
+                try{
+                    var stripTick=game.GetMethods(BindingFlags.Static|BindingFlags.Public|BindingFlags.NonPublic)
+                        .SingleOrDefault(m=>m.Name=="gaTrackStrip.tick"&&m.GetParameters().Length==5);
+                    var backNode=game.GetMethods(BindingFlags.Static|BindingFlags.Public|BindingFlags.NonPublic)
+                        .SingleOrDefault(m=>m.Name=="gaNodeTracker.getBackNode"&&m.GetParameters().Length==3);
+                    if(stripTick==null||backNode==null)throw new IOException("Visual prewarm bindings differ");
+                    var stripCallback=(CullingStripTick)CreateCall(stripTick,typeof(CullingStripTick),false);Roots.Add(stripCallback);
+                    var nodeCallback=(CullingBackNode)CreateCall(backNode,typeof(CullingBackNode),false);Roots.Add(nodeCallback);
+                    if(ReRiffConfigureCullingStripTick(Marshal.GetFunctionPointerForDelegate(stripCallback))!=1
+                        ||ReRiffConfigureCullingBackNode(Marshal.GetFunctionPointerForDelegate(nodeCallback))!=1)
+                        throw new IOException("Visual prewarm registration refused");
+                    Log("Visual-only track prewarm bound with collision disabled.");
+                }catch(Exception error){Log("Visual-only track prewarm unavailable: "+error);}
                 try {CustomsUnlocks.Configure(game);}catch(Exception e){Log("Customs unlock setup failed: "+e.Message);}
                 try {HudToggle.Configure(game);}catch(Exception error){Log("HUD Select toggle unavailable: "+error);}
                 try {ProgressionNative.Configure(game);}
