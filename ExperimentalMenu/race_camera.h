@@ -22,8 +22,6 @@ static int race_photo_key=VK_F9;
 static float race_photo_speed=8.0f;
 static float race_photo_yaw,race_photo_pitch;
 static float race_photo_position[3],race_photo_base_right[3],race_photo_base_up[3],race_photo_base_forward[3];
-typedef void (__thiscall *RaceSetPaused)(void *,BYTE);
-static RaceSetPaused race_set_paused;
 static int race_camera_mode=3;
 static DWORD race_camera_last_tick;
 static float race_camera_yaw,race_camera_idle;
@@ -369,6 +367,7 @@ static BOOL race_photo_begin(BYTE *base){
     if(!readable(race,13)||*((BYTE *)race+12)){log_line("Photo mode refused: the race is already paused.");return FALSE;}
     int set_index=-1;void *camera=race_photo_final_camera(base,&set_index);
     if(!camera){log_line("Photo mode refused: no final race camera is available.");return FALSE;}
+    char begin[160];snprintf(begin,sizeof(begin),"Photo mode begin; race=%p camera set %d camera=%p.",race,set_index,camera);log_line(begin);
     float *matrix=(float *)((BYTE *)camera+68);
     for(int row=0;row<3;row++){
         race_photo_base_right[row]=matrix[row];
@@ -377,10 +376,12 @@ static BOOL race_photo_begin(BYTE *base){
         race_photo_position[row]=matrix[9+row];
     }
     race_photo_yaw=0;race_photo_pitch=0;
-    if(race_set_paused)race_set_paused(race,1);else *((BYTE *)race+12)=1;
+    *((BYTE *)race+12)=1;
     race_photo_paused_by_us=TRUE;
+    log_line("Photo mode: pause byte set.");
     if(race_photo_hide_hud&&readable(base+0x7a2f48,1)&&*((BYTE *)base+0x7a2f48)&&race_hud_toggle){
         race_hud_toggle();race_photo_hud_hidden=TRUE;
+        log_line("Photo mode: HUD hidden.");
     }
     race_photo_active=TRUE;
     race_camera_free=FALSE;race_camera_restored=FALSE;race_camera_reset=TRUE;
@@ -394,9 +395,7 @@ static void race_photo_end(BYTE *base,BOOL resume){
     race_photo_restore_hud(base);
     if(resume&&race_photo_paused_by_us&&readable(base+0x7d6668,4)){
         void *race=*(void **)(base+0x7d6668);
-        if(readable(race,13)&&*((BYTE *)race+12)){
-            if(race_set_paused)race_set_paused(race,0);else *((BYTE *)race+12)=0;
-        }
+        if(readable(race,13)&&*((BYTE *)race+12))*((BYTE *)race+12)=0;
     }
     race_photo_paused_by_us=FALSE;
     race_camera_free=FALSE;race_camera_restored=FALSE;race_camera_reset=TRUE;
@@ -607,8 +606,7 @@ static BOOL install_race_camera(BYTE *base){
         GetPrivateProfileStringW(L"camera",L"photo_speed",L"8.0",value,64,client);race_photo_speed=(float)wcstod(value,NULL);
         if(race_photo_speed<1.0f)race_photo_speed=1.0f;if(race_photo_speed>100.0f)race_photo_speed=100.0f;
         race_photo_hide_hud=GetPrivateProfileIntW(L"camera",L"photo_hide_hud",1,client)!=0;
-        if(!readable(base+0x21f3d4,8)){race_photo_enabled=FALSE;log_line("Photo mode refused: the pause entry differs from the supported game.");}
-        else race_set_paused=(RaceSetPaused)(base+0x21f3d4);
+        if(!readable(base+0x7d6668,4)){race_photo_enabled=FALSE;log_line("Photo mode refused: the race manager singleton differs from the supported game.");}
     }
     if(!race_orbit_enabled&&!race_photo_enabled)return TRUE;
     race_camera_input_init();
