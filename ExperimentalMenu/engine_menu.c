@@ -610,6 +610,7 @@ static void cjk_direct_refresh(void);
 static BOOL picker_search_before(void *menu);
 static void picker_search_after(void *menu);
 static void picker_search_forget(void *menu);
+#include "picker_random.h"
 #include "ui_scale.h"
 #include "picker_search.h"
 #include "ui_scale_slider.h"

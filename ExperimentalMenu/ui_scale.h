@@ -78,12 +78,12 @@ static void ui_refresh_scale(void){
 static void __thiscall ui_menu_tick(void *menu){
     UiMenuHook *hook=ui_menu(menu);if(!hook)return;
     UiCanvas *previous=ui_scope_set(hook->canvas.width?&hook->canvas:NULL);
-    if(!picker_search_before(menu)){hook->tick(menu);picker_alpha_tick(menu);}picker_search_after(menu);ui_scope_set(previous);ui_refresh_scale();cjk_direct_refresh();
+    if(!picker_search_before(menu)){hook->tick(menu);picker_alpha_tick(menu);picker_random_tick(menu);}picker_search_after(menu);ui_scope_set(previous);ui_refresh_scale();cjk_direct_refresh();
 }
 static void __thiscall ui_menu_cleanup(void *menu,void *screen,void *lower){
     UiMenuHook *hook=ui_menu(menu);if(!hook)return;
     UiCanvas *previous=ui_scope_set(hook->canvas.width?&hook->canvas:NULL);
-    picker_search_forget(menu);picker_alpha_forget(menu);hook->cleanup(menu,screen,lower);ui_scope_set(previous);hook->canvas=(UiCanvas){0};
+    picker_search_forget(menu);picker_alpha_forget(menu);picker_random_forget(menu);hook->cleanup(menu,screen,lower);ui_scope_set(previous);hook->canvas=(UiCanvas){0};
 }
 static BOOL install_ui_scale(BYTE *base){
     if(*(void **)(base+0x5fbf44+16)!=(void *)(base+0x929d0)||*(void **)(base+0x6004b0+32)!=(void *)(base+0x15b470))return FALSE;
