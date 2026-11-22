@@ -92,7 +92,15 @@ static void race_culling_prewarm(BYTE *base){
         for(int step=0;step<=100;step++)race_culling_strip_tick(strip,1,0,step/100.0f,node);
         race_culling_strip_tick(strip,1,0,current,node);
         BYTE *custom=*(BYTE **)(strip+256);
-        if(race_culling_context_dirty&&custom&&readable(custom,180))race_culling_context_dirty(custom);
+        if(race_culling_context_dirty&&custom&&readable(custom,180)){
+            /* setContextDirty walks the visual's +0xc chain. A stale chain
+             * entry can fault during prewarm; mark only this visual. */
+            BOOL have_next=readable(custom+12,4);
+            DWORD next=have_next?*(DWORD *)(custom+12):0;
+            if(have_next)*(DWORD *)(custom+12)=0;
+            race_culling_context_dirty(custom);
+            if(have_next)*(DWORD *)(custom+12)=next;
+        }
         strips++;
     }
     race_culling_prewarm_done=manager;
