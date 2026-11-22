@@ -18,7 +18,7 @@ static BOOL race_camera_installed,race_camera_announced,race_camera_frame_logged
 static int race_camera_mode=3;
 static DWORD race_camera_last_tick;
 static float race_camera_yaw,race_camera_idle;
-static BOOL race_camera_reset=TRUE,race_camera_free,race_camera_restored=TRUE,race_camera_trace;static BOOL race_r3_previous;static BOOL race_camera_invert_x,race_camera_invert_y;static float race_camera_pitch,race_camera_fov_offset,race_camera_zoom=1.0f;static int race_normal_mode[12];
+static BOOL race_camera_reset=TRUE,race_camera_free,race_camera_restored=TRUE,race_camera_trace;static BOOL race_r3_previous;static WORD race_free_button=XINPUT_GAMEPAD_RIGHT_THUMB,race_hud_button=XINPUT_GAMEPAD_BACK;static int race_free_key,race_hud_key,race_free_mouse=VK_RBUTTON;static BOOL race_camera_invert_x,race_camera_invert_y;static float race_camera_pitch,race_camera_fov_offset,race_camera_zoom=1.0f;static int race_normal_mode[12];
 static BOOL race_mouse_latched;
 static POINT race_mouse_last;
 typedef DWORD (WINAPI *RaceXInputGetState)(DWORD,XINPUT_STATE *);
@@ -30,6 +30,74 @@ static void race_camera_input_init(void){
     if(!module)module=LoadLibraryW(L"xinput1_3.dll");
     if(!module)module=LoadLibraryW(L"xinput9_1_0.dll");
     if(module)race_xinput_get=(RaceXInputGetState)GetProcAddress(module,"XInputGetState");
+}
+
+static WORD race_button_value(const WCHAR *value){
+    if(!value||!*value||!_wcsicmp(value,L"none"))return 0;
+    WCHAR *end=NULL;unsigned long numeric=wcstoul(value,&end,0);
+    if(end&&*end==0&&numeric<=0xffffu)return (WORD)numeric;
+    static const struct {const WCHAR *name;WORD mask;} table[]={
+        {L"dpad_up",XINPUT_GAMEPAD_DPAD_UP},{L"dpad_down",XINPUT_GAMEPAD_DPAD_DOWN},
+        {L"dpad_left",XINPUT_GAMEPAD_DPAD_LEFT},{L"dpad_right",XINPUT_GAMEPAD_DPAD_RIGHT},
+        {L"start",XINPUT_GAMEPAD_START},{L"back",XINPUT_GAMEPAD_BACK},{L"select",XINPUT_GAMEPAD_BACK},{L"view",XINPUT_GAMEPAD_BACK},
+        {L"left_thumb",XINPUT_GAMEPAD_LEFT_THUMB},{L"l3",XINPUT_GAMEPAD_LEFT_THUMB},
+        {L"right_thumb",XINPUT_GAMEPAD_RIGHT_THUMB},{L"r3",XINPUT_GAMEPAD_RIGHT_THUMB},
+        {L"left_shoulder",XINPUT_GAMEPAD_LEFT_SHOULDER},{L"lb",XINPUT_GAMEPAD_LEFT_SHOULDER},
+        {L"right_shoulder",XINPUT_GAMEPAD_RIGHT_SHOULDER},{L"rb",XINPUT_GAMEPAD_RIGHT_SHOULDER},
+        {L"a",XINPUT_GAMEPAD_A},{L"b",XINPUT_GAMEPAD_B},{L"x",XINPUT_GAMEPAD_X},{L"y",XINPUT_GAMEPAD_Y}};
+    for(unsigned i=0;i<sizeof(table)/sizeof(table[0]);i++)if(!_wcsicmp(value,table[i].name))return table[i].mask;
+    return 0;
+}
+
+static int race_key_value(const WCHAR *value){
+    if(!value||!*value||!_wcsicmp(value,L"none"))return 0;
+    WCHAR *end=NULL;unsigned long numeric=wcstoul(value,&end,0);
+    if(end&&*end==0&&numeric<=255u)return (int)numeric;
+    if(value[0]&&!value[1]){
+        if(value[0]>='a'&&value[0]<='z')return (int)(value[0]-32);
+        if((value[0]>='A'&&value[0]<='Z')||(value[0]>='0'&&value[0]<='9'))return (int)value[0];
+    }
+    if((value[0]=='F'||value[0]=='f')&&value[1]){int n=_wtoi(value+1);if(n>=1&&n<=24)return VK_F1+n-1;}
+    static const struct {const WCHAR *name;int key;} table[]={
+        {L"space",VK_SPACE},{L"enter",VK_RETURN},{L"return",VK_RETURN},{L"tab",VK_TAB},
+        {L"escape",VK_ESCAPE},{L"esc",VK_ESCAPE},{L"backspace",VK_BACK},{L"insert",VK_INSERT},
+        {L"delete",VK_DELETE},{L"del",VK_DELETE},{L"home",VK_HOME},{L"end",VK_END},
+        {L"pageup",VK_PRIOR},{L"pgup",VK_PRIOR},{L"pagedown",VK_NEXT},{L"pgdn",VK_NEXT},
+        {L"up",VK_UP},{L"down",VK_DOWN},{L"left",VK_LEFT},{L"right",VK_RIGHT},
+        {L"shift",VK_SHIFT},{L"lshift",VK_LSHIFT},{L"rshift",VK_RSHIFT},
+        {L"ctrl",VK_CONTROL},{L"control",VK_CONTROL},{L"lctrl",VK_LCONTROL},{L"rctrl",VK_RCONTROL},
+        {L"alt",VK_MENU},{L"lalt",VK_LMENU},{L"ralt",VK_RMENU},
+        {L"numpad0",VK_NUMPAD0},{L"numpad1",VK_NUMPAD1},{L"numpad2",VK_NUMPAD2},{L"numpad3",VK_NUMPAD3},
+        {L"numpad4",VK_NUMPAD4},{L"numpad5",VK_NUMPAD5},{L"numpad6",VK_NUMPAD6},{L"numpad7",VK_NUMPAD7},
+        {L"numpad8",VK_NUMPAD8},{L"numpad9",VK_NUMPAD9},{L"multiply",VK_MULTIPLY},{L"add",VK_ADD},
+        {L"subtract",VK_SUBTRACT},{L"decimal",VK_DECIMAL},{L"divide",VK_DIVIDE}};
+    for(unsigned i=0;i<sizeof(table)/sizeof(table[0]);i++)if(!_wcsicmp(value,table[i].name))return table[i].key;
+    return 0;
+}
+
+static int race_mouse_value(const WCHAR *value){
+    if(!value||!_wcsicmp(value,L"none"))return 0;
+    if(!_wcsicmp(value,L"left")||!_wcsicmp(value,L"lmb"))return VK_LBUTTON;
+    if(!_wcsicmp(value,L"middle")||!_wcsicmp(value,L"mmb"))return VK_MBUTTON;
+    if(!_wcsicmp(value,L"right")||!_wcsicmp(value,L"rmb"))return VK_RBUTTON;
+    return VK_RBUTTON;
+}
+
+static BOOL race_button_down(WORD mask){
+    if(!mask||!race_xinput_get)return FALSE;
+    XINPUT_STATE state;
+    return race_xinput_get(0,&state)==ERROR_SUCCESS&&(state.Gamepad.wButtons&mask)!=0;
+}
+
+static BOOL race_key_down(int key){return key&&(GetAsyncKeyState(key)&0x8000)!=0;}
+
+static void race_read_controls(const WCHAR *client){
+    WCHAR value[64];
+    GetPrivateProfileStringW(L"controls",L"free_look_button",L"right_thumb",value,64,client);race_free_button=race_button_value(value);
+    GetPrivateProfileStringW(L"controls",L"hud_button",L"back",value,64,client);race_hud_button=race_button_value(value);
+    GetPrivateProfileStringW(L"controls",L"free_look_key",L"",value,64,client);race_free_key=race_key_value(value);
+    GetPrivateProfileStringW(L"controls",L"hud_key",L"",value,64,client);race_hud_key=race_key_value(value);
+    GetPrivateProfileStringW(L"controls",L"free_look_mouse",L"right",value,64,client);race_free_mouse=race_mouse_value(value);
 }
 
 static void race_camera_weight(void *camera,int active,float weight){
@@ -66,7 +134,7 @@ static void race_camera_axes(float *stickX,float *stickY,float *dx,float *dy,BOO
         }
     }
     HWND window=GetForegroundWindow();
-    BOOL rmb=(GetAsyncKeyState(VK_RBUTTON)&0x8000)!=0;
+    BOOL rmb=race_free_mouse&&(GetAsyncKeyState(race_free_mouse)&0x8000)!=0;
     if(rmb&&window){
         RECT client;POINT center;
         if(GetClientRect(window,&client)&&client.right>0&&client.bottom>0){
@@ -249,8 +317,7 @@ static void race_camera_frame(void){
     float dt=race_camera_last_tick?(now-race_camera_last_tick)/1000.0f:0.016f;
     if(dt<0.0f||dt>0.05f)dt=0.016f;
     race_camera_last_tick=now;
-    BOOL r3=FALSE;
-    if(race_xinput_get){XINPUT_STATE state;if(race_xinput_get(0,&state)==ERROR_SUCCESS)r3=(state.Gamepad.wButtons&XINPUT_GAMEPAD_RIGHT_THUMB)!=0;}
+    BOOL r3=race_button_down(race_free_button)||race_key_down(race_free_key);
     if(r3&&!race_r3_previous){
         race_camera_free=!race_camera_free;race_camera_reset=TRUE;race_camera_pitch=0;race_camera_restored=FALSE;
         if(race_camera_free)for(int index=0;index<12;index++)race_normal_mode[index]=0;
@@ -305,9 +372,24 @@ static void race_camera_frame(void){
     }
 }
 
+typedef void (__cdecl *RaceHudToggle)(void);
+static RaceHudToggle race_hud_toggle;
+static BOOL race_hud_select_previous;
+__declspec(dllexport) int __cdecl ReRiffConfigureHudToggle(void *callback){
+    if(!callback)return 0;race_hud_toggle=(RaceHudToggle)callback;return 1;
+}
+static void race_hud_frame(void){
+    if(!race_hud_toggle)return;
+    if(!race_xinput_get)race_camera_input_init();
+    BOOL select=race_button_down(race_hud_button)||race_key_down(race_hud_key);
+    if(select&&!race_hud_select_previous)race_hud_toggle();
+    race_hud_select_previous=select;
+}
+
 static BOOL install_race_camera(BYTE *base){
     (void)base;
     WCHAR client[MAX_PATH];wcscpy(client,config_path);WCHAR *slash=wcsrchr(client,L'\\');if(slash)wcscpy(slash+1,L"client.ini");
+    race_read_controls(client);
     if(!GetPrivateProfileIntW(L"camera",L"race_orbit",0,client))return TRUE;
     if(race_camera_installed)return TRUE;
     race_camera_mode=GetPrivateProfileIntW(L"camera",L"race_orbit_mode",3,client);race_camera_trace=GetPrivateProfileIntW(L"camera",L"race_orbit_trace",0,client);

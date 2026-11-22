@@ -42,7 +42,7 @@ if args.component in ('all', 'launcher'):
     def rc_path(path): return '"'+str(path).replace('\\','/')+'"'
     content=(root/'NativeLauncher/app.rc').read_text().replace('"as-invoker.manifest"',rc_path(root/'NativeLauncher/as-invoker.manifest')).replace('RERIFF_ICON_PATH',rc_path(output/'ui-assets/reriff.ico')).replace('RERIFF_LOGO_PATH',rc_path(output/'ui-assets/reriff-logo.bmp')).replace('RERIFF_BUTTON_LOGO_PATH',rc_path(output/'ui-assets/reriff-logo-button.bmp'))
     rc=output/'app.rc';rc.write_text(content)
-    subprocess.run([args.zig,'rc','/fo',str(resource),str(rc)],check=True,env=env)
+    subprocess.run([args.zig,'rc','/fo',str(resource),'--',str(rc)],check=True,env=env)
     subprocess.run([args.zig,'cc','-target','x86-windows-gnu','-municode','-Wl,--subsystem,windows',
                     '-O2','-Wall','-Wextra','-Werror','-DRERIFF_VERSION="'+version+'"','-DRERIFF_DEVELOPMENT_BUILD='+str(int(development_build)),str(root/'NativeLauncher/launcher.c'),str(resource),
                     '-o',str(output/'ReRiff-Launcher.exe'),'-lcomctl32','-lwininet','-lwinhttp','-lshell32','-luser32','-lgdi32','-ladvapi32','-static'],check=True,env=env)

@@ -1,3 +1,24 @@
+# ReRiff 1.5.0-beta.4 — Configurable free-look and HUD controls
+
+## In-game summary
+
+- Select/View toggles the HUD during a race.
+- Free-look and HUD bindings are configurable for controller and keyboard.
+- The launcher has a Controls tab after Graphics for camera and bindings.
+
+## Full release notes
+
+- Add `[controls]` settings in `client.ini`:
+  - `free_look_button` (default `right_thumb`), `free_look_key` (default none), `free_look_mouse` (default `right`).
+  - `hud_button` (default `back`/Select/View), `hud_key` (default none).
+  - Button names include `a/b/x/y`, shoulders, sticks, start, back, and D-pad. Key names include letters, digits, F1–F24, arrows, space, enter, tab, escape, modifiers, numpad and `0xNN` virtual-key codes.
+- Wire Select/View through the original `gaHUDManager.toggleUI`, independent of Last.fm/ListenBrainz and independent of free look.
+- Keep the camera frame hook installed when no scrobbling provider is registered; the scrobble observer and enter callbacks are null-safe.
+- Add a launcher **Controls** tab after Graphics. It edits the free-look camera switch, FOV offset, distance multiplier, X/Y inversion, diagnostic trace, free-look/HUD buttons, keyboard bindings and mouse look button. Values are written to `client.ini`; restart the game to apply them.
+- Keep the preferred X/Y directions as the defaults; the invert checkboxes store `1` for the opposite direction.
+- Finish/results cameras still take control automatically; Select HUD toggling is a race-time binding.
+- Validation: native menu build, launcher build, and the launcher tab/controls fixture. Existing livery-merge, car-slot, cache, save and client checks remain in the beta.2 line below.
+
 # ReRiff 1.5.0-beta.3 — Experimental race free-look camera
 
 ## In-game summary

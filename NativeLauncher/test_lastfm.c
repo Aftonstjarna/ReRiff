@@ -15,7 +15,7 @@ int wmain(int argc,WCHAR **argv){
     CHECK(WritePrivateProfileStringW(L"lastfm",L"username",L"fixture",ini));
     WNDCLASSW cls={0};cls.lpfnWndProc=procedure;cls.hInstance=GetModuleHandleW(NULL);cls.lpszClassName=L"LastFmInlineFixture";cls.hbrBackground=(HBRUSH)(COLOR_WINDOW+1);CHECK(RegisterClassW(&cls));
     busy=TRUE;HWND host=CreateWindowW(cls.lpszClassName,L"Last.fm inline fixture",WS_OVERLAPPEDWINDOW,0,0,660,615,NULL,NULL,cls.hInstance,NULL);CHECK(host);busy=FALSE;lfm_controls();ShowWindow(host,SW_SHOW);
-    SendMessageW(launcher_tabs,TCM_SETCURSEL,3,0);select_launcher_page();CHECK(IsWindowVisible(lfm_link)&&IsWindowVisible(lfm_enabled)&&!IsWindowVisible(external));CHECK(GetParent(lfm_link)==host);
+    SendMessageW(launcher_tabs,TCM_SETCURSEL,PAGE_SCROBBLING,0);select_launcher_page();CHECK(IsWindowVisible(lfm_link)&&IsWindowVisible(lfm_enabled)&&!IsWindowVisible(external));CHECK(GetParent(lfm_link)==host);
     GetWindowTextW(lfm_link,text,128);CHECK(!wcscmp(text,L"Link account"));
     CHECK(WritePrivateProfileStringW(L"lastfm",L"api_key",L"",ini));lfm_controls();
     CHECK(!lfm_has_api_key());GetWindowTextW(lfm_link,text,128);CHECK(!wcscmp(text,L"Get API key"));
@@ -72,10 +72,11 @@ int wmain(int argc,WCHAR **argv){
         RedrawWindow(host,NULL,NULL,RDW_INVALIDATE|RDW_ERASE|RDW_ALLCHILDREN|RDW_UPDATENOW);
         CHECK(IsWindowVisible(play_button)&&IsWindowVisible(status));
         CHECK(IsWindowVisible(graphics_resolution)==(page==PAGE_GRAPHICS));
+        CHECK(IsWindowVisible(controls_enable)==(page==PAGE_CONTROLS));
         CHECK(IsWindowVisible(language_checkbox)==(page==PAGE_LANGUAGES));
         CHECK(IsWindowVisible(logging_checkbox)==(page==PAGE_DIAGNOSTICS));
         CHECK(IsWindowVisible(external)==(page==PAGE_SERVERS));
-        CHECK(IsWindowVisible(lfm_key_field)==(page==PAGE_SCROBBLING));CHECK(!IsWindowVisible(lb_token));CHECK(IsWindowVisible(scrobbling_tabs)==(page==3));
+        CHECK(IsWindowVisible(lfm_key_field)==(page==PAGE_SCROBBLING));CHECK(!IsWindowVisible(lb_token));CHECK(IsWindowVisible(scrobbling_tabs)==(page==PAGE_SCROBBLING));
     }
     SendMessageW(launcher_tabs,TCM_SETCURSEL,PAGE_GRAPHICS,0);select_launcher_page();
     CHECK(GetFocus()==graphics_resolution);
@@ -86,6 +87,22 @@ int wmain(int argc,WCHAR **argv){
     CHECK(GetPrivateProfileIntW(L"graphics",L"ui_scale",0,ini)==75);
     CHECK(GetPrivateProfileIntW(L"graphics",L"recent_tracks_limit",0,ini)==50);
     graphics_reload();CHECK(graphics_value(graphics_recent)==50&&graphics_value(graphics_mode)==2);
+    SendMessageW(launcher_tabs,TCM_SETCURSEL,PAGE_CONTROLS,0);select_launcher_page();
+    CHECK(IsWindowVisible(controls_enable)&&GetFocus()==controls_enable);
+    SendMessageW(controls_enable,BM_SETCHECK,BST_CHECKED,0);
+    SetWindowTextW(controls_fov,L"-5");SetWindowTextW(controls_zoom,L"1.25");
+    SendMessageW(controls_invert_x,BM_SETCHECK,BST_CHECKED,0);SendMessageW(controls_invert_y,BM_SETCHECK,BST_UNCHECKED,0);
+    controls_pick(controls_free_button,L"right_thumb");SetWindowTextW(controls_free_key,L"V");
+    controls_pick(controls_hud_button,L"back");SetWindowTextW(controls_hud_key,L"H");
+    controls_pick(controls_mouse,L"middle");
+    SendMessageW(host,WM_COMMAND,MAKEWPARAM(CONTROLS_SAVE,BN_CLICKED),(LPARAM)controls_save);
+    WCHAR client[CAP];path(client,L"client.ini");
+    CHECK(GetPrivateProfileIntW(L"camera",L"race_orbit",0,client)==1&&GetPrivateProfileIntW(L"camera",L"invert_x",0,client)==1);
+    CHECK(GetPrivateProfileIntW(L"camera",L"invert_y",0,client)==0);
+    GetPrivateProfileStringW(L"camera",L"free_fov_offset",L"",value,64,client);CHECK(!wcscmp(value,L"-5.00"));
+    GetPrivateProfileStringW(L"controls",L"free_look_key",L"",value,64,client);CHECK(!wcscmp(value,L"V"));
+    GetPrivateProfileStringW(L"controls",L"hud_key",L"",value,64,client);CHECK(!wcscmp(value,L"H"));
+    GetPrivateProfileStringW(L"controls",L"free_look_mouse",L"",value,64,client);CHECK(!wcscmp(value,L"middle"));
     for(int mode=0;mode<=2;mode++){
         CHECK(rr_save_fullscreen_mode(ini,mode));CHECK(rr_fullscreen_mode(ini)==mode);
         GetPrivateProfileStringW(L"graphics",L"borderless",L"missing",value,64,ini);CHECK(!wcscmp(value,L"missing"));
@@ -98,7 +115,7 @@ int wmain(int argc,WCHAR **argv){
     RECT graphics_bounds,graphics_footer;GetWindowRect(graphics_save,&graphics_bounds);GetWindowRect(status_separator,&graphics_footer);CHECK(graphics_bounds.bottom<graphics_footer.top);
     CHECK(SendMessageW(launcher_tabs,TCM_GETITEMCOUNT,0,0)==PAGE_COUNT);
     CHECK(SendMessageW(scrobbling_tabs,TCM_GETITEMCOUNT,0,0)==3);
-    SendMessageW(launcher_tabs,TCM_SETCURSEL,3,0);select_launcher_page();
+    SendMessageW(launcher_tabs,TCM_SETCURSEL,PAGE_SCROBBLING,0);select_launcher_page();
     RECT subtabs,account,save,footer;
     GetWindowRect(scrobbling_tabs,&subtabs);GetWindowRect(lfm_account,&account);
     GetWindowRect(lfm_save,&save);GetWindowRect(status_separator,&footer);
@@ -109,7 +126,7 @@ int wmain(int argc,WCHAR **argv){
     CHECK(GetFocus()==scrobbling_tabs);
     SendMessageW(launcher_tabs,TCM_SETCURSEL,0,0);select_launcher_page();
     CHECK(!IsWindowVisible(scrobbling_tabs)&&!IsWindowVisible(lb_token));
-    SendMessageW(launcher_tabs,TCM_SETCURSEL,3,0);select_launcher_page();
+    SendMessageW(launcher_tabs,TCM_SETCURSEL,PAGE_SCROBBLING,0);select_launcher_page();
     CHECK(SendMessageW(scrobbling_tabs,TCM_GETCURSEL,0,0)==1);
     GetWindowTextW(lfm_percent,value,64);CHECK(!wcscmp(value,L"87"));
     SetWindowTextW(lfm_percent,L"85");

@@ -29,7 +29,7 @@
 #include "error_dialog.h"
 #define WM_COMPLETE (WM_APP + 1)
 #define WM_GAME_RUNNING (WM_APP + 2)
-enum { EXTERNAL=101, FALLBACK, TIMEOUT, POPUP, SAVE, PLAY, LOCAL, EXTERNAL_ONLY, STOP, UPDATE, EXPERIMENTAL, NETWORKING, SKIP_LAUNCHER, AUTO_UPDATE_SKIP, CJK_INSTALL, LOGGING, LATIN_INSTALL, UPDATE_DETAILS, LASTFM_ENABLED, LASTFM_PERCENT, LASTFM_LINK, LASTFM_DISCONNECT, LASTFM_SAVE, LASTFM_KEY, LASTFM_SECRET, UNINSTALL, LISTENBRAINZ_TOKEN, LISTENBRAINZ_ENABLED, LISTENBRAINZ_PERCENT, LISTENBRAINZ_SAVE, LISTENBRAINZ_GET_TOKEN, LIBRE_ENABLED, LIBRE_PERCENT, LIBRE_LINK, LIBRE_DISCONNECT, LIBRE_SAVE, LIBRE_CREDENTIAL, GRAPHICS_SAVE, LOG_CATEGORY_BASE=500 };
+enum { EXTERNAL=101, FALLBACK, TIMEOUT, POPUP, SAVE, PLAY, LOCAL, EXTERNAL_ONLY, STOP, UPDATE, EXPERIMENTAL, NETWORKING, SKIP_LAUNCHER, AUTO_UPDATE_SKIP, CJK_INSTALL, LOGGING, LATIN_INSTALL, UPDATE_DETAILS, LASTFM_ENABLED, LASTFM_PERCENT, LASTFM_LINK, LASTFM_DISCONNECT, LASTFM_SAVE, LASTFM_KEY, LASTFM_SECRET, UNINSTALL, LISTENBRAINZ_TOKEN, LISTENBRAINZ_ENABLED, LISTENBRAINZ_PERCENT, LISTENBRAINZ_SAVE, LISTENBRAINZ_GET_TOKEN, LIBRE_ENABLED, LIBRE_PERCENT, LIBRE_LINK, LIBRE_DISCONNECT, LIBRE_SAVE, LIBRE_CREDENTIAL, GRAPHICS_SAVE, CONTROLS_SAVE, LOG_CATEGORY_BASE=500 };
 #include "branding.h"
 
 static WCHAR folder[CAP], ini[CAP], message[1024];
@@ -46,7 +46,7 @@ static ULONGLONG settings_signature;
 static BOOL settings_observed=FALSE;
 static BOOL installed_experimental=FALSE, requested_experimental=FALSE;
 static HFONT font,restart_font;
-enum { PAGE_SERVERS, PAGE_GRAPHICS, PAGE_LANGUAGES, PAGE_SCROBBLING, PAGE_DIAGNOSTICS, PAGE_COUNT };
+enum { PAGE_SERVERS, PAGE_GRAPHICS, PAGE_CONTROLS, PAGE_LANGUAGES, PAGE_SCROBBLING, PAGE_DIAGNOSTICS, PAGE_COUNT };
 static HWND scrobbling_tabs,launcher_tabs,latin_checkbox,language_checkbox,checkbox_tooltips,logging_checkbox;
 static const WCHAR *log_categories[]={L"launcher",L"connections",L"game",L"text",L"languages",L"localserver",L"update",L"installer",L"python"};
 static const WCHAR *log_labels[]={L"Launcher",L"Connections, network and news",L"Menus, progression and saves",L"Unicode and song metadata",L"Font installation",L"Local server and helper",L"Updates",L"Installer",L"Python setup"};
@@ -56,6 +56,7 @@ static HWND diagnostic_controls[24];static unsigned diagnostic_count;static BOOL
 static HWND server_page_controls[40],language_page_controls[8];
 static unsigned server_page_count,language_page_count;
 static HWND graphics_controls[16];static unsigned graphics_count;static BOOL creating_graphics;
+static HWND controls_page_controls[32];static unsigned controls_page_count;static BOOL creating_controls;
 static BOOL creating_languages,changing_language,creating_lastfm,creating_listenbrainz,creating_libre;
 static HWND libre_controls_group[12];static unsigned libre_count;
 static HWND listenbrainz_controls[12];static unsigned listenbrainz_count;
@@ -379,7 +380,7 @@ static HWND control(const WCHAR *cls,const WCHAR *text,DWORD style,int x,int y,i
             FreeLibrary(theme);
         }
     }
-    if(handle){if(creating_graphics){if(graphics_count<16)graphics_controls[graphics_count++]=handle;}else if(creating_libre){if(libre_count<12)libre_controls_group[libre_count++]=handle;}else if(creating_listenbrainz){if(listenbrainz_count<12)listenbrainz_controls[listenbrainz_count++]=handle;}else if(creating_lastfm){if(lastfm_count<16)lastfm_controls[lastfm_count++]=handle;}else if(creating_diagnostics){if(diagnostic_count<24)diagnostic_controls[diagnostic_count++]=handle;}else if(creating_languages){if(language_page_count<8)language_page_controls[language_page_count++]=handle;}else if(server_page_count<40)server_page_controls[server_page_count++]=handle;}
+    if(handle){if(creating_graphics){if(graphics_count<16)graphics_controls[graphics_count++]=handle;}else if(creating_controls){if(controls_page_count<32)controls_page_controls[controls_page_count++]=handle;}else if(creating_libre){if(libre_count<12)libre_controls_group[libre_count++]=handle;}else if(creating_listenbrainz){if(listenbrainz_count<12)listenbrainz_controls[listenbrainz_count++]=handle;}else if(creating_lastfm){if(lastfm_count<16)lastfm_controls[lastfm_count++]=handle;}else if(creating_diagnostics){if(diagnostic_count<24)diagnostic_controls[diagnostic_count++]=handle;}else if(creating_languages){if(language_page_count<8)language_page_controls[language_page_count++]=handle;}else if(server_page_count<40)server_page_controls[server_page_count++]=handle;}
     SendMessageW(handle,WM_SETFONT,(WPARAM)font,TRUE);return handle;
 }
 
@@ -452,6 +453,7 @@ static void reload_log_controls(void) {
 }
 
 #include "graphics.h"
+#include "controls.h"
 
 static void reload_settings_controls(void) {
     graphics_reload();
@@ -498,7 +500,7 @@ static void checkbox_help(HWND checkbox,const WCHAR *text) {
     SendMessageW(checkbox_tooltips,TTM_ADDTOOLW,0,(LPARAM)&tool);
 }
 static void select_launcher_page(void){
-    int page=(int)SendMessageW(launcher_tabs,TCM_GETCURSEL,0,0);BOOL languages=page==PAGE_LANGUAGES;
+    int page=(int)SendMessageW(launcher_tabs,TCM_GETCURSEL,0,0);BOOL languages=page==PAGE_LANGUAGES;BOOL controls=page==PAGE_CONTROLS;
     BOOL lastfm=page==PAGE_SCROBBLING&&SendMessageW(scrobbling_tabs,TCM_GETCURSEL,0,0)==0;
     BOOL listenbrainz=page==PAGE_SCROBBLING&&SendMessageW(scrobbling_tabs,TCM_GETCURSEL,0,0)==1;
     BOOL libre=page==PAGE_SCROBBLING&&SendMessageW(scrobbling_tabs,TCM_GETCURSEL,0,0)==2;
@@ -509,13 +511,15 @@ static void select_launcher_page(void){
         if(item!=status&&item!=play_button&&item!=update_button&&item!=experimental_checkbox&&item!=launcher_progress&&item!=status_separator&&item!=footer_separator)ShowWindow(item,page!=PAGE_SERVERS?SW_HIDE:SW_SHOW);
     }
     for(unsigned i=0;i<graphics_count;i++)ShowWindow(graphics_controls[i],page==PAGE_GRAPHICS?SW_SHOW:SW_HIDE);
+    for(unsigned i=0;i<controls_page_count;i++)ShowWindow(controls_page_controls[i],controls?SW_SHOW:SW_HIDE);
     for(unsigned i=0;i<language_page_count;i++)ShowWindow(language_page_controls[i],languages?SW_SHOW:SW_HIDE);
     for(unsigned i=0;i<diagnostic_count;i++)ShowWindow(diagnostic_controls[i],page==PAGE_DIAGNOSTICS?SW_SHOW:SW_HIDE);
     for(unsigned i=0;i<lastfm_count;i++)ShowWindow(lastfm_controls[i],lastfm?SW_SHOW:SW_HIDE);
     for(unsigned i=0;i<listenbrainz_count;i++)ShowWindow(listenbrainz_controls[i],listenbrainz?SW_SHOW:SW_HIDE);
     for(unsigned i=0;i<libre_count;i++)ShowWindow(libre_controls_group[i],libre?SW_SHOW:SW_HIDE);
     if(page==PAGE_SCROBBLING){SetFocus(scrobbling_tabs);return;}
-    SetFocus(page==PAGE_GRAPHICS?graphics_resolution:page==PAGE_DIAGNOSTICS?logging_checkbox:languages?language_checkbox:external);
+    if(controls)controls_reload();
+    SetFocus(page==PAGE_GRAPHICS?graphics_resolution:controls?controls_first:page==PAGE_DIAGNOSTICS?logging_checkbox:languages?language_checkbox:external);
 }
 static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
     if(event==WM_ERASEBKGND){RECT area;GetClientRect(hwnd,&area);FillRect((HDC)wp,&area,GetSysColorBrush(COLOR_BTNFACE));return TRUE;}
@@ -535,6 +539,7 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
         SendMessageW(launcher_tabs,WM_SETFONT,(WPARAM)font,TRUE);
         TCITEMW tab={0};tab.mask=TCIF_TEXT;tab.pszText=L"Servers";SendMessageW(launcher_tabs,TCM_INSERTITEMW,0,(LPARAM)&tab);
         tab.pszText=L"Graphics";SendMessageW(launcher_tabs,TCM_INSERTITEMW,PAGE_GRAPHICS,(LPARAM)&tab);
+        tab.pszText=L"Controls";SendMessageW(launcher_tabs,TCM_INSERTITEMW,PAGE_CONTROLS,(LPARAM)&tab);
         tab.pszText=L"Languages";SendMessageW(launcher_tabs,TCM_INSERTITEMW,PAGE_LANGUAGES,(LPARAM)&tab);
         tab.pszText=L"Scrobbling";SendMessageW(launcher_tabs,TCM_INSERTITEMW,PAGE_SCROBBLING,(LPARAM)&tab);
         tab.pszText=L"Diagnostics";SendMessageW(launcher_tabs,TCM_INSERTITEMW,PAGE_DIAGNOSTICS,(LPARAM)&tab);
@@ -602,6 +607,7 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
         checkbox_help(graphics_recent,L"Limit the recent songs shown across Recent Tracks sort tabs. All tracks retains the complete saved catalogue. Bundled tracks are unaffected. Restart the game after changes.");
         restart_note(L"Restart the game after changing these settings",22,294,590);
         graphics_reload();creating_graphics=FALSE;
+        creating_controls=TRUE;controls_create();creating_controls=FALSE;
         creating_languages=TRUE;
         language_checkbox=control(L"BUTTON",L"CJK fonts",BS_AUTOCHECKBOX|WS_TABSTOP,22,26,590,32,CJK_INSTALL);
         latin_checkbox=control(L"BUTTON",L"Latin/European fonts",BS_AUTOCHECKBOX|WS_TABSTOP,22,68,590,32,LATIN_INSTALL);
@@ -699,6 +705,7 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
         }
         switch (LOWORD(wp)) {
         case GRAPHICS_SAVE: if(!busy)graphics_save_settings();break;
+        case CONTROLS_SAVE: if(!busy)controls_save_settings();break;
             case RERIFF_BRAND_CONTROL:
                 if(HIWORD(wp)==BN_CLICKED)ShellExecuteW(hwnd,L"open",L"https://github.com/Aftonstjarna/ReRiff",NULL,NULL,SW_SHOWNORMAL);
                 break;
