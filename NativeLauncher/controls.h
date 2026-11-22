@@ -31,6 +31,7 @@ static BOOL controls_trace_toggle(void){
 static void controls_trace_reload(void){
     if(!controls_trace)return;
     path(controls_ini,L"client.ini");
+    SendMessageW(controls_trace,BM_SETCHECK,GetPrivateProfileIntW(L"camera",L"race_orbit_trace",0,controls_ini)?BST_CHECKED:BST_UNCHECKED,0);
 }
 static void controls_reload(void){
     if(!controls_enable)return;

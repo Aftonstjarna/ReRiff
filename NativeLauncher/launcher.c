@@ -597,20 +597,22 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
         graphics_mode=control(L"COMBOBOX",L"",CBS_DROPDOWNLIST|WS_TABSTOP,190,66,370,160,0);
         graphics_choice(graphics_mode,L"Current game mode",0);graphics_choice(graphics_mode,L"Windowed",1);graphics_choice(graphics_mode,L"Borderless",2);graphics_choice(graphics_mode,L"Exclusive fullscreen",3);
         graphics_aa=control(L"BUTTON",L"Anti-aliasing",BS_AUTOCHECKBOX|WS_TABSTOP,22,110,590,28,0);
-        control(L"STATIC",L"UI scale",0,22,154,150,28,0);
-        graphics_scale=control(L"COMBOBOX",L"",CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP,190,150,370,240,0);
+        graphics_culling=control(L"BUTTON",L"Disable track culling",BS_AUTOCHECKBOX|WS_TABSTOP,22,142,590,28,0);
+        control(L"STATIC",L"UI scale",0,22,182,150,28,0);
+        graphics_scale=control(L"COMBOBOX",L"",CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP,190,178,370,240,0);
         graphics_choice(graphics_scale,L"Automatic",0);
         for(int value=25;value<=100;value+=5){WCHAR label[32];_snwprintf(label,32,L"%d",value);graphics_choice(graphics_scale,label,value);}
-        control(L"STATIC",L"Recent Tracks limit",0,22,198,165,28,0);
-        graphics_recent=control(L"COMBOBOX",L"",CBS_DROPDOWNLIST|WS_TABSTOP,190,194,370,160,0);
+        control(L"STATIC",L"Recent Tracks limit",0,22,218,165,28,0);
+        graphics_recent=control(L"COMBOBOX",L"",CBS_DROPDOWNLIST|WS_TABSTOP,190,214,370,160,0);
         graphics_choice(graphics_recent,L"All tracks",0);graphics_choice(graphics_recent,L"20 (original limit)",20);graphics_choice(graphics_recent,L"50",50);graphics_choice(graphics_recent,L"100",100);
-        graphics_save=control(L"BUTTON",L"Save settings",WS_TABSTOP,22,250,220,32,GRAPHICS_SAVE);
+        graphics_save=control(L"BUTTON",L"Save settings",WS_TABSTOP,22,254,220,32,GRAPHICS_SAVE);
         checkbox_help(graphics_resolution,L"Use a display resolution reported by Windows or Proton. Current game resolution keeps the game's saved resolution. Restart the game after changes.");
         checkbox_help(graphics_mode,L"Windowed, borderless or exclusive fullscreen. Current game mode keeps the game's original saved fullscreen choice.");
         checkbox_help(graphics_aa,L"Enable ReRiff's anti-aliasing. Uses the same setting as the in-game Graphics menu.");
+        checkbox_help(graphics_culling,L"Keep track sections and props visible even when the camera leaves the normal racing line. This disables the game's PVS track culling and may reduce performance. Restart the game after changes.");
         checkbox_help(graphics_scale,L"Matches the in-game UI scale: Automatic, or 25–100 in steps of five. 50 is the reference size.");
         checkbox_help(graphics_recent,L"Limit the recent songs shown across Recent Tracks sort tabs. All tracks retains the complete saved catalogue. Bundled tracks are unaffected. Restart the game after changes.");
-        restart_note(L"Restart the game after changing these settings",22,294,590);
+        restart_note(L"Restart the game after changing these settings",22,298,590);
         graphics_reload();creating_graphics=FALSE;
         creating_controls=TRUE;controls_create();creating_controls=FALSE;
         creating_languages=TRUE;

@@ -1,6 +1,6 @@
 #include "graphics_settings.h"
 /* Launcher controls share the native game's existing client.ini settings. */
-static HWND graphics_resolution,graphics_mode,graphics_aa,graphics_scale,graphics_recent,graphics_save;
+static HWND graphics_resolution,graphics_mode,graphics_aa,graphics_scale,graphics_recent,graphics_save,graphics_culling;
 static void graphics_choice(HWND box,const WCHAR *text,LPARAM value){
     LRESULT index=SendMessageW(box,CB_ADDSTRING,0,(LPARAM)text);
     SendMessageW(box,CB_SETITEMDATA,index,value);
@@ -20,6 +20,7 @@ static void graphics_reload(void){
     if(width>=800&&height>=600&&graphics_value(graphics_resolution)!=resolution){WCHAR label[64];_snwprintf(label,64,L"%u × %u",width,height);graphics_choice(graphics_resolution,label,resolution);graphics_select(graphics_resolution,resolution);}
     graphics_select(graphics_mode,rr_fullscreen_mode(ini)+1);
     SendMessageW(graphics_aa,BM_SETCHECK,graphics_bool(L"antialiasing")?BST_CHECKED:BST_UNCHECKED,0);
+    SendMessageW(graphics_culling,BM_SETCHECK,graphics_bool(L"disable_culling")?BST_CHECKED:BST_UNCHECKED,0);
     graphics_select(graphics_scale,GetPrivateProfileIntW(L"graphics",L"ui_scale",0,ini));
     graphics_select(graphics_recent,GetPrivateProfileIntW(L"graphics",L"recent_tracks_limit",0,ini));
 }
@@ -33,6 +34,7 @@ static BOOL graphics_save_settings(void){
         &&WritePrivateProfileStringW(L"graphics",L"render_height",height,ini)
         &&rr_save_fullscreen_mode(ini,(int)mode-1)
         &&WritePrivateProfileStringW(L"graphics",L"antialiasing",SendMessageW(graphics_aa,BM_GETCHECK,0,0)==BST_CHECKED?L"true":L"false",ini)
+        &&WritePrivateProfileStringW(L"graphics",L"disable_culling",SendMessageW(graphics_culling,BM_GETCHECK,0,0)==BST_CHECKED?L"true":L"false",ini)
         &&WritePrivateProfileStringW(L"graphics",L"ui_scale",size,ini)
         &&WritePrivateProfileStringW(L"graphics",L"recent_tracks_limit",recent,ini);
     SetWindowTextW(status,ok?L"Graphics settings saved. Restart the game to apply changes.":L"Could not save all graphics settings. Please try again.");return ok;

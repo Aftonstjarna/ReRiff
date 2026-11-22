@@ -74,6 +74,7 @@ int wmain(int argc,WCHAR **argv){
         RedrawWindow(host,NULL,NULL,RDW_INVALIDATE|RDW_ERASE|RDW_ALLCHILDREN|RDW_UPDATENOW);
         CHECK(IsWindowVisible(play_button)&&IsWindowVisible(status)&&IsWindowVisible(close_checkbox));
         CHECK(IsWindowVisible(graphics_resolution)==(page==PAGE_GRAPHICS));
+        CHECK(IsWindowVisible(graphics_culling)==(page==PAGE_GRAPHICS));
         CHECK(IsWindowVisible(controls_enable)==(page==PAGE_CONTROLS));
         CHECK(IsWindowVisible(language_checkbox)==(page==PAGE_LANGUAGES));
         CHECK(IsWindowVisible(logging_checkbox)==(page==PAGE_DIAGNOSTICS));
@@ -83,12 +84,14 @@ int wmain(int argc,WCHAR **argv){
     SendMessageW(launcher_tabs,TCM_SETCURSEL,PAGE_GRAPHICS,0);select_launcher_page();
     CHECK(GetFocus()==graphics_resolution);
     graphics_select(graphics_mode,2);graphics_select(graphics_scale,75);graphics_select(graphics_recent,50);
-    SendMessageW(graphics_aa,BM_SETCHECK,BST_CHECKED,0);
+    SendMessageW(graphics_aa,BM_SETCHECK,BST_CHECKED,0);SendMessageW(graphics_culling,BM_SETCHECK,BST_CHECKED,0);
     SendMessageW(host,WM_COMMAND,MAKEWPARAM(GRAPHICS_SAVE,BN_CLICKED),(LPARAM)graphics_save);
     CHECK(rr_fullscreen_mode(ini)==1&&graphics_bool(L"antialiasing"));
     CHECK(GetPrivateProfileIntW(L"graphics",L"ui_scale",0,ini)==75);
     CHECK(GetPrivateProfileIntW(L"graphics",L"recent_tracks_limit",0,ini)==50);
+    CHECK(graphics_bool(L"disable_culling"));
     graphics_reload();CHECK(graphics_value(graphics_recent)==50&&graphics_value(graphics_mode)==2);
+    CHECK(SendMessageW(graphics_culling,BM_GETCHECK,0,0)==BST_CHECKED);
     SendMessageW(launcher_tabs,TCM_SETCURSEL,PAGE_CONTROLS,0);select_launcher_page();
     CHECK(IsWindowVisible(controls_enable)&&GetFocus()==controls_enable);
     SendMessageW(controls_enable,BM_SETCHECK,BST_CHECKED,0);
