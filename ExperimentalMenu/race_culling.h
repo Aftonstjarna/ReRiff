@@ -15,6 +15,7 @@ typedef void (__cdecl *RaceCullingVisualVisible)(void *,BYTE);
 static BOOL race_culling_enabled,race_culling_trace,race_culling_trace_announced,race_culling_visual_announced;
 static unsigned race_culling_frames,race_culling_volume_count,race_culling_valid_count,race_culling_forced_count,race_culling_prop_count,race_culling_prop_forced;
 static unsigned race_culling_ramp_count,race_culling_ramp_forced,race_culling_cuboid_count,race_culling_segment_count;
+static unsigned race_culling_strip_count,race_culling_strip_block_count,race_culling_strip_forced;
 static RaceCullingVisible race_culling_force_visible,race_culling_on_visible;
 static RaceCullingVisualVisible race_culling_visual;
 __declspec(dllexport) int __cdecl ReRiffConfigureCullingVisible(void *callback){
@@ -110,6 +111,47 @@ static void race_culling_ramps(BYTE *base){
     }
 }
 
+/* gaSegmentManager::Segment is logical track data: two node indices, a type,
+ * spline values and a name. The rendered track blocks live on gaTrackStrip.
+ * tickBlocks resolves each block's elVisual through strip+164; force those
+ * visuals after the original tick so distance-based hiding cannot remove the
+ * road surface. The strip vector is trackManager+2720 (clearTrackPhys). */
+static void race_culling_strips(BYTE *base){
+    race_culling_strip_count=race_culling_strip_block_count=race_culling_strip_forced=0;
+    if(!race_culling_visual||!readable(base+0x7dce7c,4))return;
+    void *manager=*(void **)(base+0x7dce7c);
+    if(!readable(manager,2732))return;
+    void **begin=*(void ***)((BYTE *)manager+2720),**end=*(void ***)((BYTE *)manager+2724);
+    if(!begin||!end||end<begin||(size_t)((BYTE *)end-(BYTE *)begin)>256*sizeof(void *))return;
+    race_culling_strip_count=(unsigned)(end-begin);
+    for(void **item=begin;item<end;item++){
+        BYTE *strip=(BYTE *)*item;
+        if(!readable(strip,424))continue;
+        BYTE *blocks=*(BYTE **)(strip+152),*blocks_end=*(BYTE **)(strip+156);
+        if(!blocks||!blocks_end||blocks_end<blocks||(size_t)(blocks_end-blocks)>10000*88
+            ||((size_t)(blocks_end-blocks)%88)||!readable(blocks,(size_t)(blocks_end-blocks)))continue;
+        void **visuals=*(void ***)(strip+164);
+        if(!visuals||!readable(visuals,4))continue;
+        for(BYTE *block=blocks;block<blocks_end;block+=88){
+            int index=*((int *)(block+80));
+            if(index<0||index>=10000)continue;
+            void **slot=(void **)((BYTE *)visuals+index*4);
+            if(!readable(slot,4))continue;
+            void *visual=*slot;
+            if(!readable(visual,132))continue;
+            race_culling_strip_block_count++;
+            if(*((BYTE *)visual+20)==1){
+                *((DWORD *)((BYTE *)visual+128))=0x0FFF;
+                continue;
+            }
+            *((DWORD *)((BYTE *)visual+128))=0x0FFF;
+            *((BYTE *)visual+20)=1;
+            race_culling_visual(visual,1);
+            race_culling_strip_forced++;
+        }
+    }
+}
+
 static void race_culling_counts(BYTE *base){
     race_culling_cuboid_count=race_culling_segment_count=0;
     if(readable(base+0x7dce7c,4)){
@@ -134,6 +176,7 @@ static void race_culling_frame(void){
     void *manager=readable(base+0x7df324,4)?*(void **)(base+0x7df324):NULL;
     BOOL paused=race_culling_paused(base);
     race_culling_apply(manager,paused);
+    race_culling_strips(base);
     if((++race_culling_frames%10)==0){race_culling_props(base);race_culling_ramps(base);}
     if(!race_culling_trace)return;
     if(!race_culling_trace_announced){
@@ -142,7 +185,7 @@ static void race_culling_frame(void){
     }
     race_culling_counts(base);
     if((race_culling_frames%120)!=0)return;
-    char line[360];
-    snprintf(line,sizeof(line),"Culling trace frame %u manager=%p volumes=%u valid=%u forced=%u props=%u prop_forced=%u ramps=%u ramp_forced=%u cuboids=%u segments=%u paused=%d",race_culling_frames,manager,race_culling_volume_count,race_culling_valid_count,race_culling_forced_count,race_culling_prop_count,race_culling_prop_forced,race_culling_ramp_count,race_culling_ramp_forced,race_culling_cuboid_count,race_culling_segment_count,paused?1:0);
+    char line[480];
+    snprintf(line,sizeof(line),"Culling trace frame %u manager=%p volumes=%u valid=%u forced=%u props=%u prop_forced=%u ramps=%u ramp_forced=%u strips=%u blocks=%u block_forced=%u cuboids=%u segments=%u paused=%d",race_culling_frames,manager,race_culling_volume_count,race_culling_valid_count,race_culling_forced_count,race_culling_prop_count,race_culling_prop_forced,race_culling_ramp_count,race_culling_ramp_forced,race_culling_strip_count,race_culling_strip_block_count,race_culling_strip_forced,race_culling_cuboid_count,race_culling_segment_count,paused?1:0);
     log_line(line);
 }
