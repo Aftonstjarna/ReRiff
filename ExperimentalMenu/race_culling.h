@@ -67,14 +67,16 @@ static void race_culling_force_custom(BYTE *strip,BOOL visible){
         *((float *)(shader+1580))=100000.0f;
         *((float *)(shader+1584))=0.0f;
         *((float *)(shader+1588))=100000.0f;
-        *((float *)(shader+1604))=1.0f;
-        *((float *)(shader+1608))=1.0f;
-        *((float *)(shader+1612))=1.0f;
     }
 }
 static void race_culling_road_chunks_build(BYTE *base,BYTE *main,void *node){
     (void)base;
     if(!race_culling_strip_ctor||!race_culling_strip_tick||race_culling_road_chunk_count)return;
+    BYTE *main_custom=*(BYTE **)(main+256);
+    if(!main_custom||!readable(main_custom,180)){
+        log_line("Road chunks skipped: live road visual is not readable.");
+        return;
+    }
     int total=*((int *)(main+56));
     if(total<=0||total>20000){
         char detail[128];snprintf(detail,sizeof(detail),"Road chunks skipped: total_blocks=%d.",total);log_line(detail);
@@ -91,7 +93,9 @@ static void race_culling_road_chunks_build(BYTE *base,BYTE *main,void *node){
         memcpy(extra+64,main+64,72);
         memcpy(extra+136,main+136,12);
         memcpy(extra+216,main+216,16);
-        *((int *)(extra+56))=start;
+        int spawn_start=start-2;
+        if(spawn_start<0)spawn_start=0;
+        *((int *)(extra+56))=spawn_start;
         *((int *)(extra+48))=0;
         void *body=*(void **)(extra+264);
         if(body&&race_culling_set_collision)race_culling_set_collision(body,0);
@@ -101,6 +105,10 @@ static void race_culling_road_chunks_build(BYTE *base,BYTE *main,void *node){
         race_culling_strip_tick(extra,1,0,progress,node);
         BYTE *custom=*(BYTE **)(extra+256);
         if(custom&&readable(custom,180)){
+            /* Reuse the live road material and shader so every chunk has the
+             * same texture, colour and beat response as the original road. */
+            memcpy(custom+32,main_custom+32,16);
+            if(readable(main_custom+152,4))*(DWORD *)(custom+152)=*(DWORD *)(main_custom+152);
             if(race_culling_context_dirty){
                 BOOL have_next=readable(custom+12,4);
                 DWORD next=have_next?*(DWORD *)(custom+12):0;
