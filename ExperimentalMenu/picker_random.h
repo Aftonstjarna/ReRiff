@@ -10,17 +10,32 @@ static void *picker_random_owner;
 static BOOL picker_random_previous;
 static DWORD picker_random_rng;
 static unsigned picker_random_events;
+static BOOL picker_random_pending;
+static DWORD picker_random_pending_at;
+static int picker_random_pending_id;
 
 static DWORD picker_random_next(DWORD *state){
     DWORD value=*state?*state:0x9e3779b9u;
     value^=value<<13;value^=value>>17;value^=value<<5;*state=value;return value;
 }
 
-static unsigned picker_random_index(unsigned count,unsigned current,DWORD *state){
-    if(!count)return 0;
-    unsigned index=picker_random_next(state)%count;
-    if(count>1&&index==current)index=(index+1+picker_random_next(state)%(count-1))%count;
-    return index;
+static BOOL picker_random_is_file(const BYTE *entry){
+    int type=0;return picker_alpha_read(entry+24,&type,4)&&type==4;
+}
+
+static unsigned picker_random_file_index(const PickerAlphaContext *context,unsigned current,DWORD *state){
+    unsigned files=0;
+    for(unsigned i=0;i<context->count;i++)if(picker_random_is_file(context->entries+28*i))files++;
+    if(!files)return (unsigned)-1;
+    unsigned target=picker_random_next(state)%files,seen=0,selected=(unsigned)-1;
+    for(unsigned i=0;i<context->count;i++){
+        if(!picker_random_is_file(context->entries+28*i))continue;
+        if(seen++==target){selected=i;break;}
+    }
+    if(selected==current&&files>1){
+        for(unsigned i=0;i<context->count;i++)if(i!=current&&picker_random_is_file(context->entries+28*i)){selected=i;break;}
+    }
+    return selected;
 }
 
 static BOOL picker_random_name(const BYTE *entry,WCHAR *out,int size){
@@ -50,18 +65,26 @@ static void picker_random_select(void *menu){
     PickerAlphaContext context;
     if(!picker_alpha_context(menu,&context)||context.phase!=1||!context.count)return;
     unsigned current=context.focus>=4&&(unsigned)(context.focus-4)<context.count?(unsigned)(context.focus-4):(unsigned)-1;
-    unsigned index=picker_random_index(context.count,current,&picker_random_rng);
+    unsigned index=picker_random_file_index(&context,current,&picker_random_rng);
+    if(index==(unsigned)-1){if(picker_random_events++<64)log_line("Picker random roll: no files in the current list.");return;}
     float instant=0;
     reel_move(context.reel,(int)index,&instant);
     picker_random_focus(menu,4+(int)index);
+    picker_random_pending=TRUE;picker_random_pending_id=4+(int)index;picker_random_pending_at=GetTickCount();
     if(picker_random_events++<64){
         WCHAR name[96]={0};picker_random_name(context.entries+28*index,name,96);
-        char line[240];snprintf(line,sizeof(line),"Picker random roll: rows=%u selected=%u previous=%d name=%ls.",context.count,index,context.focus,name[0]?name:L"(unavailable)");log_line(line);
+        char line[240];snprintf(line,sizeof(line),"Picker random roll: rows=%u selected=%u previous=%d name=%ls; autostart pending.",context.count,index,context.focus,name[0]?name:L"(unavailable)");log_line(line);
     }
 }
 
+static InputFn picker_random_input(void){
+    if(picker_search_original_input)return picker_search_original_input;
+    BYTE *base=(BYTE *)GetModuleHandleW(NULL);void **table=(void **)(base+0x7a54bc);
+    return readable(table,25*4)?(InputFn)table[24]:NULL;
+}
+
 static void picker_random_forget(void *menu){
-    if(picker_random_owner==menu){picker_random_owner=NULL;picker_random_previous=FALSE;}
+    if(picker_random_owner==menu){picker_random_owner=NULL;picker_random_previous=FALSE;picker_random_pending=FALSE;}
 }
 
 static void picker_random_tick(void *menu){
@@ -72,7 +95,15 @@ static void picker_random_tick(void *menu){
     }
     HWND window=display_window();
     BOOL foreground=IsWindow(window)&&!IsIconic(window)&&GetForegroundWindow()==window;
-    if(!foreground){picker_random_previous=FALSE;return;}
+    if(!foreground){picker_random_previous=FALSE;picker_random_pending=FALSE;return;}
+    if(picker_random_pending&&(DWORD)(GetTickCount()-picker_random_pending_at)>=180){
+        InputFn input=picker_random_input();
+        PickerAlphaContext context;
+        if(input&&picker_alpha_context(menu,&context)&&context.phase==1){
+            int id=picker_random_pending_id;picker_random_pending=FALSE;input(menu,id);
+            if(picker_random_events++<64)log_line("Picker random roll: autostart dispatched.");
+        }else picker_random_pending=FALSE;
+    }
     BOOL pressed=picker_random_r3();
     if(pressed&&!picker_random_previous)picker_random_select(menu);
     picker_random_previous=pressed;

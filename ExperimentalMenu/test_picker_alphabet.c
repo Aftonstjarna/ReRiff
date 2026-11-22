@@ -26,9 +26,11 @@ int main(void){
     *(void **)(screen+20)=NULL;CHECK(picker_alpha_context(menu,&context)&&context.current==0&&context.focus==-1);
     *(BYTE **)(menu+280)=entry[0]+sizeof(entry)-1;CHECK(!picker_alpha_context(menu,&context));*(BYTE **)(menu+280)=entry[0]+sizeof(entry);
     *(void ***)(menu+328)=rows+2;CHECK(!picker_alpha_context(menu,&context));
-    DWORD rng_state=1;for(int i=0;i<200;i++){unsigned index=picker_random_index(10,5,&rng_state);CHECK(index<10&&index!=5);}
-    CHECK(picker_random_index(0,0,&rng_state)==0&&picker_random_index(1,0,&rng_state)==0);
-    WCHAR rolled[64];CHECK(picker_random_name(entry[1],rolled,64)&&!wcscmp(rolled,L"BUCK-TICK"));
+    DWORD rng_state=1;WCHAR rolled[64];CHECK(picker_random_name(entry[1],rolled,64)&&!wcscmp(rolled,L"BUCK-TICK"));
+    *(int *)(entry[0]+24)=3;*(int *)(entry[1]+24)=4;*(int *)(entry[2]+24)=4;
+    unsigned file=picker_random_file_index(&context,0,&rng_state);CHECK(file==1||file==2);
+    CHECK(picker_random_file_index(&context,1,&rng_state)==2);
+    *(int *)(entry[1]+24)=3;*(int *)(entry[2]+24)=3;CHECK(picker_random_file_index(&context,0,&rng_state)==(unsigned)-1);
     picker_alpha_owner=menu;picker_alpha_armed=TRUE;picker_alpha_logged=TRUE;picker_alpha_forget(menu);CHECK(!picker_alpha_owner&&!picker_alpha_armed&&!picker_alpha_logged);
     CHECK(PICKER_ALPHA_NAVIGATION==1);CHECK(!ReRiffConfigurePickerAlphabet(NULL));
     CHECK(ReRiffConfigurePickerAlphabet((void *)jump_test));context.count=3;context.focus=4;context.phase=1;
