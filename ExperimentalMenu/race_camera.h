@@ -16,7 +16,7 @@
 
 static BOOL race_camera_installed,race_camera_announced,race_camera_frame_logged;static unsigned race_camera_frames;
 static BOOL race_orbit_enabled;
-static BOOL race_photo_enabled,race_photo_active,race_photo_paused_by_us,race_photo_hud_hidden,race_photo_hide_hud=TRUE,race_photo_previous,race_photo_chord,race_photo_music_paused,race_photo_invert_strafe;
+static BOOL race_photo_enabled,race_photo_active,race_photo_paused_by_us,race_photo_hud_hidden,race_photo_hud_user_toggled,race_photo_hide_hud=TRUE,race_photo_previous,race_photo_chord,race_photo_music_paused,race_photo_invert_strafe;
 static WORD race_photo_buttons[4];static int race_photo_button_count;
 static int race_photo_key=VK_F9;
 static WORD postfx_dof_buttons[4],postfx_bloom_buttons[4];static int postfx_dof_button_count,postfx_bloom_button_count;
@@ -367,8 +367,10 @@ static void race_camera_activate(void *set,float dt,int index){
 
 typedef void (__cdecl *RaceHudToggle)(void);
 typedef void (__cdecl *RaceHudSetVisible)(BYTE);
+typedef int (__cdecl *RaceHudVisibleQuery)(void);
 static RaceHudToggle race_hud_toggle;
 static RaceHudSetVisible race_hud_set_visible;
+static RaceHudVisibleQuery race_hud_visible_query;
 
 static void race_photo_normalize(float *v){
     float length=(float)sqrt(v[0]*v[0]+v[1]*v[1]+v[2]*v[2]);
@@ -394,8 +396,9 @@ static void *race_photo_final_camera(BYTE *base,int *set_index){
 
 static void race_photo_restore_hud(BYTE *base){
     (void)base;
-    if(race_photo_hud_hidden&&race_hud_set_visible)race_hud_set_visible(1);
-    race_photo_hud_hidden=FALSE;
+    /* If Select was used during photo mode, leave the HUD in that state. */
+    if(!race_photo_hud_user_toggled&&race_photo_hud_hidden&&race_hud_set_visible)race_hud_set_visible(1);
+    race_photo_hud_hidden=FALSE;race_photo_hud_user_toggled=FALSE;
 }
 
 static void *race_photo_audio(BYTE *base){
@@ -455,6 +458,7 @@ static BOOL race_photo_begin(BYTE *base){
     *((BYTE *)race+12)=1;
     race_photo_paused_by_us=TRUE;
     log_line("Photo mode: pause byte set.");
+    race_photo_hud_user_toggled=FALSE;
     if(race_photo_hide_hud&&race_hud_set_visible){
         race_hud_set_visible(0);race_photo_hud_hidden=TRUE;
         log_line("Photo mode: HUD hidden (all owners).");
@@ -484,7 +488,7 @@ static void race_photo_end(BYTE *base,BOOL resume){
 }
 
 static void race_photo_race_enter(void){
-    race_photo_active=FALSE;race_photo_paused_by_us=FALSE;race_photo_hud_hidden=FALSE;race_photo_music_paused=FALSE;
+    race_photo_active=FALSE;race_photo_paused_by_us=FALSE;race_photo_hud_hidden=FALSE;race_photo_hud_user_toggled=FALSE;race_photo_music_paused=FALSE;
     race_photo_previous=FALSE;race_photo_chord=FALSE;race_photo_clip_camera=NULL;race_photo_roll=0;
 }
 
@@ -716,11 +720,22 @@ __declspec(dllexport) int __cdecl ReRiffConfigureHudToggle(void *callback){
 __declspec(dllexport) int __cdecl ReRiffConfigureHudSetVisible(void *callback){
     if(!callback)return 0;race_hud_set_visible=(RaceHudSetVisible)callback;return 1;
 }
+__declspec(dllexport) int __cdecl ReRiffConfigureHudVisibleQuery(void *callback){
+    if(!callback)return 0;race_hud_visible_query=(RaceHudVisibleQuery)callback;return 1;
+}
 static void race_hud_frame(void){
     if(!race_hud_toggle)return;
     if(!race_xinput_get)race_camera_input_init();
     BOOL select=race_button_down(race_hud_button)||race_key_down(race_hud_key);
-    if(select&&!race_hud_select_previous)race_hud_toggle();
+    if(select&&!race_hud_select_previous){
+        race_hud_toggle();
+        if(race_photo_active){
+            int visible=race_hud_visible_query?race_hud_visible_query():1;
+            race_photo_hud_hidden=visible?FALSE:TRUE;
+            race_photo_hud_user_toggled=TRUE;
+            log_line(visible?"Photo mode: Select showed the HUD.":"Photo mode: Select hid the HUD.");
+        }
+    }
     race_hud_select_previous=select;
 }
 

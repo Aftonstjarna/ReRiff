@@ -11,16 +11,20 @@ namespace ReRiff {
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void SetAllVisible(IntPtr manager,bool visible,int owner,bool immediate);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void Toggle();
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void ForceVisible(bool visible);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int VisibleQuery();
         [DllImport("ReRiff.Notify.dll",CallingConvention=CallingConvention.Cdecl,ExactSpelling=true)]
         private static extern int ReRiffConfigureHudToggle(IntPtr callback);
         [DllImport("ReRiff.Notify.dll",CallingConvention=CallingConvention.Cdecl,ExactSpelling=true)]
         private static extern int ReRiffConfigureHudSetVisible(IntPtr callback);
+        [DllImport("ReRiff.Notify.dll",CallingConvention=CallingConvention.Cdecl,ExactSpelling=true)]
+        private static extern int ReRiffConfigureHudVisibleQuery(IntPtr callback);
         private static Func<IntPtr> manager;
         private static ToggleOriginal original;
         private static SetAllVisible setAllVisible;
         private static FieldInfo showField;
         private static readonly Toggle callback=Observe;
         private static readonly ForceVisible forceCallback=ForceSetVisible;
+        private static readonly VisibleQuery queryCallback=QueryVisible;
         internal static void Configure(Module game){
             if(IntPtr.Size!=4)throw new PlatformNotSupportedException();
             var method=game.ResolveMethod(0x06000c53) as MethodInfo;
@@ -39,6 +43,8 @@ namespace ReRiff {
                 throw new IOException("HUD toggle bridge refused");
             if(ReRiffConfigureHudSetVisible(Marshal.GetFunctionPointerForDelegate(forceCallback))!=1)
                 throw new IOException("HUD visibility bridge refused");
+            if(ReRiffConfigureHudVisibleQuery(Marshal.GetFunctionPointerForDelegate(queryCallback))!=1)
+                throw new IOException("HUD visibility query refused");
         }
         private static void Observe(){
             IntPtr value=manager();
@@ -57,6 +63,9 @@ namespace ReRiff {
             /* Photo mode uses an explicit state so it does not depend on the
              * host's intermittent HUD flag being readable at toggle time. */
             setAllVisible(value,visible,0x7FFFFFFF,true);
+        }
+        private static int QueryVisible(){
+            return showField==null||(bool)showField.GetValue(null)?1:0;
         }
     }
 }
