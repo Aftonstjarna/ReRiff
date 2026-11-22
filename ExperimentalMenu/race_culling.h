@@ -346,6 +346,15 @@ static void race_culling_strips(BYTE *base){
             *((BYTE *)custom+20)=1;
             *((BYTE *)custom+137)&=(BYTE)~1;
             *((DWORD *)((BYTE *)custom+128))=0x0FFF;
+            BYTE *shader=*(BYTE **)(custom+152);
+            if(shader&&readable(shader,1592)){
+                if(race_culling_trace&&(race_culling_frames%120)==0){
+                    char window[160];snprintf(window,sizeof(window),"Culling mesh type=%d shader_window=%.3f..%.3f.",
+                        *((int *)(strip+212)),*((float *)(shader+1576)),*((float *)(shader+1580)));log_line(window);
+                }
+                *((float *)(shader+1576))=0.0f;
+                *((float *)(shader+1580))=100000.0f;
+            }
         }
         if(race_culling_trace&&(race_culling_frames%120)==0){
             void **pool_begin=*(void ***)(strip+164),**pool_end=*(void ***)(strip+168);
