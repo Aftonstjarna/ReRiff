@@ -1,3 +1,32 @@
+# ReRiff 1.5.0-beta.5 — Photo mode, post-effect switches and HUD fixes
+
+## In-game summary
+
+- Photo mode: **L3+R3** (or **F9**) pauses the race without opening the pause menu, hides the complete HUD, pauses the music and detaches a free camera. The same chord resumes the race.
+- Free camera: left stick/WASD move, right stick/mouse look, LB/RB or Q/E down/up, right trigger or Shift boost.
+- Select/View now hides the whole HUD, not only the text elements.
+- **L3+A** toggles depth of field; **L3+X** toggles bloom. **F10** and **F11** are keyboard fallbacks.
+- The launcher Graphics tab exposes global Bloom and Depth of field defaults, plus the experimental track-culling switch.
+- The Profile main-level bar now moves within the current level instead of showing a fixed level/40 fraction.
+
+## Full release notes
+
+- Add experimental race photo mode. It uses the race pause byte directly, so the world freezes without pushing the pause menu. It writes a free camera matrix after the camera manager tick, restores the normal camera on exit, and yields automatically when results or a finish camera takes over.
+- Photo-mode controls: right stick or RMB/mouse look, left stick or WASD move, LB/RB or Q/E vertical, right trigger or Shift boost. FOV and camera distance remain the normal race values.
+- Default photo-mode chord is `left_thumb+right_thumb` (L3+R3); default keyboard key is F9. Bindings, speed, HUD hiding and a separate photo-strafe inversion are in `[camera]` and `[controls]` in `client.ini`.
+- Pause and resume race music with photo mode through the original music-source vtable. Photo mode only resumes music that it paused, so the normal pause menu remains authoritative.
+- Separate right-stick look inversion from photo-mode left-stick strafe inversion. `invert_x`/`invert_y` affect look; `photo_invert_strafe` affects only movement. Defaults remain right-is-right.
+- Select/View now applies the complete `gaHUDManager` owner mask, so the full HUD hides and restores instead of only text elements.
+- Add global depth-of-field and bloom switches. The native layer hooks the `elGraphicsDevice` DOF and bloom vtable entries, validates that both original targets are executable, and forwards unchanged when enabled.
+- Add in-game hotkeys: L3+A toggles DOF, L3+X toggles bloom. F10/F11 are keyboard fallbacks. Hotkeys toggle the current session only; the launcher checkboxes are the persistent defaults.
+- Keep all client graphics settings in `client.ini`: resolution, display mode, anti-aliasing, UI scale, recent-track limit, track culling, bloom and depth of field. `server.ini` remains server and launcher configuration only.
+- Add an experimental track-culling switch. The trace is controlled by Camera diagnostic trace in Diagnostics and logs volumes, valid volumes, forced volumes and pause state. The switch currently reports `volumes=0` on tracks that do not expose `gaTriggerCullingVolume` sections; retargeting remains experimental.
+- Add a **Controls** tab after Graphics in the launcher with free-look camera settings, photo-mode settings, HUD and photo bindings, speed, strafe inversion and mouse look. The Diagnostics tab owns the camera/culling trace.
+- Add the **Close launcher** checkbox next to Play. When checked, the launcher hides when the game starts and exits when the game closes; unchecked keeps the existing minimize behavior. The choice persists immediately in `server.ini` `[launcher] close_on_game_start`.
+- Fix the permanent-level Profile bar. It previously used `level/40` below level 40 and appeared frozen between levels. It now uses the native threshold interval, so level 33 at 71,407,950 XP shows about 85.6% toward level 34 at 75,000,000 XP. The display log includes the fill value.
+- Validation: native menu build; managed ClientConfig build; launcher build; launcher tab/save/controls fixture; native post-effect hook, photo pause/HUD state, culling visibility and progression fill tests. Existing livery-merge, car-slot, cache, save, client and progression checks remain in the beta.4 and earlier lines below.
+- Known limitations: photo mode is race-only; the track-culling retarget is still experimental; hotkeys are session-only; no live-player gate is added for photo mode.
+
 # ReRiff 1.5.0-beta.4 — Configurable free-look and HUD controls
 
 ## In-game summary
