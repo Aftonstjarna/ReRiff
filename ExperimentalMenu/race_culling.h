@@ -354,11 +354,17 @@ static void race_culling_strips(BYTE *base){
             BYTE *shader=*(BYTE **)(custom+152);
             if(shader&&readable(shader,1592)){
                 if(race_culling_trace&&(race_culling_frames%120)==0){
-                    char window[160];snprintf(window,sizeof(window),"Culling mesh type=%d shader_window=%.3f..%.3f.",
-                        *((int *)(strip+212)),*((float *)(shader+1576)),*((float *)(shader+1580)));log_line(window);
+                    char window[200];snprintf(window,sizeof(window),"Culling mesh type=%d shader_window=%.3f..%.3f fade=%.3f..%.3f.",
+                        *((int *)(strip+212)),*((float *)(shader+1576)),*((float *)(shader+1580)),
+                        *((float *)(shader+1584)),*((float *)(shader+1588)));log_line(window);
                 }
                 *((float *)(shader+1576))=0.0f;
                 *((float *)(shader+1580))=100000.0f;
+                *((float *)(shader+1584))=0.0f;
+                *((float *)(shader+1588))=100000.0f;
+                *((float *)(shader+1604))=1.0f;
+                *((float *)(shader+1608))=1.0f;
+                *((float *)(shader+1612))=1.0f;
             }
         }
         if(race_culling_trace&&(race_culling_frames%120)==0){
