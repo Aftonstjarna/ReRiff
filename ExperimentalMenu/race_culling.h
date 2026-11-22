@@ -15,6 +15,8 @@ typedef void (__cdecl *RaceCullingTrackTick)(void *,float *);
 typedef void (__cdecl *RaceCullingStripTick)(void *,BYTE,BYTE,float,void *);
 typedef void *(__cdecl *RaceCullingBackNode)(void *,void **,float *);
 
+#include "gaTrackStrip_ctor_blob.h"
+
 static BOOL race_culling_enabled,race_culling_trace,race_culling_trace_announced,race_culling_visual_announced;
 static unsigned race_culling_frames,race_culling_volume_count,race_culling_valid_count,race_culling_forced_count,race_culling_prop_count,race_culling_prop_forced;
 static unsigned race_culling_ramp_count,race_culling_ramp_forced,race_culling_cuboid_count,race_culling_segment_count;
@@ -22,6 +24,8 @@ static unsigned race_culling_strip_count,race_culling_strip_block_count,race_cul
 static unsigned race_culling_block_unique,race_culling_block_duplicate;
 static float race_culling_block_min,race_culling_block_max;
 static BOOL race_culling_pool_expanded;
+static BOOL race_track_pool_relocated;
+static void *race_culling_prewarm_done;
 static RaceCullingVisible race_culling_force_visible,race_culling_on_visible;
 static RaceCullingVisualVisible race_culling_visual;
 static RaceCullingTrackTick race_culling_track_tick;
@@ -40,12 +44,93 @@ __declspec(dllexport) int __cdecl ReRiffConfigureCullingBackNode(void *callback)
     if(!callback)return 0;race_culling_back_node=(RaceCullingBackNode)callback;return 1;
 }
 static void race_culling_prewarm(BYTE *base){
-    (void)base;
-    static BOOL warned;
-    if(!warned){
-        warned=TRUE;
-        log_line("Photo mode prewarm disabled: strip 9 needs 323 visuals and strip 8 needs 289; pool is 127.");
+    if(!race_culling_enabled||!race_track_pool_relocated||!race_culling_strip_tick||!race_culling_back_node
+        ||!readable(base+0x7dce7c,4))return;
+    void *manager=*(void **)(base+0x7dce7c);
+    if(!readable(manager,2728)||manager==race_culling_prewarm_done)return;
+    if(!readable(base+0x7d5930,4))return;
+    void *players=*(void **)(base+0x7d5930);
+    if(!readable(players,52))return;
+    void *list=*(void **)((BYTE *)players+48);
+    if(!readable(list,4))return;
+    void *local=*(void **)list;
+    if(!readable(local,8))return;
+    void *tracker=*(void **)((BYTE *)local+4);
+    if(!readable(tracker,124))return;
+    void *node=race_culling_back_node(tracker,NULL,NULL);
+    if(!node)return;
+    void **begin=*(void ***)((BYTE *)manager+2720),**end=*(void ***)((BYTE *)manager+2724);
+    if(!begin||!end||end<begin||(size_t)((BYTE *)end-(BYTE *)begin)>256*sizeof(void *))return;
+
+    /* The MethodDef patch only takes effect if the CLR had not already
+     * compiled the constructor. Bail out rather than overflow a 127-slot
+     * pool and make the track vanish. */
+    unsigned small=0;
+    for(void **item=begin;item<end;item++){
+        BYTE *strip=(BYTE *)*item;
+        if(!readable(strip,424))continue;
+        int type=*((int *)(strip+212));
+        if(type!=8&&type!=9)continue;
+        void **pool_begin=*(void ***)(strip+164),**pool_end=*(void ***)(strip+168);
+        unsigned pool=pool_begin&&pool_end&&pool_end>=pool_begin?(unsigned)(pool_end-pool_begin):0;
+        if(pool<512)small++;
     }
+    if(small){
+        char detail[160];snprintf(detail,sizeof(detail),"Photo mode prewarm skipped: %u large strips still have a small pool.",small);log_line(detail);
+        return;
+    }
+
+    float total=*((float *)((BYTE *)tracker+116)),position=*((float *)((BYTE *)tracker+120));
+    float current=total>0.01f?position/total:0.0f;
+    if(!(current>=0.0f&&current<=1.0f))current=0.0f;
+    unsigned strips=0;
+    for(void **item=begin;item<end;item++){
+        BYTE *strip=(BYTE *)*item;
+        if(!readable(strip,424))continue;
+        for(int step=0;step<=100;step++)race_culling_strip_tick(strip,1,0,step/100.0f,node);
+        race_culling_strip_tick(strip,1,0,current,node);
+        strips++;
+    }
+    race_culling_prewarm_done=manager;
+    char line[200];snprintf(line,sizeof(line),"Photo mode visual prewarm: strips=%u steps=101 progress=%.4f pool=512.",strips,current);log_line(line);
+}
+
+/* The constructor's own 64-slot pool is far too small for the photo-mode
+ * prewarm. Relocate its IL to a copy whose three ldc.i4.s 64 sites use
+ * ldc.i4 512, then point the MethodDef RVA at the copy. The original body
+ * stays in place as a fallback for any path that already compiled it. */
+static BOOL race_track_pool_install(BYTE *base){
+    static BOOL attempted,installed;
+    if(attempted)return installed;
+    attempted=TRUE;
+    if(!readable(base+RERIFF_TRACK_CTOR_RVA_FIELD,4)){
+        log_line("Track ctor relocation: MethodDef RVA is not readable.");
+        return FALSE;
+    }
+    DWORD *slot=(DWORD *)(base+RERIFF_TRACK_CTOR_RVA_FIELD);
+    if(*slot!=0x271e78){
+        char line[160];snprintf(line,sizeof(line),"Track ctor relocation skipped: MethodDef RVA is %08X.",(unsigned)*slot);log_line(line);
+        return FALSE;
+    }
+    void *memory=VirtualAlloc(NULL,RERIFF_TRACK_CTOR_BLOB_SIZE,MEM_COMMIT|MEM_RESERVE,PAGE_EXECUTE_READWRITE);
+    if(!memory){
+        log_line("Track ctor relocation: VirtualAlloc failed.");
+        return FALSE;
+    }
+    memcpy(memory,race_track_ctor_blob,RERIFF_TRACK_CTOR_BLOB_SIZE);
+    DWORD rva=(DWORD)((BYTE *)memory-base),old,ignored;
+    if(!VirtualProtect(slot,4,PAGE_READWRITE,&old)){
+        log_line("Track ctor relocation: metadata page is not writable.");
+        return FALSE;
+    }
+    *slot=rva;
+    VirtualProtect(slot,4,old,&ignored);
+    FlushInstructionCache(GetCurrentProcess(),memory,RERIFF_TRACK_CTOR_BLOB_SIZE);
+    char line[192];snprintf(line,sizeof(line),"Track ctor relocated: RVA %08X -> %08X, visual pool=512, blob=%u bytes.",
+        0x271e78u,(unsigned)rva,(unsigned)RERIFF_TRACK_CTOR_BLOB_SIZE);log_line(line);
+    installed=TRUE;
+    race_track_pool_relocated=TRUE;
+    return TRUE;
 }
 
 /* gaTrackStrip.{ctor} creates three 64-entry pools: the elVisual3d vector at
@@ -89,8 +174,9 @@ static BOOL install_race_culling(BYTE *base){
     race_culling_on_visible=(RaceCullingVisible)(base+0x27959c);
     BOOL expanded=race_culling_expand_pool(base);
     race_culling_pool_expanded=expanded;
+    BOOL relocated=race_track_pool_install(base);
     BOOL retained=race_culling_retain_blocks(base);
-    char detail[192];snprintf(detail,sizeof(detail),"Track culling disable enabled; trace=%d; block retention=%d; visual pool=%s.",race_culling_trace?1:0,retained?1:0,expanded?"127":"64");log_line(detail);
+    char detail[192];snprintf(detail,sizeof(detail),"Track culling disable enabled; trace=%d; block retention=%d; visual pool=%s.",race_culling_trace?1:0,retained?1:0,relocated?"512":"127");log_line(detail);
     return TRUE;
 }
 
