@@ -497,7 +497,10 @@ static void race_photo_update(BYTE *base,float dt){
     float moveX,moveY,moveZ;BOOL boost;
     race_photo_move(&moveX,&moveY,&moveZ,&boost);
     float movement[3];
-    for(int axis=0;axis<3;axis++)movement[axis]=rightVector[axis]*moveX+forwardVector[axis]*moveY+worldUp[axis]*moveZ;
+    /* The camera basis stores its horizontal axis opposite the input
+     * direction used by the game's default left-stick movement. Keep
+     * strafe and D/A consistent with the expected right-is-right. */
+    for(int axis=0;axis<3;axis++)movement[axis]=rightVector[axis]*(-moveX)+forwardVector[axis]*moveY+worldUp[axis]*moveZ;
     float length=(float)sqrt(movement[0]*movement[0]+movement[1]*movement[1]+movement[2]*movement[2]);
     if(length>1.0f){movement[0]/=length;movement[1]/=length;movement[2]/=length;}
     float speed=race_photo_speed*(boost?3.0f:1.0f);
