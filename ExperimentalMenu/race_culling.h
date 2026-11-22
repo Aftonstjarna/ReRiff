@@ -150,6 +150,11 @@ static void race_culling_prewarm(BYTE *base){
         ||!readable(base+0x7dce7c,4))return;
     void *manager=*(void **)(base+0x7dce7c);
     if(!readable(manager,2728)||manager==race_culling_prewarm_done)return;
+    if(race_culling_road_chunk_count&&race_culling_prewarm_done&&manager!=race_culling_prewarm_done){
+        for(unsigned i=0;i<race_culling_road_chunk_count;i++)race_culling_force_custom((BYTE *)race_culling_road_chunks[i],0);
+        char detail[128];snprintf(detail,sizeof(detail),"Track prewarm reset: hid %u chunks from the previous manager.",race_culling_road_chunk_count);log_line(detail);
+        race_culling_road_chunk_count=0;
+    }
     if(!readable(base+0x7d5930,4))return;
     void *players=*(void **)(base+0x7d5930);
     if(!readable(players,52))return;
@@ -243,8 +248,8 @@ static void race_culling_prewarm(BYTE *base){
         return;
     }
     race_culling_prewarm_done=manager;
-    char line[220];snprintf(line,sizeof(line),"Track prewarm: strips=%u progress=%.4f main_cursor=%d total=%d chunks=%u.",
-        strips,current,main_cursor,master_total,race_culling_road_chunk_count);log_line(line);
+    char line[240];snprintf(line,sizeof(line),"Track prewarm: manager=%p strips=%u progress=%.4f main_cursor=%d total=%d chunks=%u.",
+        manager,strips,current,main_cursor,master_total,race_culling_road_chunk_count);log_line(line);
 }
 
 /* The constructor's own 64-slot pool is far too small for the photo-mode
