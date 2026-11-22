@@ -163,6 +163,7 @@ static void race_read_controls(const WCHAR *client){
     GetPrivateProfileStringW(L"controls",L"bloom_button",L"left_thumb+x",value,64,client);postfx_bloom_button_count=race_parse_chord(value,postfx_bloom_buttons,4);
     GetPrivateProfileStringW(L"controls",L"bloom_key",L"F11",value,64,client);postfx_bloom_key=race_key_value(value);
     postfx_hotkeys_active=postfx_dof_button_count||postfx_dof_key||postfx_bloom_button_count||postfx_bloom_key;
+    char hotkeys[128];snprintf(hotkeys,sizeof(hotkeys),"Photo hotkeys: dof_buttons=%d dof_key=%d bloom_buttons=%d bloom_key=%d active=%d.",postfx_dof_button_count,postfx_dof_key,postfx_bloom_button_count,postfx_bloom_key,postfx_hotkeys_active?1:0);log_line(hotkeys);
 }
 
 static void race_camera_weight(void *camera,int active,float weight){
@@ -365,7 +366,9 @@ static void race_camera_activate(void *set,float dt,int index){
 }
 
 typedef void (__cdecl *RaceHudToggle)(void);
+typedef void (__cdecl *RaceHudSetVisible)(BYTE);
 static RaceHudToggle race_hud_toggle;
+static RaceHudSetVisible race_hud_set_visible;
 
 static void race_photo_normalize(float *v){
     float length=(float)sqrt(v[0]*v[0]+v[1]*v[1]+v[2]*v[2]);
@@ -390,7 +393,8 @@ static void *race_photo_final_camera(BYTE *base,int *set_index){
 }
 
 static void race_photo_restore_hud(BYTE *base){
-    if(race_photo_hud_hidden&&readable(base+0x7a2f48,1)&&!*((BYTE *)base+0x7a2f48)&&race_hud_toggle)race_hud_toggle();
+    (void)base;
+    if(race_photo_hud_hidden&&race_hud_set_visible)race_hud_set_visible(1);
     race_photo_hud_hidden=FALSE;
 }
 
@@ -451,9 +455,9 @@ static BOOL race_photo_begin(BYTE *base){
     *((BYTE *)race+12)=1;
     race_photo_paused_by_us=TRUE;
     log_line("Photo mode: pause byte set.");
-    if(race_photo_hide_hud&&readable(base+0x7a2f48,1)&&*((BYTE *)base+0x7a2f48)&&race_hud_toggle){
-        race_hud_toggle();race_photo_hud_hidden=TRUE;
-        log_line("Photo mode: HUD hidden.");
+    if(race_photo_hide_hud&&race_hud_set_visible){
+        race_hud_set_visible(0);race_photo_hud_hidden=TRUE;
+        log_line("Photo mode: HUD hidden (all owners).");
     }
     race_photo_pause_music(base);
     race_photo_active=TRUE;
@@ -500,9 +504,12 @@ static void race_photo_move(float *x,float *y,float *z,float *roll,BOOL *boost){
             /* LB/RB roll the photo camera around its forward axis. */
             if(state.Gamepad.wButtons&XINPUT_GAMEPAD_LEFT_SHOULDER)*roll-=1.0f;
             if(state.Gamepad.wButtons&XINPUT_GAMEPAD_RIGHT_SHOULDER)*roll+=1.0f;
-            /* Face buttons handle vertical movement now. */
-            if(state.Gamepad.wButtons&XINPUT_GAMEPAD_A)*z+=1.0f;
-            if(state.Gamepad.wButtons&XINPUT_GAMEPAD_B)*z-=1.0f;
+            /* Face buttons handle vertical movement, except while L3 is held
+             * so the L3+A/L3+X effect chords remain usable in photo mode. */
+            if(!(state.Gamepad.wButtons&XINPUT_GAMEPAD_LEFT_THUMB)){
+                if(state.Gamepad.wButtons&XINPUT_GAMEPAD_A)*z+=1.0f;
+                if(state.Gamepad.wButtons&XINPUT_GAMEPAD_B)*z-=1.0f;
+            }
             if(state.Gamepad.bRightTrigger>30)*boost=TRUE;
         }
     }
@@ -705,6 +712,9 @@ static void race_camera_frame(void){
 static BOOL race_hud_select_previous;
 __declspec(dllexport) int __cdecl ReRiffConfigureHudToggle(void *callback){
     if(!callback)return 0;race_hud_toggle=(RaceHudToggle)callback;return 1;
+}
+__declspec(dllexport) int __cdecl ReRiffConfigureHudSetVisible(void *callback){
+    if(!callback)return 0;race_hud_set_visible=(RaceHudSetVisible)callback;return 1;
 }
 static void race_hud_frame(void){
     if(!race_hud_toggle)return;

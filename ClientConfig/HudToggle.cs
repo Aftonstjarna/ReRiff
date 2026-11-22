@@ -10,13 +10,17 @@ namespace ReRiff {
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void ToggleOriginal(IntPtr manager);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void SetAllVisible(IntPtr manager,bool visible,int owner,bool immediate);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void Toggle();
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void ForceVisible(bool visible);
         [DllImport("ReRiff.Notify.dll",CallingConvention=CallingConvention.Cdecl,ExactSpelling=true)]
         private static extern int ReRiffConfigureHudToggle(IntPtr callback);
+        [DllImport("ReRiff.Notify.dll",CallingConvention=CallingConvention.Cdecl,ExactSpelling=true)]
+        private static extern int ReRiffConfigureHudSetVisible(IntPtr callback);
         private static Func<IntPtr> manager;
         private static ToggleOriginal original;
         private static SetAllVisible setAllVisible;
         private static FieldInfo showField;
         private static readonly Toggle callback=Observe;
+        private static readonly ForceVisible forceCallback=ForceSetVisible;
         internal static void Configure(Module game){
             if(IntPtr.Size!=4)throw new PlatformNotSupportedException();
             var method=game.ResolveMethod(0x06000c53) as MethodInfo;
@@ -33,6 +37,8 @@ namespace ReRiff {
             manager=ProgressionNative.Singleton(game,0x0400039c,"?ms_pInstance@gaHUDManager@@0PAV1@A");
             if(ReRiffConfigureHudToggle(Marshal.GetFunctionPointerForDelegate(callback))!=1)
                 throw new IOException("HUD toggle bridge refused");
+            if(ReRiffConfigureHudSetVisible(Marshal.GetFunctionPointerForDelegate(forceCallback))!=1)
+                throw new IOException("HUD visibility bridge refused");
         }
         private static void Observe(){
             IntPtr value=manager();
@@ -41,6 +47,15 @@ namespace ReRiff {
             bool visible=showField==null||(bool)showField.GetValue(null);
             /* toggleUI only covers HIDE value 12; include every HUD owner so
              * Select hides the complete HUD, not just the text elements. */
+            setAllVisible(value,visible,0x7FFFFFFF,true);
+        }
+        private static void ForceSetVisible(bool visible){
+            IntPtr value=manager();
+            if(value==IntPtr.Zero)return;
+            bool current=showField==null||(bool)showField.GetValue(null);
+            if(current!=visible)original(value);
+            /* Photo mode uses an explicit state so it does not depend on the
+             * host's intermittent HUD flag being readable at toggle time. */
             setAllVisible(value,visible,0x7FFFFFFF,true);
         }
     }
