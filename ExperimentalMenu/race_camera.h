@@ -25,6 +25,8 @@ static BOOL postfx_dof_previous,postfx_bloom_previous,postfx_hotkeys_active;
 static float race_photo_speed=8.0f;
 static float race_photo_yaw,race_photo_pitch;
 static unsigned race_photo_clip_frames;
+static float race_photo_far_clip,race_photo_saved_far;
+static void *race_photo_clip_camera;
 static float race_photo_position[3],race_photo_base_right[3],race_photo_base_up[3],race_photo_base_forward[3];
 static int race_camera_mode=3;
 static DWORD race_camera_last_tick;
@@ -433,6 +435,10 @@ static BOOL race_photo_begin(BYTE *base){
     int set_index=-1;void *camera=race_photo_final_camera(base,&set_index);
     if(!camera){log_line("Photo mode refused: no final race camera is available.");return FALSE;}
     char begin[160];snprintf(begin,sizeof(begin),"Photo mode begin; race=%p camera set %d camera=%p.",race,set_index,camera);log_line(begin);
+    race_photo_clip_camera=camera;race_photo_saved_far=*((float *)((BYTE *)camera+12));
+    if(race_photo_far_clip>0){
+        char clip[128];snprintf(clip,sizeof(clip),"Photo mode far clip: %.0f -> %.0f.",race_photo_saved_far,race_photo_far_clip);log_line(clip);
+    }
     float *matrix=(float *)((BYTE *)camera+68);
     for(int row=0;row<3;row++){
         race_photo_base_right[row]=matrix[row];
@@ -458,6 +464,9 @@ static BOOL race_photo_begin(BYTE *base){
 static void race_photo_end(BYTE *base,BOOL resume){
     if(!race_photo_active)return;
     race_photo_active=FALSE;
+    if(race_photo_clip_camera&&readable(race_photo_clip_camera,16)&&race_photo_saved_far>0)
+        *((float *)((BYTE *)race_photo_clip_camera+12))=race_photo_saved_far;
+    race_photo_clip_camera=NULL;
     race_photo_restore_hud(base);
     if(resume&&race_photo_paused_by_us&&readable(base+0x7d6668,4)){
         void *race=*(void **)(base+0x7d6668);
@@ -471,7 +480,7 @@ static void race_photo_end(BYTE *base,BOOL resume){
 
 static void race_photo_race_enter(void){
     race_photo_active=FALSE;race_photo_paused_by_us=FALSE;race_photo_hud_hidden=FALSE;race_photo_music_paused=FALSE;
-    race_photo_previous=FALSE;race_photo_chord=FALSE;
+    race_photo_previous=FALSE;race_photo_chord=FALSE;race_photo_clip_camera=NULL;
 }
 
 static void race_photo_disable(void){
@@ -498,6 +507,16 @@ static void race_photo_move(float *x,float *y,float *z,BOOL *boost){
     if(race_key_down(VK_SPACE))*z+=1.0f;
     if(race_key_down(VK_LCONTROL)||race_key_down(VK_CONTROL))*z-=1.0f;
     if(race_key_down(VK_SHIFT))*boost=TRUE;
+}
+
+static void race_photo_apply_far(void *camera){
+    if(race_photo_far_clip<=0||!readable(camera,16))return;
+    *((float *)((BYTE *)camera+12))=race_photo_far_clip;
+}
+/* Called before the original camera tick so a projection rebuilt from
+ * elCamera+8/+12 sees the photo-mode far plane. */
+static void race_photo_pre_tick(void){
+    if(race_photo_active&&race_photo_clip_camera)race_photo_apply_far(race_photo_clip_camera);
 }
 
 /* Diagnostic only: dump the final elCamera and its view matrix. This is the
@@ -561,6 +580,8 @@ static void race_photo_update(BYTE *base,float dt){
     for(int axis=0;axis<3;axis++)race_photo_position[axis]+=movement[axis]*speed*dt;
     int set_index=-1;void *camera=race_photo_final_camera(base,&set_index);
     if(!camera){race_photo_end(base,TRUE);return;}
+    race_photo_clip_camera=camera;
+    race_photo_apply_far(camera);
     float *matrix=(float *)((BYTE *)camera+68);
     for(int row=0;row<3;row++){
         matrix[row]=rightVector[row];
@@ -701,11 +722,13 @@ static BOOL install_race_camera(BYTE *base){
         if(race_photo_speed<1.0f)race_photo_speed=1.0f;if(race_photo_speed>100.0f)race_photo_speed=100.0f;
         race_photo_hide_hud=GetPrivateProfileIntW(L"camera",L"photo_hide_hud",1,client)!=0;
         race_photo_invert_strafe=GetPrivateProfileIntW(L"camera",L"photo_invert_strafe",0,client)!=0;
+        GetPrivateProfileStringW(L"camera",L"photo_far_clip",L"0",value,64,client);race_photo_far_clip=(float)wcstod(value,NULL);
+        if(race_photo_far_clip>0&&(race_photo_far_clip<1000||race_photo_far_clip>100000))race_photo_far_clip=0;
         if(!readable(base+0x7d6668,4)){race_photo_enabled=FALSE;log_line("Photo mode refused: the race manager singleton differs from the supported game.");}
     }
     if(!race_orbit_enabled&&!race_photo_enabled)return TRUE;
     race_camera_input_init();
     race_camera_installed=TRUE;
-    char detail[240];snprintf(detail,sizeof(detail),"Race camera hook ready; free_look=%d photo=%d mode=%d fov_offset=%.1f zoom=%.2f invert_x=%d invert_y=%d photo_speed=%.1f invert_strafe=%d.",race_orbit_enabled?1:0,race_photo_enabled?1:0,race_camera_mode,race_camera_fov_offset,race_camera_zoom,race_camera_invert_x,race_camera_invert_y,race_photo_speed,race_photo_invert_strafe?1:0);log_line(detail);
+    char detail[280];snprintf(detail,sizeof(detail),"Race camera hook ready; free_look=%d photo=%d mode=%d fov_offset=%.1f zoom=%.2f invert_x=%d invert_y=%d photo_speed=%.1f invert_strafe=%d far_clip=%.0f.",race_orbit_enabled?1:0,race_photo_enabled?1:0,race_camera_mode,race_camera_fov_offset,race_camera_zoom,race_camera_invert_x,race_camera_invert_y,race_photo_speed,race_photo_invert_strafe?1:0,race_photo_far_clip);log_line(detail);
     return TRUE;
 }

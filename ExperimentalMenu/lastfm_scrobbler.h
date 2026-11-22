@@ -12,6 +12,7 @@ __declspec(dllexport) int __cdecl ReRiffConfigureScrobbler(ScrobbleObserver call
 }
 static void scrobble_completed(void){if(scrobble_observer)scrobble_observer(2,0);}
 static void __thiscall scrobble_tick(void *self){
+    race_photo_pre_tick();
     scrobble_tick_original(self);race_camera_frame();race_hud_frame();race_culling_frame();postfx_hotkeys_frame();DWORD now=GetTickCount();
     if(scrobble_observer&&(DWORD)(now-scrobble_last_tick)>=250){scrobble_last_tick=now;scrobble_observer(0,0);}
 }
