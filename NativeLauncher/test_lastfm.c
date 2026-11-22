@@ -90,9 +90,10 @@ int wmain(int argc,WCHAR **argv){
     SendMessageW(graphics_aa,BM_SETCHECK,BST_CHECKED,0);SendMessageW(graphics_culling,BM_SETCHECK,BST_CHECKED,0);
     SendMessageW(graphics_bloom,BM_SETCHECK,BST_UNCHECKED,0);SendMessageW(graphics_dof,BM_SETCHECK,BST_CHECKED,0);
     SendMessageW(host,WM_COMMAND,MAKEWPARAM(GRAPHICS_SAVE,BN_CLICKED),(LPARAM)graphics_save);
-    CHECK(rr_fullscreen_mode(ini)==1&&graphics_bool(L"antialiasing"));
-    CHECK(GetPrivateProfileIntW(L"graphics",L"ui_scale",0,ini)==75);
-    CHECK(GetPrivateProfileIntW(L"graphics",L"recent_tracks_limit",0,ini)==50);
+    WCHAR graphics_client[CAP];path(graphics_client,L"client.ini");
+    CHECK(rr_fullscreen_mode(graphics_client)==1&&graphics_bool(L"antialiasing"));
+    CHECK(GetPrivateProfileIntW(L"graphics",L"ui_scale",0,graphics_client)==75);
+    CHECK(GetPrivateProfileIntW(L"graphics",L"recent_tracks_limit",0,graphics_client)==50);
     CHECK(graphics_bool(L"disable_culling"));CHECK(!graphics_bool(L"bloom"));CHECK(graphics_bool(L"depth_of_field"));
     graphics_reload();CHECK(graphics_value(graphics_recent)==50&&graphics_value(graphics_mode)==2);
     CHECK(SendMessageW(graphics_culling,BM_GETCHECK,0,0)==BST_CHECKED);

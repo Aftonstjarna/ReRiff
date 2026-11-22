@@ -3,7 +3,7 @@
  * The game always enables both effects. They are drawn through the native
  * elGraphicsDevice vtable, so the toggle replaces those two entries and
  * forwards to the originals. Settings are shared with the launcher through
- * [graphics] bloom and depth_of_field in server.ini.
+ * [graphics] bloom and depth_of_field in client.ini.
  */
 typedef struct { float r,g,b,a; } PostFxColour;
 typedef void (__thiscall *PostFxDofFn)(void *,BYTE,float,float,float,float,float,float,int);
@@ -15,8 +15,10 @@ static BOOL postfx_installed,postfx_loaded,postfx_bloom_enabled=TRUE,postfx_dof_
 static BOOL postfx_hooks_wanted=TRUE;
 
 static BOOL postfx_bool(const WCHAR *key){
-    WCHAR value[16];
-    GetPrivateProfileStringW(L"graphics",key,L"true",value,16,config_path);
+    WCHAR client[MAX_PATH],value[16];
+    wcsncpy(client,config_path,MAX_PATH-1);client[MAX_PATH-1]=0;
+    WCHAR *slash=wcsrchr(client,L'\\');if(slash)wcscpy(slash+1,L"client.ini");
+    GetPrivateProfileStringW(L"graphics",key,L"true",value,16,client);
     return !_wcsicmp(value,L"true")||!_wcsicmp(value,L"yes")||!wcscmp(value,L"1");
 }
 

@@ -7,7 +7,7 @@
  * tick. While the race is paused the trigger manager does not tick, so the
  * paused path also forces the volume's existing onVisible callbacks.
  *
- * Opt-in: [graphics] disable_culling=1 in server.ini. Restart to apply.
+ * Opt-in: [graphics] disable_culling=1 in client.ini. Restart to apply.
  */
 typedef void (__thiscall *RaceCullingVisible)(void *,int,BYTE);
 
@@ -17,10 +17,10 @@ static RaceCullingVisible race_culling_force_visible,race_culling_on_visible;
 
 static BOOL install_race_culling(BYTE *base){
     WCHAR value[16];
-    GetPrivateProfileStringW(L"graphics",L"disable_culling",L"false",value,16,config_path);
-    race_culling_enabled=!_wcsicmp(value,L"true")||!_wcsicmp(value,L"yes")||!wcscmp(value,L"1");
     WCHAR client[MAX_PATH];wcsncpy(client,config_path,MAX_PATH-1);client[MAX_PATH-1]=0;
     WCHAR *slash=wcsrchr(client,L'\\');if(slash)wcscpy(slash+1,L"client.ini");
+    GetPrivateProfileStringW(L"graphics",L"disable_culling",L"false",value,16,client);
+    race_culling_enabled=!_wcsicmp(value,L"true")||!_wcsicmp(value,L"yes")||!wcscmp(value,L"1");
     GetPrivateProfileStringW(L"camera",L"race_orbit_trace",L"false",value,16,client);
     race_culling_trace=!_wcsicmp(value,L"true")||!_wcsicmp(value,L"yes")||!wcscmp(value,L"1");
     if(!race_culling_enabled)return TRUE;
