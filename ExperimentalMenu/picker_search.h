@@ -158,7 +158,7 @@ static void picker_search_after(void *menu){
     if(!readable(picker_search_field,484))return;
     WCHAR line[256];
     if(text_entry_inline)text_entry_line(line,picker_search_columns,GetTickCount());
-    else if(!picker_search_query[0])wcscpy(line,L"Search music (Y / Ctrl+F)  Shuffle (R3 / Ctrl+R)");
+    else if(!picker_search_query[0])wcscpy(line,L"Search (Y / Ctrl+F)  Shuffle (R3 / Ctrl+R)");
     else {
         WCHAR state[80];int count=picker_search_status;
         if(count==-1)wcscpy(state,L"Searching");else if(count==-2)wcscpy(state,L"Search unavailable");
