@@ -37,6 +37,24 @@ namespace ReRiff {
         private static extern int ReRiffConfigureCullingStripTick(IntPtr callback);
         [DllImport("ReRiff.Notify.dll",CallingConvention=CallingConvention.Cdecl,ExactSpelling=true)]
         private static extern int ReRiffConfigureCullingBackNode(IntPtr callback);
+        [DllImport("ReRiff.Notify.dll",CallingConvention=CallingConvention.Cdecl,ExactSpelling=true)]
+        private static extern int ReRiffTrackPoolRelocated();
+        [DllImport("ReRiff.Notify.dll",CallingConvention=CallingConvention.Cdecl,ExactSpelling=true)]
+        private static extern int ReRiffTrackPoolRestore();
+        internal static Module GameModule;
+        internal static void ValidateTrackPool(){
+            try{
+                if(GameModule==null||ReRiffTrackPoolRelocated()!=1)return;
+                MethodInfo ctor=GameModule.GetMethods(BindingFlags.Static|BindingFlags.Public|BindingFlags.NonPublic)
+                    .SingleOrDefault(m=>m.Name=="gaTrackStrip.{ctor}"&&m.GetParameters().Length==2);
+                if(ctor==null){ReRiffTrackPoolRestore();Log("Track ctor relocation reverted: method not found.");return;}
+                System.Runtime.CompilerServices.RuntimeHelpers.PrepareMethod(ctor.MethodHandle);
+                Log("Track ctor relocation JIT-validated.");
+            }catch(Exception error){
+                try{ReRiffTrackPoolRestore();}catch{}
+                Log("Track ctor relocation reverted after JIT failure: "+error);
+            }
+        }
         private static void ObserveCulling(IntPtr visual,bool visible){
             try{if(cullingOriginal!=null&&visual!=IntPtr.Zero)cullingOriginal(visual,visible);}catch{}
         }
@@ -93,6 +111,7 @@ namespace ReRiff {
                     if(string.Equals(Path.GetFileName(assembly.Location),"Game.exe",StringComparison.OrdinalIgnoreCase)) {game=assembly.ManifestModule;break;}
                 }
                 if(game==null){Log("Original Game.exe module not found; native bridge unavailable.");return;}
+                GameModule=game;
                 using(var hash=SHA256.Create())using(var file=File.OpenRead(game.FullyQualifiedName)) {
                     string value=BitConverter.ToString(hash.ComputeHash(file)).Replace("-","").ToLowerInvariant();
                     if(value!="2d1af8a01ec6b1e3477ff6dbe4a44895828e2ac71449344fec9d7d99e87a58e2"){Log("Unsupported Game.exe SHA256="+value);return;}

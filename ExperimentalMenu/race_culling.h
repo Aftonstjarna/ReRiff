@@ -144,6 +144,25 @@ static BOOL race_track_pool_install(BYTE *base){
     return TRUE;
 }
 
+/* Managed startup calls these to force the CLR to JIT the relocated body
+ * before a race exists. If the JIT rejects it, restore the original RVA and
+ * leave the 127-slot fallback in place instead of crashing at song load. */
+__declspec(dllexport) int __cdecl ReRiffTrackPoolRelocated(void){
+    return race_track_pool_relocated?1:0;
+}
+__declspec(dllexport) int __cdecl ReRiffTrackPoolRestore(void){
+    BYTE *base=(BYTE *)GetModuleHandleW(NULL);
+    DWORD *slot=(DWORD *)(base+RERIFF_TRACK_CTOR_RVA_FIELD);
+    DWORD old,ignored;
+    if(!race_track_pool_relocated||!readable(slot,4))return 0;
+    if(!VirtualProtect(slot,4,PAGE_READWRITE,&old))return 0;
+    *slot=0x271e78;
+    VirtualProtect(slot,4,old,&ignored);
+    race_track_pool_relocated=FALSE;
+    log_line("Track ctor relocation reverted to the original 64-slot body.");
+    return 1;
+}
+
 /* gaTrackStrip.{ctor} creates three 64-entry pools: the elVisual3d vector at
  * +164, blockPoolFlags at +176, and the initialization loop bound. Raise the
  * three ldc.i4.s 64 sites to 127 before the first track load. The constructor

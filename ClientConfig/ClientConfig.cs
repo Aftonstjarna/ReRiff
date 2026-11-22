@@ -69,6 +69,7 @@ namespace ReRiff {
                 NativeReelBridge.Configure();
                 int result=ReRiffStartEngineMenu();
                 NativeReelBridge.Log("Engine menu startup result="+result+"; CLR="+Environment.Version+"; process bits="+(IntPtr.Size*8));
+                NativeReelBridge.ValidateTrackPool();
             }
             catch (DllNotFoundException error) { NativeReelBridge.Log(error.ToString()); }
             catch (EntryPointNotFoundException error) { NativeReelBridge.Log(error.ToString()); }
