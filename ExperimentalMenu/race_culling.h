@@ -150,6 +150,9 @@ static BOOL race_track_pool_install(BYTE *base){
 __declspec(dllexport) int __cdecl ReRiffTrackPoolRelocated(void){
     return race_track_pool_relocated?1:0;
 }
+__declspec(dllexport) void __cdecl ReRiffTrackPoolValidated(void){
+    if(race_track_pool_relocated)log_line("Track ctor relocation JIT-validated.");
+}
 __declspec(dllexport) int __cdecl ReRiffTrackPoolRestore(void){
     BYTE *base=(BYTE *)GetModuleHandleW(NULL);
     DWORD *slot=(DWORD *)(base+RERIFF_TRACK_CTOR_RVA_FIELD);

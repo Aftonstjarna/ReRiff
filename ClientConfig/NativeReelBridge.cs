@@ -41,6 +41,8 @@ namespace ReRiff {
         private static extern int ReRiffTrackPoolRelocated();
         [DllImport("ReRiff.Notify.dll",CallingConvention=CallingConvention.Cdecl,ExactSpelling=true)]
         private static extern int ReRiffTrackPoolRestore();
+        [DllImport("ReRiff.Notify.dll",CallingConvention=CallingConvention.Cdecl,ExactSpelling=true)]
+        private static extern void ReRiffTrackPoolValidated();
         internal static Module GameModule;
         internal static void ValidateTrackPool(){
             try{
@@ -49,6 +51,7 @@ namespace ReRiff {
                     .SingleOrDefault(m=>m.Name=="gaTrackStrip.{ctor}"&&m.GetParameters().Length==2);
                 if(ctor==null){ReRiffTrackPoolRestore();Log("Track ctor relocation reverted: method not found.");return;}
                 System.Runtime.CompilerServices.RuntimeHelpers.PrepareMethod(ctor.MethodHandle);
+                ReRiffTrackPoolValidated();
                 Log("Track ctor relocation JIT-validated.");
             }catch(Exception error){
                 try{ReRiffTrackPoolRestore();}catch{}
