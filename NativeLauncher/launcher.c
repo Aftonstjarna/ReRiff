@@ -510,7 +510,7 @@ static void select_launcher_page(void){
     SendMessageW(checkbox_tooltips,TTM_POP,0,0);
     for(unsigned i=0;i<server_page_count;i++){
         HWND item=server_page_controls[i];
-        if(item!=status&&item!=play_button&&item!=update_button&&item!=experimental_checkbox&&item!=launcher_progress&&item!=status_separator&&item!=footer_separator)ShowWindow(item,page!=PAGE_SERVERS?SW_HIDE:SW_SHOW);
+        if(item!=status&&item!=play_button&&item!=close_checkbox&&item!=update_button&&item!=experimental_checkbox&&item!=launcher_progress&&item!=status_separator&&item!=footer_separator)ShowWindow(item,page!=PAGE_SERVERS?SW_HIDE:SW_SHOW);
     }
     for(unsigned i=0;i<graphics_count;i++)ShowWindow(graphics_controls[i],page==PAGE_GRAPHICS?SW_SHOW:SW_HIDE);
     for(unsigned i=0;i<controls_page_count;i++)ShowWindow(controls_page_controls[i],controls?SW_SHOW:SW_HIDE);
