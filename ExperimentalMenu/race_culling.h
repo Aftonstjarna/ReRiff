@@ -21,6 +21,7 @@ static unsigned race_culling_ramp_count,race_culling_ramp_forced,race_culling_cu
 static unsigned race_culling_strip_count,race_culling_strip_block_count,race_culling_strip_forced;
 static unsigned race_culling_block_unique,race_culling_block_duplicate;
 static float race_culling_block_min,race_culling_block_max;
+static BOOL race_culling_pool_expanded;
 static RaceCullingVisible race_culling_force_visible,race_culling_on_visible;
 static RaceCullingVisualVisible race_culling_visual;
 static RaceCullingTrackTick race_culling_track_tick;
@@ -38,17 +39,49 @@ __declspec(dllexport) int __cdecl ReRiffConfigureCullingStripTick(void *callback
 __declspec(dllexport) int __cdecl ReRiffConfigureCullingBackNode(void *callback){
     if(!callback)return 0;race_culling_back_node=(RaceCullingBackNode)callback;return 1;
 }
-/* The strip tick reuses a small visual pool (59 unique indices for 799
- * requested blocks). Calling it across artificial progress duplicates block
- * entries and moves the rendered surface away from the live section, so the
- * prewarm remains disabled until the pool itself can be expanded. */
 static void race_culling_prewarm(BYTE *base){
-    (void)base;
-    static BOOL warned;
-    if(!warned){
-        warned=TRUE;
-        log_line("Photo mode prewarm disabled: strip tick reuses its visual pool.");
+    if(!race_culling_enabled||!race_culling_pool_expanded||!race_culling_strip_tick||!race_culling_back_node||!readable(base+0x7dce7c,4))return;
+    void *manager=*(void **)(base+0x7dce7c);
+    if(!readable(manager,2736)||!readable(base+0x7d5930,4))return;
+    void *players=*(void **)(base+0x7d5930);
+    if(!readable(players,52))return;
+    void *list=*(void **)((BYTE *)players+48);
+    if(!readable(list,4))return;
+    void *local=*(void **)list;
+    if(!readable(local,8))return;
+    void *tracker=*(void **)((BYTE *)local+4);
+    if(!readable(tracker,4))return;
+    void *node=race_culling_back_node(tracker,NULL,NULL);
+    if(!node)return;
+    void **begin=*(void ***)((BYTE *)manager+2720),**end=*(void ***)((BYTE *)manager+2724);
+    if(!begin||!end||end<begin||(size_t)((BYTE *)end-(BYTE *)begin)>256*sizeof(void *))return;
+    unsigned strips=0;
+    for(void **item=begin;item<end;item++){
+        BYTE *strip=(BYTE *)*item;
+        if(!readable(strip,424))continue;
+        for(int step=0;step<=100;step++)race_culling_strip_tick(strip,1,0,step/100.0f,node);
+        strips++;
     }
+    char line[160];snprintf(line,sizeof(line),"Photo mode visual prewarm: strips=%u steps=101 node=%p pool=127.",strips,node);log_line(line);
+}
+
+/* gaTrackStrip.{ctor} creates three 64-entry pools: the elVisual3d vector at
+ * +164, blockPoolFlags at +176, and the initialization loop bound. Raise the
+ * three ldc.i4.s 64 sites to 127 before the first track load. The constructor
+ * then allocates distinct visuals for the whole track instead of recycling
+ * the 64-slot pool. */
+static BOOL race_culling_expand_pool(BYTE *base){
+    static const DWORD sites[]={0x2731c4,0x2731cd,0x273a7a};
+    BYTE *addresses[3];
+    for(int i=0;i<3;i++){
+        addresses[i]=base+sites[i];
+        if(!readable(addresses[i],2)||addresses[i][0]!=0x1f||addresses[i][1]!=0x40)return FALSE;
+    }
+    DWORD old,ignored;
+    if(!VirtualProtect(addresses[0],sites[2]-sites[0]+2,PAGE_READWRITE,&old))return FALSE;
+    for(int i=0;i<3;i++)addresses[i][1]=0x7f;
+    VirtualProtect(addresses[0],sites[2]-sites[0]+2,old,&ignored);
+    return TRUE;
 }
 
 /* tickBlocks retires the oldest block through the branch at IL_01e7. Turn
@@ -78,8 +111,10 @@ static BOOL install_race_culling(BYTE *base){
     if(!readable(base+0x278ea0,8)||!readable(base+0x27959c,8))return FALSE;
     race_culling_force_visible=(RaceCullingVisible)(base+0x278ea0);
     race_culling_on_visible=(RaceCullingVisible)(base+0x27959c);
+    BOOL expanded=race_culling_expand_pool(base);
+    race_culling_pool_expanded=expanded;
     BOOL retained=race_culling_retain_blocks(base);
-    char detail[160];snprintf(detail,sizeof(detail),"Track culling disable enabled; trace=%d; block retention=%d.",race_culling_trace?1:0,retained?1:0);log_line(detail);
+    char detail[192];snprintf(detail,sizeof(detail),"Track culling disable enabled; trace=%d; block retention=%d; visual pool=%s.",race_culling_trace?1:0,retained?1:0,expanded?"127":"64");log_line(detail);
     return TRUE;
 }
 
