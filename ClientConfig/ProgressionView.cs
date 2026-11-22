@@ -20,6 +20,7 @@ namespace ReRiff {
         private static Func<IntPtr> driver;
         private static bool errorLogged;
         private static string lastIdentity;
+        private static float lastFill=-1f;
         [DllImport("ReRiff.Notify.dll",CallingConvention=CallingConvention.Cdecl,ExactSpelling=true)]
         private static extern int ReRiffConfigureProgressionView([In] IntPtr[] callbacks,int count);
         internal static string Identity(int level,uint prestige){
@@ -30,9 +31,13 @@ namespace ReRiff {
         }
         internal static int MainLevel(ProgressionStore.State progress){
             if(progress==null||nativeLevel==null||driver==null)throw new InvalidOperationException("Permanent level is not ready");
-            return (int)PermanentLevel(driver(),progress.MainXp,nativeLevel);
+            float ignored;return (int)PermanentLevel(driver(),progress.MainXp,nativeLevel,out ignored);
         }
         internal static decimal PermanentLevel(IntPtr currentDriver,ulong xp,ProfileLevel calculate){
+            float ignored;return PermanentLevel(currentDriver,xp,calculate,out ignored);
+        }
+        internal static decimal PermanentLevel(IntPtr currentDriver,ulong xp,ProfileLevel calculate,out float barFill){
+            barFill=0;
             byte[] vector=ProgressionNative.Read(currentDriver,12);
             uint first=BitConverter.ToUInt32(vector,0),last=BitConverter.ToUInt32(vector,4),end=BitConverter.ToUInt32(vector,8);
             if(first==0||last<first||end<last||(last-first)%4!=0||(last-first)/4<2||(last-first)/4>128)throw new IOException("Invalid native level table");
@@ -43,12 +48,24 @@ namespace ReRiff {
                 int value=BitConverter.ToInt32(thresholds,i*4);
                 if(value<0||value<=previous)throw new IOException("Native level thresholds are not increasing");previous=value;
             }
-            if(xp>=(ulong)previous)return ProgressionBalance.Current.ExtendedMainLevel(xp,count-1,previous,previous-BitConverter.ToInt32(thresholds,(count-2)*4));
+            if(xp>=(ulong)previous){
+                decimal extended=ProgressionBalance.Current.ExtendedMainLevel(xp,count-1,previous,previous-BitConverter.ToInt32(thresholds,(count-2)*4));
+                barFill=ProgressionBalance.Current.MainLevelFill(extended);
+                return extended;
+            }
             IntPtr explicitXp=Marshal.AllocHGlobal(4);
             try {
                 Marshal.WriteInt32(explicitXp,(int)Math.Min(xp,(ulong)previous));
                 float result=calculate(currentDriver,explicitXp);
                 if(Single.IsNaN(result)||Single.IsInfinity(result)||result<0||result>40)throw new IOException("Invalid original profile level");
+                if(ProgressionBalance.Current.MainLevelCap>0)barFill=ProgressionBalance.Current.MainLevelFill((decimal)(double)result);
+                else{
+                    int index=0;
+                    while(index+1<count&&xp>=(ulong)thresholds[index+1])index++;
+                    int low=thresholds[index],high=thresholds[index+1];
+                    if(high>low)barFill=(float)((xp-(ulong)low)/(double)(high-low));
+                }
+                if(barFill<0f)barFill=0f;if(barFill>1f)barFill=1f;
                 return (decimal)(double)result;
             }finally{Marshal.FreeHGlobal(explicitXp);}
         }
@@ -56,12 +73,12 @@ namespace ReRiff {
             try {
                 var progress=ProgressionCheckpoints.DisplayProgress(cycleXp);
                 if(progress==null||capacity<2||text==IntPtr.Zero||factor==IntPtr.Zero||nativeLevel==null||driver==null)return 0;
-                decimal level=PermanentLevel(driver(),progress.MainXp,nativeLevel);
+                float barFill;decimal level=PermanentLevel(driver(),progress.MainXp,nativeLevel,out barFill);
                 string identity=Identity((int)level,progress.PrestigeCount);
                 if(identity.Length>=capacity)return 0;
                 Marshal.Copy((identity+"\0").ToCharArray(),0,text,identity.Length+1);
-                Marshal.Copy(new[]{ProgressionBalance.Current.MainLevelFill(level)},0,factor,1);
-                if(lastIdentity!=identity){lastIdentity=identity;NativeReelBridge.Log("Permanent-level Profile display: main_level="+(int)level+" prestige="+progress.PrestigeCount+" native_cycle_xp="+cycleXp+" permanent_xp="+progress.MainXp);}
+                Marshal.Copy(new[]{barFill},0,factor,1);
+                if(lastIdentity!=identity||Math.Abs(barFill-lastFill)>=0.01f){lastIdentity=identity;lastFill=barFill;NativeReelBridge.Log("Permanent-level Profile display: main_level="+(int)level+" fill="+barFill.ToString("0.000",CultureInfo.InvariantCulture)+" prestige="+progress.PrestigeCount+" native_cycle_xp="+cycleXp+" permanent_xp="+progress.MainXp);}
                 return 1;
             }catch(Exception error){if(!errorLogged){errorLogged=true;NativeReelBridge.Log("Permanent-level display unavailable: "+error);}return 0;}
         }

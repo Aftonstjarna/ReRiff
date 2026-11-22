@@ -92,6 +92,8 @@ class ProgressionNativeSmoke {
                 Check(calculate(driver,IntPtr.Zero)==0,"Native level still reads zero cycle XP");
                 var display=ProgressionCheckpoints.DisplayProgress(0);
                 Check((int)ProgressionView.PermanentLevel(driver,display.MainXp,calculate)==1,"Permanent display uses saved main XP through original level helper");
+                float barFill;Check((int)ProgressionView.PermanentLevel(driver,display.MainXp,calculate,out barFill)==1
+                    &&Math.Abs(barFill-((float)(display.MainXp-1000UL)/1000f))<0.001f,"Permanent display bar uses XP within the current native level");
                 Check(ProgressionView.PermanentLevel(driver,40000,calculate)==40&&ProgressionView.PermanentLevel(driver,41500,calculate)==41.5m,"Permanent main levels extend the original final interval");
                 Check(ProgressionView.PermanentLevel(driver,UInt64.MaxValue,calculate)==Int32.MaxValue,"Uncapped permanent identity saturates safely at its integer representation");
                 var oldPolicy=ProgressionBalance.Current;
