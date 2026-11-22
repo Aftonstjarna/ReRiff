@@ -14,6 +14,7 @@ typedef void (__cdecl *RaceCullingVisualVisible)(void *,BYTE);
 
 static BOOL race_culling_enabled,race_culling_trace,race_culling_trace_announced,race_culling_visual_announced;
 static unsigned race_culling_frames,race_culling_volume_count,race_culling_valid_count,race_culling_forced_count,race_culling_prop_count,race_culling_prop_forced;
+static unsigned race_culling_ramp_count,race_culling_ramp_forced,race_culling_cuboid_count,race_culling_segment_count;
 static RaceCullingVisible race_culling_force_visible,race_culling_on_visible;
 static RaceCullingVisualVisible race_culling_visual;
 __declspec(dllexport) int __cdecl ReRiffConfigureCullingVisible(void *callback){
@@ -90,20 +91,58 @@ static void race_culling_props(BYTE *base){
     }
 }
 
+static void race_culling_ramps(BYTE *base){
+    race_culling_ramp_count=race_culling_ramp_forced=0;
+    if(!race_culling_visual)return;
+    if(!readable(base+0x7db0cc,4))return;
+    void *manager=*(void **)(base+0x7db0cc);
+    if(!readable(manager,44))return;
+    BYTE *begin=*(BYTE **)((BYTE *)manager+36),*end=*(BYTE **)((BYTE *)manager+40);
+    if(!begin||!end||end<begin||(size_t)(end-begin)>10000*24)return;
+    race_culling_ramp_count=(unsigned)((end-begin)/24);
+    for(BYTE *ramp=begin;ramp<end;ramp+=24){
+        void *visual=*(void **)ramp;
+        if(!readable(visual,132))continue;
+        *((BYTE *)visual+20)=1;
+        *((DWORD *)((BYTE *)visual+128))=0x0FFF;
+        race_culling_visual(visual,1);
+        race_culling_ramp_forced++;
+    }
+}
+
+static void race_culling_counts(BYTE *base){
+    race_culling_cuboid_count=race_culling_segment_count=0;
+    if(readable(base+0x7dce7c,4)){
+        void *track=*(void **)(base+0x7dce7c);
+        if(readable(track,2428)){
+            BYTE *begin=*(BYTE **)((BYTE *)track+2420),*end=*(BYTE **)((BYTE *)track+2424);
+            if(begin&&end>=begin&&(size_t)(end-begin)<=10000*144)race_culling_cuboid_count=(unsigned)((end-begin)/144);
+        }
+    }
+    if(readable(base+0x7e237c,4)){
+        void *segments=*(void **)(base+0x7e237c);
+        if(readable(segments,28)){
+            BYTE *begin=*(BYTE **)((BYTE *)segments+20),*end=*(BYTE **)((BYTE *)segments+24);
+            if(begin&&end>=begin&&(size_t)(end-begin)<=10000*80)race_culling_segment_count=(unsigned)((end-begin)/80);
+        }
+    }
+}
+
 static void race_culling_frame(void){
     if(!race_culling_enabled)return;
     BYTE *base=(BYTE *)GetModuleHandleW(NULL);
     void *manager=readable(base+0x7df324,4)?*(void **)(base+0x7df324):NULL;
     BOOL paused=race_culling_paused(base);
     race_culling_apply(manager,paused);
-    if((++race_culling_frames%10)==0)race_culling_props(base);
+    if((++race_culling_frames%10)==0){race_culling_props(base);race_culling_ramps(base);}
     if(!race_culling_trace)return;
     if(!race_culling_trace_announced){
         race_culling_trace_announced=TRUE;
         log_line("Culling trace enabled.");
     }
+    race_culling_counts(base);
     if((race_culling_frames%120)!=0)return;
-    char line[260];
-    snprintf(line,sizeof(line),"Culling trace frame %u manager=%p volumes=%u valid=%u forced=%u props=%u prop_forced=%u paused=%d",race_culling_frames,manager,race_culling_volume_count,race_culling_valid_count,race_culling_forced_count,race_culling_prop_count,race_culling_prop_forced,paused?1:0);
+    char line[360];
+    snprintf(line,sizeof(line),"Culling trace frame %u manager=%p volumes=%u valid=%u forced=%u props=%u prop_forced=%u ramps=%u ramp_forced=%u cuboids=%u segments=%u paused=%d",race_culling_frames,manager,race_culling_volume_count,race_culling_valid_count,race_culling_forced_count,race_culling_prop_count,race_culling_prop_forced,race_culling_ramp_count,race_culling_ramp_forced,race_culling_cuboid_count,race_culling_segment_count,paused?1:0);
     log_line(line);
 }
