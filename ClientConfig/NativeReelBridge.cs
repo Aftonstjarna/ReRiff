@@ -24,6 +24,8 @@ namespace ReRiff {
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void CullingTrackTick(IntPtr manager,IntPtr progress);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void CullingStripTick(IntPtr strip,bool updateVisual,bool updateCollision,float progress,IntPtr node);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate IntPtr CullingBackNode(IntPtr tracker,IntPtr forward,IntPtr nodeT);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void CullingResize(IntPtr vector,uint size);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate IntPtr CullingStripCtor(IntPtr storage,int type);
         [DllImport("ReRiff.Notify.dll",CallingConvention=CallingConvention.Cdecl,ExactSpelling=true)]
         private static extern int ReRiffConfigurePickerAlphabet(IntPtr callback);
         private static readonly List<Delegate> Roots = new List<Delegate>();
@@ -37,6 +39,8 @@ namespace ReRiff {
         private static extern int ReRiffConfigureCullingStripTick(IntPtr callback);
         [DllImport("ReRiff.Notify.dll",CallingConvention=CallingConvention.Cdecl,ExactSpelling=true)]
         private static extern int ReRiffConfigureCullingBackNode(IntPtr callback);
+        [DllImport("ReRiff.Notify.dll",CallingConvention=CallingConvention.Cdecl,ExactSpelling=true)]
+        private static extern int ReRiffConfigureCullingPool(IntPtr ctor,IntPtr visualResize,IntPtr flagsResize);
         private static void ObserveCulling(IntPtr visual,bool visible){
             try{if(cullingOriginal!=null&&visual!=IntPtr.Zero)cullingOriginal(visual,visible);}catch{}
         }
@@ -170,6 +174,22 @@ namespace ReRiff {
                         throw new IOException("Visual prewarm registration refused");
                     Log("Visual-only track prewarm bound with collision disabled.");
                 }catch(Exception error){Log("Visual-only track prewarm unavailable: "+error);}
+                try{
+                    var ctor=game.GetMethods(BindingFlags.Static|BindingFlags.Public|BindingFlags.NonPublic)
+                        .SingleOrDefault(m=>m.Name=="gaTrackStrip.{ctor}"&&m.GetParameters().Length==2);
+                    var visualResize=game.GetMethods(BindingFlags.Static|BindingFlags.Public|BindingFlags.NonPublic)
+                        .SingleOrDefault(m=>m.Name.StartsWith("std.vector<elSSP<elVisual3d>")&&m.Name.EndsWith(".resize")&&m.GetParameters().Length==2);
+                    var flagsResize=game.GetMethods(BindingFlags.Static|BindingFlags.Public|BindingFlags.NonPublic)
+                        .SingleOrDefault(m=>m.Name.StartsWith("std.vector<gaTrackStrip::blockPoolFlags")&&m.Name.EndsWith(".resize")&&m.GetParameters().Length==2);
+                    if(ctor==null||visualResize==null||flagsResize==null)throw new IOException("Track pool bindings differ");
+                    var ctorCallback=(CullingStripCtor)CreateCall(ctor,typeof(CullingStripCtor),false);Roots.Add(ctorCallback);
+                    var visualCallback=(CullingResize)CreateCall(visualResize,typeof(CullingResize),false);Roots.Add(visualCallback);
+                    var flagsCallback=(CullingResize)CreateCall(flagsResize,typeof(CullingResize),false);Roots.Add(flagsCallback);
+                    if(ReRiffConfigureCullingPool(Marshal.GetFunctionPointerForDelegate(ctorCallback),
+                        Marshal.GetFunctionPointerForDelegate(visualCallback),Marshal.GetFunctionPointerForDelegate(flagsCallback))!=1)
+                        throw new IOException("Track pool registration refused");
+                    Log("Track strip pool expansion bound (635 slots per large strip).");
+                }catch(Exception error){Log("Track strip pool expansion unavailable: "+error);}
                 try {CustomsUnlocks.Configure(game);}catch(Exception e){Log("Customs unlock setup failed: "+e.Message);}
                 try {HudToggle.Configure(game);}catch(Exception error){Log("HUD Select toggle unavailable: "+error);}
                 try {ProgressionNative.Configure(game);}
