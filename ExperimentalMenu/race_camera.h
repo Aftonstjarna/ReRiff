@@ -24,6 +24,7 @@ static int postfx_dof_key=VK_F10,postfx_bloom_key=VK_F11;
 static BOOL postfx_dof_previous,postfx_bloom_previous,postfx_hotkeys_active;
 static float race_photo_speed=8.0f;
 static float race_photo_yaw,race_photo_pitch;
+static unsigned race_photo_clip_frames;
 static float race_photo_position[3],race_photo_base_right[3],race_photo_base_up[3],race_photo_base_forward[3];
 static int race_camera_mode=3;
 static DWORD race_camera_last_tick;
@@ -499,6 +500,27 @@ static void race_photo_move(float *x,float *y,float *z,BOOL *boost){
     if(race_key_down(VK_SHIFT))*boost=TRUE;
 }
 
+/* Diagnostic only: dump the final elCamera and its view matrix. This is the
+ * probe for the remaining far-clip/frustum culling work; it does not alter
+ * the camera. elCamera+68 is the view matrix the photo camera writes. */
+static void race_photo_trace_clip(void *camera,int set_index){
+    if(!race_camera_trace||!readable(camera,252))return;
+    char line[720];
+    float *matrix=(float *)((BYTE *)camera+68);
+    snprintf(line,sizeof(line),"Photo clip probe set=%d camera=%p pos=%.2f,%.2f,%.2f fwd=%.3f,%.3f,%.3f.",
+        set_index,camera,matrix[9],matrix[10],matrix[11],matrix[6],matrix[7],matrix[8]);
+    log_line(line);
+    for(int first=0;first<252;first+=64){
+        int end=first+64;if(end>252)end=252;
+        int used=snprintf(line,sizeof(line),"Photo clip camera=%p +%d:",camera,first);
+        for(int offset=first;offset<end;offset+=4){
+            DWORD bits;float value;memcpy(&bits,(BYTE *)camera+offset,4);memcpy(&value,&bits,4);
+            if(used<(int)sizeof(line)-48)used+=snprintf(line+used,sizeof(line)-used," +%d=%08lx/%.6g",offset,(unsigned long)bits,value);
+        }
+        log_line(line);
+    }
+}
+
 static void race_photo_update(BYTE *base,float dt){
     float stickX,stickY,dx,dy;BOOL right;
     race_camera_axes(&stickX,&stickY,&dx,&dy,&right);
@@ -546,6 +568,7 @@ static void race_photo_update(BYTE *base,float dt){
         matrix[6+row]=forwardVector[row];
         matrix[9+row]=race_photo_position[row];
     }
+    if(race_camera_trace&&(++race_photo_clip_frames%180)==0)race_photo_trace_clip(camera,set_index);
     if(race_camera_trace&&(++race_camera_frames%90)==0){
         char line[180];
         snprintf(line,sizeof(line),"Photo camera trace frame %u set=%d pos=%.2f,%.2f,%.2f yaw=%.2f pitch=%.2f",race_camera_frames,set_index,race_photo_position[0],race_photo_position[1],race_photo_position[2],race_photo_yaw,race_photo_pitch);
