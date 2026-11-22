@@ -407,7 +407,7 @@ def install(bundle, game, backups, platform, dry_run=False, restore=False, music
             script = '#!/bin/sh\nset -eu\nunset PYTHONHOME\nexport PYTHONNOUSERSITE=1\nexport PYTHONPATH='+shlex.quote(str(root/'python-libs'))+'\nexec '+shlex.quote(interpreter)+' '+shlex.quote(str(root/'trace-server.py'))+' --server-dir '+shlex.quote(str(root/'server'))+'\n'
             plan['localserver/start-server.sh'] = script.encode()
         if not (game/'server.ini').exists():
-            plan['server.ini'] = b'[server]\n; External server example: https://riffapi.hobune.stream/\n; To use it, set external_url = https://riffapi.hobune.stream/\nexternal_url =\nfallback_url =\ntimeout_seconds = 5\nnetworking_enabled = true\nshow_server_popup = true\n\n[launcher]\nskip_launcher = false\nauto_update_on_skip = false\n'
+            plan['server.ini'] = b'[server]\n; External server example: https://riffapi.hobune.stream/\n; To use it, set external_url = https://riffapi.hobune.stream/\nexternal_url =\nfallback_url =\ntimeout_seconds = 5\nnetworking_enabled = true\nshow_server_popup = true\n\n[launcher]\nskip_launcher = false\nauto_update_on_skip = false\nclose_on_game_start = false\n'
         language_enabled = cjk
         if language_enabled is None:
             settings = configparser.ConfigParser(interpolation=None, strict=False)
