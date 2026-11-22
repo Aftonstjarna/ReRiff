@@ -149,6 +149,13 @@ static void race_culling_road_chunks_apply(void){
 }
 
 static void race_culling_prewarm(BYTE *base){
+    (void)base;
+    static BOOL disabled_logged;
+    if(!disabled_logged){
+        disabled_logged=TRUE;
+        log_line("Photo mode prewarm disabled.");
+    }
+    return;
     if(!race_culling_enabled||!race_track_pool_relocated||!race_culling_strip_tick||!race_culling_back_node
         ||!readable(base+0x7dce7c,4))return;
     void *manager=*(void **)(base+0x7dce7c);
@@ -461,9 +468,6 @@ static void race_culling_strips(BYTE *base){
          * When the road is split into chunks the original type-0 mesh is
          * hidden; everything else is forced visible and its fade window is
          * widened for the backed-out camera. */
-        int strip_type=*((int *)(strip+212));
-        (void)strip_type;
-        race_culling_force_custom(strip,1);
         if(race_culling_trace&&(race_culling_frames%120)==0){
             void **pool_begin=*(void ***)(strip+164),**pool_end=*(void ***)(strip+168);
             unsigned pool=pool_begin&&pool_end&&pool_end>=pool_begin?(unsigned)(pool_end-pool_begin):0;
