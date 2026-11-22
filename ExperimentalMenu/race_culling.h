@@ -337,6 +337,16 @@ static void race_culling_strips(BYTE *base){
     for(void **item=begin;item<end;item++){
         BYTE *strip=(BYTE *)*item;
         if(!readable(strip,424))continue;
+        /* The custom road/wall/zone mesh is one elVisualCustom at strip+256.
+         * Prewarming fills the mesh, but its bounding volume is left at the
+         * last spawned segment, so the backed-out camera culls the whole
+         * surface. Keep it visible and clear the setCullable bit (137.0). */
+        BYTE *custom=*(BYTE **)(strip+256);
+        if(custom&&readable(custom,180)){
+            *((BYTE *)custom+20)=1;
+            *((BYTE *)custom+137)&=(BYTE)~1;
+            *((DWORD *)((BYTE *)custom+128))=0x0FFF;
+        }
         if(race_culling_trace&&(race_culling_frames%120)==0){
             void **pool_begin=*(void ***)(strip+164),**pool_end=*(void ***)(strip+168);
             unsigned pool=pool_begin&&pool_end&&pool_end>=pool_begin?(unsigned)(pool_end-pool_begin):0;
