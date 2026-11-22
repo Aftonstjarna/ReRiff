@@ -96,7 +96,7 @@ typedef struct { const WCHAR *key,*label,*def; } ControllerBindingRow;
 static const ControllerBindingRow controls_controller_rows[CONTROLLER_BINDING_COUNT]={
     {L"a",L"Boost",L"button:a"},{L"b",L"Cancel",L"button:b"},
     {L"x",L"Drift",L"button:x"},{L"y",L"Camera",L"button:y"},
-    {L"lb",L"Steer L",L"button:lb"},{L"rb",L"Steer R",L"button:rb"},
+    {L"lb",L"Unused (LB)",L"none"},{L"rb",L"Unused (RB)",L"none"},
     {L"back",L"Restart",L"button:back"},{L"start",L"Pause",L"button:start"},
     {L"l3",L"Photo chord",L"button:l3"},{L"r3",L"Free look",L"button:r3"},
     {L"guide",L"Guide",L"button:guide"},
@@ -258,6 +258,17 @@ static void controls_binding_assign(int row,int count,const int *kinds,const int
         controls_binding_sign[row][i]=signs[i];
     }
     controls_binding_update_text(row);
+}
+static void controls_controller_defaults(void){
+    if(!controls_controller_enabled)return;
+    SendMessageW(controls_controller_enabled,BM_SETCHECK,BST_CHECKED,0);
+    for(int i=0;i<CONTROLLER_BINDING_COUNT;i++){
+        int count,kinds[CONTROLS_MAX_CHORD],indexes[CONTROLS_MAX_CHORD],signs[CONTROLS_MAX_CHORD];
+        memset(kinds,0,sizeof(kinds));memset(indexes,0,sizeof(indexes));memset(signs,0,sizeof(signs));
+        if(!controls_parse_binding(controls_controller_rows[i].def,&count,kinds,indexes,signs))count=0;
+        controls_binding_assign(i,count,kinds,indexes,signs);
+    }
+    SetWindowTextW(status,L"Controller defaults restored. Save settings to apply.");
 }
 static void controls_sdl_bind(void *target,size_t size,HMODULE module,const char *name){
     FARPROC symbol=GetProcAddress(module,name);
@@ -673,6 +684,16 @@ static BOOL controls_keyboard_save(void){
     }
     return ok;
 }
+static void controls_keyboard_defaults(void){
+    if(!controls_keyboard_enabled)return;
+    for(int i=0;i<KEYBOARD_ACTION_COUNT;i++){
+        controls_key_values[i]=controls_keyboard_rows[i].default_value;
+        controls_keyboard_update_text(i);
+    }
+    controls_pick(controls_keyboard_mouse,L"right");
+    SendMessageW(controls_keyboard_enabled,BM_SETCHECK,BST_CHECKED,0);
+    SetWindowTextW(status,L"Keyboard defaults restored. Save settings to apply.");
+}
 static void controls_reload(void){
     if(!controls_enable)return;
     path(controls_ini,L"client.ini");
@@ -773,10 +794,11 @@ static void controls_create(void){
         }
     }
     controls_keyboard_first=controls_keyboard_bindings[0];
-    control(L"BUTTON",L"Save settings",WS_TABSTOP,14,224,210,30,CONTROLS_SAVE);
+    control(L"BUTTON",L"Save settings",WS_TABSTOP,14,224,150,30,CONTROLS_SAVE);
+    checkbox_help(control(L"BUTTON",L"Defaults",WS_TABSTOP,172,224,120,30,CONTROLS_DEFAULTS),L"Restore the vanilla keyboard mapping and ReRiff hotkey defaults. Save settings to apply.");
     checkbox_help(controls_keyboard_enabled,L"Remap the game's keyboard keys. Virtual rows send the vanilla key to the game; the button shows your physical key. Restart the game after saving.");
     checkbox_help(controls_keyboard_mouse,L"Mouse button held while using free look or photo mode to capture mouse movement.");
-    restart_note(L"Click a binding, press a key, then release. Delete clears it.",232,226,400);
+    restart_note(L"Click a binding, press a key, then release. Delete clears it.",302,226,340);
 
     /* Controller: click a row, then press the physical SDL control to bind.
      * Three columns keep the table clear of the launcher status area. */
@@ -788,8 +810,9 @@ static void controls_create(void){
         controls_controller_bindings[i]=control(L"BUTTON",L"",WS_TABSTOP,x+96,y,112,24,CONTROLLER_CAPTURE_BASE+i);
         controls_capture_button_old_proc=(WNDPROC)SetWindowLongPtrW(controls_controller_bindings[i],GWLP_WNDPROC,(LONG_PTR)controls_capture_button_proc);
     }
-    controls_controller_enabled=control(L"BUTTON",L"Enable controller remapping",BS_AUTOCHECKBOX|WS_TABSTOP,250,210,390,28,0);
-    controls_save=control(L"BUTTON",L"Save settings",WS_TABSTOP,14,210,210,30,CONTROLS_SAVE);
+    controls_controller_enabled=control(L"BUTTON",L"Enable controller remapping",BS_AUTOCHECKBOX|WS_TABSTOP,290,210,350,28,0);
+    controls_save=control(L"BUTTON",L"Save settings",WS_TABSTOP,14,210,140,30,CONTROLS_SAVE);
+    checkbox_help(control(L"BUTTON",L"Defaults",WS_TABSTOP,162,210,120,30,CONTROLS_DEFAULTS),L"Restore the vanilla controller mapping. LB and RB are unused by default. Save settings to apply.");
     checkbox_help(controls_controller_enabled,L"Enable the SDL3 XInput proxy remap table. Restart the game after saving. The game receives the virtual controls selected on this tab. Chords such as L3+R3 require every listed button.");
     restart_note(L"Click a binding, press one button or a chord, then release. Delete clears it.",14,246,630);
     controls_reload();

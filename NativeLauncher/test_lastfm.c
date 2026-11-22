@@ -135,6 +135,10 @@ int wmain(int argc,WCHAR **argv){
     CHECK(SendMessageW(controls_photo_invert_strafe,BM_GETCHECK,0,0)==BST_CHECKED);
     GetWindowTextW(controls_photo_speed,value,64);CHECK(!wcscmp(value,L"12.5"));
     CHECK(controls_key_values[0]==L'F'&&controls_key_values[10]==L'V'&&controls_key_values[11]==L'H'&&controls_key_values[12]==L'P');
+    SendMessageW(controls_tabs,TCM_SETCURSEL,CONTROLS_KEYBOARD,0);select_launcher_page();
+    SendMessageW(host,WM_COMMAND,MAKEWPARAM(CONTROLS_DEFAULTS,BN_CLICKED),(LPARAM)0);
+    CHECK(controls_key_values[0]==VK_UP&&controls_key_values[10]==0&&controls_key_values[12]==VK_F9);
+    CHECK(controls_key_values[5]==VK_SPACE&&controls_key_values[9]==L'R');
     for(int mode=0;mode<=2;mode++){
         CHECK(rr_save_fullscreen_mode(ini,mode));CHECK(rr_fullscreen_mode(ini)==mode);
         GetPrivateProfileStringW(L"graphics",L"borderless",L"missing",value,64,ini);CHECK(!wcscmp(value,L"missing"));
