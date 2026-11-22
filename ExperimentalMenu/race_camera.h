@@ -16,7 +16,7 @@
 
 static BOOL race_camera_installed,race_camera_announced,race_camera_frame_logged;static unsigned race_camera_frames;
 static BOOL race_orbit_enabled;
-static BOOL race_photo_enabled,race_photo_active,race_photo_paused_by_us,race_photo_hud_hidden,race_photo_hide_hud=TRUE,race_photo_previous,race_photo_chord;
+static BOOL race_photo_enabled,race_photo_active,race_photo_paused_by_us,race_photo_hud_hidden,race_photo_hide_hud=TRUE,race_photo_previous,race_photo_chord,race_photo_music_paused;
 static WORD race_photo_buttons[4];static int race_photo_button_count;
 static int race_photo_key=VK_F9;
 static float race_photo_speed=8.0f;
@@ -361,6 +361,40 @@ static void race_photo_restore_hud(BYTE *base){
     race_photo_hud_hidden=FALSE;
 }
 
+static void *race_photo_audio(BYTE *base){
+    if(!readable(base+0x7e750c,4))return NULL;
+    void *audio=*(void **)(base+0x7e750c);
+    return readable(audio,164)?audio:NULL;
+}
+
+static void race_photo_pause_music(BYTE *base){
+    void *audio=race_photo_audio(base);
+    if(!audio||*((BYTE *)audio+109))return;
+    void *source=*(void **)((BYTE *)audio+100);
+    if(!readable(source,4))return;
+    void **vtable=*(void ***)source;
+    if(!readable(vtable,8)||!vtable[1])return;
+    ((void (__thiscall *)(void *))vtable[1])(source);
+    *((BYTE *)audio+109)=1;
+    race_photo_music_paused=TRUE;
+    log_line("Photo mode: music paused.");
+}
+
+static void race_photo_resume_music(BYTE *base){
+    if(!race_photo_music_paused)return;
+    void *audio=race_photo_audio(base);
+    if(audio&&*((BYTE *)audio+109)){
+        void *source=*(void **)((BYTE *)audio+100);
+        if(readable(source,4)){
+            void **vtable=*(void ***)source;
+            if(readable(vtable,4)&&vtable[0])((void (__thiscall *)(void *))vtable[0])(source);
+        }
+        *((BYTE *)audio+109)=0;
+        log_line("Photo mode: music resumed.");
+    }
+    race_photo_music_paused=FALSE;
+}
+
 static BOOL race_photo_begin(BYTE *base){
     if(!readable(base+0x7d6668,4))return FALSE;
     void *race=*(void **)(base+0x7d6668);
@@ -383,6 +417,7 @@ static BOOL race_photo_begin(BYTE *base){
         race_hud_toggle();race_photo_hud_hidden=TRUE;
         log_line("Photo mode: HUD hidden.");
     }
+    race_photo_pause_music(base);
     race_photo_active=TRUE;
     race_camera_free=FALSE;race_camera_restored=FALSE;race_camera_reset=TRUE;
     char line[128];snprintf(line,sizeof(line),"Photo mode enabled; race paused, camera set %d.",set_index);log_line(line);
@@ -397,13 +432,14 @@ static void race_photo_end(BYTE *base,BOOL resume){
         void *race=*(void **)(base+0x7d6668);
         if(readable(race,13)&&*((BYTE *)race+12))*((BYTE *)race+12)=0;
     }
+    race_photo_resume_music(base);
     race_photo_paused_by_us=FALSE;
     race_camera_free=FALSE;race_camera_restored=FALSE;race_camera_reset=TRUE;
     log_line("Photo mode disabled; normal camera restored.");
 }
 
 static void race_photo_race_enter(void){
-    race_photo_active=FALSE;race_photo_paused_by_us=FALSE;race_photo_hud_hidden=FALSE;
+    race_photo_active=FALSE;race_photo_paused_by_us=FALSE;race_photo_hud_hidden=FALSE;race_photo_music_paused=FALSE;
     race_photo_previous=FALSE;race_photo_chord=FALSE;
 }
 

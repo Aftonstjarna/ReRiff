@@ -1,12 +1,14 @@
 #include "engine_menu.c"
 #define CHECK(c) do{if(!(c)){fprintf(stderr,"FAIL %d: %s\n",__LINE__,#c);return 1;}}while(0)
-static int ticks,enters,observations,event,state_seen,forced,shown,hud_toggles;static BYTE *fake_hud;
+static int ticks,enters,observations,event,state_seen,forced,shown,hud_toggles,audio_pauses,audio_resumes;static BYTE *fake_hud;
 static void __cdecl observe(int kind,int state){observations++;event=kind;state_seen=state;}
 static void __thiscall tick(void *self){(void)self;ticks++;}
 static void __thiscall enter(void *self,int state){(void)self;(void)state;enters++;}
 static void __thiscall force_visible(void *self,int view,BYTE visible){(void)self;if(view>=0&&view<4&&visible)forced++;}
 static void __thiscall on_visible(void *self,int view,BYTE visible){(void)self;if(view>=0&&view<4&&visible)shown++;}
 static void __cdecl toggle_hud(void){if(fake_hud){*fake_hud=*fake_hud?0:1;hud_toggles++;}}
+static void __thiscall audio_pause(void *self){(void)self;audio_pauses++;}
+static void __thiscall audio_resume(void *self){(void)self;audio_resumes++;}
 int main(void){
     BYTE *base=VirtualAlloc(NULL,0x800000,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE);CHECK(base);
     CHECK(install_scrobbler(base));CHECK(!ReRiffConfigureScrobbler(NULL));CHECK(ReRiffConfigureScrobbler(observe));CHECK(!ReRiffConfigureScrobbler(observe));
@@ -35,10 +37,13 @@ int main(void){
     float *matrix=(float *)((BYTE *)camera+68);for(int i=0;i<12;i++)matrix[i]=0;
     matrix[0]=matrix[4]=matrix[8]=matrix[9]=1.0f;
     fake_hud=base+0x7a2f48;*fake_hud=1;race_hud_toggle=toggle_hud;
-    CHECK(race_photo_begin(base));CHECK(race_photo_active&&race_photo_paused_by_us&&race_photo_hud_hidden);
-    CHECK(*((BYTE *)race+12)==1&&*fake_hud==0&&hud_toggles==1);
-    race_photo_end(base,TRUE);CHECK(!race_photo_active&&!race_photo_paused_by_us&&!race_photo_hud_hidden);
-    CHECK(*((BYTE *)race+12)==0&&*fake_hud==1&&hud_toggles==2);
+    void *audio=base+0x120000,*source=base+0x122000,*audio_vtable=base+0x124000;
+    *(void **)(base+0x7e750c)=audio;*(void **)((BYTE *)audio+100)=source;*((BYTE *)audio+109)=0;
+    ((void **)audio_vtable)[0]=audio_resume;((void **)audio_vtable)[1]=audio_pause;*(void **)source=audio_vtable;
+    CHECK(race_photo_begin(base));CHECK(race_photo_active&&race_photo_paused_by_us&&race_photo_hud_hidden&&race_photo_music_paused);
+    CHECK(*((BYTE *)race+12)==1&&*fake_hud==0&&hud_toggles==1&&audio_pauses==1&&*((BYTE *)audio+109)==1);
+    race_photo_end(base,TRUE);CHECK(!race_photo_active&&!race_photo_paused_by_us&&!race_photo_hud_hidden&&!race_photo_music_paused);
+    CHECK(*((BYTE *)race+12)==0&&*fake_hud==1&&hud_toggles==2&&audio_resumes==1&&*((BYTE *)audio+109)==0);
     VirtualFree(base,0,MEM_RELEASE);
     puts("PASS: Last.fm race guards, native forwarding, throttling, pause entry, completion, culling visibility and photo pause/HUD state independent of progression");return 0;
 }
