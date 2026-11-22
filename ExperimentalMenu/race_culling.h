@@ -38,30 +38,17 @@ __declspec(dllexport) int __cdecl ReRiffConfigureCullingStripTick(void *callback
 __declspec(dllexport) int __cdecl ReRiffConfigureCullingBackNode(void *callback){
     if(!callback)return 0;race_culling_back_node=(RaceCullingBackNode)callback;return 1;
 }
+/* The strip tick reuses a small visual pool (59 unique indices for 799
+ * requested blocks). Calling it across artificial progress duplicates block
+ * entries and moves the rendered surface away from the live section, so the
+ * prewarm remains disabled until the pool itself can be expanded. */
 static void race_culling_prewarm(BYTE *base){
-    if(!race_culling_enabled||!race_culling_strip_tick||!race_culling_back_node||!readable(base+0x7dce7c,4))return;
-    void *manager=*(void **)(base+0x7dce7c);
-    if(!readable(manager,2736)||!readable(base+0x7d5930,4))return;
-    void *players=*(void **)(base+0x7d5930);
-    if(!readable(players,52))return;
-    void *list=*(void **)((BYTE *)players+48);
-    if(!readable(list,4))return;
-    void *local=*(void **)list;
-    if(!readable(local,8))return;
-    void *tracker=*(void **)((BYTE *)local+4);
-    if(!readable(tracker,4))return;
-    void *node=race_culling_back_node(tracker,NULL,NULL);
-    if(!node)return;
-    void **begin=*(void ***)((BYTE *)manager+2720),**end=*(void ***)((BYTE *)manager+2724);
-    if(!begin||!end||end<begin||(size_t)((BYTE *)end-(BYTE *)begin)>256*sizeof(void *))return;
-    unsigned strips=0;
-    for(void **item=begin;item<end;item++){
-        BYTE *strip=(BYTE *)*item;
-        if(!readable(strip,424))continue;
-        for(int step=0;step<=100;step++)race_culling_strip_tick(strip,1,0,step/100.0f,node);
-        strips++;
+    (void)base;
+    static BOOL warned;
+    if(!warned){
+        warned=TRUE;
+        log_line("Photo mode prewarm disabled: strip tick reuses its visual pool.");
     }
-    char line[160];snprintf(line,sizeof(line),"Photo mode visual prewarm: strips=%u steps=101 node=%p.",strips,node);log_line(line);
 }
 
 /* tickBlocks retires the oldest block through the branch at IL_01e7. Turn
