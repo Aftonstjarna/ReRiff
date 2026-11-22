@@ -714,6 +714,19 @@ static void race_camera_frame(void){
 }
 
 static BOOL race_hud_select_previous;
+/* The original game input path calls gaHUDManager.toggleUI directly for its
+ * hard-coded HUD action. Remove that call so only the remappable raw-input
+ * handler below owns the binding; the managed original remains callable. */
+static BOOL race_hud_patch_native_toggle(BYTE *base){
+    BYTE *site=base+0x29407e;
+    static const BYTE expected[]={0x28,0x53,0x0c,0x00,0x06};
+    if(!readable(site,sizeof(expected))||memcmp(site,expected,sizeof(expected)))return FALSE;
+    DWORD old,ignored;
+    if(!VirtualProtect(site,sizeof(expected),PAGE_READWRITE,&old))return FALSE;
+    memset(site,0,sizeof(expected));
+    VirtualProtect(site,sizeof(expected),old,&ignored);
+    return TRUE;
+}
 __declspec(dllexport) int __cdecl ReRiffConfigureHudToggle(void *callback){
     if(!callback)return 0;race_hud_toggle=(RaceHudToggle)callback;return 1;
 }
@@ -742,6 +755,7 @@ static void race_hud_frame(void){
 static BOOL install_race_camera(BYTE *base){
     WCHAR client[MAX_PATH];wcscpy(client,config_path);WCHAR *slash=wcsrchr(client,L'\\');if(slash)wcscpy(slash+1,L"client.ini");
     race_read_controls(client);
+    if(!race_hud_patch_native_toggle(base))log_line("Native HUD action call not patched; remapped HUD may also respond on the original button.");
     BOOL orbit=GetPrivateProfileIntW(L"camera",L"race_orbit",0,client)!=0;
     BOOL photo=GetPrivateProfileIntW(L"camera",L"photo_mode",0,client)!=0;
     if(!orbit&&!photo)return TRUE;
