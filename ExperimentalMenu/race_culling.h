@@ -186,7 +186,10 @@ static BOOL install_race_culling(BYTE *base){
     race_culling_on_visible=(RaceCullingVisible)(base+0x27959c);
     BOOL expanded=race_culling_expand_pool(base);
     race_culling_pool_expanded=expanded;
-    BOOL relocated=race_track_pool_install(base);
+    WCHAR pool_value[16];
+    GetPrivateProfileStringW(L"graphics",L"track_pool_512",L"true",pool_value,16,client);
+    BOOL use_512=!_wcsicmp(pool_value,L"true")||!_wcsicmp(pool_value,L"yes")||!wcscmp(pool_value,L"1");
+    BOOL relocated=use_512?race_track_pool_install(base):FALSE;
     BOOL retained=race_culling_retain_blocks(base);
     char detail[192];snprintf(detail,sizeof(detail),"Track culling disable enabled; trace=%d; block retention=%d; visual pool=%s.",race_culling_trace?1:0,retained?1:0,relocated?"512":"127");log_line(detail);
     return TRUE;
