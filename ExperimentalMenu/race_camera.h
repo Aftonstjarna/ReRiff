@@ -16,7 +16,7 @@
 
 static BOOL race_camera_installed,race_camera_announced,race_camera_frame_logged;static unsigned race_camera_frames;
 static BOOL race_orbit_enabled;
-static BOOL race_photo_enabled,race_photo_active,race_photo_paused_by_us,race_photo_hud_hidden,race_photo_hide_hud=TRUE,race_photo_previous,race_photo_chord,race_photo_music_paused;
+static BOOL race_photo_enabled,race_photo_active,race_photo_paused_by_us,race_photo_hud_hidden,race_photo_hide_hud=TRUE,race_photo_previous,race_photo_chord,race_photo_music_paused,race_photo_invert_strafe;
 static WORD race_photo_buttons[4];static int race_photo_button_count;
 static int race_photo_key=VK_F9;
 static WORD postfx_dof_buttons[4],postfx_bloom_buttons[4];static int postfx_dof_button_count,postfx_bloom_button_count;
@@ -529,8 +529,10 @@ static void race_photo_update(BYTE *base,float dt){
     float movement[3];
     /* The camera basis stores its horizontal axis opposite the input
      * direction used by the game's default left-stick movement. Keep
-     * strafe and D/A consistent with the expected right-is-right. */
-    for(int axis=0;axis<3;axis++)movement[axis]=rightVector[axis]*(-moveX)+forwardVector[axis]*moveY+worldUp[axis]*moveZ;
+     * strafe and D/A consistent with the expected right-is-right, while
+     * leaving right-stick look controlled only by invert_x/invert_y. */
+    float strafe=race_photo_invert_strafe?moveX:-moveX;
+    for(int axis=0;axis<3;axis++)movement[axis]=rightVector[axis]*strafe+forwardVector[axis]*moveY+worldUp[axis]*moveZ;
     float length=(float)sqrt(movement[0]*movement[0]+movement[1]*movement[1]+movement[2]*movement[2]);
     if(length>1.0f){movement[0]/=length;movement[1]/=length;movement[2]/=length;}
     float speed=race_photo_speed*(boost?3.0f:1.0f);
@@ -675,11 +677,12 @@ static BOOL install_race_camera(BYTE *base){
         GetPrivateProfileStringW(L"camera",L"photo_speed",L"8.0",value,64,client);race_photo_speed=(float)wcstod(value,NULL);
         if(race_photo_speed<1.0f)race_photo_speed=1.0f;if(race_photo_speed>100.0f)race_photo_speed=100.0f;
         race_photo_hide_hud=GetPrivateProfileIntW(L"camera",L"photo_hide_hud",1,client)!=0;
+        race_photo_invert_strafe=GetPrivateProfileIntW(L"camera",L"photo_invert_strafe",0,client)!=0;
         if(!readable(base+0x7d6668,4)){race_photo_enabled=FALSE;log_line("Photo mode refused: the race manager singleton differs from the supported game.");}
     }
     if(!race_orbit_enabled&&!race_photo_enabled)return TRUE;
     race_camera_input_init();
     race_camera_installed=TRUE;
-    char detail[240];snprintf(detail,sizeof(detail),"Race camera hook ready; free_look=%d photo=%d mode=%d fov_offset=%.1f zoom=%.2f invert_x=%d invert_y=%d photo_speed=%.1f.",race_orbit_enabled?1:0,race_photo_enabled?1:0,race_camera_mode,race_camera_fov_offset,race_camera_zoom,race_camera_invert_x,race_camera_invert_y,race_photo_speed);log_line(detail);
+    char detail[240];snprintf(detail,sizeof(detail),"Race camera hook ready; free_look=%d photo=%d mode=%d fov_offset=%.1f zoom=%.2f invert_x=%d invert_y=%d photo_speed=%.1f invert_strafe=%d.",race_orbit_enabled?1:0,race_photo_enabled?1:0,race_camera_mode,race_camera_fov_offset,race_camera_zoom,race_camera_invert_x,race_camera_invert_y,race_photo_speed,race_photo_invert_strafe?1:0);log_line(detail);
     return TRUE;
 }

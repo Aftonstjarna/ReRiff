@@ -107,13 +107,14 @@ int wmain(int argc,WCHAR **argv){
     controls_pick(controls_free_button,L"right_thumb");SetWindowTextW(controls_free_key,L"V");
     controls_pick(controls_hud_button,L"back");SetWindowTextW(controls_hud_key,L"H");
     controls_pick(controls_mouse,L"middle");
-    SendMessageW(controls_photo_enable,BM_SETCHECK,BST_CHECKED,0);SendMessageW(controls_photo_hud,BM_SETCHECK,BST_UNCHECKED,0);
+    SendMessageW(controls_photo_enable,BM_SETCHECK,BST_CHECKED,0);SendMessageW(controls_photo_hud,BM_SETCHECK,BST_UNCHECKED,0);SendMessageW(controls_photo_invert_strafe,BM_SETCHECK,BST_CHECKED,0);
     controls_pick(controls_photo_button,L"left_thumb+right_thumb");SetWindowTextW(controls_photo_key,L"P");SetWindowTextW(controls_photo_speed,L"12.5");
     SendMessageW(host,WM_COMMAND,MAKEWPARAM(CONTROLS_SAVE,BN_CLICKED),(LPARAM)controls_save);
     WCHAR client[CAP];path(client,L"client.ini");
     CHECK(GetPrivateProfileIntW(L"camera",L"race_orbit",0,client)==1&&GetPrivateProfileIntW(L"camera",L"invert_x",0,client)==1);
     CHECK(GetPrivateProfileIntW(L"camera",L"invert_y",0,client)==0);
     CHECK(GetPrivateProfileIntW(L"camera",L"photo_mode",0,client)==1&&GetPrivateProfileIntW(L"camera",L"photo_hide_hud",1,client)==0);
+    CHECK(GetPrivateProfileIntW(L"camera",L"photo_invert_strafe",0,client)==1);
     GetPrivateProfileStringW(L"camera",L"free_fov_offset",L"",value,64,client);CHECK(!wcscmp(value,L"-5.00"));
     GetPrivateProfileStringW(L"camera",L"photo_speed",L"",value,64,client);CHECK(!wcscmp(value,L"12.5"));
     GetPrivateProfileStringW(L"controls",L"free_look_key",L"",value,64,client);CHECK(!wcscmp(value,L"V"));
@@ -124,6 +125,7 @@ int wmain(int argc,WCHAR **argv){
     controls_reload();
     CHECK(SendMessageW(controls_photo_enable,BM_GETCHECK,0,0)==BST_CHECKED);
     CHECK(SendMessageW(controls_photo_hud,BM_GETCHECK,0,0)==BST_UNCHECKED);
+    CHECK(SendMessageW(controls_photo_invert_strafe,BM_GETCHECK,0,0)==BST_CHECKED);
     GetWindowTextW(controls_photo_key,value,64);CHECK(!wcscmp(value,L"P"));
     GetWindowTextW(controls_photo_speed,value,64);CHECK(!wcscmp(value,L"12.5"));
     controls_text(controls_photo_button,value,64);CHECK(!wcscmp(value,L"left_thumb+right_thumb"));

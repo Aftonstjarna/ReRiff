@@ -6,7 +6,7 @@
 static void checkbox_help(HWND,const WCHAR *);
 static HWND controls_enable,controls_fov,controls_zoom,controls_invert_x,controls_invert_y;
 static HWND controls_trace,controls_free_button,controls_free_key,controls_hud_button,controls_hud_key;
-static HWND controls_mouse,controls_photo_enable,controls_photo_button,controls_photo_key,controls_photo_hud,controls_photo_speed,controls_save,controls_first;static WCHAR controls_ini[CAP];
+static HWND controls_mouse,controls_photo_enable,controls_photo_button,controls_photo_key,controls_photo_hud,controls_photo_speed,controls_photo_invert_strafe,controls_save,controls_first;static WCHAR controls_ini[CAP];
 
 static void controls_add(HWND box,const WCHAR *text){graphics_choice(box,text,0);}
 static void controls_pick(HWND box,const WCHAR *value){
@@ -49,6 +49,7 @@ static void controls_reload(void){
     GetPrivateProfileStringW(L"controls",L"free_look_mouse",L"right",value,64,controls_ini);controls_pick(controls_mouse,value);
     SendMessageW(controls_photo_enable,BM_SETCHECK,GetPrivateProfileIntW(L"camera",L"photo_mode",0,controls_ini)?BST_CHECKED:BST_UNCHECKED,0);
     SendMessageW(controls_photo_hud,BM_SETCHECK,GetPrivateProfileIntW(L"camera",L"photo_hide_hud",1,controls_ini)?BST_CHECKED:BST_UNCHECKED,0);
+    SendMessageW(controls_photo_invert_strafe,BM_SETCHECK,GetPrivateProfileIntW(L"camera",L"photo_invert_strafe",0,controls_ini)?BST_CHECKED:BST_UNCHECKED,0);
     GetPrivateProfileStringW(L"controls",L"photo_mode_button",L"left_thumb+right_thumb",value,64,controls_ini);controls_pick(controls_photo_button,value);
     GetPrivateProfileStringW(L"controls",L"photo_mode_key",L"F9",value,64,controls_ini);SetWindowTextW(controls_photo_key,value);
     GetPrivateProfileStringW(L"camera",L"photo_speed",L"8.0",value,64,controls_ini);SetWindowTextW(controls_photo_speed,value);
@@ -79,6 +80,7 @@ static BOOL controls_save_settings(void){
         &&WritePrivateProfileStringW(L"controls",L"free_look_mouse",mouse,controls_ini)
         &&WritePrivateProfileStringW(L"camera",L"photo_mode",SendMessageW(controls_photo_enable,BM_GETCHECK,0,0)==BST_CHECKED?L"1":L"0",controls_ini)
         &&WritePrivateProfileStringW(L"camera",L"photo_hide_hud",SendMessageW(controls_photo_hud,BM_GETCHECK,0,0)==BST_CHECKED?L"1":L"0",controls_ini)
+        &&WritePrivateProfileStringW(L"camera",L"photo_invert_strafe",SendMessageW(controls_photo_invert_strafe,BM_GETCHECK,0,0)==BST_CHECKED?L"1":L"0",controls_ini)
         &&WritePrivateProfileStringW(L"camera",L"photo_speed",photo_speed,controls_ini)
         &&WritePrivateProfileStringW(L"controls",L"photo_mode_button",photo_button,controls_ini)
         &&WritePrivateProfileStringW(L"controls",L"photo_mode_key",photo_key,controls_ini);
@@ -91,12 +93,13 @@ static void controls_create(void){
     controls_fov=control(L"EDIT",L"0",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,190,50,112,28,0);
     control(L"STATIC",L"Distance multiplier",0,22,86,150,24,0);
     controls_zoom=control(L"EDIT",L"1.0",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,190,82,112,28,0);
-    controls_invert_x=control(L"BUTTON",L"Invert X",BS_AUTOCHECKBOX|WS_TABSTOP,22,114,130,28,0);
-    controls_invert_y=control(L"BUTTON",L"Invert Y",BS_AUTOCHECKBOX|WS_TABSTOP,164,114,138,28,0);
+    controls_invert_x=control(L"BUTTON",L"Invert look X",BS_AUTOCHECKBOX|WS_TABSTOP,22,114,130,28,0);
+    controls_invert_y=control(L"BUTTON",L"Invert look Y",BS_AUTOCHECKBOX|WS_TABSTOP,164,114,138,28,0);
     control(L"STATIC",L"Mouse look button",0,22,150,150,24,0);
     controls_mouse=control(L"COMBOBOX",L"",CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP,190,146,112,160,0);
     controls_photo_enable=control(L"BUTTON",L"Enable photo mode",BS_AUTOCHECKBOX|WS_TABSTOP,22,178,280,28,0);
     controls_photo_hud=control(L"BUTTON",L"Hide HUD in photo mode",BS_AUTOCHECKBOX|WS_TABSTOP,22,210,280,28,0);
+    controls_photo_invert_strafe=control(L"BUTTON",L"Invert photo strafe X",BS_AUTOCHECKBOX|WS_TABSTOP,312,246,280,28,0);
     control(L"STATIC",L"Free-look button",0,312,22,130,24,0);
     controls_free_button=control(L"COMBOBOX",L"",CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP,452,18,160,200,0);
     control(L"STATIC",L"Free-look key",0,312,54,130,24,0);
@@ -134,10 +137,11 @@ static void controls_create(void){
     graphics_choice(controls_mouse,L"right",0);graphics_choice(controls_mouse,L"left",0);
     graphics_choice(controls_mouse,L"middle",0);graphics_choice(controls_mouse,L"none",0);
     checkbox_help(controls_enable,L"Keep the normal chase camera and use the right stick/mouse to look around while free look is toggled on. Press R3 or the configured button/key to toggle. Restart the game after changes.");
-    checkbox_help(controls_invert_x,L"Invert horizontal free-look and photo-mode input. 0 in client.ini is the preferred direction; this checkbox stores 1.");
-    checkbox_help(controls_invert_y,L"Invert vertical free-look and photo-mode input. 0 in client.ini is the preferred direction; this checkbox stores 1.");
+    checkbox_help(controls_invert_x,L"Invert horizontal look from the right stick or mouse. 0 in client.ini is the preferred direction; this checkbox stores 1. It does not change photo-mode strafing.");
+    checkbox_help(controls_invert_y,L"Invert vertical look from the right stick or mouse. 0 in client.ini is the preferred direction; this checkbox stores 1.");
     checkbox_help(controls_photo_enable,L"Enable photo mode. The default controller chord is L3+R3 and the default keyboard key is F9. During a race it pauses without opening the pause menu and gives you a free camera.");
-    checkbox_help(controls_photo_hud,L"Hide the race HUD while photo mode is active and restore it when photo mode ends.");
+    checkbox_help(controls_photo_hud,L"Hide the complete race HUD while photo mode is active and restore it when photo mode ends.");
+    checkbox_help(controls_photo_invert_strafe,L"Flip only the photo-mode left-stick and A/D strafe direction. This does not affect right-stick look.");
     checkbox_help(controls_photo_button,L"Controller chord for photo mode. Separate buttons with +. The default is left_thumb+right_thumb (L3+R3).");
     checkbox_help(controls_photo_key,L"Keyboard key for photo mode. Leave empty to use only the controller chord.");
     checkbox_help(controls_photo_speed,L"Free-camera speed in game units per second. Hold the right trigger or Shift for a 3x boost.");
