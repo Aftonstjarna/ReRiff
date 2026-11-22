@@ -34,6 +34,8 @@ int wmain(int argc,WCHAR **argv){
     SetWindowTextW(lfm_percent,L"80");SendMessageW(lfm_enabled,BM_SETCHECK,BST_CHECKED,0);lfm_save_settings();GetPrivateProfileStringW(L"lastfm",L"enabled",L"",value,64,ini);CHECK(!wcscmp(value,L"true"));
     SetWindowTextW(lfm_percent,L"85");
     CHECK(WritePrivateProfileStringW(L"launcher",L"skip_launcher",L"true",ini));
+    CHECK(WritePrivateProfileStringW(L"launcher",L"close_on_game_start",L"true",ini));
+    CHECK(launcher_preference(L"close_on_game_start"));
     CHECK(lfm_save_settings());
     GetPrivateProfileStringW(L"launcher",L"skip_launcher",L"",value,64,ini);CHECK(!wcscmp(value,L"true"));
     SetWindowTextW(lfm_secret_field,L"invalid");CHECK(!lfm_save_settings());CHECK(lfm_read_credential(L"shared_secret",value)&&!wcscmp(value,L"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"));lfm_reload();
@@ -70,7 +72,7 @@ int wmain(int argc,WCHAR **argv){
     for(int cycle=0;cycle<3;cycle++)for(int page=0;page<PAGE_COUNT;page++){
         SendMessageW(launcher_tabs,TCM_SETCURSEL,page,0);select_launcher_page();
         RedrawWindow(host,NULL,NULL,RDW_INVALIDATE|RDW_ERASE|RDW_ALLCHILDREN|RDW_UPDATENOW);
-        CHECK(IsWindowVisible(play_button)&&IsWindowVisible(status));
+        CHECK(IsWindowVisible(play_button)&&IsWindowVisible(status)&&IsWindowVisible(close_checkbox));
         CHECK(IsWindowVisible(graphics_resolution)==(page==PAGE_GRAPHICS));
         CHECK(IsWindowVisible(controls_enable)==(page==PAGE_CONTROLS));
         CHECK(IsWindowVisible(language_checkbox)==(page==PAGE_LANGUAGES));
@@ -116,10 +118,10 @@ int wmain(int argc,WCHAR **argv){
     CHECK(SendMessageW(launcher_tabs,TCM_GETITEMCOUNT,0,0)==PAGE_COUNT);
     CHECK(SendMessageW(scrobbling_tabs,TCM_GETITEMCOUNT,0,0)==3);
     SendMessageW(launcher_tabs,TCM_SETCURSEL,PAGE_SCROBBLING,0);select_launcher_page();
-    RECT subtabs,account,save,footer;
+    RECT subtabs,account,save_rect,footer;
     GetWindowRect(scrobbling_tabs,&subtabs);GetWindowRect(lfm_account,&account);
-    GetWindowRect(lfm_save,&save);GetWindowRect(status_separator,&footer);
-    CHECK(subtabs.bottom<account.top&&save.bottom<footer.top);
+    GetWindowRect(lfm_save,&save_rect);GetWindowRect(status_separator,&footer);
+    CHECK(subtabs.bottom<account.top&&save_rect.bottom<footer.top);
     SetWindowTextW(lfm_percent,L"87");
     SendMessageW(scrobbling_tabs,TCM_SETCURSEL,1,0);
     NMHDR changed={scrobbling_tabs,0,TCN_SELCHANGE};SendMessageW(host,WM_NOTIFY,0,(LPARAM)&changed);
@@ -146,7 +148,7 @@ int wmain(int argc,WCHAR **argv){
     GetPrivateProfileStringW(L"listenbrainz",L"user_token",L"",value,64,ini);CHECK(!wcscmp(value,L"dpapi:00"));
     SendMessageW(scrobbling_tabs,TCM_SETCURSEL,2,0);SendMessageW(host,WM_NOTIFY,0,(LPARAM)&changed);
     CHECK(IsWindowVisible(libre_save)&&!IsWindowVisible(lb_token)&&!IsWindowVisible(lfm_save));
-    GetWindowRect(libre_save,&save);CHECK(save.bottom<footer.top);
+    GetWindowRect(libre_save,&save_rect);CHECK(save_rect.bottom<footer.top);
     CHECK(scrobble_store_credentials(L"librefm",LIBRE_KEY,LIBRE_SECRET,L"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",L"fixture",FALSE,NULL));libre_reload();
     SendMessageW(libre_enabled,BM_SETCHECK,BST_CHECKED,0);SetWindowTextW(libre_percent,L"95");CHECK(libre_save_settings());
     CHECK(GetPrivateProfileIntW(L"librefm",L"scrobble_percent",0,ini)==95);
@@ -171,7 +173,12 @@ int wmain(int argc,WCHAR **argv){
     SetWindowTextW(lfm_key_field,L"cccccccccccccccccccccccccccccccc");CHECK(lfm_save_settings());
     CHECK(lfm_read_credential(L"session_key",value)&&!*value);GetPrivateProfileStringW(L"lastfm",L"enabled",L"",value,64,ini);CHECK(!wcscmp(value,L"false"));
     lfm_unlink();GetPrivateProfileStringW(L"lastfm",L"session_key",L"",value,64,ini);CHECK(!*value);CHECK(lfm_read_credential(L"api_key",value)&&lfm_hex(value));
-    SendMessageW(launcher_tabs,TCM_SETCURSEL,0,0);select_launcher_page();CHECK(!IsWindowVisible(lfm_enabled)&&!IsWindowVisible(lfm_key_field)&&!IsWindowVisible(lfm_secret_field)&&!IsWindowVisible(lfm_save)&&IsWindowVisible(external));DestroyWindow(host);
+    SendMessageW(launcher_tabs,TCM_SETCURSEL,0,0);select_launcher_page();CHECK(!IsWindowVisible(lfm_enabled)&&!IsWindowVisible(lfm_key_field)&&!IsWindowVisible(lfm_secret_field)&&!IsWindowVisible(lfm_save)&&IsWindowVisible(external));
+    SendMessageW(close_checkbox,BM_SETCHECK,BST_CHECKED,0);CHECK(save());
+    GetPrivateProfileStringW(L"launcher",L"close_on_game_start",L"",value,64,ini);CHECK(!wcscmp(value,L"true"));
+    SendMessageW(close_checkbox,BM_SETCHECK,BST_UNCHECKED,0);CHECK(save());
+    GetPrivateProfileStringW(L"launcher",L"close_on_game_start",L"",value,64,ini);CHECK(!wcscmp(value,L"false"));
+    DestroyWindow(host);
     path(file,L"client.ini");DeleteFileW(file);DeleteFileW(ini);RemoveDirectoryW(folder);
     puts("PASS: Last.fm, ListenBrainz and Libre.fm subtabs, DPAPI sessions, thresholds, persistence, layout and disconnect");return 0;
 }

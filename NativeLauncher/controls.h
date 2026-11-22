@@ -23,6 +23,15 @@ static void controls_text(HWND box,WCHAR *out,int size){
     if(index==CB_ERR){out[0]=0;return;}
     SendMessageW(box,CB_GETLBTEXT,index,(LPARAM)out);out[size-1]=0;
 }
+static BOOL controls_trace_toggle(void){
+    path(controls_ini,L"client.ini");
+    BOOL enabled=SendMessageW(controls_trace,BM_GETCHECK,0,0)==BST_CHECKED;
+    return WritePrivateProfileStringW(L"camera",L"race_orbit_trace",enabled?L"1":L"0",controls_ini);
+}
+static void controls_trace_reload(void){
+    if(!controls_trace)return;
+    path(controls_ini,L"client.ini");
+}
 static void controls_reload(void){
     if(!controls_enable)return;
     path(controls_ini,L"client.ini");
@@ -32,7 +41,6 @@ static void controls_reload(void){
     GetPrivateProfileStringW(L"camera",L"free_zoom",L"1.0",value,64,controls_ini);SetWindowTextW(controls_zoom,value);
     SendMessageW(controls_invert_x,BM_SETCHECK,GetPrivateProfileIntW(L"camera",L"invert_x",0,controls_ini)?BST_CHECKED:BST_UNCHECKED,0);
     SendMessageW(controls_invert_y,BM_SETCHECK,GetPrivateProfileIntW(L"camera",L"invert_y",0,controls_ini)?BST_CHECKED:BST_UNCHECKED,0);
-    SendMessageW(controls_trace,BM_SETCHECK,GetPrivateProfileIntW(L"camera",L"race_orbit_trace",0,controls_ini)?BST_CHECKED:BST_UNCHECKED,0);
     GetPrivateProfileStringW(L"controls",L"free_look_button",L"right_thumb",value,64,controls_ini);controls_pick(controls_free_button,value);
     GetPrivateProfileStringW(L"controls",L"free_look_key",L"",value,64,controls_ini);SetWindowTextW(controls_free_key,value);
     GetPrivateProfileStringW(L"controls",L"hud_button",L"back",value,64,controls_ini);controls_pick(controls_hud_button,value);
@@ -55,7 +63,6 @@ static BOOL controls_save_settings(void){
         &&WritePrivateProfileStringW(L"camera",L"free_zoom",zoom,controls_ini)
         &&WritePrivateProfileStringW(L"camera",L"invert_x",SendMessageW(controls_invert_x,BM_GETCHECK,0,0)==BST_CHECKED?L"1":L"0",controls_ini)
         &&WritePrivateProfileStringW(L"camera",L"invert_y",SendMessageW(controls_invert_y,BM_GETCHECK,0,0)==BST_CHECKED?L"1":L"0",controls_ini)
-        &&WritePrivateProfileStringW(L"camera",L"race_orbit_trace",SendMessageW(controls_trace,BM_GETCHECK,0,0)==BST_CHECKED?L"1":L"0",controls_ini)
         &&WritePrivateProfileStringW(L"controls",L"free_look_button",free_button,controls_ini)
         &&WritePrivateProfileStringW(L"controls",L"free_look_key",free_key,controls_ini)
         &&WritePrivateProfileStringW(L"controls",L"hud_button",hud_button,controls_ini)
@@ -68,22 +75,21 @@ static void controls_create(void){
     controls_enable=control(L"BUTTON",L"Enable free-look camera",BS_AUTOCHECKBOX|WS_TABSTOP,22,26,590,28,0);
     control(L"STATIC",L"FOV offset (degrees)",0,22,62,150,24,0);
     controls_fov=control(L"EDIT",L"0",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,190,58,90,28,0);
-    control(L"STATIC",L"Distance multiplier",0,22,98,150,24,0);
-    controls_zoom=control(L"EDIT",L"1.0",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,190,94,90,28,0);
-    controls_invert_x=control(L"BUTTON",L"Invert X",BS_AUTOCHECKBOX|WS_TABSTOP,22,134,280,28,0);
-    controls_invert_y=control(L"BUTTON",L"Invert Y",BS_AUTOCHECKBOX|WS_TABSTOP,312,134,280,28,0);
-    control(L"STATIC",L"Free-look button",0,22,170,150,24,0);
-    controls_free_button=control(L"COMBOBOX",L"",CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP,190,166,150,200,0);
-    control(L"STATIC",L"Free-look key",0,360,170,120,24,0);
-    controls_free_key=control(L"EDIT",L"",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,490,166,80,28,0);
-    control(L"STATIC",L"HUD button",0,22,206,150,24,0);
-    controls_hud_button=control(L"COMBOBOX",L"",CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP,190,202,150,200,0);
-    control(L"STATIC",L"HUD key",0,360,206,120,24,0);
-    controls_hud_key=control(L"EDIT",L"",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,490,202,80,28,0);
-    control(L"STATIC",L"Mouse look button",0,22,242,150,24,0);
-    controls_mouse=control(L"COMBOBOX",L"",CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP,190,238,150,160,0);
-    controls_trace=control(L"BUTTON",L"Camera diagnostic trace",BS_AUTOCHECKBOX|WS_TABSTOP,22,278,590,28,0);
-    controls_save=control(L"BUTTON",L"Save settings",WS_TABSTOP,22,314,220,32,CONTROLS_SAVE);
+    control(L"STATIC",L"Distance multiplier",0,22,94,150,24,0);
+    controls_zoom=control(L"EDIT",L"1.0",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,190,90,90,28,0);
+    controls_invert_x=control(L"BUTTON",L"Invert X",BS_AUTOCHECKBOX|WS_TABSTOP,22,126,280,28,0);
+    controls_invert_y=control(L"BUTTON",L"Invert Y",BS_AUTOCHECKBOX|WS_TABSTOP,312,126,280,28,0);
+    control(L"STATIC",L"Free-look button",0,22,158,150,24,0);
+    controls_free_button=control(L"COMBOBOX",L"",CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP,190,154,150,200,0);
+    control(L"STATIC",L"Free-look key",0,360,158,120,24,0);
+    controls_free_key=control(L"EDIT",L"",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,490,154,80,28,0);
+    control(L"STATIC",L"HUD button",0,22,190,150,24,0);
+    controls_hud_button=control(L"COMBOBOX",L"",CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP,190,186,150,200,0);
+    control(L"STATIC",L"HUD key",0,360,190,120,24,0);
+    controls_hud_key=control(L"EDIT",L"",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,490,186,80,28,0);
+    control(L"STATIC",L"Mouse look button",0,22,222,150,24,0);
+    controls_mouse=control(L"COMBOBOX",L"",CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP,190,218,150,160,0);
+    controls_save=control(L"BUTTON",L"Save settings",WS_TABSTOP,22,254,220,32,CONTROLS_SAVE);
     controls_first=controls_enable;
     graphics_choice(controls_free_button,L"right_thumb",0);graphics_choice(controls_free_button,L"left_thumb",0);
     graphics_choice(controls_free_button,L"back",0);graphics_choice(controls_free_button,L"start",0);
@@ -101,7 +107,6 @@ static void controls_create(void){
     checkbox_help(controls_enable,L"Keep the normal chase camera and use the right stick/mouse to look around while free look is toggled on. Press R3 or the configured button/key to toggle. Restart the game after changes.");
     checkbox_help(controls_invert_x,L"Invert horizontal free-look input. 0 in client.ini is the preferred direction; this checkbox stores 1.");
     checkbox_help(controls_invert_y,L"Invert vertical free-look input. 0 in client.ini is the preferred direction; this checkbox stores 1.");
-    checkbox_help(controls_trace,L"Write detailed camera set/camera traces to the game log. Use only for diagnostics; it adds log I/O every 90 frames.");
     controls_reload();
 }
 #endif

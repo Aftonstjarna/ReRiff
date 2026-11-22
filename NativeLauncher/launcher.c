@@ -29,7 +29,7 @@
 #include "error_dialog.h"
 #define WM_COMPLETE (WM_APP + 1)
 #define WM_GAME_RUNNING (WM_APP + 2)
-enum { EXTERNAL=101, FALLBACK, TIMEOUT, POPUP, SAVE, PLAY, LOCAL, EXTERNAL_ONLY, STOP, UPDATE, EXPERIMENTAL, NETWORKING, SKIP_LAUNCHER, AUTO_UPDATE_SKIP, CJK_INSTALL, LOGGING, LATIN_INSTALL, UPDATE_DETAILS, LASTFM_ENABLED, LASTFM_PERCENT, LASTFM_LINK, LASTFM_DISCONNECT, LASTFM_SAVE, LASTFM_KEY, LASTFM_SECRET, UNINSTALL, LISTENBRAINZ_TOKEN, LISTENBRAINZ_ENABLED, LISTENBRAINZ_PERCENT, LISTENBRAINZ_SAVE, LISTENBRAINZ_GET_TOKEN, LIBRE_ENABLED, LIBRE_PERCENT, LIBRE_LINK, LIBRE_DISCONNECT, LIBRE_SAVE, LIBRE_CREDENTIAL, GRAPHICS_SAVE, CONTROLS_SAVE, LOG_CATEGORY_BASE=500 };
+enum { EXTERNAL=101, FALLBACK, TIMEOUT, POPUP, SAVE, PLAY, LOCAL, EXTERNAL_ONLY, STOP, UPDATE, EXPERIMENTAL, NETWORKING, SKIP_LAUNCHER, AUTO_UPDATE_SKIP, CLOSE_LAUNCHER, CJK_INSTALL, LOGGING, LATIN_INSTALL, UPDATE_DETAILS, LASTFM_ENABLED, LASTFM_PERCENT, LASTFM_LINK, LASTFM_DISCONNECT, LASTFM_SAVE, LASTFM_KEY, LASTFM_SECRET, UNINSTALL, LISTENBRAINZ_TOKEN, LISTENBRAINZ_ENABLED, LISTENBRAINZ_PERCENT, LISTENBRAINZ_SAVE, LISTENBRAINZ_GET_TOKEN, LIBRE_ENABLED, LIBRE_PERCENT, LIBRE_LINK, LIBRE_DISCONNECT, LIBRE_SAVE, LIBRE_CREDENTIAL, GRAPHICS_SAVE, CONTROLS_SAVE, CONTROLS_TRACE, LOG_CATEGORY_BASE=500 };
 #include "branding.h"
 
 static WCHAR folder[CAP], ini[CAP], message[1024];
@@ -39,9 +39,9 @@ static DWORD restart_parent_pid;
 #include "restart_protocol.h"
 static HWND window, status, external, fallback, timeout_edit, popup, play_button, save_button;
 static HWND only_checkbox, stop_button, update_button, launcher_progress, status_separator, footer_separator;
-static BOOL busy = FALSE, playing = FALSE, checking_update = FALSE;
+static BOOL busy = FALSE, playing = FALSE, checking_update = FALSE, exit_after_game = FALSE;
 static HWND experimental_checkbox;
-static HWND networking_checkbox, skip_checkbox, auto_update_checkbox;
+static HWND networking_checkbox, skip_checkbox, auto_update_checkbox, close_checkbox;
 static ULONGLONG settings_signature;
 static BOOL settings_observed=FALSE;
 static BOOL installed_experimental=FALSE, requested_experimental=FALSE;
@@ -416,7 +416,8 @@ static BOOL save(void) {
         && WritePrivateProfileStringW(L"server",L"networking_enabled",enabled?L"true":L"false",ini)
         && WritePrivateProfileStringW(L"server",L"show_server_popup",SendMessageW(popup,BM_GETCHECK,0,0)==BST_CHECKED?L"true":L"false",ini)
         && WritePrivateProfileStringW(L"launcher",L"skip_launcher",SendMessageW(skip_checkbox,BM_GETCHECK,0,0)==BST_CHECKED?L"true":L"false",ini)
-        && WritePrivateProfileStringW(L"launcher",L"auto_update_on_skip",SendMessageW(auto_update_checkbox,BM_GETCHECK,0,0)==BST_CHECKED?L"true":L"false",ini);
+        && WritePrivateProfileStringW(L"launcher",L"auto_update_on_skip",SendMessageW(auto_update_checkbox,BM_GETCHECK,0,0)==BST_CHECKED?L"true":L"false",ini)
+        && WritePrivateProfileStringW(L"launcher",L"close_on_game_start",SendMessageW(close_checkbox,BM_GETCHECK,0,0)==BST_CHECKED?L"true":L"false",ini);
     if (!ok) rr_show_error(window,L"ReRiff",L"Could not save server.ini.");
     else SetWindowTextW(status,L"Settings saved. They apply on the next game start.");
     return ok;
@@ -472,6 +473,7 @@ static void reload_settings_controls(void) {
     SendMessageW(networking_checkbox,BM_SETCHECK,(_wcsicmp(value,L"false")&&_wcsicmp(value,L"no")&&wcscmp(value,L"0"))?BST_UNCHECKED:BST_CHECKED,0);
     SendMessageW(skip_checkbox,BM_SETCHECK,launcher_preference(L"skip_launcher")?BST_CHECKED:BST_UNCHECKED,0);
     SendMessageW(auto_update_checkbox,BM_SETCHECK,launcher_preference(L"auto_update_on_skip")?BST_CHECKED:BST_UNCHECKED,0);
+    SendMessageW(close_checkbox,BM_SETCHECK,launcher_preference(L"close_on_game_start")?BST_CHECKED:BST_UNCHECKED,0);
     update_networking_controls();
 }
 
@@ -519,6 +521,7 @@ static void select_launcher_page(void){
     for(unsigned i=0;i<libre_count;i++)ShowWindow(libre_controls_group[i],libre?SW_SHOW:SW_HIDE);
     if(page==PAGE_SCROBBLING){SetFocus(scrobbling_tabs);return;}
     if(controls)controls_reload();
+    if(page==PAGE_DIAGNOSTICS)controls_trace_reload();
     SetFocus(page==PAGE_GRAPHICS?graphics_resolution:controls?controls_first:page==PAGE_DIAGNOSTICS?logging_checkbox:languages?language_checkbox:external);
 }
 static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
@@ -569,11 +572,13 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
         progress_sink=hwnd;
         footer_separator=control(L"STATIC",L"",SS_ETCHEDHORZ,10,435,630,2,0);
         local_server_hint=control(L"STATIC",L"Local server: http://127.0.0.1:5144 — enter in Secondary server",SS_CENTER|SS_CENTERIMAGE,22,437,600,24,0);
-        HWND github_button=control(L"BUTTON",L"ReRiff on GitHub",WS_TABSTOP|BS_BITMAP|BS_CENTER|BS_VCENTER,22,461,150,34,RERIFF_BRAND_CONTROL);
+        HWND github_button=control(L"BUTTON",L"ReRiff on GitHub",WS_TABSTOP|BS_BITMAP|BS_CENTER|BS_VCENTER,22,461,120,34,RERIFF_BRAND_CONTROL);
         rr_brand_button(github_button);
-        stop_button=control(L"BUTTON",L"Install local server",WS_TABSTOP,180,461,150,34,STOP);
-        save_button=control(L"BUTTON",L"Save settings",WS_TABSTOP,345,461,130,34,SAVE);
-        play_button=control(L"BUTTON",L"Play",WS_TABSTOP|BS_DEFPUSHBUTTON,490,461,130,34,PLAY);
+        stop_button=control(L"BUTTON",L"Install local server",WS_TABSTOP,152,461,130,34,STOP);
+        save_button=control(L"BUTTON",L"Save settings",WS_TABSTOP,292,461,110,34,SAVE);
+        close_checkbox=control(L"BUTTON",L"Close launcher",BS_AUTOCHECKBOX|WS_TABSTOP,412,461,120,34,CLOSE_LAUNCHER);
+        play_button=control(L"BUTTON",L"Play",WS_TABSTOP|BS_DEFPUSHBUTTON,542,461,80,34,PLAY);
+        checkbox_help(close_checkbox,L"Hide the launcher automatically once the game starts, then exit when the game closes. Leave unchecked to minimize the launcher instead.");
         update_button=control(L"BUTTON",L"Update from GitHub",WS_TABSTOP,22,505,155,30,UPDATE);
         experimental_checkbox=control(L"BUTTON",L"Use experimental releases",BS_AUTOCHECKBOX|WS_TABSTOP,195,505,420,30,EXPERIMENTAL);
         SendMessageW(experimental_checkbox,BM_SETCHECK,installed_experimental?BST_CHECKED:BST_UNCHECKED,0);
@@ -615,11 +620,13 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
         creating_languages=FALSE;
         creating_diagnostics=TRUE;
         logging_checkbox=control(L"BUTTON",L"Enable diagnostic logging",BS_AUTOCHECKBOX|WS_TABSTOP,22,26,590,32,LOGGING);
+        controls_trace=control(L"BUTTON",L"Camera diagnostic trace",BS_AUTOCHECKBOX|WS_TABSTOP,22,60,590,28,CONTROLS_TRACE);
+        checkbox_help(controls_trace,L"Write detailed camera set and camera traces to the game log. Use only for diagnostics; it adds log I/O every 90 frames.");
         for(unsigned i=0;i<LOG_CATEGORY_COUNT;i++)
-            log_checkboxes[i]=control(L"BUTTON",log_labels[i],BS_AUTOCHECKBOX|WS_TABSTOP,22+(i%2)*300,78+(i/2)*32,290,28,LOG_CATEGORY_BASE+i);
-        control(L"BUTTON",L"View update details",WS_TABSTOP,22,278,200,32,UPDATE_DETAILS);
-        control(L"BUTTON",L"Uninstall ReRiff",WS_TABSTOP,242,278,200,32,UNINSTALL);
-        restart_note(L"Restart the game or local server after logging changes",22,244,590);
+            log_checkboxes[i]=control(L"BUTTON",log_labels[i],BS_AUTOCHECKBOX|WS_TABSTOP,22+(i%2)*300,96+(i/2)*32,290,28,LOG_CATEGORY_BASE+i);
+        control(L"BUTTON",L"View update details",WS_TABSTOP,22,290,200,32,UPDATE_DETAILS);
+        control(L"BUTTON",L"Uninstall ReRiff",WS_TABSTOP,242,290,200,32,UNINSTALL);
+        restart_note(L"Restart the game or local server after logging changes",22,260,590);
         creating_diagnostics=FALSE;
         creating_lastfm=TRUE;
         lfm_account=control(L"STATIC",L"No Last.fm account linked",0,22,26,590,28,0);
@@ -689,7 +696,7 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
         checkbox_help(logging_checkbox,L"Enable diagnostic logging for the selected categories. Related diagnostics share a log. Disabling keeps your selections and existing logs. Restart the game or local server after changes. Logs may contain file paths and server addresses; review before sharing.");
         for(unsigned i=0;i<LOG_CATEGORY_COUNT;i++)
             checkbox_help(log_checkboxes[i],L"Include this category when diagnostic logging is enabled. Related components share a log. Existing logs are kept. Restart the game or local server after changes. Logs may contain file paths and server addresses; review before sharing.");
-        reload_log_controls();language_controls();select_launcher_page();
+        reload_log_controls();controls_trace_reload();language_controls();select_launcher_page();
         channel_title();local_server_controls();
         reload_settings_controls();
         SetTimer(hwnd,1,500,NULL);
@@ -706,6 +713,7 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
         switch (LOWORD(wp)) {
         case GRAPHICS_SAVE: if(!busy)graphics_save_settings();break;
         case CONTROLS_SAVE: if(!busy)controls_save_settings();break;
+        case CONTROLS_TRACE: if(!busy){BOOL ok=controls_trace_toggle();SetWindowTextW(status,ok?L"Camera diagnostic trace setting saved. Restart the game to apply.":L"Could not save the camera trace setting.");}break;
             case RERIFF_BRAND_CONTROL:
                 if(HIWORD(wp)==BN_CLICKED)ShellExecuteW(hwnd,L"open",L"https://github.com/Aftonstjarna/ReRiff",NULL,NULL,SW_SHOWNORMAL);
                 break;
@@ -757,10 +765,14 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
     if(event==WM_TIMER&&wp==1){refresh_changed_settings();if(SendMessageW(launcher_tabs,TCM_GETCURSEL,0,0)==PAGE_SCROBBLING&&SendMessageW(scrobbling_tabs,TCM_GETCURSEL,0,0)==0&&lfm_poll_due(GetTickCount()))begin(9);if(SendMessageW(launcher_tabs,TCM_GETCURSEL,0,0)==PAGE_SCROBBLING&&SendMessageW(scrobbling_tabs,TCM_GETCURSEL,0,0)==2&&libre_poll_due(GetTickCount()))begin(12);return 0;}
     if(event==WM_ACTIVATE&&LOWORD(wp)!=WA_INACTIVE)refresh_changed_settings();
     if(event==RERIFF_PROGRESS_EVENT){if(busy)progress_set_bar(launcher_progress,(int)(INT_PTR)lp);return 0;}
-    if (event==WM_GAME_RUNNING) { progress_set_bar(launcher_progress,0); SetWindowTextW(status,L"Game running. Keep the launcher open until the game closes.");ShowWindow(window,SW_MINIMIZE);return 0; }
+    if (event==WM_GAME_RUNNING) {
+        if(SendMessageW(close_checkbox,BM_GETCHECK,0,0)==BST_CHECKED){exit_after_game=TRUE;ShowWindow(hwnd,SW_HIDE);return 0;}
+        progress_set_bar(launcher_progress,0);SetWindowTextW(status,L"Game running. Keep the launcher open until the game closes.");ShowWindow(window,SW_MINIMIZE);return 0;
+    }
     if (event==WM_COMPLETE) {
         if(lp==3){MessageBoxW(hwnd,message,L"ReRiff removed",MB_OK|MB_ICONINFORMATION);DestroyWindow(hwnd);return 0;}
         if (lp==2) { DestroyWindow(hwnd);return 0; }
+        if (lp==1 && exit_after_game) { DestroyWindow(hwnd);return 0; }
         if(changing_language){settings_observed=read_settings_signature(&settings_signature);changing_language=FALSE;}
         if (lp==1) reload_settings_controls();
         requested_experimental=installed_experimental;
