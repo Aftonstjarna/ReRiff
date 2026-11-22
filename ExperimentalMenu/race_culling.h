@@ -84,7 +84,7 @@ static void race_culling_force_custom(BYTE *strip,BOOL visible){
         }
     }
 }
-static void race_culling_road_chunks_split(BYTE *base,BYTE *main,BYTE *capture_custom,int vertex_start,int vertex_end,int master_total){
+static void race_culling_road_chunks_split(BYTE *base,BYTE *main,BYTE *capture_custom,int vertex_start,int vertex_end,int master_total,void *node){
     (void)base;
     if(!race_culling_strip_ctor||!capture_custom||master_total<=0)return;
     BYTE *main_custom=*(BYTE **)(main+256);
@@ -126,6 +126,17 @@ static void race_culling_road_chunks_split(BYTE *base,BYTE *main,BYTE *capture_c
         if(!race_culling_strip_ctor(extra,0))continue;
         void *body=*(void **)(extra+264);
         if(body&&race_culling_set_collision)race_culling_set_collision(body,0);
+        /* Position this chunk's rail/sign visuals over its block range. */
+        memcpy(extra+64,main+64,72);
+        memcpy(extra+136,main+136,12);
+        memcpy(extra+216,main+216,16);
+        int start_block=(int)(ext_start/9);
+        int end_block=(int)(ext_end/9);
+        *((int *)(extra+56))=start_block;
+        *((int *)(extra+48))=0;
+        float chunk_progress=master_total>0?(float)end_block/(float)master_total:0.0f;
+        if(chunk_progress>1.0f)chunk_progress=1.0f;
+        race_culling_strip_tick(extra,1,0,chunk_progress,node);
         BYTE *custom=*(BYTE **)(extra+256);
         if(!custom||!readable(custom,180))continue;
         memcpy(custom+32,main_custom+32,16);
@@ -278,8 +289,8 @@ static void race_culling_prewarm(BYTE *base){
     if(main_road&&master_total>0&&capture_custom){
         int window_start=main_cursor-232;
         if(window_start<0)window_start=0;
-        if(window_start>0)race_culling_road_chunks_split(base,main_road,capture_custom,0,window_start*9,master_total);
-        if(main_cursor<master_total)race_culling_road_chunks_split(base,main_road,capture_custom,main_cursor*9,master_total*9,master_total);
+        if(window_start>0)race_culling_road_chunks_split(base,main_road,capture_custom,0,window_start*9,master_total,node);
+        if(main_cursor<master_total)race_culling_road_chunks_split(base,main_road,capture_custom,main_cursor*9,master_total*9,master_total,node);
     }else{
         log_line("Track prewarm deferred: road data is not ready.");
         return;
