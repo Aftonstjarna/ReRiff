@@ -36,6 +36,7 @@ namespace ReRiff {
         }
         private static Session current;
         private static LibrarySearchSnapshot library;
+        private static readonly Random random=new Random();
         [DllImport("kernel32.dll",CharSet=CharSet.Unicode,ExactSpelling=true)]
         private static extern uint GetLongPathNameW(string path,StringBuilder output,uint capacity);
         private static string LongPath(string path) {
@@ -205,7 +206,10 @@ namespace ReRiff {
         }
         private static int Select(Session session,int row) {
             if(session.Shown==null||row<0||row>=session.Shown.Length)return 0;
-            string path=session.Shown[row].Filename.Substring(4);if(!File.Exists(path))return -2;
+            return SelectSong(session,session.Shown[row]);
+        }
+        private static int SelectSong(Session session,LibrarySearchSong song) {
+            string path=song.Filename.Substring(4);if(!File.Exists(path))return -2;
             IntPtr wide=Storage(24),narrow=Storage(24),chosen=Storage(24),text=Marshal.StringToHGlobalUni(path);
             bool converted=false,constructed=false;
             try {
@@ -220,12 +224,33 @@ namespace ReRiff {
                 selected(session.Menu,chosen);return 1;
             }finally{if(constructed)narrowDtor(chosen);if(converted)narrowDtor(narrow);Marshal.FreeHGlobal(wide);Marshal.FreeHGlobal(narrow);Marshal.FreeHGlobal(chosen);Marshal.FreeHGlobal(text);}
         }
+        private static int Roll(Session session,string folder) {
+            LibrarySearchSong[] songs;
+            lock(gate){if(session.Failed)return -2;songs=session.Songs;}
+            if(songs==null)return -1;
+            string prefix=(folder??"").TrimEnd('\\');
+            if(prefix.Length>0)prefix+='\\';
+            var matches=new List<LibrarySearchSong>();
+            foreach(var song in songs) {
+                if(song==null||song.Filename==null||!song.Filename.StartsWith("hst:",StringComparison.Ordinal))continue;
+                string path=song.Filename.Substring(4);
+                if(prefix.Length>0&&!path.StartsWith(prefix,StringComparison.OrdinalIgnoreCase))continue;
+                matches.Add(song);
+            }
+            if(matches.Count==0)return 0;
+            LibrarySearchSong chosen;
+            lock(gate)chosen=matches[random.Next(matches.Count)];
+            int result=SelectSong(session,chosen);
+            if(result==1)NativeReelBridge.Log("Picker random roll: candidates="+matches.Count+" path="+chosen.Filename.Substring(4));
+            return result;
+        }
         private static int Dispatch(int operation,IntPtr menu,IntPtr text,int argument) {
             try {
                 if(operation==0){Start(menu);return 1;}
                 Session session;lock(gate)session=current;if(session==null||session.Menu!=menu)return -2;
                 if(operation==3){Close(argument!=0);return 1;}
                 if(operation==4)return Select(session,argument);
+                if(operation==6)return Roll(session,Marshal.PtrToStringUni(text)??"");
                 if(operation==1) {
                     string query=Marshal.PtrToStringUni(text)??"";
                     lock(gate){session.Query=query;session.Revision++;}

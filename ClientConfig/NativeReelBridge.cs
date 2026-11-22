@@ -20,11 +20,8 @@ namespace ReRiff {
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void Scrollbar(IntPtr reel, float x, float top, float bottom, int pcScale, IntPtr width);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void Overlay(IntPtr manager,int state);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int AlphabetJump(IntPtr menu,int letter);
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void PickerFocus(IntPtr menu,int focus);
         [DllImport("ReRiff.Notify.dll",CallingConvention=CallingConvention.Cdecl,ExactSpelling=true)]
         private static extern int ReRiffConfigurePickerAlphabet(IntPtr callback);
-        [DllImport("ReRiff.Notify.dll",CallingConvention=CallingConvention.Cdecl,ExactSpelling=true)]
-        private static extern int ReRiffConfigurePickerRandom(IntPtr callback);
         private static readonly List<Delegate> Roots = new List<Delegate>();
         private static bool attempted;
         [DllImport("ReRiff.Notify.dll", CallingConvention=CallingConvention.Cdecl, ExactSpelling=true)]
@@ -151,14 +148,6 @@ namespace ReRiff {
                     if(ReRiffConfigurePickerAlphabet(Marshal.GetFunctionPointerForDelegate(callback))!=1)throw new IOException("Picker alphabet registration refused");
                     Log("Original picker A-Z jump bound; controller alphabet integration ready.");
                 }catch(Exception error){Log("Controller alphabet shortcut unavailable; original picker unchanged: "+error);}
-                try {
-                    var focus=game.GetMethods(BindingFlags.Static|BindingFlags.Public|BindingFlags.NonPublic)
-                        .SingleOrDefault(m=>m.Name=="gaFileSelectInterface.updateFocus");
-                    if(focus==null||focus.GetParameters().Length!=2)throw new IOException("Native picker focus signature differs");
-                    Delegate focusCallback=CreateCall(focus,typeof(PickerFocus),false);Roots.Add(focusCallback);
-                    if(ReRiffConfigurePickerRandom(Marshal.GetFunctionPointerForDelegate(focusCallback))!=1)throw new IOException("Picker random registration refused");
-                    Log("Original picker R3 random-song roll bound.");
-                }catch(Exception error){Log("Picker R3 random-song roll unavailable: "+error);}
 
             } catch(DllNotFoundException) { }
               catch(EntryPointNotFoundException) { }
