@@ -10,13 +10,14 @@ Check the [ReRiff wiki](https://github.com/Aftonstjarna/ReRiff/wiki) before
 adding or expanding a repository Markdown file. Do not create a new `.md` for a
 feature, a joint project or a user-facing change when an existing wiki page can
 hold it. Repository Markdown is reserved for agent instructions, validation policy,
-durable internal contracts, component READMEs and `reports/` research notes.
-Internal architecture, port and decomp notes live in the wiki
-[developer guides](https://github.com/Aftonstjarna/ReRiff/wiki/Developers).
+durable internal contracts and component READMEs. Internal architecture, port and
+decomp notes live in the wiki [developer guides](https://github.com/Aftonstjarna/ReRiff/wiki/Developers).
+Research notes live in the wiki [Research notes](https://github.com/Aftonstjarna/ReRiff/wiki/Research).
 
 | Topic | Update |
 | --- | --- |
 | Internal architecture, port, decomp or implementation notes | [Developer guides](https://github.com/Aftonstjarna/ReRiff/wiki/Developers) |
+| Research notes, original-byte evidence, investigation limits | [Research notes](https://github.com/Aftonstjarna/ReRiff/wiki/Research); publish with `scripts/publish-research.sh` |
 | Install, update, uninstall, restore original files | [Installation](https://github.com/Aftonstjarna/ReRiff/wiki/Installation), [Updates](https://github.com/Aftonstjarna/ReRiff/wiki/Updates), [Restoring original files](https://github.com/Aftonstjarna/ReRiff/wiki/Restoring-original-files) |
 | Launcher and in-game settings | [Launcher and in-game settings](https://github.com/Aftonstjarna/ReRiff/wiki/Launcher-and-in-game-settings) |
 | Graphics, culling, free look, photo mode | [Graphics](https://github.com/Aftonstjarna/ReRiff/wiki/Graphics) |
@@ -78,7 +79,7 @@ workflow for the full list. For local work, start with the subset below.
 | `packaging/`, release metadata | `python -m unittest discover -s packaging -p test_release_metadata.py -v`; `scripts/test_client_update.py`; the release workflow for publication |
 | `ServerSync/`, `docker/`, `vendor/` | The container workflow and the protocol/checkpoint tests; `scripts/test_multiplayer_transport.py` or `scripts/test_progression_discovery.py` when the wire format moves |
 | `Shared/` | The client and server checks for every consumer |
-| `reports/` | `bash scripts/submit-decomp-research.sh reports/NOTE.md` |
+| Research notes (wiki) | `bash scripts/publish-research.sh NOTE.md`; the decomp coordinator receives the wiki snapshot for triage |
 | `.github/workflows/` | The affected workflow's manual dispatch or a pull request run; do not publish from a side branch |
 
 If a required runtime or hardware is genuinely unavailable, say which check

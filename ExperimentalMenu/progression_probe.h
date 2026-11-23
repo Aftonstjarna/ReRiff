@@ -1,5 +1,5 @@
 /* Read-only progression observation for the hash-pinned original Game.exe.
- * Original metadata/layout provenance: reports/PRESTIGE-NATIVE-BOUNDARIES.md.
+ * Original metadata/layout provenance: https://github.com/Aftonstjarna/ReRiff/wiki/Research-PRESTIGE-NATIVE-BOUNDARIES.
  * This never resets a chunk, awards anything, or changes Steam Cloud state. */
 static LONG progression_probe_started;
 static BOOL progression_probe_read(const void *source,void *target,SIZE_T size){

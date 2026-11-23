@@ -1,6 +1,6 @@
 """Write font-only native VFS volumes; never edit the original game archive.
 
-Format evidence and validation: reports/CJK-FONT-INTEGRATION.md.
+Format evidence and validation: https://github.com/Aftonstjarna/ReRiff/wiki/Research-CJK-FONT-INTEGRATION.
 """
 from pathlib import Path, PurePosixPath
 import struct

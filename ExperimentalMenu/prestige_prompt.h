@@ -1,5 +1,5 @@
 /* Manual Credits entry only; gaOptionsMenu.handleScreenInput selection 3.
- * Exact original provenance: reports/PRESTIGE-NATIVE-BOUNDARIES.md.
+ * Exact original provenance: https://github.com/Aftonstjarna/ReRiff/wiki/Research-PRESTIGE-NATIVE-BOUNDARIES.
  * Only a configured helper may register the confirmed native reset action.
  * Registration alone is insufficient: the native eligibility and callback
  * readiness checks must pass both before opening and after confirmation. */

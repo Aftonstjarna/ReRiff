@@ -75,5 +75,5 @@ An in-game regenerated-track race remains necessary to confirm the full fix.
 Existing `_v18` analysis is not rewritten: back up and regenerate affected
 tracks. Old scores/ghosts were created against different geometry; this patch
 does not migrate server history or change its source-song identity mapping.
-See [original reproduction](../reports/FLAC-SAMPLE-RATE.md). This is an analysis
+See [original reproduction](https://github.com/Aftonstjarna/ReRiff/wiki/Research-FLAC-SAMPLE-RATE). This is an analysis
 rate fix, not a replacement decoder or a direct 96 kHz DAT pipeline.

@@ -1,6 +1,6 @@
 /* Optional observation of the original race lifecycle. No audio/input changes.
  * Registration follows the managed whole-file hash guard; installation also
- * checks the original vtable/thunks. See reports/LASTFM-PLAYBACK.md. */
+ * checks the original vtable/thunks. See https://github.com/Aftonstjarna/ReRiff/wiki/Research-LASTFM-PLAYBACK. */
 typedef void (__cdecl *ScrobbleObserver)(int,int);
 static ScrobbleObserver scrobble_observer;
 static TickFn scrobble_tick_original;

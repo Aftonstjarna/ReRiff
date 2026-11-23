@@ -2,7 +2,7 @@
  * elStringManager.load RVA 24ef0, unload 25370, singleton 7fcb34.
  * load skips an identical language/bank mask; unload clears the cached mask.
  * Only before save allocation, on the synchronous startup/mount thread.
- * See reports/CAR-CAPACITY-AND-SAVE-TRACE.md. */
+ * See https://github.com/Aftonstjarna/ReRiff/wiki/Research-CAR-CAPACITY-AND-SAVE-TRACE. */
 typedef void (__thiscall *ModsStringLoad)(void *,unsigned,int);
 typedef void (__thiscall *ModsStringUnload)(void *,unsigned);
 static BOOL mods_refresh_strings(void *manager,void *save,ModsStringUnload unload,ModsStringLoad load){
