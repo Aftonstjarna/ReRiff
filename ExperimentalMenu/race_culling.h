@@ -432,6 +432,9 @@ static BOOL install_race_culling(BYTE *base){
     WCHAR *slash=wcsrchr(client,L'\\');if(slash)wcscpy(slash+1,L"client.ini");
     GetPrivateProfileStringW(L"graphics",L"disable_culling",L"false",value,16,client);
     race_culling_enabled=!_wcsicmp(value,L"true")||!_wcsicmp(value,L"yes")||!wcscmp(value,L"1");
+    GetPrivateProfileStringW(L"graphics",L"visual_retention",L"false",value,16,client);
+    BOOL visual_retention=!_wcsicmp(value,L"true")||!_wcsicmp(value,L"yes")||!wcscmp(value,L"1");
+    if(visual_retention)race_culling_enabled=TRUE;
     GetPrivateProfileStringW(L"camera",L"race_orbit_trace",L"false",value,16,client);
     race_culling_trace=!_wcsicmp(value,L"true")||!_wcsicmp(value,L"yes")||!wcscmp(value,L"1");
     if(!race_culling_enabled)return TRUE;
@@ -445,10 +448,10 @@ static BOOL install_race_culling(BYTE *base){
     race_culling_pool_expanded=expanded;
     WCHAR pool_value[16];
     GetPrivateProfileStringW(L"graphics",L"track_pool_512",L"true",pool_value,16,client);
-    BOOL use_512=!_wcsicmp(pool_value,L"true")||!_wcsicmp(pool_value,L"yes")||!wcscmp(pool_value,L"1");
+    BOOL use_512=visual_retention||!_wcsicmp(pool_value,L"true")||!_wcsicmp(pool_value,L"yes")||!wcscmp(pool_value,L"1");
     BOOL relocated=use_512?race_track_pool_install(base):FALSE;
     BOOL retained=race_culling_retain_blocks(base);
-    char detail[192];snprintf(detail,sizeof(detail),"Track culling disable enabled; trace=%d; block retention=%d; visual pool=%s.",race_culling_trace?1:0,retained?1:0,relocated?"512/127":"127");log_line(detail);
+    char detail[192];snprintf(detail,sizeof(detail),"Track visual retention enabled=%d; trace=%d; block retention=%d; visual pool=%s.",visual_retention?1:0,race_culling_trace?1:0,retained?1:0,relocated?"512/127":"127");log_line(detail);
     return TRUE;
 }
 

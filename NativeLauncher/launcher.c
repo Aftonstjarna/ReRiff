@@ -611,6 +611,7 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
         graphics_mode=control(L"COMBOBOX",L"",CBS_DROPDOWNLIST|WS_TABSTOP,190,66,370,160,0);
         graphics_choice(graphics_mode,L"Current game mode",0);graphics_choice(graphics_mode,L"Windowed",1);graphics_choice(graphics_mode,L"Borderless",2);graphics_choice(graphics_mode,L"Exclusive fullscreen",3);
         graphics_aa=control(L"BUTTON",L"Anti-aliasing",BS_AUTOCHECKBOX|WS_TABSTOP,22,110,280,28,0);
+        graphics_retention=control(L"BUTTON",L"Retain track visuals",BS_AUTOCHECKBOX|WS_TABSTOP,312,110,280,28,0);
         graphics_bloom=control(L"BUTTON",L"Bloom",BS_AUTOCHECKBOX|WS_TABSTOP,22,142,280,28,0);
         graphics_dof=control(L"BUTTON",L"Depth of field",BS_AUTOCHECKBOX|WS_TABSTOP,312,142,280,28,0);
         control(L"STATIC",L"UI scale",0,22,182,150,28,0);
@@ -624,6 +625,7 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
         checkbox_help(graphics_resolution,L"Use a display resolution reported by Windows or Proton. Current game resolution keeps the game's saved resolution. Restart the game after changes.");
         checkbox_help(graphics_mode,L"Windowed, borderless or exclusive fullscreen. Current game mode keeps the game's original saved fullscreen choice.");
         checkbox_help(graphics_aa,L"Enable ReRiff's anti-aliasing. Uses the same setting as the in-game Graphics menu.");
+        checkbox_help(graphics_retention,L"Keep the full track's road, ramps, rails and scrolling signs rendered for free look and photo mode. Uses the existing visual prewarm and retention path; restart the game after changes.");
         checkbox_help(graphics_bloom,L"Enable the game's bloom effect. This is the global default; the in-game L3+X hotkey toggles it for the current session.");
         checkbox_help(graphics_dof,L"Enable the game's depth-of-field effect. This is the global default; the in-game L3+A hotkey toggles it for the current session.");
         checkbox_help(graphics_scale,L"Matches the in-game UI scale: Automatic, or 25–100 in steps of five. 50 is the reference size.");
