@@ -14,3 +14,7 @@
   existing entry. Notes remain pending until reviewed. A coordinator integration
   receipt requires the exact note in a reachable decomp commit. Keep corrections
   alongside the original evidence rather than silently replacing its snapshot.
+- Stable, user-facing findings belong on the wiki
+  [Original game research](https://github.com/Aftonstjarna/ReRiff/wiki/Original-game-research)
+  page. Keep snapshot notes and uncertain evidence here; do not create a second
+  repository Markdown file for the same finding.
