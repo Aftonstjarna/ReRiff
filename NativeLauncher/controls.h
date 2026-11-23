@@ -100,7 +100,7 @@ static const ControllerBindingRow controls_controller_rows[CONTROLLER_BINDING_CO
     {L"guide",L"Guide",L"button:guide"},
     {L"dup",L"Menu up",L"button:dup"},{L"ddown",L"Menu down",L"button:ddown"},
     {L"dleft",L"Steer/Menu L",L"button:dleft"},{L"dright",L"Steer/Menu R",L"button:dright"},
-    {L"l3",L"Photo chord",L"button:l3"},{L"r3",L"Free look",L"button:r3"},
+    {L"l3",L"Photo mode",L"button:l3"},{L"r3",L"Free look",L"button:r3"},
     {L"lx",L"Steer/Menu",L"axis:lx"},{L"ly",L"Menu Y",L"axis:ly"},
     {L"rx",L"Look X",L"axis:rx"},{L"ry",L"Look Y",L"axis:ry"},
     {L"lt",L"Brake",L"axis:lt"},{L"rt",L"Accelerate",L"axis:rt"}
