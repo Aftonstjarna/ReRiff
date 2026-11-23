@@ -48,7 +48,7 @@ static BOOL installed_experimental=FALSE, requested_experimental=FALSE;
 static HFONT font,restart_font;
 enum { PAGE_SERVERS, PAGE_GRAPHICS, PAGE_CONTROLS, PAGE_LANGUAGES, PAGE_SCROBBLING, PAGE_DIAGNOSTICS, PAGE_COUNT };
 static HWND scrobbling_tabs,launcher_tabs,controls_tabs,latin_checkbox,language_checkbox,checkbox_tooltips,logging_checkbox;
-enum { CONTROLS_KEYBOARD, CONTROLS_CONTROLLER, CONTROLS_HOTKEYS, CONTROLS_PART_COUNT };
+enum { CONTROLS_CONTROLLER, CONTROLS_KEYBOARD, CONTROLS_HOTKEYS, CONTROLS_PART_COUNT };
 static const WCHAR *log_categories[]={L"launcher",L"connections",L"game",L"text",L"languages",L"localserver",L"update",L"installer",L"python"};
 static const WCHAR *log_labels[]={L"Launcher",L"Connections, network and news",L"Menus, progression and saves",L"Unicode and song metadata",L"Font installation",L"Local server and helper",L"Updates",L"Installer",L"Python setup"};
 #define LOG_CATEGORY_COUNT (sizeof(log_categories)/sizeof(log_categories[0]))
@@ -632,10 +632,10 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
         graphics_reload();creating_graphics=FALSE;
         controls_tabs=CreateWindowExW(0,WC_TABCONTROLW,L"",WS_CHILD|WS_TABSTOP|WS_CLIPSIBLINGS,22,40,600,28,window,NULL,GetModuleHandleW(NULL),NULL);
         SendMessageW(controls_tabs,WM_SETFONT,(WPARAM)font,TRUE);
-        tab.pszText=L"Keyboard";SendMessageW(controls_tabs,TCM_INSERTITEMW,CONTROLS_KEYBOARD,(LPARAM)&tab);
         tab.pszText=L"Controller";SendMessageW(controls_tabs,TCM_INSERTITEMW,CONTROLS_CONTROLLER,(LPARAM)&tab);
+        tab.pszText=L"Keyboard";SendMessageW(controls_tabs,TCM_INSERTITEMW,CONTROLS_KEYBOARD,(LPARAM)&tab);
         tab.pszText=L"Hotkeys";SendMessageW(controls_tabs,TCM_INSERTITEMW,CONTROLS_HOTKEYS,(LPARAM)&tab);
-        SendMessageW(controls_tabs,TCM_SETCURSEL,CONTROLS_HOTKEYS,0);
+        SendMessageW(controls_tabs,TCM_SETCURSEL,CONTROLS_CONTROLLER,0);
         creating_controls=TRUE;controls_create();creating_controls=FALSE;
         creating_languages=TRUE;
         language_checkbox=control(L"BUTTON",L"CJK fonts",BS_AUTOCHECKBOX|WS_TABSTOP,22,26,590,32,CJK_INSTALL);

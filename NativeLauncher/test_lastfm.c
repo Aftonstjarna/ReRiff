@@ -76,8 +76,8 @@ int wmain(int argc,WCHAR **argv){
         CHECK(IsWindowVisible(graphics_resolution)==(page==PAGE_GRAPHICS));
         CHECK(IsWindowVisible(graphics_bloom)==(page==PAGE_GRAPHICS));
         CHECK(IsWindowVisible(graphics_dof)==(page==PAGE_GRAPHICS));
-        CHECK(IsWindowVisible(controls_enable)==(page==PAGE_CONTROLS));
-        CHECK(IsWindowVisible(controls_photo_enable)==(page==PAGE_CONTROLS));
+        CHECK(IsWindowVisible(controls_controller_bindings[0])==(page==PAGE_CONTROLS));
+        CHECK(!IsWindowVisible(controls_photo_enable));
         CHECK(IsWindowVisible(language_checkbox)==(page==PAGE_LANGUAGES));
         CHECK(IsWindowVisible(logging_checkbox)==(page==PAGE_DIAGNOSTICS));
         CHECK(IsWindowVisible(external)==(page==PAGE_SERVERS));
@@ -97,6 +97,8 @@ int wmain(int argc,WCHAR **argv){
     graphics_reload();CHECK(graphics_value(graphics_recent)==50&&graphics_value(graphics_mode)==2);
     CHECK(SendMessageW(graphics_bloom,BM_GETCHECK,0,0)==BST_UNCHECKED);CHECK(SendMessageW(graphics_dof,BM_GETCHECK,0,0)==BST_CHECKED);
     SendMessageW(launcher_tabs,TCM_SETCURSEL,PAGE_CONTROLS,0);select_launcher_page();
+    CHECK(IsWindowVisible(controls_controller_bindings[0])&&GetFocus()==controls_controller_bindings[0]);
+    SendMessageW(controls_tabs,TCM_SETCURSEL,CONTROLS_HOTKEYS,0);select_launcher_page();
     CHECK(IsWindowVisible(controls_enable)&&GetFocus()==controls_enable);
     RECT controls_save_rect,controls_status_rect;GetWindowRect(controls_save,&controls_save_rect);GetWindowRect(status_separator,&controls_status_rect);CHECK(controls_save_rect.bottom<controls_status_rect.top);
     SendMessageW(controls_enable,BM_SETCHECK,BST_CHECKED,0);
