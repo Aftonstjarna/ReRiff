@@ -452,7 +452,7 @@
   checks, backups and rollback. Retain conflicting or modified files for review
   rather than silently replacing them. Preserve settings and saved progress.
 - Update Windows and Linux installer staging/removal handling and launcher
-  font explanations for the new layout. See docs/MODS.md for the mod format.
+  font explanations for the new layout. See the [mod loader guide](https://github.com/Aftonstjarna/ReRiff/wiki/Mod-loader) for the mod format.
 
 ### Documentation
 
@@ -467,7 +467,7 @@
   Release CI also checks native launcher/client builds and Windows helpers.
 - The native engine has 31 extra volume slots; numbered archives reserve slots
   first. Only immediate mod folders are discovered, and linked files/folders
-  are skipped. See docs/MODS.md for overflow behavior.
+  are skipped. See the [mod loader guide](https://github.com/Aftonstjarna/ReRiff/wiki/Mod-loader#development-loose-assets-and-overflow-merge) for overflow behavior.
 - Beta.10 and older loaders cannot discover the new named folders. Keep the
   migration backups when reverting. Native mount tests do not establish that
   arbitrary third-party mods render correctly.
@@ -763,7 +763,7 @@
 - Keep original and singleplayer saves separate. An explicit one-time import
   into an empty test account remains available; no automatic import occurs.
 - Include policy, protocol, account-cache and server-setup documentation in
-  `docs/MULTIPLAYER-PRESTIGE.md`. This is trusted-client progression, not
+  the [multiplayer prestige guide](https://github.com/Aftonstjarna/ReRiff/wiki/Progression-and-balance#multiplayer-prestige). This is trusted-client progression, not
   anticheat verification. Losing private account credentials can lose account
   access; gameplay since the last acknowledged save may be lost on disconnect.
 
