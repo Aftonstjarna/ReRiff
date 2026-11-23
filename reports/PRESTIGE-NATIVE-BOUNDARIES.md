@@ -1,7 +1,7 @@
 # Prestige: native achievement, save and XP boundaries
 
 Research date: 2026-11-13. Original reference:
-`/var/home/afton/Applications/SteamDepotDownloader/depots/351991/1687655/Game.exe`.
+the hash-verified `Game.exe` reference.
 SHA-256 checked directly:
 `2d1af8a01ec6b1e3477ff6dbe4a44895828e2ac71449344fec9d7d99e87a58e2`.
 Evidence is the original managed CIL surveys and PE metadata under

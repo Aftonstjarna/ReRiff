@@ -37,7 +37,7 @@ and four adjacent/unused sprite descriptors. Reads use ReadProcessMemory and
 bounded pointer/count checks. It calls no asset loader, does not enable the
 hidden row and does not modify achievement, Steam, save or UI state.
 
-The provided logo source is `/var/home/afton/.dev/ReRiff/docs/images/reriff-logo-re.png`.
+The provided logo source is `docs/images/reriff-logo-re.png`.
 It has been visually inspected but is not yet installed as native artwork.
 A live Achievements visit is required to confirm the initialized descriptor
 and row layouts before a native row/texture extension. The earlier font work

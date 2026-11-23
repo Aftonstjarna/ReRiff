@@ -1,7 +1,7 @@
 # Fresh multiplayer save allocation before native serialization
 
 Research date: 2026-11-15. Original reference:
-`/var/home/afton/Applications/SteamDepotDownloader/depots/351991/1687655/Game.exe`.
+the hash-verified `Game.exe` reference.
 Direct SHA-256: `2d1af8a01ec6b1e3477ff6dbe4a44895828e2ac71449344fec9d7d99e87a58e2`.
 Consulted RiffRacerDecomp recovery files `Decomp/native/save_device_open.S`
 and `save_device_create.S`, plus ReRiff's original CIL survey and decompiled

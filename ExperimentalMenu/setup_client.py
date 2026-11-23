@@ -146,7 +146,7 @@ def transact(game, plan, backup_dir, record_path, preserve_record=False):
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--game-dir', type=Path, required=True)
-    p.add_argument('--dotnet', default='/tmp/reriff-dotnet/dotnet')
+    p.add_argument('--dotnet', default='dotnet')
     p.add_argument('--framework-dir', type=Path, default=ROOT/'build/song-reference/dotnet452-proton1102-win64/drive_c/windows/Microsoft.NET/Framework/v4.0.30319')
     p.add_argument('--restore', action='store_true')
     p.add_argument('--dry-run', action='store_true')

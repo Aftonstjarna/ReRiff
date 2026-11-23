@@ -34,7 +34,7 @@ Addresses below are original VAs at image base `0x00400000`.
   is `0x0092D4A0`, CRT free IAT `0x0092D3A4`.
 
 Evidence: original managed IL, original instruction disassembly and Ghidra
-read-only exports in the private `/tmp/reriff-flac-research/Audio` project.
+read-only exports in a private analysis project.
 The targeted export at `0x005624B0` is an interior constructor address, not a
 separate function. No compiler-built matching-byte credit is claimed.
 

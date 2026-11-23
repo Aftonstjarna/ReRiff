@@ -6,7 +6,7 @@ matching-byte credit claimed. An in-game controller test remains necessary.
 ## Original provenance
 
 Reference: Steam depot 351991/build 1687655, from the configured
-SteamDepotDownloader original-file directory. Game.exe is 8,635,392 bytes,
+the hash-verified original-file directory. Game.exe is 8,635,392 bytes,
 SHA-256 `2d1af8a01ec6b1e3477ff6dbe4a44895828e2ac71449344fec9d7d99e87a58e2`.
 The existing local IL survey identifies that same executable hash. Its
 decompiled C# is explanatory evidence, not an exact reconstruction. IL bodies

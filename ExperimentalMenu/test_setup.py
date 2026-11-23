@@ -1,6 +1,7 @@
 """Real vanilla/modified DLL setup tests in disposable game directories."""
 import importlib.util
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -9,9 +10,9 @@ import unittest
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
-GAME = Path('/var/home/afton/.local/share/Steam/steamapps/common/Riff Racer')
+GAME = Path(os.environ.get('RIFF_RACER_DIR', Path.home()/'.local/share/Steam/steamapps/common/Riff Racer'))
 SETUP = ROOT/'ExperimentalMenu/setup_client.py'
-DOTNET = '/tmp/reriff-dotnet/dotnet'
+DOTNET = os.environ.get('DOTNET', 'dotnet')
 
 
 class ClientSetup(unittest.TestCase):

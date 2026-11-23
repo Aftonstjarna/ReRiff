@@ -53,4 +53,4 @@ matching-byte credit were made for this finding.
 
 Evidence supplied locally: `DAT bug test/44/` and `DAT bug test/96/` under the
 installed game; old decoded 96 kHz analysis retained at
-`/tmp/reriff-track-timing/eXFoJ1V4AX_v18.json` during investigation.
+`analysis/reriff-track-timing/eXFoJ1V4AX_v18.json` during investigation.

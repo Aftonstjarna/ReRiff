@@ -3,7 +3,7 @@
 ## Provenance
 
 - Original reference: Steam depot 351991/build 1687655, `Game.exe` from
-  `/var/home/afton/Applications/SteamDepotDownloader/depots/351991/1687655/`.
+  the hash-verified depot reference (see `packaging/vanilla-reference.json`).
 - SHA-256: `2d1af8a01ec6b1e3477ff6dbe4a44895828e2ac71449344fec9d7d99e87a58e2`.
 - Addresses below are original preferred VAs (image base `0x00400000`);
   ReRiff uses the corresponding RVAs at the actual loaded base.

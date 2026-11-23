@@ -1,5 +1,5 @@
 
-/var/home/afton/.local/share/Steam/steamapps/common/Riff Racer/Game.exe:     file format pei-i386
+Game.exe:     file format pei-i386
 
 
 Disassembly of section .text:
@@ -99,7 +99,7 @@ Disassembly of section .text:
   43b7ca:	5d                   	pop    ebp
   43b7cb:	c2 08 00             	ret    0x8
 
-/var/home/afton/.local/share/Steam/steamapps/common/Riff Racer/Game.exe:     file format pei-i386
+Game.exe:     file format pei-i386
 
 
 Disassembly of section .text:
@@ -236,7 +236,7 @@ Disassembly of section .text:
   43ba43:	5d                   	pop    ebp
   43ba44:	c2 04 00             	ret    0x4
 
-/var/home/afton/.local/share/Steam/steamapps/common/Riff Racer/Game.exe:     file format pei-i386
+Game.exe:     file format pei-i386
 
 
 Disassembly of section .text:
@@ -273,7 +273,7 @@ Disassembly of section .text:
   43bbbb:	5d                   	pop    ebp
   43bbbc:	c2 04 00             	ret    0x4
 
-/var/home/afton/.local/share/Steam/steamapps/common/Riff Racer/Game.exe:     file format pei-i386
+Game.exe:     file format pei-i386
 
 Contents of section .rdata:
  9f982c 009a4300 10af4300 10b04300 00bd4300  ..C...C...C...C.
