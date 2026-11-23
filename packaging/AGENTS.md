@@ -5,12 +5,12 @@ installer payload layout.
 
 ## Original-file reference
 
-- Use
-  `/var/home/afton/Applications/SteamDepotDownloader/depots/351991/1687655/` as
-  the unmodified Windows game reference for file hashes and byte comparisons.
-  `packaging/vanilla-reference.json` records its executable/DLL SHA-256 hashes,
-  sizes and Steam depot/build/manifest identifiers. Compare working copies and
-  backups against this baseline before treating them as original game files.
+- Use a hash-verified unmodified Windows game reference for file comparisons.
+  `packaging/vanilla-reference.json` records the expected executable/DLL
+  SHA-256 hashes, sizes and Steam depot/build/manifest identifiers. Compare
+  working copies and backups against that baseline before treating them as
+  original game files. The local reference path is in the private `ReRiff-dev`
+  developer notes.
 - Do not substitute an unverified download for a missing original file. Require
   a verified backup or game-file repair.
 
