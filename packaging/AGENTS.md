@@ -9,8 +9,7 @@ installer payload layout.
   `packaging/vanilla-reference.json` records the expected executable/DLL
   SHA-256 hashes, sizes and Steam depot/build/manifest identifiers. Compare
   working copies and backups against that baseline before treating them as
-  original game files. The local reference path is in the private `ReRiff-dev`
-  developer notes.
+  original game files. Use a hash-verified local reference checkout for comparisons.
 - Do not substitute an unverified download for a missing original file. Require
   a verified backup or game-file repair.
 
