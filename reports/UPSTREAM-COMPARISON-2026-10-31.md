@@ -176,3 +176,11 @@ the fixed-work table.
 ## Suggested contribution description
 
 > ReRiff extends riffapi-local-extended with configurable Windows/Proton client routing, exact-source song identity recovery for shared scores and ghosts, structured redacted tracing, a native launcher with safe local-server controls, transactional installers, automatic verified GitHub updates, and persistent tested container deployment. It retains and credits upstream's Parse-compatible persistence, API operations, authentication scaffolding, and admin interface, while documenting the remaining service and runtime limitations.
+
+## Upstream update 2026-11-23
+
+Upstream added [`b1f459c`](https://github.com/rumbadebu/riffapi-local-extended/commit/b1f459c06adac9eea8976828112773a82fcfcb3d)
+("AI written tutorial for debugging and building"). The commit adds only the
+`tutorial/` directory; the server code is unchanged from `d6b98d2`. The tutorial
+content is already represented in the ReRiff wiki Developer section, and
+`Server-Restoration` now includes the upstream commit.
