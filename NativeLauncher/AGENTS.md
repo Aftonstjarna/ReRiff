@@ -40,6 +40,16 @@ Build and run the affected `NativeLauncher/test_*.c` regression. Use
 `scripts/test_native_client.py` and the uninstall tests when their paths move.
 The authoritative matrix is `.github/workflows/launcher-checks.yml`.
 
+Uninstall and restore paths use disposable folders:
+
+```sh
+python scripts/test_uninstall.py --host /path/to/game --vanilla /path/to/depot
+```
+
+Add `--wine /path/to/wine` for the Windows helper and `--running-launcher` to
+exercise removal while a launcher fixture is running. No live game files are
+changed.
+
 Test against a separate game installation. Do not install two candidate DLL
 sets into the same live game.
 
