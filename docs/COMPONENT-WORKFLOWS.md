@@ -1,5 +1,8 @@
 # Parallel component development
 
+> Agent rules live in the root `AGENTS.md` and the component guides. Wiki-first
+> documentation and joint-project routing are in `docs/agents/README.md`.
+
 Launcher, client mod and server changes can be developed on separate branches
 and in separate Git worktrees of this repository. Give each chat its own
 worktree; switching branches inside one shared checkout does not isolate edits,
