@@ -24,11 +24,12 @@ those directories. Do not load every guide by default.
 - [Developer guides](https://github.com/Aftonstjarna/ReRiff/wiki/Developers) —
   architecture, port, decomp and internal implementation notes.
 
-User-facing behavior, setup and shared/cross-component project documentation
-belong in the [ReRiff wiki](https://github.com/Aftonstjarna/ReRiff/wiki), not in
-new repository Markdown. Component `AGENTS.md` files and `docs/agents/` are for
-agent instructions and validation policy only. Internal developer documentation
-lives in the wiki [Developer guides](https://github.com/Aftonstjarna/ReRiff/wiki/Developers).
+User-facing guides, setup and shared/cross-component guides belong in the
+[ReRiff wiki](https://github.com/Aftonstjarna/ReRiff/wiki), not in new repository
+Markdown. Component `AGENTS.md` files, `docs/agents/`, durable internal
+contracts, component READMEs and `reports/` notes stay in the repository.
+Internal architecture, port and decomp notes live in the wiki
+[Developer guides](https://github.com/Aftonstjarna/ReRiff/wiki/Developers).
 Before creating a Markdown file, read the routing table in
 `docs/agents/README.md`.
 
