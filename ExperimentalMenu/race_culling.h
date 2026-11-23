@@ -30,6 +30,7 @@ static int race_retention_pool;
 static int race_retention_block_cap;
 static int race_window_behind,race_window_ahead;
 static float race_player_distance;
+static int race_track_block_total;
 static void *race_culling_prewarm_done;
 static RaceCullingVisible race_culling_force_visible,race_culling_on_visible;
 static RaceCullingVisualVisible race_culling_visual;
@@ -46,6 +47,13 @@ static RaceCullingSetCollision race_culling_set_collision;
 static RaceCullingOperatorNew race_culling_operator_new;
 static void *race_culling_road_chunks[64];
 static unsigned race_culling_road_chunk_count;
+/* Side type-6 strips reuse the original sign tick at a shifted pace time.
+ * Each one adds a forward window of scrolling base/glow signs without
+ * touching the original strip's +268/+300 arrays or its destructor. */
+static void *race_sign_strips[4];
+static int race_sign_strip_count;
+static void *race_sign_manager;
+static BOOL race_sign_announced;
 __declspec(dllexport) int __cdecl ReRiffConfigureCullingVisible(void *callback){
     if(!callback)return 0;race_culling_visual=(RaceCullingVisualVisible)callback;return 1;
 }
@@ -193,6 +201,7 @@ static void race_culling_prewarm(BYTE *base){
         ||!readable(base+0x7dce7c,4))return;
     void *manager=*(void **)(base+0x7dce7c);
     if(!readable(manager,2728)||manager==race_culling_prewarm_done)return;
+    race_track_block_total=0;
     if(race_culling_road_chunk_count&&race_culling_prewarm_done&&manager!=race_culling_prewarm_done){
         for(unsigned i=0;i<race_culling_road_chunk_count;i++)race_culling_force_custom((BYTE *)race_culling_road_chunks[i],0);
         char detail[128];snprintf(detail,sizeof(detail),"Track prewarm reset: hid %u chunks from the previous manager.",race_culling_road_chunk_count);log_line(detail);
@@ -284,6 +293,7 @@ static void race_culling_prewarm(BYTE *base){
             }
             for(int step=0;step<=steps;step++)race_culling_strip_tick(capture,1,0,(float)step/(float)steps*max_progress,node);
             master_total=*((int *)(capture+56));
+            race_track_block_total=master_total;
             if(capture_custom&&readable(capture_custom,180))*((BYTE *)capture_custom+20)=0;
             for(int off=268;off<=300;off+=32){
                 for(int i=0;i<8;i++){
@@ -602,6 +612,239 @@ static void race_culling_trim_strip(BYTE *strip){
     *(BYTE **)(strip+156)=blocks+keep*88;
 }
 
+/* ---- Ahead scrolling signs via side type-6 strips -----------------------
+ * The original type-6 strip owns exactly 8 base + 8 glow sign visuals and
+ * tickScoreZone places them at the pace-marker time and three score-zone
+ * steps behind it. Instead of converting +268/+300 to vectors (which would
+ * also require destructor and EH changes), allocate independent type-6
+ * strips, share the live strip's spline control blocks and tick each one at
+ * a shifted pace time. Their own custom mesh and score-zone text are hidden;
+ * only the sign visuals remain. */
+static BOOL race_culling_player_state(BYTE *base,float *distance,float *progress,void **tracker_out){
+    if(!readable(base+0x7d5930,4))return FALSE;
+    void *players=*(void **)(base+0x7d5930);
+    if(!readable(players,52))return FALSE;
+    void *list=*(void **)((BYTE *)players+48);
+    if(!readable(list,4))return FALSE;
+    void *local=*(void **)list;
+    if(!readable(local,8))return FALSE;
+    void *tracker=*(void **)((BYTE *)local+4);
+    if(!readable(tracker,124))return FALSE;
+    float total=*((float *)((BYTE *)tracker+116)),position=*((float *)((BYTE *)tracker+120));
+    if(distance)*distance=position;
+    if(progress)*progress=total>0.01f?position/total:0.0f;
+    if(tracker_out)*tracker_out=tracker;
+    return TRUE;
+}
+static void *race_culling_camera_player(BYTE *base){
+    if(!readable(base+0x7cb408,4))return NULL;
+    void *manager=*(void **)(base+0x7cb408);
+    if(!readable(manager,4))return NULL;
+    void *set=((void **)manager)[0];
+    if(!readable(set,8))return NULL;
+    void *player=*(void **)((BYTE *)set+4);
+    return readable(player,76)?player:NULL;
+}
+/* gaPaceMarker.get() is ((uint*)gaRaceManager)[1]; the race manager pointer
+ * is the same global the pause check already reads. */
+static void *race_culling_pace(BYTE *base){
+    if(!readable(base+0x7d6668,4))return NULL;
+    BYTE *race=*(BYTE **)(base+0x7d6668);
+    if(!readable(race,8))return NULL;
+    void *pace=*(void **)(race+4);
+    return readable(pace,12)?pace:NULL;
+}
+static BOOL race_culling_trackgen(BYTE *base,float *song_len,float *track_len,float *zone){
+    if(!readable(base+0x7dc750,4))return FALSE;
+    BYTE *gen=*(BYTE **)(base+0x7dc750);
+    if(!gen||!readable(gen,288))return FALSE;
+    float song=*((float *)(gen+160)),length=*((float *)(gen+280)),step=*((float *)(gen+284));
+    if(song_len)*song_len=song;
+    if(track_len)*track_len=length;
+    if(zone)*zone=step;
+    return song>0.001f&&length>0.001f;
+}
+static BYTE *race_culling_sign_main(BYTE *base,void **manager_out){
+    if(!readable(base+0x7dce7c,4))return NULL;
+    void *manager=*(void **)(base+0x7dce7c);
+    if(!readable(manager,2728))return NULL;
+    void **begin=*(void ***)((BYTE *)manager+2720),**end=*(void ***)((BYTE *)manager+2724);
+    if(!begin||!end||end<begin||(size_t)((BYTE *)end-(BYTE *)begin)>256*sizeof(void *))return NULL;
+    if(manager_out)*manager_out=manager;
+    for(void **item=begin;item<end;item++){
+        BYTE *strip=(BYTE *)*item;
+        if(!readable(strip,424))continue;
+        if(*((int *)(strip+212))==6)return strip;
+    }
+    return NULL;
+}
+static void race_culling_sign_hide_extras(BYTE *strip){
+    if(!readable(strip,424))return;
+    BYTE *custom=*(BYTE **)(strip+256);
+    if(custom&&readable(custom,132)){
+        *((BYTE *)custom+20)=0;
+        *((DWORD *)((BYTE *)custom+128))=0;
+        if(race_culling_visual)race_culling_visual(custom,0);
+    }
+    for(int i=0;i<8;i++){
+        void *two=*(void **)(strip+332+i*4);
+        if(two&&readable(two,132)){
+            *((BYTE *)two+20)=0;
+            *((DWORD *)((BYTE *)two+128))=0;
+            if(race_culling_visual)race_culling_visual(two,0);
+        }
+    }
+}
+static void race_culling_sign_hide(BYTE *strip){
+    race_culling_sign_hide_extras(strip);
+    if(!readable(strip,424))return;
+    for(int off=268;off<=300;off+=32){
+        for(int i=0;i<8;i++){
+            void *sign=*(void **)(strip+off+i*4);
+            if(!sign||!readable(sign,132))continue;
+            *((BYTE *)sign+20)=0;
+            *((DWORD *)((BYTE *)sign+128))=0;
+            if(race_culling_visual)race_culling_visual(sign,0);
+        }
+    }
+}
+static void race_culling_sign_link(BYTE *strip,BYTE *main){
+    if(!readable(strip,424)||!readable(main,232))return;
+    /* Reuse the live type-6 spline and score-zone state. The side strip is
+     * never destroyed, so sharing these control blocks is safe. */
+    memcpy(strip+64,main+64,72);
+    memcpy(strip+136,main+136,12);
+    memcpy(strip+216,main+216,16);
+    /* Type 6 has no spawn case, so nothing is created by tick. Mark both
+     * side counters as already complete to skip the empty spawn loop. */
+    *((int *)(strip+56))=-1;
+    *((int *)(strip+60))=-1;
+}
+static BYTE *race_culling_sign_create(BYTE *main){
+    if(!race_culling_strip_ctor)return NULL;
+    BYTE *strip=(BYTE *)VirtualAlloc(NULL,424,MEM_COMMIT|MEM_RESERVE,PAGE_READWRITE);
+    if(!strip)return NULL;
+    if(!race_culling_strip_ctor(strip,6)){
+        VirtualFree(strip,0,MEM_RELEASE);
+        return NULL;
+    }
+    race_culling_sign_link(strip,main);
+    race_culling_sign_hide(strip);
+    return strip;
+}
+static void race_culling_sign_tick(BYTE *base){
+    if(race_retention_tier<=0||!race_culling_strip_tick||!race_culling_strip_ctor)return;
+    void *manager=NULL;
+    BYTE *main=race_culling_sign_main(base,&manager);
+    if(!main||!manager){
+        for(int i=0;i<race_sign_strip_count;i++)race_culling_sign_hide((BYTE *)race_sign_strips[i]);
+        race_sign_manager=NULL;
+        return;
+    }
+    if(race_sign_manager!=manager){
+        for(int i=0;i<race_sign_strip_count;i++)race_culling_sign_hide((BYTE *)race_sign_strips[i]);
+        race_sign_manager=manager;
+        for(int i=0;i<race_sign_strip_count;i++)race_culling_sign_link((BYTE *)race_sign_strips[i],main);
+        race_sign_announced=FALSE;
+    }
+    int want=1;
+    {
+        int ahead=race_window_ahead>0?race_window_ahead:64;
+        want=(ahead+63)/64;
+        if(want<1)want=1;
+        if(want>4)want=4;
+    }
+    while(race_sign_strip_count<want){
+        BYTE *strip=race_culling_sign_create(main);
+        if(!strip)break;
+        race_sign_strips[race_sign_strip_count++]=strip;
+    }
+    if(!race_sign_strip_count)return;
+
+    float distance=0.0f,progress=0.0f,song_len=0.0f,track_len=0.0f,zone=6.0f;
+    void *tracker=NULL;
+    if(!race_culling_player_state(base,&distance,&progress,&tracker))return;
+    if(!race_culling_trackgen(base,&song_len,&track_len,&zone))return;
+
+    /* Block distance lets the tier's ahead block window become world units.
+     * The prewarm records the measured block total for this manager. */
+    float block_distance=1.8f;
+    if(race_track_block_total>0&&track_len>0.001f)block_distance=track_len/(float)race_track_block_total;
+    if(block_distance<0.25f)block_distance=0.25f;
+    int strips=race_sign_strip_count;
+    if(strips>4)strips=4;
+    /* One strip covers the tier-1 ahead window (64 blocks). Higher tiers add
+     * more strips at the same sign density instead of stretching one strip. */
+    float step_distance=64.0f*block_distance;
+    if(step_distance<12.0f)step_distance=12.0f;
+    float window=step_distance*(float)strips;
+    float spacing=step_distance/6.0f;
+    /* Camera-relative in photo mode: centre the ahead window on the camera's
+     * projected along-track offset instead of pinning it to the car. */
+    float offset=0.0f;
+    if(race_photo_active){
+        void *player=race_culling_camera_player(base);
+        float position[3],forward[3];
+        if(player&&race_camera_player(player,position,forward)){
+            offset=(race_photo_position[0]-position[0])*forward[0]
+                  +(race_photo_position[1]-position[1])*forward[1]
+                  +(race_photo_position[2]-position[2])*forward[2];
+        }
+        offset-=window*0.5f;
+    }
+    void *node=race_culling_back_node?race_culling_back_node(tracker,NULL,NULL):NULL;
+    if(!node)return;
+    void *pace=race_culling_pace(base);
+    float *pace_time=(pace&&readable(pace,12))?(float *)((BYTE *)pace+8):NULL;
+    float *zone_slot=NULL;
+    if(readable(base+0x7dc750,4)){
+        BYTE *gen=*(BYTE **)(base+0x7dc750);
+        if(gen&&readable(gen,288))zone_slot=(float *)(gen+284);
+    }
+    /* tickScoreZone reads the global score-zone step for both its hidden mesh
+     * and the sign pairs. Temporarily widening it spreads four pairs across
+     * the strip's slice of the ahead window; restoring it keeps the live
+     * strip's own layout untouched. */
+    float saved_zone=zone;
+    for(int i=0;i<strips;i++){
+        BYTE *strip=(BYTE *)race_sign_strips[i];
+        BYTE *custom=*(BYTE **)(strip+256);
+        if(!custom||!readable(custom,180)||!*(void **)(strip+268)||!readable(*(void **)(strip+268),132))continue;
+        race_culling_sign_link(strip,main);
+        float anchor=offset+(float)(i+1)*step_distance;
+        float delta=pace_time?anchor*(song_len/track_len):0.0f;
+        float saved_time=pace_time?*pace_time:0.0f;
+        if(zone_slot)*zone_slot=spacing;
+        if(pace_time)*pace_time=saved_time+delta;
+        race_culling_strip_tick(strip,1,0,progress,node);
+        if(pace_time)*pace_time=saved_time;
+        if(zone_slot)*zone_slot=saved_zone;
+        race_culling_sign_hide_extras(strip);
+        for(int off=268;off<=300;off+=32){
+            for(int j=0;j<8;j++){
+                void *sign=*(void **)(strip+off+j*4);
+                if(sign&&readable(sign,132))*((DWORD *)((BYTE *)sign+128))=0x0FFF;
+            }
+        }
+    }
+    if(!race_sign_announced){
+        race_sign_announced=TRUE;
+        char detail[240];
+        snprintf(detail,sizeof(detail),"Sign side strips: tier=%d count=%d window=%.1f step=%.1f spacing=%.1f zone=%.1f block=%.2f photo_offset=%.1f.",
+            race_retention_tier,strips,window,step_distance,spacing,saved_zone,block_distance,offset);
+        log_line(detail);
+    }
+    if(race_culling_trace&&(race_culling_frames%120)==0){
+        void *visual=*(void **)((BYTE *)race_sign_strips[0]+268);
+        float *matrix=(visual&&readable(visual,132))?(float *)((BYTE *)visual+76):NULL;
+        char trace[280];
+        snprintf(trace,sizeof(trace),"Sign trace: strips=%d window=%.1f step=%.1f spacing=%.1f distance=%.1f pace=%.2f photo=%d sign=%.1f,%.1f,%.1f.",
+            strips,window,step_distance,spacing,distance,pace_time?*pace_time:-1.0f,race_photo_active?1:0,
+            matrix?matrix[0]:0.0f,matrix?matrix[1]:0.0f,matrix?matrix[2]:0.0f);
+        log_line(trace);
+    }
+}
+
 /* gaSegmentManager::Segment is logical track data: two node indices, a type,
  * spline values and a name. The rendered track blocks live on gaTrackStrip.
  * tickBlocks resolves each block's elVisual through strip+164; force those
@@ -706,6 +949,7 @@ static void race_culling_frame(void){
     BOOL paused=race_culling_paused(base);
     race_culling_apply(manager,paused);
     race_culling_strips(base);
+    race_culling_sign_tick(base);
     race_culling_road_chunks_apply();
     if((++race_culling_frames%10)==0){race_culling_props(base);race_culling_ramps(base);}
     if(!race_culling_trace)return;
