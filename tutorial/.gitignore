@@ -1,0 +1,4 @@
+# runtime data (contains your ghosts/scores - keep private)
+data/
+__pycache__/
+*.pyc
