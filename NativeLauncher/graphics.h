@@ -1,6 +1,6 @@
 #include "graphics_settings.h"
 /* Graphics are client-side settings; keep them in the game's client.ini. */
-static HWND graphics_resolution,graphics_mode,graphics_aa,graphics_scale,graphics_recent,graphics_save,graphics_culling,graphics_retention,graphics_bloom,graphics_dof;
+static HWND graphics_resolution,graphics_mode,graphics_aa,graphics_scale,graphics_recent,graphics_save,graphics_culling,graphics_retention,graphics_retention_value,graphics_bloom,graphics_dof;
 static const WCHAR *graphics_file(void){static WCHAR file[CAP];path(file,L"client.ini");return file;}
 static void graphics_choice(HWND box,const WCHAR *text,LPARAM value){
     LRESULT index=SendMessageW(box,CB_ADDSTRING,0,(LPARAM)text);
@@ -28,7 +28,14 @@ static void graphics_reload(void){
     graphics_select(graphics_mode,rr_fullscreen_mode(file)+1);
     SendMessageW(graphics_aa,BM_SETCHECK,graphics_bool(L"antialiasing")?BST_CHECKED:BST_UNCHECKED,0);
     if(graphics_culling)SendMessageW(graphics_culling,BM_SETCHECK,graphics_bool(L"disable_culling")?BST_CHECKED:BST_UNCHECKED,0);
-    if(graphics_retention)SendMessageW(graphics_retention,BM_SETCHECK,graphics_bool(L"visual_retention")?BST_CHECKED:BST_UNCHECKED,0);
+    if(graphics_retention){
+        int tier=GetPrivateProfileIntW(L"graphics",L"visual_retention",0,file);
+        if(tier<0)tier=0;if(tier>10)tier=10;
+        SendMessageW(graphics_retention,TBM_SETRANGE,TRUE,MAKELONG(0,10));
+        SendMessageW(graphics_retention,TBM_SETTICFREQ,1,0);
+        SendMessageW(graphics_retention,TBM_SETPOS,TRUE,tier);
+        if(graphics_retention_value){WCHAR label[16];_snwprintf(label,16,L"%d",tier);SetWindowTextW(graphics_retention_value,label);}
+    }
     SendMessageW(graphics_bloom,BM_SETCHECK,graphics_bool_default(L"bloom")?BST_CHECKED:BST_UNCHECKED,0);
     SendMessageW(graphics_dof,BM_SETCHECK,graphics_bool_default(L"depth_of_field")?BST_CHECKED:BST_UNCHECKED,0);
     graphics_select(graphics_scale,GetPrivateProfileIntW(L"graphics",L"ui_scale",0,file));
@@ -37,16 +44,17 @@ static void graphics_reload(void){
 static BOOL graphics_save_settings(void){
     LPARAM resolution=graphics_value(graphics_resolution),mode=graphics_value(graphics_mode),scale=graphics_value(graphics_scale),limit=graphics_value(graphics_recent);
     if(resolution==CB_ERR||mode==CB_ERR||scale==CB_ERR||limit==CB_ERR)return FALSE;
-    WCHAR width[16],height[16],size[16],recent[16];
+    WCHAR width[16],height[16],size[16],recent[16],retention[16];
     _snwprintf(width,16,L"%u",LOWORD(resolution));_snwprintf(height,16,L"%u",HIWORD(resolution));
     _snwprintf(size,16,L"%ld",(long)scale);_snwprintf(recent,16,L"%ld",(long)limit);
+    _snwprintf(retention,16,L"%d",graphics_retention?(int)SendMessageW(graphics_retention,TBM_GETPOS,0,0):0);
     const WCHAR *file=graphics_file();
     BOOL ok=WritePrivateProfileStringW(L"graphics",L"render_width",width,file)
         &&WritePrivateProfileStringW(L"graphics",L"render_height",height,file)
         &&rr_save_fullscreen_mode(file,(int)mode-1)
         &&WritePrivateProfileStringW(L"graphics",L"antialiasing",SendMessageW(graphics_aa,BM_GETCHECK,0,0)==BST_CHECKED?L"true":L"false",file)
         &&(!graphics_culling||WritePrivateProfileStringW(L"graphics",L"disable_culling",SendMessageW(graphics_culling,BM_GETCHECK,0,0)==BST_CHECKED?L"true":L"false",file))
-        &&(!graphics_retention||WritePrivateProfileStringW(L"graphics",L"visual_retention",SendMessageW(graphics_retention,BM_GETCHECK,0,0)==BST_CHECKED?L"true":L"false",file))
+        &&(!graphics_retention||WritePrivateProfileStringW(L"graphics",L"visual_retention",retention,file))
         &&WritePrivateProfileStringW(L"graphics",L"bloom",SendMessageW(graphics_bloom,BM_GETCHECK,0,0)==BST_CHECKED?L"true":L"false",file)
         &&WritePrivateProfileStringW(L"graphics",L"depth_of_field",SendMessageW(graphics_dof,BM_GETCHECK,0,0)==BST_CHECKED?L"true":L"false",file)
         &&WritePrivateProfileStringW(L"graphics",L"ui_scale",size,file)

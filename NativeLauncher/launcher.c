@@ -546,7 +546,7 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
         SetWindowLongPtrW(hwnd,GWL_STYLE,GetWindowLongPtrW(hwnd,GWL_STYLE)|WS_CLIPCHILDREN);
         rr_brand_icon(hwnd);
         window=hwnd;font=CreateFontW(-16,0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,0,0,CLEARTYPE_QUALITY,0,L"Segoe UI");
-        INITCOMMONCONTROLSEX common={sizeof(common),ICC_TAB_CLASSES|ICC_WIN95_CLASSES|ICC_PROGRESS_CLASS};InitCommonControlsEx(&common);
+        INITCOMMONCONTROLSEX common={sizeof(common),ICC_TAB_CLASSES|ICC_WIN95_CLASSES|ICC_PROGRESS_CLASS|ICC_BAR_CLASSES};InitCommonControlsEx(&common);
         checkbox_tooltips=CreateWindowExW(WS_EX_TOPMOST,TOOLTIPS_CLASSW,NULL,
             WS_POPUP|TTS_ALWAYSTIP|TTS_NOPREFIX,CW_USEDEFAULT,CW_USEDEFAULT,
             CW_USEDEFAULT,CW_USEDEFAULT,hwnd,NULL,GetModuleHandleW(NULL),NULL);
@@ -611,7 +611,11 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
         graphics_mode=control(L"COMBOBOX",L"",CBS_DROPDOWNLIST|WS_TABSTOP,190,66,370,160,0);
         graphics_choice(graphics_mode,L"Current game mode",0);graphics_choice(graphics_mode,L"Windowed",1);graphics_choice(graphics_mode,L"Borderless",2);graphics_choice(graphics_mode,L"Exclusive fullscreen",3);
         graphics_aa=control(L"BUTTON",L"Anti-aliasing",BS_AUTOCHECKBOX|WS_TABSTOP,22,110,280,28,0);
-        graphics_retention=control(L"BUTTON",L"Retain track visuals",BS_AUTOCHECKBOX|WS_TABSTOP,312,110,280,28,0);
+        control(L"STATIC",L"Retention",0,312,110,74,20,0);
+        graphics_retention=control(TRACKBAR_CLASSW,L"",WS_TABSTOP|TBS_AUTOTICKS|TBS_HORZ,390,106,180,32,0);
+        SendMessageW(graphics_retention,TBM_SETRANGE,TRUE,MAKELONG(0,10));
+        SendMessageW(graphics_retention,TBM_SETTICFREQ,1,0);
+        graphics_retention_value=control(L"STATIC",L"0",0,576,110,30,20,0);
         graphics_bloom=control(L"BUTTON",L"Bloom",BS_AUTOCHECKBOX|WS_TABSTOP,22,142,280,28,0);
         graphics_dof=control(L"BUTTON",L"Depth of field",BS_AUTOCHECKBOX|WS_TABSTOP,312,142,280,28,0);
         control(L"STATIC",L"UI scale",0,22,182,150,28,0);
@@ -625,7 +629,7 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
         checkbox_help(graphics_resolution,L"Use a display resolution reported by Windows or Proton. Current game resolution keeps the game's saved resolution. Restart the game after changes.");
         checkbox_help(graphics_mode,L"Windowed, borderless or exclusive fullscreen. Current game mode keeps the game's original saved fullscreen choice.");
         checkbox_help(graphics_aa,L"Enable ReRiff's anti-aliasing. Uses the same setting as the in-game Graphics menu.");
-        checkbox_help(graphics_retention,L"Keep the full track's road, ramps, rails and scrolling signs rendered for free look and photo mode. Uses the existing visual prewarm and retention path; restart the game after changes.");
+        checkbox_help(graphics_retention,L"0 keeps vanilla culling and memory use. 1 adds a minimal behind and ahead visual window. 10 uses the maximum 512-block visual window. Higher values keep more road, ramps, rails and scrolling signs for free look and photo mode. Restart the game to apply.");
         checkbox_help(graphics_bloom,L"Enable the game's bloom effect. This is the global default; the in-game L3+X hotkey toggles it for the current session.");
         checkbox_help(graphics_dof,L"Enable the game's depth-of-field effect. This is the global default; the in-game L3+A hotkey toggles it for the current session.");
         checkbox_help(graphics_scale,L"Matches the in-game UI scale: Automatic, or 25–100 in steps of five. 50 is the reference size.");
@@ -806,6 +810,7 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
         }return 0;
     }
     if(event==WM_KEYDOWN&&(controls_capture_key((int)wp)||controls_key_capture_key((int)wp)))return 0;
+    if(event==WM_HSCROLL&&(HWND)lp==graphics_retention){WCHAR label[16];_snwprintf(label,16,L"%d",(int)SendMessageW(graphics_retention,TBM_GETPOS,0,0));SetWindowTextW(graphics_retention_value,label);return 0;}
     if(event==WM_TIMER&&wp==CONTROLS_CAPTURE_TIMER){controls_capture_tick();return 0;}
     if(event==WM_TIMER&&wp==KEYBOARD_CAPTURE_TIMER){controls_key_capture_tick();return 0;}
     if(event==WM_TIMER&&wp==1){refresh_changed_settings();if(SendMessageW(launcher_tabs,TCM_GETCURSEL,0,0)==PAGE_SCROBBLING&&SendMessageW(scrobbling_tabs,TCM_GETCURSEL,0,0)==0&&lfm_poll_due(GetTickCount()))begin(9);if(SendMessageW(launcher_tabs,TCM_GETCURSEL,0,0)==PAGE_SCROBBLING&&SendMessageW(scrobbling_tabs,TCM_GETCURSEL,0,0)==2&&libre_poll_due(GetTickCount()))begin(12);return 0;}

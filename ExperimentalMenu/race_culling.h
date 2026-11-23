@@ -25,6 +25,9 @@ static unsigned race_culling_block_unique,race_culling_block_duplicate;
 static float race_culling_block_min,race_culling_block_max;
 static BOOL race_culling_pool_expanded;
 static BOOL race_track_pool_relocated;
+static int race_retention_tier;
+static int race_retention_pool;
+static int race_retention_block_cap;
 static void *race_culling_prewarm_done;
 static RaceCullingVisible race_culling_force_visible,race_culling_on_visible;
 static RaceCullingVisualVisible race_culling_visual;
@@ -215,7 +218,7 @@ static void race_culling_prewarm(BYTE *base){
         if(type!=8&&type!=9)continue;
         void **pool_begin=*(void ***)(strip+164),**pool_end=*(void ***)(strip+168);
         unsigned pool=pool_begin&&pool_end&&pool_end>=pool_begin?(unsigned)(pool_end-pool_begin):0;
-        if(pool<512)small++;
+        if(pool<(unsigned)race_retention_pool)small++;
     }
     if(small){
         char detail[160];snprintf(detail,sizeof(detail),"Track prewarm skipped: %u large strips still have a small pool.",small);log_line(detail);
@@ -225,6 +228,9 @@ static void race_culling_prewarm(BYTE *base){
     float total=*((float *)((BYTE *)tracker+116)),position=*((float *)((BYTE *)tracker+120));
     float current=total>0.01f?position/total:0.0f;
     if(!(current>=0.0f&&current<=1.0f))current=0.0f;
+    int steps=race_retention_tier>0?race_retention_tier*10:100;
+    float max_progress=(float)steps/100.0f;
+    if(current>max_progress)current=max_progress;
     unsigned strips=0;
     BYTE *main_road=NULL;
     int main_cursor=0;
@@ -239,7 +245,7 @@ static void race_culling_prewarm(BYTE *base){
             strips++;
             continue;
         }
-        for(int step=0;step<=100;step++)race_culling_strip_tick(strip,1,0,step/100.0f,node);
+        for(int step=0;step<=steps;step++)race_culling_strip_tick(strip,1,0,(float)step/(float)steps*max_progress,node);
         race_culling_strip_tick(strip,1,0,current,node);
         BYTE *custom=*(BYTE **)(strip+256);
         if(race_culling_context_dirty&&custom&&readable(custom,180)){
@@ -274,7 +280,7 @@ static void race_culling_prewarm(BYTE *base){
                     *(BYTE **)(capture_custom+164)=vbig+(size_t)cap*40;
                 }
             }
-            for(int step=0;step<=100;step++)race_culling_strip_tick(capture,1,0,step/100.0f,node);
+            for(int step=0;step<=steps;step++)race_culling_strip_tick(capture,1,0,(float)step/(float)steps*max_progress,node);
             master_total=*((int *)(capture+56));
             if(capture_custom&&readable(capture_custom,180))*((BYTE *)capture_custom+20)=0;
             for(int off=268;off<=300;off+=32){
@@ -304,7 +310,7 @@ static void race_culling_prewarm(BYTE *base){
  * prewarm. Relocate its IL to a copy whose three ldc.i4.s 64 sites use
  * ldc.i4 512, then point the MethodDef RVA at the copy. The original body
  * stays in place as a fallback for any path that already compiled it. */
-static BOOL race_track_pool_install(BYTE *base){
+static BOOL race_track_pool_install(BYTE *base,int pool){
     static BOOL attempted,installed;
     if(attempted)return installed;
     attempted=TRUE;
@@ -342,7 +348,18 @@ static BOOL race_track_pool_install(BYTE *base){
         log_line("Track ctor relocation: in-image body range is not writable.");
         return FALSE;
     }
-    memcpy(memory,race_track_ctor_blob,RERIFF_TRACK_CTOR_BLOB_SIZE);
+    static BYTE body[RERIFF_TRACK_CTOR_BLOB_SIZE];
+    memcpy(body,race_track_ctor_blob,sizeof(body));
+    if(pool!=512){
+        int replaced=0;
+        for(unsigned i=0;i+5<=sizeof(body);i++){
+            if(body[i]==0x20&&body[i+1]==0x00&&body[i+2]==0x02&&body[i+3]==0x00&&body[i+4]==0x00){
+                *(int *)(body+i+1)=pool;replaced++;break;
+            }
+        }
+        if(replaced!=1)log_line("Track ctor pool patch: expected one 512 immediate; using the blob value.");
+    }
+    memcpy(memory,body,sizeof(body));
     VirtualProtect(memory,RERIFF_TRACK_CTOR_BLOB_SIZE,old,&ignored);
     DWORD rva=(DWORD)(memory-base);
     if(!VirtualProtect(slot,4,PAGE_READWRITE,&old)){
@@ -353,8 +370,8 @@ static BOOL race_track_pool_install(BYTE *base){
     VirtualProtect(slot,4,old,&ignored);
     FlushInstructionCache(GetCurrentProcess(),memory,RERIFF_TRACK_CTOR_BLOB_SIZE);
     char readback[128];snprintf(readback,sizeof(readback),"Track ctor RVA readback=%08X.",(unsigned)*slot);log_line(readback);
-    char line[192];snprintf(line,sizeof(line),"Track ctor relocated: RVA %08X -> %08X, pool=512 for types 8/9 and 127 otherwise, blob=%u bytes.",
-        0x271e78u,(unsigned)rva,(unsigned)RERIFF_TRACK_CTOR_BLOB_SIZE);log_line(line);
+    char line[192];snprintf(line,sizeof(line),"Track ctor relocated: RVA %08X -> %08X, large pool=%d, small pool=127, blob=%u bytes.",
+        0x271e78u,(unsigned)rva,pool,(unsigned)RERIFF_TRACK_CTOR_BLOB_SIZE);log_line(line);
     installed=TRUE;
     race_track_pool_relocated=TRUE;
     return TRUE;
@@ -431,10 +448,12 @@ static BOOL install_race_culling(BYTE *base){
     WCHAR client[MAX_PATH];wcsncpy(client,config_path,MAX_PATH-1);client[MAX_PATH-1]=0;
     WCHAR *slash=wcsrchr(client,L'\\');if(slash)wcscpy(slash+1,L"client.ini");
     GetPrivateProfileStringW(L"graphics",L"disable_culling",L"false",value,16,client);
-    race_culling_enabled=!_wcsicmp(value,L"true")||!_wcsicmp(value,L"yes")||!wcscmp(value,L"1");
-    GetPrivateProfileStringW(L"graphics",L"visual_retention",L"false",value,16,client);
-    BOOL visual_retention=!_wcsicmp(value,L"true")||!_wcsicmp(value,L"yes")||!wcscmp(value,L"1");
-    if(visual_retention)race_culling_enabled=TRUE;
+    BOOL disable_culling=!_wcsicmp(value,L"true")||!_wcsicmp(value,L"yes")||!wcscmp(value,L"1");
+    int tier=GetPrivateProfileIntW(L"graphics",L"visual_retention",0,client);
+    if(tier<0)tier=0;if(tier>10)tier=10;
+    race_retention_tier=tier;
+    BOOL visual_retention=tier>0;
+    race_culling_enabled=disable_culling||visual_retention;
     GetPrivateProfileStringW(L"camera",L"race_orbit_trace",L"false",value,16,client);
     race_culling_trace=!_wcsicmp(value,L"true")||!_wcsicmp(value,L"yes")||!wcscmp(value,L"1");
     if(!race_culling_enabled)return TRUE;
@@ -448,10 +467,13 @@ static BOOL install_race_culling(BYTE *base){
     race_culling_pool_expanded=expanded;
     WCHAR pool_value[16];
     GetPrivateProfileStringW(L"graphics",L"track_pool_512",L"true",pool_value,16,client);
-    BOOL use_512=visual_retention||!_wcsicmp(pool_value,L"true")||!_wcsicmp(pool_value,L"yes")||!wcscmp(pool_value,L"1");
-    BOOL relocated=use_512?race_track_pool_install(base):FALSE;
+    BOOL use_pool=visual_retention||!_wcsicmp(pool_value,L"true")||!_wcsicmp(pool_value,L"yes")||!wcscmp(pool_value,L"1");
+    int pool=visual_retention?128+((tier-1)*384)/9:512;
+    race_retention_pool=pool;
+    race_retention_block_cap=visual_retention?pool:0;
+    BOOL relocated=use_pool?race_track_pool_install(base,pool):FALSE;
     BOOL retained=race_culling_retain_blocks(base);
-    char detail[192];snprintf(detail,sizeof(detail),"Track visual retention enabled=%d; trace=%d; block retention=%d; visual pool=%s.",visual_retention?1:0,race_culling_trace?1:0,retained?1:0,relocated?"512/127":"127");log_line(detail);
+    char detail[192];snprintf(detail,sizeof(detail),"Track visual retention tier=%d; trace=%d; block retention=%d; large pool=%d; block cap=%d.",tier,race_culling_trace?1:0,retained?1:0,relocated?pool:0,race_retention_block_cap);log_line(detail);
     return TRUE;
 }
 
@@ -528,6 +550,35 @@ static void race_culling_ramps(BYTE *base){
     }
 }
 
+/* Bound the retained visual blocks to the selected performance tier. The
+ * original erase is suppressed by the retention patch, so trim the oldest
+ * blocks here and hide their pool visuals before shifting the vector down. */
+static void race_culling_trim_strip(BYTE *strip){
+    int cap=race_retention_block_cap;
+    if(cap<=0)return;
+    BYTE *blocks=*(BYTE **)(strip+152),*blocks_end=*(BYTE **)(strip+156);
+    if(!blocks||!blocks_end||blocks_end<blocks||((size_t)(blocks_end-blocks)%88))return;
+    size_t count=(size_t)(blocks_end-blocks)/88;
+    if(count<=(size_t)cap)return;
+    size_t drop=count-(size_t)cap;
+    void **visuals=*(void ***)(strip+164);
+    if(visuals){
+        for(size_t i=0;i<drop;i++){
+            int index=*((int *)(blocks+i*88+80));
+            if(index<0)continue;
+            void **slot=(void **)((BYTE *)visuals+index*4);
+            if(!readable(slot,4))continue;
+            void *visual=*slot;
+            if(!visual||!readable(visual,132))continue;
+            *((BYTE *)visual+20)=0;
+            *((DWORD *)((BYTE *)visual+128))=0;
+            if(race_culling_visual)race_culling_visual(visual,0);
+        }
+    }
+    memmove(blocks,blocks+drop*88,(count-drop)*88);
+    *(BYTE **)(strip+156)=blocks+(count-drop)*88;
+}
+
 /* gaSegmentManager::Segment is logical track data: two node indices, a type,
  * spline values and a name. The rendered track blocks live on gaTrackStrip.
  * tickBlocks resolves each block's elVisual through strip+164; force those
@@ -548,6 +599,7 @@ static void race_culling_strips(BYTE *base){
     for(void **item=begin;item<end;item++){
         BYTE *strip=(BYTE *)*item;
         if(!readable(strip,424))continue;
+        race_culling_trim_strip(strip);
         /* The custom road/wall/zone mesh is one elVisualCustom at strip+256.
          * When the road is split into chunks the original type-0 mesh is
          * hidden; everything else is forced visible and its fade window is
