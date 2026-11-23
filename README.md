@@ -131,7 +131,9 @@ License: The Unlicense (public domain) - see LICENSE.
 
 ## Shared-song identity
 
-[Song synchronization](docs/SONG-SYNC.md) lets compatible clients link cached song
-IDs for identical source audio, sharing existing scores and ghosts without
-rewriting stored history. Stock clients retain their previous behavior; automatic
-linking requires the documented registration handshake.
+[Song synchronization](docs/SONG-SYNC.md) lets compatible clients group cached
+song IDs by normalized artist/title, with source hashes retained as evidence, so
+differently encoded copies share existing scores and ghosts without rewriting
+stored history. Unlabelled audio falls back to exact-source matching. Stock
+clients retain their previous behavior; automatic linking requires the
+documented registration handshake.
