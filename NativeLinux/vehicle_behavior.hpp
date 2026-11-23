@@ -2,7 +2,8 @@
 #include "driving.hpp"
 #include <array>
 
-// Direct ports from this installation's Game.exe. See PHYSICS-RECOVERY.md for
+// Direct ports from this installation's Game.exe. See
+// https://github.com/Aftonstjarna/ReRiff/wiki/Developer-Native-Linux-Physics-recovery for
 // MethodDef/RVA evidence and the unchanged-executable comparison harness.
 // These routines consume real caller state; they do not integrate a substitute body.
 namespace reriff::drive {

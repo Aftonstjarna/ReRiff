@@ -306,7 +306,7 @@
 
 - Update build-only Pillow to 13.0.0 and fontTools to 4.60.2, including the
   experimental image-build workflows. These address the dependency advisories
-  recorded in docs/SECURITY-TRIAGE-2026-11-16.md; they are not client runtime
+  recorded in https://github.com/Aftonstjarna/ReRiff/wiki/Developer-Security-triage-2026-11-16; they are not client runtime
   Python dependencies.
 
 ### Validation and known limitations

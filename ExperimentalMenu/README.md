@@ -1,7 +1,7 @@
 # Experimental in-process server menu
 
 **Superseded Windows-panel prototype.** The requested engine-rendered menu is
-implemented separately in [ENGINE-MENU.md](ENGINE-MENU.md), built with
+implemented separately in [engine menu guide](https://github.com/Aftonstjarna/ReRiff/wiki/Developer-Engine-menu), built with
 `build-engine.sh`. The panel below does not satisfy the in-game menu requirement.
 
 Branch: `codex/experimental-client` in ReRiff. Matching EXE recovery stays
