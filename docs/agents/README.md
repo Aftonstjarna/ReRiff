@@ -9,11 +9,14 @@ project documentation.
 Check the [ReRiff wiki](https://github.com/Aftonstjarna/ReRiff/wiki) before
 adding or expanding a repository Markdown file. Do not create a new `.md` for a
 feature, a joint project or a user-facing change when an existing wiki page can
-hold it. Repository Markdown is reserved for agent instructions, validation
-policy and durable internal contracts.
+hold it. Repository Markdown is reserved for agent instructions, validation policy,
+durable internal contracts, component READMEs and `reports/` research notes.
+Internal architecture, port and decomp notes live in the wiki
+[developer guides](https://github.com/Aftonstjarna/ReRiff/wiki/Developers).
 
 | Topic | Update |
 | --- | --- |
+| Internal architecture, port, decomp or implementation notes | [Developer guides](https://github.com/Aftonstjarna/ReRiff/wiki/Developers) |
 | Install, update, uninstall, restore original files | [Installation](https://github.com/Aftonstjarna/ReRiff/wiki/Installation), [Updates](https://github.com/Aftonstjarna/ReRiff/wiki/Updates), [Restoring original files](https://github.com/Aftonstjarna/ReRiff/wiki/Restoring-original-files) |
 | Launcher and in-game settings | [Launcher and in-game settings](https://github.com/Aftonstjarna/ReRiff/wiki/Launcher-and-in-game-settings) |
 | Graphics, culling, free look, photo mode | [Graphics](https://github.com/Aftonstjarna/ReRiff/wiki/Graphics) |
@@ -85,7 +88,8 @@ been run, and do not describe an inference as a measurement.
 ## Worktrees and artifacts
 
 - Use one Git worktree per component when work can proceed in parallel. The
-  workflow details are in `docs/COMPONENT-WORKFLOWS.md`.
+  workflow details are in the
+  [developer workflow guide](https://github.com/Aftonstjarna/ReRiff/wiki/Developer-Component-workflows).
 - Keep `build/`, `dist/`, backups, game logs, downloaded tools, profiling dumps
   and local captures out of the tracked tree.
 - Check free storage before large builds, captures or model/tool downloads.

@@ -16,7 +16,7 @@ These are behavioral findings, not newly byte-matching reconstructed source.
   minimized high word therefore takes its activation branch. Normalizing the
   activation code preserves the native 0x0048D240 deactivation routine, which
   clears the active byte +0x140, keyboard bytes and mouse states.
-- Existing recovery in Decomp/native/WORKER.md covers the synchronized reset
+- Existing recovery in https://github.com/Aftonstjarna/ReRiff/wiki/Developer-Decomp-Native-worker covers the synchronized reset
   requests and original window sizing at 0x0048CB30. Preserve that reset path;
   restore frame/position with the currently selected client size, rather than
   restoring dimensions captured before a resolution change.

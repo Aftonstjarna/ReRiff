@@ -6,7 +6,7 @@ SHA-256 checked directly:
 `2d1af8a01ec6b1e3477ff6dbe4a44895828e2ac71449344fec9d7d99e87a58e2`.
 Evidence is the original managed CIL surveys and PE metadata under
 `analysis/native-port/il/` and `decompiled/Module.cs`. Consulted recovery
-`Decomp/native/STARTUP.md`, `save_device_io.S`, `save_device_open.S` and
+`https://github.com/Aftonstjarna/ReRiff/wiki/Developer-Decomp-Native-startup`, `save_device_io.S`, `save_device_open.S` and
 `save_device_set_name.S`. This is ReRiff integration research; no matching-byte
 credit or complete original-source reconstruction is claimed.
 

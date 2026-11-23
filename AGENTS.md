@@ -21,12 +21,16 @@ those directories. Do not load every guide by default.
 - [`packaging/AGENTS.md`](packaging/AGENTS.md) — release metadata, changelog,
   packaging and publication.
 - [`reports/AGENTS.md`](reports/AGENTS.md) — decomp research handoff.
+- [Developer guides](https://github.com/Aftonstjarna/ReRiff/wiki/Developers) —
+  architecture, port, decomp and internal implementation notes.
 
 User-facing behavior, setup and shared/cross-component project documentation
 belong in the [ReRiff wiki](https://github.com/Aftonstjarna/ReRiff/wiki), not in
 new repository Markdown. Component `AGENTS.md` files and `docs/agents/` are for
-agent instructions and validation policy only. Before creating a Markdown file,
-read the routing table in `docs/agents/README.md`.
+agent instructions and validation policy only. Internal developer documentation
+lives in the wiki [Developer guides](https://github.com/Aftonstjarna/ReRiff/wiki/Developers).
+Before creating a Markdown file, read the routing table in
+`docs/agents/README.md`.
 
 ## Working rules
 

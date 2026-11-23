@@ -6,7 +6,7 @@ SHA-256 verified during this investigation:
 `2d1af8a01ec6b1e3477ff6dbe4a44895828e2ac71449344fec9d7d99e87a58e2`.
 Evidence: local original CIL surveys in `analysis/native-port/il/` and
 `analysis/native-port/decompiled/Module.cs`. Consulted recovery project's
-`Decomp/native/WORKER.md`; no prestige implementation was located there.
+`https://github.com/Aftonstjarna/ReRiff/wiki/Developer-Decomp-Native-worker`; no prestige implementation was located there.
 This is feasibility research, not a matching reconstruction or tested patch.
 
 ## Requested behavior

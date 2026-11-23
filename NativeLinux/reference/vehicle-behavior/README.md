@@ -10,4 +10,4 @@ Microsoft x86 CLR, not by the C++ implementation under test. The row layouts
 are defined by that writer and `test_vehicle_behavior.cpp`. Every test group
 must be complete; the reader also checks the capture hash before comparing.
 
-See [recovery details and regeneration](../../PHYSICS-RECOVERY.md).
+See [recovery details and regeneration](https://github.com/Aftonstjarna/ReRiff/wiki/Developer-Native-Linux-Physics-recovery).
