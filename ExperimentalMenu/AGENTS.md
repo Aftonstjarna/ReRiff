@@ -25,7 +25,7 @@ the launcher's shared headers. Managed helpers live in `ClientConfig/`.
   byte-for-byte original reconstruction and do not claim matching without
   comparison.
 - Keep patch sites, fallback behavior and validation in the code and in the
-  matching `reports/` note. Do not describe a patch as original behavior.
+  matching wiki Research page. Do not describe a patch as original behavior.
 - Preserve the original executable and assembly contracts. A patch that changes
   an IL body, method RVA or metadata token needs the affected callers and
   unload/error paths checked.
@@ -59,7 +59,7 @@ Do not skip a test and report only a caveat.
   [Graphics](https://github.com/Aftonstjarna/ReRiff/wiki/Graphics).
 - Original-game reconstruction and patch findings: wiki
   [Original game research](https://github.com/Aftonstjarna/ReRiff/wiki/Original-game-research)
-  and `reports/`.
+  and the [Research notes](https://github.com/Aftonstjarna/ReRiff/wiki/Research).
 - In-game settings and controls: wiki
   [Launcher and in-game settings](https://github.com/Aftonstjarna/ReRiff/wiki/Launcher-and-in-game-settings).
 - Search, music and progression UI: the matching wiki page.

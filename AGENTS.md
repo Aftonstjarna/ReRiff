@@ -20,18 +20,20 @@ those directories. Do not load every guide by default.
   promotion and upstream restoration.
 - [`packaging/AGENTS.md`](packaging/AGENTS.md) — release metadata, changelog,
   packaging and publication.
-- [`reports/AGENTS.md`](reports/AGENTS.md) — decomp research handoff.
+- [Research notes](https://github.com/Aftonstjarna/ReRiff/wiki/Research) —
+  original evidence, investigation limits and decomp research.
 - [Developer guides](https://github.com/Aftonstjarna/ReRiff/wiki/Developers) —
   architecture, port, decomp and internal implementation notes.
 
 User-facing guides, setup and shared/cross-component guides belong in the
 [ReRiff wiki](https://github.com/Aftonstjarna/ReRiff/wiki), not in new repository
 Markdown. Component `AGENTS.md` files, `docs/agents/`, durable internal
-contracts, component READMEs and `reports/` notes stay in the repository.
-Internal architecture, port and decomp notes live in the wiki
+contracts and component READMEs stay in the repository. Internal architecture,
+port and decomp notes live in the wiki
 [Developer guides](https://github.com/Aftonstjarna/ReRiff/wiki/Developers).
-Before creating a Markdown file, read the routing table in
-`docs/agents/README.md`.
+Research notes live in the wiki [Research notes](https://github.com/Aftonstjarna/ReRiff/wiki/Research);
+publish them with `scripts/publish-research.sh`. Before creating a Markdown file,
+read the routing table in `docs/agents/README.md`.
 
 ## Working rules
 

@@ -2,7 +2,7 @@
 """Build a local-only Pulse clone in the unused dod slot from owned stock assets.
 
 Does not install, launch, or change saves. Do not distribute the generated assets.
-Native layouts: NativeLinux/archive.hpp and reports/CAR-CAPACITY-AND-SAVE-TRACE.md.
+Native layouts: NativeLinux/archive.hpp and https://github.com/Aftonstjarna/ReRiff/wiki/Research-CAR-CAPACITY-AND-SAVE-TRACE.
 """
 import argparse
 import copy

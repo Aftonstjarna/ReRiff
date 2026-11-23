@@ -1,6 +1,6 @@
 /* Opt-in Unicode diagnostics and native fallback experiments.
- * Original hash/bytes and ABI evidence: reports/UNICODE-TEXT-TRACE.md
- * and reports/CJK-FONT-INTEGRATION.md. */
+ * Original hash/bytes and ABI evidence: https://github.com/Aftonstjarna/ReRiff/wiki/Research-UNICODE-TEXT-TRACE
+ * and https://github.com/Aftonstjarna/ReRiff/wiki/Research-CJK-FONT-INTEGRATION. */
 #include <stdarg.h>
 static BYTE *unicode_base;
 static WCHAR unicode_log_path[MAX_PATH];

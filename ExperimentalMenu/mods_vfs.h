@@ -1,5 +1,5 @@
 /* Reuse the original directory scanner and secondary VFS mount pass.
- * See reports/MODS-VFS-DIRECTORY.md for original-byte provenance and ABI. */
+ * See https://github.com/Aftonstjarna/ReRiff/wiki/Research-MODS-VFS-DIRECTORY for original-byte provenance and ABI. */
 typedef struct ModsNativeString {
     union { WCHAR small[8];const WCHAR *text; } data;
     unsigned length,capacity;

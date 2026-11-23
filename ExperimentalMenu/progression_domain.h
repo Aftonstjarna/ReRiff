@@ -1,6 +1,6 @@
 /* Opt-in singleplayer save-domain prototype. Original serialization, chunk
  * lifecycle and native I/O are retained. No prestige/reset/reward hooks here.
- * Native provenance: reports/PRESTIGE-NATIVE-BOUNDARIES.md. */
+ * Native provenance: https://github.com/Aftonstjarna/ReRiff/wiki/Research-PRESTIGE-NATIVE-BOUNDARIES. */
 typedef BYTE (__thiscall *ProgressExistsFn)(void *,const char *);
 typedef BYTE (__thiscall *ProgressCreateFn)(void *,const char *,DWORD);
 typedef BYTE (__thiscall *ProgressOpenFn)(void *,const char *,DWORD);

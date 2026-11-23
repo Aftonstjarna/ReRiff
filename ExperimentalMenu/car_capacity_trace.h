@@ -1,5 +1,5 @@
 /* Read-only car capacity and save-state observations. No native calls or writes.
- * Verified layouts: reports/CAR-CAPACITY-AND-SAVE-TRACE.md. */
+ * Verified layouts: https://github.com/Aftonstjarna/ReRiff/wiki/Research-CAR-CAPACITY-AND-SAVE-TRACE. */
 #include <stdarg.h>
 static LONG car_trace_started;
 static BOOL car_trace_append(char *out,size_t size,size_t *used,const char *format,...){
