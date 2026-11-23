@@ -747,6 +747,11 @@ static void race_culling_sign_tick(BYTE *base){
         for(int i=0;i<race_sign_strip_count;i++)race_culling_sign_link((BYTE *)race_sign_strips[i],main);
         race_sign_announced=FALSE;
     }
+    float distance=0.0f,progress=0.0f,song_len=0.0f,track_len=0.0f,zone=6.0f;
+    void *tracker=NULL;
+    if(!race_culling_player_state(base,&distance,&progress,&tracker))return;
+    if(!race_culling_trackgen(base,&song_len,&track_len,&zone))return;
+
     int want=1;
     {
         int ahead=race_window_ahead>0?race_window_ahead:64;
@@ -760,11 +765,6 @@ static void race_culling_sign_tick(BYTE *base){
         race_sign_strips[race_sign_strip_count++]=strip;
     }
     if(!race_sign_strip_count)return;
-
-    float distance=0.0f,progress=0.0f,song_len=0.0f,track_len=0.0f,zone=6.0f;
-    void *tracker=NULL;
-    if(!race_culling_player_state(base,&distance,&progress,&tracker))return;
-    if(!race_culling_trackgen(base,&song_len,&track_len,&zone))return;
 
     /* Block distance lets the tier's ahead block window become world units.
      * The prewarm records the measured block total for this manager. */
