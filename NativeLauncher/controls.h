@@ -819,8 +819,8 @@ static void controls_create(void){
         int column=i<7?0:i<13?1:2;
         int row=i<7?i:i<13?i-7:i-13;
         int x=6+column*216,y=22+row*26;
-        control(L"STATIC",controls_controller_rows[i].label,0,x,y+2,94,24,0);
-        controls_controller_bindings[i]=control(L"BUTTON",L"",BS_OWNERDRAW|WS_TABSTOP,x+96,y,112,24,CONTROLLER_CAPTURE_BASE+i);
+        control(L"STATIC",controls_controller_rows[i].label,SS_LEFTNOWORDWRAP,x,y+2,100,22,0);
+        controls_controller_bindings[i]=control(L"BUTTON",L"",BS_OWNERDRAW|WS_TABSTOP,x+102,y,108,24,CONTROLLER_CAPTURE_BASE+i);
         controls_capture_button_old_proc=(WNDPROC)SetWindowLongPtrW(controls_controller_bindings[i],GWLP_WNDPROC,(LONG_PTR)controls_capture_button_proc);
     }
     controls_controller_enabled=control(L"BUTTON",L"Enable controller remapping",BS_AUTOCHECKBOX|WS_TABSTOP,290,210,350,28,0);
