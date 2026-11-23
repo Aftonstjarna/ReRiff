@@ -10,7 +10,7 @@ source reconstruction credit. No live recovery checkout was modified.
 ## Original provenance
 
 Windows depot 351991/build 1687655, immutable reference:
-`/var/home/afton/Applications/SteamDepotDownloader/depots/351991/1687655/`.
+`$VANILLA` (see `packaging/vanilla-reference.json`).
 Game.exe SHA-256:
 `2d1af8a01ec6b1e3477ff6dbe4a44895828e2ac71449344fec9d7d99e87a58e2`.
 The fixture verifies this hash before mapping original code.

@@ -9,7 +9,7 @@ int main(int argc, char **argv) {
         fs::path game = home / ".local/share/Steam/steamapps/common/Riff Racer",
                  prefix = root / "build/song-reference/dotnet452-proton1102-win64",
                  wine = home / ".local/share/Steam/steamapps/common/Proton 11.0/files/bin/wine",
-                 dotnet = "/tmp/reriff-dotnet/dotnet", output,
+                 dotnet = std::getenv("DOTNET") ? std::getenv("DOTNET") : "dotnet", output,
                  reference = root / "analysis/native-port/original-rolling-on", nodes,
                  playback = root / "analysis/native-port/song-17sjwbbsrv-dance-alf/song.rplay";
         std::string mode = argv[1], song = "Rolling On", genre = "dance";

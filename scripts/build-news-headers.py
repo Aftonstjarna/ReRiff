@@ -5,7 +5,7 @@ import subprocess
 
 root = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--dotnet', default='/tmp/reriff-dotnet/dotnet')
+parser.add_argument('--dotnet', default='dotnet')
 parser.add_argument('--framework-dir', type=Path, required=True)
 parser.add_argument('--input', type=Path, default=root/'build/Parse.NetFx45.dll')
 args = parser.parse_args()

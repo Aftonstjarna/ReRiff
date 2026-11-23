@@ -30,7 +30,7 @@ visibility and actual Game.exe/Steam-Proton integration require a live test.
 From the project workspace:
 
 ```sh
-distrobox enter development -- bash /var/home/afton/.dev/ReRiff/ExperimentalMenu/build.sh
+distrobox enter development -- bash ExperimentalMenu/build.sh
 ```
 
 Pass a Zig binary path as the script's first argument if the local cached tool

@@ -1,5 +1,5 @@
 
-/var/home/afton/.local/share/Steam/steamapps/common/Riff Racer/Game.exe:     file format pei-i386
+Game.exe:     file format pei-i386
 
 
 Disassembly of section .text:

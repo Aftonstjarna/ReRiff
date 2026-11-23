@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-zig_tool=${1:-/tmp/reriff-zig/zig-x86_64-linux-0.14.1/zig}
+zig_tool=${1:-${ZIG:-zig}}
 export ZIG_GLOBAL_CACHE_DIR=/tmp/reriff-menu-zig-global
 export ZIG_LOCAL_CACHE_DIR=/tmp/reriff-menu-zig-local
 menu_version=$(cat VERSION)

@@ -1,7 +1,7 @@
 # Prestige using original progression and garage systems
 
 Research date: 2026-11-13. Original Windows reference:
-`/var/home/afton/Applications/SteamDepotDownloader/depots/351991/1687655/Game.exe`.
+the hash-verified `Game.exe` reference.
 SHA-256 verified during this investigation:
 `2d1af8a01ec6b1e3477ff6dbe4a44895828e2ac71449344fec9d7d99e87a58e2`.
 Evidence: local original CIL surveys in `analysis/native-port/il/` and

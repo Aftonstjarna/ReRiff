@@ -94,7 +94,7 @@ fixture coverage rather than an owner-confirmed over-limit live rendering test.
 ### RiffRacer Customs loose-export integration
 
 The maintained standalone authoring checkout is
-`/var/mnt/512GB-SSD1/reriff-livery-standalone`. The older ReRiff-worktree
+`$LIVERY_TOOL`. The older ReRiff-worktree
 `LiveryMaker/` was not substituted for this newer Windows/Linux tool.
 Existing unrelated GUI/preview edits were preserved.
 

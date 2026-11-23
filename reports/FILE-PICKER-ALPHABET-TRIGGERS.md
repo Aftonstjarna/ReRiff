@@ -2,7 +2,7 @@
 
 ## Provenance
 
-Original Windows Game.exe from SteamDepotDownloader depot 351991/build 1687655:
+Original Windows Game.exe from the hash-verified depot 351991/build 1687655:
 SHA-256 `2d1af8a01ec6b1e3477ff6dbe4a44895828e2ac71449344fec9d7d99e87a58e2`, 8,635,392 bytes. Recovery notes and the previous failed wraparound investigation were consulted. This is research and an intentional ReRiff integration, not a byte-matching reconstruction.
 
 ## Existing keyboard path
