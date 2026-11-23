@@ -28,6 +28,8 @@ static BOOL race_track_pool_relocated;
 static int race_retention_tier;
 static int race_retention_pool;
 static int race_retention_block_cap;
+static int race_window_behind,race_window_ahead;
+static float race_player_distance;
 static void *race_culling_prewarm_done;
 static RaceCullingVisible race_culling_force_visible,race_culling_on_visible;
 static RaceCullingVisualVisible race_culling_visual;
@@ -471,9 +473,12 @@ static BOOL install_race_culling(BYTE *base){
     int pool=visual_retention?128+((tier-1)*384)/9:512;
     race_retention_pool=pool;
     race_retention_block_cap=visual_retention?pool:0;
+    race_window_behind=visual_retention?pool/2:0;
+    race_window_ahead=visual_retention?pool-race_window_behind:0;
     BOOL relocated=use_pool?race_track_pool_install(base,pool):FALSE;
     BOOL retained=race_culling_retain_blocks(base);
-    char detail[192];snprintf(detail,sizeof(detail),"Track visual retention tier=%d; trace=%d; block retention=%d; large pool=%d; block cap=%d.",tier,race_culling_trace?1:0,retained?1:0,relocated?pool:0,race_retention_block_cap);log_line(detail);
+    char detail[220];snprintf(detail,sizeof(detail),"Track visual retention tier=%d; trace=%d; block retention=%d; large pool=%d; window=%d behind + %d ahead.",
+        tier,race_culling_trace?1:0,retained?1:0,relocated?pool:0,race_window_behind,race_window_ahead);log_line(detail);
     return TRUE;
 }
 
@@ -550,33 +555,51 @@ static void race_culling_ramps(BYTE *base){
     }
 }
 
-/* Bound the retained visual blocks to the selected performance tier. The
- * original erase is suppressed by the retention patch, so trim the oldest
- * blocks here and hide their pool visuals before shifting the vector down. */
+/* Bound the retained visual blocks to the tier's behind + ahead window. The
+ * original erase is suppressed by the retention patch, so trim here and hide
+ * the pool visuals that leave the window before compacting the block vector. */
+static float race_culling_player_distance(BYTE *base){
+    if(!readable(base+0x7d5930,4))return 0.0f;
+    void *players=*(void **)(base+0x7d5930);
+    if(!readable(players,52))return 0.0f;
+    void *list=*(void **)((BYTE *)players+48);
+    if(!readable(list,4))return 0.0f;
+    void *local=*(void **)list;
+    if(!readable(local,8))return 0.0f;
+    void *tracker=*(void **)((BYTE *)local+4);
+    if(!readable(tracker,124))return 0.0f;
+    return *((float *)((BYTE *)tracker+120));
+}
+static void race_culling_hide_block(BYTE *blocks,BYTE *block,void **visuals){
+    int index=*((int *)(block+80));
+    if(index<0||!visuals)return;
+    void **slot=(void **)((BYTE *)visuals+index*4);
+    if(!readable(slot,4))return;
+    void *visual=*slot;
+    if(!visual||!readable(visual,132))return;
+    *((BYTE *)visual+20)=0;
+    *((DWORD *)((BYTE *)visual+128))=0;
+    if(race_culling_visual)race_culling_visual(visual,0);
+    (void)blocks;
+}
 static void race_culling_trim_strip(BYTE *strip){
-    int cap=race_retention_block_cap;
-    if(cap<=0)return;
+    if(race_window_behind<=0&&race_window_ahead<=0)return;
     BYTE *blocks=*(BYTE **)(strip+152),*blocks_end=*(BYTE **)(strip+156);
     if(!blocks||!blocks_end||blocks_end<blocks||((size_t)(blocks_end-blocks)%88))return;
     size_t count=(size_t)(blocks_end-blocks)/88;
-    if(count<=(size_t)cap)return;
-    size_t drop=count-(size_t)cap;
+    if(!count)return;
+    size_t player_index=0;
+    while(player_index<count&&*((float *)(blocks+player_index*88+76))<race_player_distance)player_index++;
+    size_t keep_start=player_index>(size_t)race_window_behind?player_index-(size_t)race_window_behind:0;
+    size_t keep_end=player_index+(size_t)race_window_ahead;
+    if(keep_end>count)keep_end=count;
+    if(keep_start==0&&keep_end==count)return;
     void **visuals=*(void ***)(strip+164);
-    if(visuals){
-        for(size_t i=0;i<drop;i++){
-            int index=*((int *)(blocks+i*88+80));
-            if(index<0)continue;
-            void **slot=(void **)((BYTE *)visuals+index*4);
-            if(!readable(slot,4))continue;
-            void *visual=*slot;
-            if(!visual||!readable(visual,132))continue;
-            *((BYTE *)visual+20)=0;
-            *((DWORD *)((BYTE *)visual+128))=0;
-            if(race_culling_visual)race_culling_visual(visual,0);
-        }
-    }
-    memmove(blocks,blocks+drop*88,(count-drop)*88);
-    *(BYTE **)(strip+156)=blocks+(count-drop)*88;
+    for(size_t i=0;i<keep_start;i++)race_culling_hide_block(blocks,blocks+i*88,visuals);
+    for(size_t i=keep_end;i<count;i++)race_culling_hide_block(blocks,blocks+i*88,visuals);
+    size_t keep=keep_end-keep_start;
+    memmove(blocks,blocks+keep_start*88,keep*88);
+    *(BYTE **)(strip+156)=blocks+keep*88;
 }
 
 /* gaSegmentManager::Segment is logical track data: two node indices, a type,
@@ -596,6 +619,7 @@ static void race_culling_strips(BYTE *base){
     void **begin=*(void ***)((BYTE *)manager+2720),**end=*(void ***)((BYTE *)manager+2724);
     if(!begin||!end||end<begin||(size_t)((BYTE *)end-(BYTE *)begin)>256*sizeof(void *))return;
     race_culling_strip_count=(unsigned)(end-begin);
+    race_player_distance=race_culling_player_distance(base);
     for(void **item=begin;item<end;item++){
         BYTE *strip=(BYTE *)*item;
         if(!readable(strip,424))continue;
