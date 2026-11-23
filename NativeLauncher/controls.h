@@ -36,7 +36,7 @@ static const KeyboardActionRow controls_keyboard_rows[KEYBOARD_ACTION_COUNT]={
     {L"mouse_look",L"Mouse look (ReRiff)",0,KEYBOARD_MOUSE,VK_RBUTTON}
 };
 static HWND controls_controller_enabled;
-#define CONTROLLER_BINDING_COUNT 21
+#define CONTROLLER_BINDING_COUNT 19
 static HWND controls_controller_bindings[CONTROLLER_BINDING_COUNT];
 
 /* ------------------------------------------------------------------ */
@@ -96,16 +96,21 @@ typedef struct { const WCHAR *key,*label,*def; } ControllerBindingRow;
 static const ControllerBindingRow controls_controller_rows[CONTROLLER_BINDING_COUNT]={
     {L"a",L"Boost",L"button:a"},{L"b",L"Cancel",L"button:b"},
     {L"x",L"Drift",L"button:x"},{L"y",L"Camera",L"button:y"},
-    {L"lb",L"Unused (LB)",L"none"},{L"rb",L"Unused (RB)",L"none"},
     {L"back",L"Restart",L"button:back"},{L"start",L"Pause",L"button:start"},
-    {L"l3",L"Photo chord",L"button:l3"},{L"r3",L"Free look",L"button:r3"},
     {L"guide",L"Guide",L"button:guide"},
     {L"dup",L"Menu up",L"button:dup"},{L"ddown",L"Menu down",L"button:ddown"},
     {L"dleft",L"Steer/Menu L",L"button:dleft"},{L"dright",L"Steer/Menu R",L"button:dright"},
+    {L"l3",L"Photo chord",L"button:l3"},{L"r3",L"Free look",L"button:r3"},
     {L"lx",L"Steer/Menu",L"axis:lx"},{L"ly",L"Menu Y",L"axis:ly"},
     {L"rx",L"Look X",L"axis:rx"},{L"ry",L"Look Y",L"axis:ry"},
     {L"lt",L"Brake",L"axis:lt"},{L"rt",L"Accelerate",L"axis:rt"}
 };
+static BOOL controls_controller_axis_row(int row){
+    if(row<0||row>=CONTROLLER_BINDING_COUNT)return FALSE;
+    const WCHAR *key=controls_controller_rows[row].key;
+    return !_wcsicmp(key,L"lx")||!_wcsicmp(key,L"ly")||!_wcsicmp(key,L"rx")||
+           !_wcsicmp(key,L"ry")||!_wcsicmp(key,L"lt")||!_wcsicmp(key,L"rt");
+}
 
 static int controls_name_index(const WCHAR *name,const WCHAR **names,int count){
     for(int i=0;i<count;i++)if(!_wcsicmp(name,names[i]))return i;
@@ -410,7 +415,7 @@ static void controls_capture_tick(void){
             int sign=i>=4?1:(value<0?-1:1);
             /* A virtual axis stores the physical axis direction, not an
              * inversion. Y conversion happens once in the proxy. */
-            if(controls_capture_row>=15)sign=1;
+            if(controls_controller_axis_row(controls_capture_row))sign=1;
             controls_capture_store(BINDING_AXIS,i,sign);
             return;
         }
@@ -748,6 +753,8 @@ static BOOL controls_save_settings(void){
         controls_binding_canonical(i,binding,64);
         ok=WritePrivateProfileStringW(L"controller",controls_controller_rows[i].key,binding,controls_ini)!=0;
     }
+    if(ok)ok=WritePrivateProfileStringW(L"controller",L"lb",L"none",controls_ini)!=0;
+    if(ok)ok=WritePrivateProfileStringW(L"controller",L"rb",L"none",controls_ini)!=0;
     SetWindowTextW(status,ok?L"Input and camera settings saved. Restart the game to apply changes.":L"Could not save all input settings. Please try again.");
     return ok;
 }
@@ -809,7 +816,8 @@ static void controls_create(void){
      * Three columns keep the table clear of the launcher status area. */
     controls_part=CONTROLS_CONTROLLER;
     for(int i=0;i<CONTROLLER_BINDING_COUNT;i++){
-        int column=i/7,row=i%7;
+        int column=i<7?0:i<13?1:2;
+        int row=i<7?i:i<13?i-7:i-13;
         int x=6+column*216,y=22+row*26;
         control(L"STATIC",controls_controller_rows[i].label,0,x,y+2,94,24,0);
         controls_controller_bindings[i]=control(L"BUTTON",L"",BS_OWNERDRAW|WS_TABSTOP,x+96,y,112,24,CONTROLLER_CAPTURE_BASE+i);

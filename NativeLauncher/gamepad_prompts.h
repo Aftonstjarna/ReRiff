@@ -114,7 +114,7 @@ static BOOL gamepad_prompt_draw(const DRAWITEMSTRUCT *draw) {
     } else {
         int glyphs[CONTROLS_MAX_CHORD];
         int glyph_count = 0;
-        BOOL directional = row < 15;
+        BOOL directional = !controls_controller_axis_row(row);
         for (int i = 0; i < controls_binding_count[row]; i++) {
             int glyph = -1;
             if (controls_binding_kind[row][i] == BINDING_BUTTON)

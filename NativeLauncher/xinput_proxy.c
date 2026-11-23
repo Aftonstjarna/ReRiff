@@ -221,6 +221,9 @@ static void load_mapping(void) {
     mapping_ready = 1;
     for (int i = 0; i < VIRTUAL_BUTTON_COUNT; i++) identity_button(&button_map[i], i);
     for (int i = 0; i < 6; i++) identity_axis(&axis_map[i], i);
+    /* The game does not map LB/RB, so leave those virtual buttons unbound. */
+    button_map[9].count = 0;
+    button_map[10].count = 0;
     if (!dll_dir[0]) return;
     WCHAR ini[MAX_PATH];
     wcsncpy(ini, dll_dir, MAX_PATH - 1);
@@ -231,6 +234,7 @@ static void load_mapping(void) {
     mapping_enabled = !_wcsicmp(value, L"1") || !_wcsicmp(value, L"true") || !_wcsicmp(value, L"yes");
     int overrides = 0;
     for (int i = 0; i < VIRTUAL_BUTTON_COUNT; i++) {
+        if (i == 9 || i == 10) continue; /* LB/RB are unused by the game. */
         WCHAR key[16];
         MultiByteToWideChar(CP_UTF8, 0, virtual_button_names[i], -1, key, 16);
         DWORD got = GetPrivateProfileStringW(L"controller", key, L"", value, 128, ini);
