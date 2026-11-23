@@ -689,8 +689,9 @@ static void race_culling_sign_hide_extras(BYTE *strip){
     for(int i=0;i<8;i++){
         void *two=*(void **)(strip+332+i*4);
         if(two&&readable(two,132)){
+            /* elVisual2d shares elVisual's visible byte at +20. Do not touch
+             * +128 here; that mask belongs to the 3D visual layout. */
             *((BYTE *)two+20)=0;
-            *((DWORD *)((BYTE *)two+128))=0;
             if(race_culling_visual)race_culling_visual(two,0);
         }
     }
@@ -706,6 +707,25 @@ static void race_culling_sign_hide(BYTE *strip){
             *((DWORD *)((BYTE *)sign+128))=0;
             if(race_culling_visual)race_culling_visual(sign,0);
         }
+    }
+}
+/* tickScoreZone always writes the base sign transform but only toggles the
+ * glow's visibility, so re-enable each placed base sign after the side tick.
+ * A zero translation means the slot has never been placed (the ctor leaves
+ * the matrix at identity); leave that one hidden. */
+static void race_culling_sign_present(BYTE *strip){
+    for(int i=0;i<8;i++){
+        void *base=*(void **)(strip+268+i*4);
+        if(base&&readable(base,132)){
+            float *translation=(float *)((BYTE *)base+76);
+            if(translation[0]!=0.0f||translation[1]!=0.0f||translation[2]!=0.0f){
+                *((BYTE *)base+20)=1;
+                if(race_culling_visual)race_culling_visual(base,1);
+            }
+            *((DWORD *)((BYTE *)base+128))=0x0FFF;
+        }
+        void *glow=*(void **)(strip+300+i*4);
+        if(glow&&readable(glow,132))*((DWORD *)((BYTE *)glow+128))=0x0FFF;
     }
 }
 static void race_culling_sign_link(BYTE *strip,BYTE *main){
@@ -820,12 +840,7 @@ static void race_culling_sign_tick(BYTE *base){
         if(pace_time)*pace_time=saved_time;
         if(zone_slot)*zone_slot=saved_zone;
         race_culling_sign_hide_extras(strip);
-        for(int off=268;off<=300;off+=32){
-            for(int j=0;j<8;j++){
-                void *sign=*(void **)(strip+off+j*4);
-                if(sign&&readable(sign,132))*((DWORD *)((BYTE *)sign+128))=0x0FFF;
-            }
-        }
+        race_culling_sign_present(strip);
     }
     if(!race_sign_announced){
         race_sign_announced=TRUE;
