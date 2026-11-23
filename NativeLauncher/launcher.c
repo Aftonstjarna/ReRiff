@@ -368,7 +368,7 @@ static void begin(int action) {
 }
 
 static HWND control(const WCHAR *cls,const WCHAR *text,DWORD style,int x,int y,int w,int h,int id) {
-    HWND handle=CreateWindowExW(0,cls,text,WS_CHILD|WS_VISIBLE|style,x,y+34+((creating_lastfm||creating_listenbrainz||creating_libre)?24:0)+(creating_controls?58:0),w,h,window,(HMENU)(INT_PTR)id,GetModuleHandleW(NULL),NULL);
+    HWND handle=CreateWindowExW(0,cls,text,WS_CHILD|WS_VISIBLE|style,x,y+34+((creating_lastfm||creating_listenbrainz||creating_libre)?24:0)+(creating_controls?18:0),w,h,window,(HMENU)(INT_PTR)id,GetModuleHandleW(NULL),NULL);
     /* Use the standard edit border under Wine. Its themed focus decoration
      * can remain visible above unrelated windows after the launcher loses focus.
      * Keep the native EDIT control, keyboard focus and text handling. */

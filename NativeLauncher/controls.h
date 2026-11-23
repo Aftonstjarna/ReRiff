@@ -815,11 +815,11 @@ static void controls_create(void){
     /* Controller: click a row, then press the physical SDL control to bind.
      * Three columns keep the table clear of the launcher status area. */
     controls_part=CONTROLS_CONTROLLER;
-    controls_controller_enabled=control(L"BUTTON",L"Enable controller remapping",BS_AUTOCHECKBOX|WS_TABSTOP,6,18,300,26,0);
+    controls_controller_enabled=control(L"BUTTON",L"Enable controller remapping",BS_AUTOCHECKBOX|WS_TABSTOP,6,20,300,26,0);
     for(int i=0;i<CONTROLLER_BINDING_COUNT;i++){
         int column=i<7?0:i<13?1:2;
         int row=i<7?i:i<13?i-7:i-13;
-        int x=6+column*216,y=50+row*25;
+        int x=9+column*216,y=50+row*25;
         control(L"STATIC",controls_controller_rows[i].label,SS_LEFTNOWORDWRAP,x,y+2,100,22,0);
         controls_controller_bindings[i]=control(L"BUTTON",L"",BS_OWNERDRAW|WS_TABSTOP,x+102,y,108,24,CONTROLLER_CAPTURE_BASE+i);
         controls_capture_button_old_proc=(WNDPROC)SetWindowLongPtrW(controls_controller_bindings[i],GWLP_WNDPROC,(LONG_PTR)controls_capture_button_proc);
@@ -827,7 +827,7 @@ static void controls_create(void){
     controls_save=control(L"BUTTON",L"Save settings",WS_TABSTOP,14,228,140,30,CONTROLS_SAVE);
     checkbox_help(control(L"BUTTON",L"Defaults",WS_TABSTOP,162,228,120,30,CONTROLS_DEFAULTS),L"Restore the vanilla controller mapping. LB and RB are unused by default. Save settings to apply.");
     checkbox_help(controls_controller_enabled,L"Enable the SDL3 XInput proxy remap table. Restart the game after saving. The game receives the virtual controls selected on this tab. Chords such as L3+R3 require every listed button.");
-    restart_note(L"Click a binding, press one button or a chord, then release. Delete clears it.",300,230,340);
+    restart_note(L"Click a binding, press one button or a chord, then release. Delete clears it.",14,260,630);
     controls_reload();
 }
 #endif
