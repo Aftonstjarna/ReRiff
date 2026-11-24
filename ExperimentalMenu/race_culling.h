@@ -961,7 +961,7 @@ static void race_culling_strips(BYTE *base){
         BYTE *strip=(BYTE *)*item;
         if(!readable(strip,424))continue;
         int type=*((int *)(strip+212));
-        if(photo_progress>=0.0f&&photo_node&&type>=8&&type<=12
+        if(photo_progress>=0.0f&&photo_node&&type!=0
             &&race_culling_strip_tick)race_culling_strip_tick(strip,1,0,photo_progress,photo_node);
         race_culling_trim_strip(strip);
         /* The custom road/wall/zone mesh is one elVisualCustom at strip+256.
