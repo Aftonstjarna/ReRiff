@@ -524,6 +524,24 @@ static BOOL race_culling_retain_walls(BYTE *base){
     }
     return ok;
 }
+
+/* Keep intact gaPropNodes in the active list without bypassing their tick.
+ * The manager erases a node when tick() returns false. Let tick run, then make
+ * its normal return path return true; destroyed pieces are already hidden by
+ * the node itself and by the piece visibility rules above. */
+static BOOL race_culling_retain_node_tick(BYTE *base){
+    BYTE *site=base+0x29e7d3;
+    static const BYTE expected[]={0x11,0x05,0xd2,0x2a};
+    if(!readable(site,sizeof(expected))||memcmp(site,expected,sizeof(expected)))return FALSE;
+    DWORD old,ignored;
+    if(!VirtualProtect(site,sizeof(expected),PAGE_READWRITE,&old))return FALSE;
+    site[0]=0x17; /* ldc.i4.1 */
+    site[1]=0x2a; /* ret */
+    site[2]=0x00;
+    site[3]=0x00;
+    VirtualProtect(site,sizeof(expected),old,&ignored);
+    return TRUE;
+}
 static BOOL install_race_culling(BYTE *base){
     WCHAR value[16];
     WCHAR client[MAX_PATH];wcsncpy(client,config_path,MAX_PATH-1);client[MAX_PATH-1]=0;
@@ -558,8 +576,9 @@ static BOOL install_race_culling(BYTE *base){
     BOOL relocated=use_pool?race_track_pool_install(base,pool):FALSE;
     BOOL retained=race_culling_retain_blocks(base);
     BOOL walls=race_culling_retain_walls(base);
-    char detail[240];snprintf(detail,sizeof(detail),"Track visual retention tier=%d; trace=%d; block retention=%d; wall retention=%d; large pool=%d; window=%d behind + %d ahead.",
-        tier,race_culling_trace?1:0,retained?1:0,walls?1:0,relocated?pool:0,race_window_behind,race_window_ahead);log_line(detail);
+    BOOL nodes=race_culling_retain_node_tick(base);
+    char detail[260];snprintf(detail,sizeof(detail),"Track visual retention tier=%d; trace=%d; block retention=%d; wall retention=%d; prop-node retention=%d; large pool=%d; window=%d behind + %d ahead.",
+        tier,race_culling_trace?1:0,retained?1:0,walls?1:0,nodes?1:0,relocated?pool:0,race_window_behind,race_window_ahead);log_line(detail);
     return TRUE;
 }
 
