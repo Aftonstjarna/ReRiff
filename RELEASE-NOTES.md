@@ -1,3 +1,23 @@
+# ReRiff 1.5.0-beta.7 — Track visual retention
+
+## In-game summary
+
+- Visual retention 0–10 keeps more road, wall and prop scenery loaded.
+- Road chunks render from below; ramps and edge barriers stay loaded.
+- Launcher labels and tooltips now use setting names.
+
+## Full release notes
+
+- Add the launcher and `client.ini` `[graphics] visual_retention` setting, 0–10. 0 is vanilla; higher tiers use a larger visual pool and a symmetric behind/ahead block window. Tier 10 uses the largest window the tier ladder drives. Restart required.
+- Split the captured road mesh into full-track chunks, including the pre-start range. Each chunk carries both triangle windings so the road is solid from below, and the live road mesh is hidden while chunks are present.
+- Retain the type 2/3 edge barrier behind the car by enlarging the wall vertex pool and skipping the triangle erase, so the barrier accumulates over the driven track.
+- Keep type 8/9 block visuals and the active prop/prop-node vectors in the retention pass. Props and nodes removed by `gaPropManager` are re-added from a live snapshot with a vtable check; exploded props are excluded and broken prop-node pieces keep their hidden state.
+- Clear the visual frustum-cull flag for retained blocks, props, ramps and sign bases, and force two-sided D3D9 rendering while retention is active, so ramp backs, wall backs and the road underside stay visible.
+- Leave score-zone scrolling rails and type-10 special blocks vanilla in this beta; they are not part of the retention scope yet.
+- Name launcher and installer controls by function: button and checkbox text is the setting name, tooltips state scope, values and restart requirements, and long policy text moved out of the UI.
+- Validation: packaging release-metadata tests, client-update tests, UI asset exports, launcher/setup build, native retention regressions, and the release workflow's launcher, client and Windows-loader checks. Live testing covered free look and photo-mode road, wall, ramp, fan and breakable-wall retention; destructible prop coverage can still vary by track.
+- Known limitations: prop and destructible-wall retention is best-effort; type-10 special blocks and score-zone rails remain vanilla; retention applies to the experimental channel only.
+
 # ReRiff 1.5.0-beta.6 — Shuffle picker and permanent-level bar fix
 
 ## In-game summary
