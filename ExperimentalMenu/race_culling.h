@@ -25,6 +25,7 @@ static unsigned race_culling_block_unique,race_culling_block_duplicate;
 static float race_culling_block_min,race_culling_block_max;
 static BOOL race_culling_pool_expanded;
 static BOOL race_track_pool_relocated;
+static BYTE *race_track_pool_base;
 static int race_retention_tier;
 static int race_retention_pool;
 static int race_retention_block_cap;
@@ -319,9 +320,26 @@ static void race_culling_prewarm(BYTE *base){
 }
 
 /* The constructor's own 64-slot pool is far too small for the photo-mode
- * prewarm. Relocate its IL to a copy whose three ldc.i4.s 64 sites use
- * ldc.i4 512, then point the MethodDef RVA at the copy. The original body
- * stays in place as a fallback for any path that already compiled it. */
+ * prewarm. Relocate its IL to a copy whose three ldc.i4.s 64 sites use the
+ * tier-sized pool, then point the MethodDef RVA at the copy. The original body
+ * stays in place, expanded to 127 slots, as a fallback for any path that
+ * already compiled it or if the copy cannot be installed safely.
+ *
+ * A method RVA must stay inside the mapped PE image, and the rewritten body is
+ * 10760 bytes, so it fits no inter-section gap. The zero tail of .data looked
+ * free, but the game's static objects and arenas reuse it; the JIT then read
+ * an overwritten header and track load failed with BadImageFormatException
+ * "Invalid method header format 1". Place the copy in .reloc instead: the
+ * loader consumes the base relocation records before this runs, no runtime
+ * code reads them again, and the section lies inside both SizeOfRawData and
+ * VirtualSize for every PE reader. */
+static BYTE *race_track_ctor_image_slot(BYTE *base){
+    /* .reloc spans RVA 0x854000..0x885000. Stay clear of its first page so
+     * the choice does not depend on the blob size. */
+    static const DWORD rva=0x855000;
+    BYTE *memory=base+rva;
+    return readable(memory,RERIFF_TRACK_CTOR_BLOB_SIZE)?memory:NULL;
+}
 static BOOL race_track_pool_install(BYTE *base,int pool){
     static BOOL attempted,installed;
     if(attempted)return installed;
@@ -335,26 +353,12 @@ static BOOL race_track_pool_install(BYTE *base,int pool){
         char line[160];snprintf(line,sizeof(line),"Track ctor relocation skipped: MethodDef RVA is %08X.",(unsigned)*slot);log_line(line);
         return FALSE;
     }
-    /* The CLR rejects method RVAs outside the mapped image ("Method has zero
-     * rva"), so the relocated body has to live inside the image. The .data
-     * virtual tail at 0x7C9200..0x7FFFC0 has no absolute references in the
-     * executable. Scan backwards for the last all-zero blob-sized window so
-     * early runtime-initialized globals are avoided. */
-    BYTE *map_begin=base+0x7c9200;
-    BYTE *map_end=base+0x7fffc0;
-    BYTE *memory=NULL;
-    if(readable(map_begin,(size_t)(map_end-map_begin))){
-        for(BYTE *candidate=map_end-RERIFF_TRACK_CTOR_BLOB_SIZE;candidate>=map_begin;candidate-=0x10){
-            unsigned i=0;
-            while(i<RERIFF_TRACK_CTOR_BLOB_SIZE&&candidate[i]==0)i++;
-            if(i==RERIFF_TRACK_CTOR_BLOB_SIZE){memory=candidate;break;}
-        }
-    }
+    BYTE *memory=race_track_ctor_image_slot(base);
     if(!memory){
-        log_line("Track ctor relocation: no zero in-image range is available.");
+        log_line("Track ctor relocation: .reloc image range is unavailable; keeping the 127-slot body.");
         return FALSE;
     }
-    char range[128];snprintf(range,sizeof(range),"Track ctor in-image range=%08X.",(unsigned)((BYTE *)memory-base));log_line(range);
+    char range[128];snprintf(range,sizeof(range),"Track ctor .reloc range=%08X.",(unsigned)((BYTE *)memory-base));log_line(range);
     DWORD old,ignored;
     if(!VirtualProtect(memory,RERIFF_TRACK_CTOR_BLOB_SIZE,PAGE_READWRITE,&old)){
         log_line("Track ctor relocation: in-image body range is not writable.");
@@ -373,6 +377,12 @@ static BOOL race_track_pool_install(BYTE *base,int pool){
     }
     memcpy(memory,body,sizeof(body));
     VirtualProtect(memory,RERIFF_TRACK_CTOR_BLOB_SIZE,old,&ignored);
+    /* The CLR reads this header at first JIT. Refuse to redirect the MethodDef
+     * if the copy did not survive the write; the 127-slot original remains. */
+    if(memcmp(memory,body,sizeof(body))||(memory[0]&3)!=3){
+        log_line("Track ctor relocation: .reloc body did not verify; keeping the 127-slot body.");
+        return FALSE;
+    }
     DWORD rva=(DWORD)(memory-base);
     if(!VirtualProtect(slot,4,PAGE_READWRITE,&old)){
         log_line("Track ctor relocation: metadata page is not writable.");
@@ -385,26 +395,28 @@ static BOOL race_track_pool_install(BYTE *base,int pool){
     char line[192];snprintf(line,sizeof(line),"Track ctor relocated: RVA %08X -> %08X, large pool=%d, small pool=127, blob=%u bytes.",
         0x271e78u,(unsigned)rva,pool,(unsigned)RERIFF_TRACK_CTOR_BLOB_SIZE);log_line(line);
     installed=TRUE;
+    race_track_pool_base=base;
     race_track_pool_relocated=TRUE;
     return TRUE;
 }
 
-/* Managed startup calls these to force the CLR to JIT the relocated body
- * before a race exists. If the JIT rejects it, restore the original RVA and
- * leave the 127-slot fallback in place instead of crashing at song load. */
+/* Managed startup calls these to have the runtime parse the relocated header
+ * before a race exists. If it rejects the copy, restore the original RVA and
+ * leave the 127-slot in-place body as the fallback instead of crashing at song
+ * load. */
 __declspec(dllexport) int __cdecl ReRiffTrackPoolRelocated(void){
     return race_track_pool_relocated?1:0;
 }
 __declspec(dllexport) unsigned __cdecl ReRiffTrackPoolRva(void){
-    BYTE *base=(BYTE *)GetModuleHandleW(NULL);
+    BYTE *base=race_track_pool_base?race_track_pool_base:(BYTE *)GetModuleHandleW(NULL);
     if(!readable(base+RERIFF_TRACK_CTOR_RVA_FIELD,4))return 0;
     return *(unsigned *)(base+RERIFF_TRACK_CTOR_RVA_FIELD);
 }
 __declspec(dllexport) void __cdecl ReRiffTrackPoolValidated(void){
-    if(race_track_pool_relocated)log_line("Track ctor relocation JIT-validated.");
+    if(race_track_pool_relocated)log_line("Track ctor relocation validated.");
 }
 __declspec(dllexport) int __cdecl ReRiffTrackPoolRestore(void){
-    BYTE *base=(BYTE *)GetModuleHandleW(NULL);
+    BYTE *base=race_track_pool_base?race_track_pool_base:(BYTE *)GetModuleHandleW(NULL);
     DWORD *slot=(DWORD *)(base+RERIFF_TRACK_CTOR_RVA_FIELD);
     DWORD old,ignored;
     if(!race_track_pool_relocated||!readable(slot,4))return 0;
@@ -412,7 +424,7 @@ __declspec(dllexport) int __cdecl ReRiffTrackPoolRestore(void){
     *slot=0x271e78;
     VirtualProtect(slot,4,old,&ignored);
     race_track_pool_relocated=FALSE;
-    log_line("Track ctor relocation reverted to the original 64-slot body.");
+    log_line("Track ctor relocation reverted to the 127-slot in-place body.");
     return 1;
 }
 
