@@ -528,6 +528,7 @@ static BOOL install_race_culling(BYTE *base){
     race_retention_tier=tier;
     BOOL visual_retention=tier>0;
     race_culling_enabled=disable_culling||visual_retention;
+    reriff_two_sided=race_culling_enabled;
     GetPrivateProfileStringW(L"camera",L"race_orbit_trace",L"false",value,16,client);
     race_culling_trace=!_wcsicmp(value,L"true")||!_wcsicmp(value,L"yes")||!wcscmp(value,L"1");
     if(!race_culling_enabled)return TRUE;
@@ -542,7 +543,7 @@ static BOOL install_race_culling(BYTE *base){
     WCHAR pool_value[16];
     GetPrivateProfileStringW(L"graphics",L"track_pool_512",L"true",pool_value,16,client);
     BOOL use_pool=visual_retention||!_wcsicmp(pool_value,L"true")||!_wcsicmp(pool_value,L"yes")||!wcscmp(pool_value,L"1");
-    int pool=visual_retention?128+((tier-1)*384)/9:512;
+    int pool=visual_retention?128+((tier-1)*896)/9:512;
     race_retention_pool=pool;
     race_retention_block_cap=visual_retention?pool:0;
     race_window_behind=visual_retention?pool/2:0;
@@ -1089,6 +1090,7 @@ static void race_culling_counts(BYTE *base){
 
 static void race_culling_frame(void){
     if(!race_culling_enabled)return;
+    race_culling_frames++;
     BYTE *base=(BYTE *)GetModuleHandleW(NULL);
     race_culling_prewarm(base);
     void *manager=readable(base+0x7df324,4)?*(void **)(base+0x7df324):NULL;
@@ -1097,7 +1099,7 @@ static void race_culling_frame(void){
     race_culling_strips(base);
     race_culling_sign_tick(base);
     race_culling_road_chunks_apply();
-    if((++race_culling_frames%10)==0){race_culling_props(base);race_culling_ramps(base);}
+    race_culling_props(base);race_culling_ramps(base);
     if(!race_culling_trace)return;
     if(!race_culling_trace_announced){
         race_culling_trace_announced=TRUE;

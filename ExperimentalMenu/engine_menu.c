@@ -262,6 +262,11 @@ static BOOL readable(const void *p,size_t count) {
     return start<=end && count<=end-start;
 }
 
+/* Set while track retention is active; the D3D9 state hook below then forces
+ * two-sided rendering so ramp backs, wall backs and the road underside stay
+ * visible in free look and photo mode. */
+static BOOL reriff_two_sided;
+
 #include "postfx.h"
 
 static void show_item(void *item,BYTE visible) {

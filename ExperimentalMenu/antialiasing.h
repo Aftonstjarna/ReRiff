@@ -119,6 +119,11 @@ static void hitch_observe(void){
     hitch_last_present=now;
 }
 static HRESULT WINAPI aa_present(IDirect3DDevice9 *self,const RECT *a,const RECT *b,HWND window,const RGNDATA *dirty){if(self!=aa_device)return aa_present_original(self,a,b,window,dirty);if(aa_skip_background_present&&aa_skip_background_present())return D3D_OK;hitch_observe();aa_draw(self);return aa_present_original(self,a,b,window,dirty);}
+static HRESULT (WINAPI *aa_set_render_state_original)(IDirect3DDevice9 *,D3DRENDERSTATETYPE,DWORD);
+static HRESULT WINAPI aa_set_render_state(IDirect3DDevice9 *self,D3DRENDERSTATETYPE state,DWORD value){
+    if(reriff_two_sided&&state==D3DRS_CULLMODE)value=D3DCULL_NONE;
+    return aa_set_render_state_original(self,state,value);
+}
 static HRESULT WINAPI aa_reset(IDirect3DDevice9 *self,D3DPRESENT_PARAMETERS *params){
     if(self!=aa_device)return aa_reset_original(self,params);
     char trace[192];snprintf(trace,sizeof(trace),"D3D9 Reset: %ux%u windowed=%d refresh=%u thread=%lu owner=%lu.",params->BackBufferWidth,params->BackBufferHeight,params->Windowed,params->FullScreen_RefreshRateInHz,(unsigned long)GetCurrentThreadId(),(unsigned long)GetWindowThreadProcessId(params->hDeviceWindow,NULL));log_line(trace);
@@ -164,9 +169,11 @@ static BOOL aa_attach_renderer(void *renderer){
     DWORD writable=(memory.Protect&(PAGE_EXECUTE|PAGE_EXECUTE_READ|PAGE_EXECUTE_READWRITE|PAGE_EXECUTE_WRITECOPY))?PAGE_EXECUTE_READWRITE:PAGE_READWRITE;
     if(!VirtualProtect(table,entries*sizeof(void *),writable,&protection))return aa_attach_problem("COM methods are not writable",table);
     aa_present_original=(void *)table[17];aa_reset_original=(void *)table[16];
+    aa_set_render_state_original=(void *)table[57];
     if(extended){aa_present_ex_original=(void *)table[121];aa_reset_ex_original=(void *)table[132];}
     aa_device=device;
     InterlockedExchangePointer(table+17,(void *)aa_present);InterlockedExchangePointer(table+16,(void *)aa_reset);
+    InterlockedExchangePointer(table+57,(void *)aa_set_render_state);
     if(extended){InterlockedExchangePointer(table+121,(void *)aa_present_ex);InterlockedExchangePointer(table+132,(void *)aa_reset_ex);}
     DWORD ignored;VirtualProtect(table,entries*sizeof(void *),protection,&ignored);
     log_line("Post-process AA extends native D3D9 method slots; original device table preserved.");return TRUE;
