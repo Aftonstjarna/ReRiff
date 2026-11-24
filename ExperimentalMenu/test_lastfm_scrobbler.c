@@ -7,6 +7,7 @@ static void __thiscall enter(void *self,int state){(void)self;(void)state;enters
 static void __thiscall force_visible(void *self,int view,BYTE visible){(void)self;if(view>=0&&view<4&&visible)forced++;}
 static void __thiscall on_visible(void *self,int view,BYTE visible){(void)self;if(view>=0&&view<4&&visible)shown++;}
 static void __cdecl toggle_hud(void){if(fake_hud){*fake_hud=*fake_hud?0:1;hud_toggles++;}}
+static void __cdecl set_hud_visible(BYTE visible){if(fake_hud)*fake_hud=visible?1:0;hud_toggles++;}
 static void __thiscall audio_pause(void *self){(void)self;audio_pauses++;}
 static void __thiscall audio_resume(void *self){(void)self;audio_resumes++;}
 static int dof_calls,dof_enable,bloom_calls,bloom_enable;static float dof_focal,bloom_intensity;
@@ -39,7 +40,7 @@ int main(void){
     ((void **)camera_manager)[0]=set;*(void **)((BYTE *)set+8)=viewport;*(void **)((BYTE *)viewport+428)=camera;
     float *matrix=(float *)((BYTE *)camera+68);for(int i=0;i<12;i++)matrix[i]=0;
     matrix[0]=matrix[4]=matrix[8]=matrix[9]=1.0f;
-    fake_hud=base+0x7a2f48;*fake_hud=1;race_hud_toggle=toggle_hud;
+    fake_hud=base+0x7a2f48;*fake_hud=1;race_hud_toggle=toggle_hud;race_hud_set_visible=set_hud_visible;
     void *audio=base+0x120000,*source=base+0x122000,*audio_vtable=base+0x124000;
     *(void **)(base+0x7e750c)=audio;*(void **)((BYTE *)audio+100)=source;*((BYTE *)audio+109)=0;
     ((void **)audio_vtable)[0]=audio_resume;((void **)audio_vtable)[1]=audio_pause;*(void **)source=audio_vtable;

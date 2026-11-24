@@ -723,7 +723,7 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
         checkbox_help(experimental_checkbox,L"Use beta releases for updates.");
         checkbox_help(language_checkbox,L"CJK fonts for names, metadata, leaderboards and pause screens. Restart required.");
         checkbox_help(latin_checkbox,L"Latin/European font support. Restart required.");
-        checkbox_help(logging_checkbox,L"Write diagnostic logs for the selected categories. Restart required.");
+        checkbox_help(logging_checkbox,L"Write diagnostic logs for the selected categories; existing logs are kept. Restart required.");
         for(unsigned i=0;i<LOG_CATEGORY_COUNT;i++)
             checkbox_help(log_checkboxes[i],L"Include this category in diagnostic logging. Restart required.");
         reload_log_controls();controls_trace_reload();language_controls();select_launcher_page();
