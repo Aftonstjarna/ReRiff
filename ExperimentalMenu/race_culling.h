@@ -525,23 +525,6 @@ static BOOL race_culling_retain_walls(BYTE *base){
     return ok;
 }
 
-/* Keep intact gaPropNodes in the active list without bypassing their tick.
- * The manager erases a node when tick() returns false. Let tick run, then make
- * its normal return path return true; destroyed pieces are already hidden by
- * the node itself and by the piece visibility rules above. */
-static BOOL race_culling_retain_node_tick(BYTE *base){
-    BYTE *site=base+0x29e7d3;
-    static const BYTE expected[]={0x11,0x05,0xd2,0x2a};
-    if(!readable(site,sizeof(expected))||memcmp(site,expected,sizeof(expected)))return FALSE;
-    DWORD old,ignored;
-    if(!VirtualProtect(site,sizeof(expected),PAGE_READWRITE,&old))return FALSE;
-    site[0]=0x17; /* ldc.i4.1 */
-    site[1]=0x2a; /* ret */
-    site[2]=0x00;
-    site[3]=0x00;
-    VirtualProtect(site,sizeof(expected),old,&ignored);
-    return TRUE;
-}
 static BOOL install_race_culling(BYTE *base){
     WCHAR value[16];
     WCHAR client[MAX_PATH];wcsncpy(client,config_path,MAX_PATH-1);client[MAX_PATH-1]=0;
@@ -576,9 +559,8 @@ static BOOL install_race_culling(BYTE *base){
     BOOL relocated=use_pool?race_track_pool_install(base,pool):FALSE;
     BOOL retained=race_culling_retain_blocks(base);
     BOOL walls=race_culling_retain_walls(base);
-    BOOL nodes=race_culling_retain_node_tick(base);
-    char detail[260];snprintf(detail,sizeof(detail),"Track visual retention tier=%d; trace=%d; block retention=%d; wall retention=%d; prop-node retention=%d; large pool=%d; window=%d behind + %d ahead.",
-        tier,race_culling_trace?1:0,retained?1:0,walls?1:0,nodes?1:0,relocated?pool:0,race_window_behind,race_window_ahead);log_line(detail);
+    char detail[240];snprintf(detail,sizeof(detail),"Track visual retention tier=%d; trace=%d; block retention=%d; wall retention=%d; large pool=%d; window=%d behind + %d ahead.",
+        tier,race_culling_trace?1:0,retained?1:0,walls?1:0,relocated?pool:0,race_window_behind,race_window_ahead);log_line(detail);
     return TRUE;
 }
 
@@ -697,7 +679,7 @@ static void race_culling_props(BYTE *base){
     }
     unsigned prop_readd=race_culling_readd((void **)((BYTE *)manager+448),572,race_prop_snapshot,race_prop_vtable,&race_prop_snapshot_count,502);
     prop_readd+=race_culling_readd((void **)((BYTE *)manager+460),572,race_prop_snapshot,race_prop_vtable,&race_prop_snapshot_count,502);
-    unsigned node_readd=race_culling_readd((void **)((BYTE *)manager+472),52,race_node_snapshot,race_node_vtable,&race_node_snapshot_count,0);
+    unsigned node_readd=race_culling_readd((void **)((BYTE *)manager+472),52,race_node_snapshot,race_node_vtable,&race_node_snapshot_count,121);
     if(race_culling_trace&&(race_culling_frames%120)==0){
         void **pb=*(void ***)((BYTE *)manager+460),**pe=*(void ***)((BYTE *)manager+464);
         unsigned active=(pb&&pe&&pe>=pb)?(unsigned)(pe-pb):0;
@@ -736,7 +718,8 @@ static void race_culling_props(BYTE *base){
     if(!nbegin||!nend||nend<nbegin||(BYTE *)nend-(BYTE *)nbegin>20000*4)return;
     for(void **item=nbegin;item<nend;item++){
         BYTE *node=(BYTE *)*item;
-        if(!readable(node,52))continue;
+        if(!readable(node,122))continue;
+        if(*((BYTE *)node+121)==1)continue; /* damaged: let the broken wall clear */
         void **pbegin=*(void ***)(node+40),**pend=*(void ***)(node+44);
         if(!pbegin||!pend||pend<pbegin||(BYTE *)pend-(BYTE *)pbegin>2000*4)continue;
         for(void **piece_item=pbegin;piece_item<pend;piece_item++){
