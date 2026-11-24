@@ -362,7 +362,8 @@ static void race_culling_prewarm(BYTE *base){
                     if(visual&&readable(visual,132))*((BYTE *)visual+20)=0;
                 }
             }
-            char detail[180];snprintf(detail,sizeof(detail),"Road capture: total_blocks=%d main_cursor=%d verts=%u.",master_total,main_cursor,capture_custom? (unsigned)((*(BYTE **)(capture_custom+160)-*(BYTE **)(capture_custom+156))/40):0);log_line(detail);
+            char detail[180];snprintf(detail,sizeof(detail),"Road capture: total_blocks=%d main_cursor=%d verts=%u cap=%u.",
+                master_total,main_cursor,master_total>0?(unsigned)master_total*9:0,race_capture_vertex_capacity);log_line(detail);
         }
     }
     if(main_road&&master_total>0&&capture_custom){
