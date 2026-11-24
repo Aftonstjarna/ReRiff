@@ -255,11 +255,17 @@ static void race_culling_prewarm(BYTE *base){
     for(void **item=begin;item<end;item++){
         BYTE *strip=(BYTE *)*item;
         if(!readable(strip,424))continue;
-        if(*((int *)(strip+212))==0){
+        int type=*((int *)(strip+212));
+        if(type==0){
             /* Do not sweep the live road strip; its current window is the
              * near-camera surface that must stay intact. */
             main_road=strip;
             main_cursor=*((int *)(strip+56));
+            strips++;
+            continue;
+        }
+        if(type==6){
+            /* Scrolling sign rails and score zones stay vanilla. */
             strips++;
             continue;
         }
@@ -954,6 +960,8 @@ static BYTE *race_culling_sign_create(BYTE *main){
     return strip;
 }
 static void race_culling_sign_tick(BYTE *base){
+    (void)base;
+    return; /* scrolling rails and score zones stay vanilla for now */
     if(race_retention_tier<=0||!race_culling_strip_tick||!race_culling_strip_ctor)return;
     void *manager=NULL;
     BYTE *main=race_culling_sign_main(base,&manager);
@@ -1131,7 +1139,7 @@ static void race_culling_strips(BYTE *base){
          * When the road is split into chunks the original type-0 mesh is
          * hidden; everything else is forced visible and its fade window is
          * widened for the backed-out camera. */
-        if(type!=0)race_culling_force_custom(strip,1);
+        if(type!=0&&type!=6)race_culling_force_custom(strip,1);
         if(race_culling_trace&&(race_culling_frames%120)==0){
             void **pool_begin=*(void ***)(strip+164),**pool_end=*(void ***)(strip+168);
             unsigned pool=pool_begin&&pool_end&&pool_end>=pool_begin?(unsigned)(pool_end-pool_begin):0;
