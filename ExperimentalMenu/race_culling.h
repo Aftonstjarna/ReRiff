@@ -36,6 +36,7 @@ static float race_player_distance;
 static int race_track_block_total;
 static void *race_culling_prewarm_done;
 static void *race_culling_prewarm_road;
+static float race_culling_prewarm_track_len;
 static RaceCullingVisible race_culling_force_visible,race_culling_on_visible;
 static RaceCullingVisualVisible race_culling_visual;
 typedef void (__cdecl *RaceCullingContextDirty)(void *);
@@ -254,7 +255,17 @@ static void race_culling_prewarm(BYTE *base){
         BYTE *strip=(BYTE *)*item;
         if(readable(strip,424)&&*((int *)(strip+212))==0){road=strip;break;}
     }
-    if(!road||(manager==race_culling_prewarm_done&&road==race_culling_prewarm_road))return;
+    /* A short preview can reuse the same strip object, so also key on the
+     * generated track length; the full race regenerates a longer track. */
+    float track_len=0.0f;
+    if(readable(base+0x7dc750,4)){
+        BYTE *gen=*(BYTE **)(base+0x7dc750);
+        if(gen&&readable(gen,288))track_len=*((float *)(gen+280));
+    }
+    float delta=track_len-race_culling_prewarm_track_len;
+    if(delta<0.0f)delta=-delta;
+    BOOL same_length=!(track_len>0.001f&&race_culling_prewarm_track_len>0.001f)||delta<0.5f;
+    if(!road||(manager==race_culling_prewarm_done&&road==race_culling_prewarm_road&&same_length))return;
     race_track_block_total=0;
     if(!readable(base+0x7d5930,4))return;
     void *players=*(void **)(base+0x7d5930);
@@ -391,8 +402,9 @@ static void race_culling_prewarm(BYTE *base){
     }
     race_culling_prewarm_done=manager;
     race_culling_prewarm_road=main_road;
-    char line[260];snprintf(line,sizeof(line),"Track prewarm: manager=%p road=%p strips=%u progress=%.4f main_cursor=%d total=%d chunks=%u.",
-        manager,main_road,strips,current,main_cursor,master_total,race_culling_road_chunk_count);log_line(line);
+    race_culling_prewarm_track_len=track_len;
+    char line[280];snprintf(line,sizeof(line),"Track prewarm: manager=%p road=%p track_len=%.1f strips=%u progress=%.4f main_cursor=%d total=%d chunks=%u.",
+        manager,main_road,track_len,strips,current,main_cursor,master_total,race_culling_road_chunk_count);log_line(line);
 }
 
 /* The constructor's own 64-slot pool is far too small for the photo-mode
