@@ -12,7 +12,8 @@
 - Raise the barricade and ramp release window from the vanilla `-30` to the retained behind window, so a ramp launch no longer recycles the walls beside the ramp while they are still visible.
 - Leave type 13 distant buildings vanilla by default. The base game hides a building two units behind the car; the retired blocks no longer consume draw calls behind the track. `[graphics] retain_buildings=true` restores the retained behaviour for A/B testing, and the trace logs `Buildings: mode=..., strips=..., blocks=..., visible=...` so the two modes can be compared.
 - Size the road capture buffer for the whole track and reuse it between races. The old 40000-vertex cap wrapped the road mesh on tracks longer than about 4400 blocks, so the end-of-track vertices overwrote the beginning and the road surface was missing until the car passed the wrapped range.
-- Release the previous race's road chunk buffers when the track manager changes instead of leaking them.
+- Release the previous race's road chunk buffers when the track changes instead of leaking them.
+- Rebuild the road capture when the live type-0 strip changes, not only when the track manager object changes. The menu preview and the race share the manager singleton, so a short preview track could leave its chunks in place for a full race and the road would disappear once the car passed the preview range.
 - Validation: native retention, prop, track-pool, scrobbler and UI regressions.
 
 # ReRiff 1.5.0-beta.7 — Track visual retention

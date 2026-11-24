@@ -35,6 +35,7 @@ static int race_window_behind,race_window_ahead;
 static float race_player_distance;
 static int race_track_block_total;
 static void *race_culling_prewarm_done;
+static void *race_culling_prewarm_road;
 static RaceCullingVisible race_culling_force_visible,race_culling_on_visible;
 static RaceCullingVisualVisible race_culling_visual;
 typedef void (__cdecl *RaceCullingContextDirty)(void *);
@@ -240,13 +241,21 @@ static void race_culling_prewarm(BYTE *base){
     if(!race_culling_enabled||!race_track_pool_relocated||!race_culling_strip_tick||!race_culling_back_node
         ||!readable(base+0x7dce7c,4))return;
     void *manager=*(void **)(base+0x7dce7c);
-    if(!readable(manager,2728)||manager==race_culling_prewarm_done)return;
-    race_track_block_total=0;
-    if(race_culling_road_chunk_count&&race_culling_prewarm_done&&manager!=race_culling_prewarm_done){
-        for(unsigned i=0;i<race_culling_road_chunk_count;i++)race_culling_road_chunk_release(race_culling_road_chunks[i]);
-        char detail[160];snprintf(detail,sizeof(detail),"Track prewarm reset: released %u chunks from the previous manager.",race_culling_road_chunk_count);log_line(detail);
-        race_culling_road_chunk_count=0;
+    if(!readable(manager,2728))return;
+    void **begin=*(void ***)((BYTE *)manager+2720),**end=*(void ***)((BYTE *)manager+2724);
+    if(!begin||!end||end<begin||(size_t)((BYTE *)end-(BYTE *)begin)>256*sizeof(void *))return;
+    /* The track manager is a singleton reused by the menu preview and the
+     * race, so the manager pointer alone is not enough: a short preview track
+     * would leave its 720-block chunks in place for a 5000-block race. Each
+     * gaTrackManager.load creates new gaTrackStrip objects, so key the cache on
+     * the live type-0 strip too. */
+    BYTE *road=NULL;
+    for(void **item=begin;item<end;item++){
+        BYTE *strip=(BYTE *)*item;
+        if(readable(strip,424)&&*((int *)(strip+212))==0){road=strip;break;}
     }
+    if(!road||(manager==race_culling_prewarm_done&&road==race_culling_prewarm_road))return;
+    race_track_block_total=0;
     if(!readable(base+0x7d5930,4))return;
     void *players=*(void **)(base+0x7d5930);
     if(!readable(players,52))return;
@@ -258,8 +267,6 @@ static void race_culling_prewarm(BYTE *base){
     if(!readable(tracker,124))return;
     void *node=race_culling_back_node(tracker,NULL,NULL);
     if(!node)return;
-    void **begin=*(void ***)((BYTE *)manager+2720),**end=*(void ***)((BYTE *)manager+2724);
-    if(!begin||!end||end<begin||(size_t)((BYTE *)end-(BYTE *)begin)>256*sizeof(void *))return;
 
     unsigned small=0;
     for(void **item=begin;item<end;item++){
@@ -274,6 +281,11 @@ static void race_culling_prewarm(BYTE *base){
     if(small){
         char detail[160];snprintf(detail,sizeof(detail),"Track prewarm skipped: %u large strips still have a small pool.",small);log_line(detail);
         return;
+    }
+    if(race_culling_road_chunk_count){
+        for(unsigned i=0;i<race_culling_road_chunk_count;i++)race_culling_road_chunk_release(race_culling_road_chunks[i]);
+        char detail[160];snprintf(detail,sizeof(detail),"Track prewarm reset: released %u chunks for a new track.",race_culling_road_chunk_count);log_line(detail);
+        race_culling_road_chunk_count=0;
     }
 
     float total=*((float *)((BYTE *)tracker+116)),position=*((float *)((BYTE *)tracker+120));
@@ -378,8 +390,9 @@ static void race_culling_prewarm(BYTE *base){
         return;
     }
     race_culling_prewarm_done=manager;
-    char line[240];snprintf(line,sizeof(line),"Track prewarm: manager=%p strips=%u progress=%.4f main_cursor=%d total=%d chunks=%u.",
-        manager,strips,current,main_cursor,master_total,race_culling_road_chunk_count);log_line(line);
+    race_culling_prewarm_road=main_road;
+    char line[260];snprintf(line,sizeof(line),"Track prewarm: manager=%p road=%p strips=%u progress=%.4f main_cursor=%d total=%d chunks=%u.",
+        manager,main_road,strips,current,main_cursor,master_total,race_culling_road_chunk_count);log_line(line);
 }
 
 /* The constructor's own 64-slot pool is far too small for the photo-mode
