@@ -637,12 +637,26 @@ static unsigned race_culling_readd(void **vector,size_t object_size,void **snaps
         for(void **item=begin;item<end;item++)if(*item==object){present=TRUE;break;}
         if(present)continue;
         if(!readable(object,object_size)||*(void **)object!=vtable[i])continue;
-        if(end+1<=cap){
-            *end=object;
-            end++;
-            vector[1]=end;
+        if(end+1>cap){
+            size_t used=(size_t)((BYTE *)end-(BYTE *)begin)/4;
+            size_t next=used+16;
+            BYTE *fresh=race_culling_operator_new?(BYTE *)race_culling_operator_new(next*4):NULL;
+            if(!fresh)continue;
+            memcpy(fresh,begin,used*4);
+            ((void **)fresh)[used]=object;
+            vector[0]=fresh;
+            vector[1]=fresh+(used+1)*4;
+            vector[2]=fresh+next*4;
+            begin=(void **)fresh;
+            end=begin+used+1;
+            cap=begin+next;
             readded++;
+            continue;
         }
+        *end=object;
+        end++;
+        vector[1]=end;
+        readded++;
     }
     return readded;
 }
