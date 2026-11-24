@@ -472,20 +472,26 @@ static BOOL race_culling_expand_pool(BYTE *base){
  * the post-tick visual pass keeps their visuals visible. Applied before the
  * first race tick so the CLR has not compiled this method yet. */
 static BOOL race_culling_retain_blocks(BYTE *base){
-    /* tickBlocks retires every block behind the current progress through
-     * this beq. Replace the num2 load with ldc.i4.m1 + nop so the compare is
-     * always -1 == -1 and the erase path is skipped. Keeping beq.s (instead
-     * of a raw br.s) leaves the IL evaluation stack balanced. Applied before
-     * the first race tick, so the CLR has not compiled tickBlocks yet. */
-    BYTE *site=base+0x26c624;
+    /* tickBlocks and tickSpecialBlocks retire blocks behind the current
+     * progress through the same beq. Replace the num2 load with ldc.i4.m1 +
+     * nop so the compare is always -1 == -1 and the erase path is skipped.
+     * Keeping beq.s (instead of a raw br.s) leaves the IL evaluation stack
+     * balanced. Applied before the first race tick, so the CLR has not
+     * compiled either method yet. */
     static const BYTE expected[]={0x11,0x08,0x15,0x2e,0x33};
-    if(!readable(site,sizeof(expected))||memcmp(site,expected,sizeof(expected)))return FALSE;
-    DWORD old,ignored;
-    if(!VirtualProtect(site,sizeof(expected),PAGE_READWRITE,&old))return FALSE;
-    site[0]=0x15;
-    site[1]=0x00;
-    VirtualProtect(site,sizeof(expected),old,&ignored);
-    return TRUE;
+    BYTE *sites[2]={base+0x26c624,base+0x271401};
+    BOOL any=FALSE;
+    for(int s=0;s<2;s++){
+        BYTE *site=sites[s];
+        if(!readable(site,sizeof(expected))||memcmp(site,expected,sizeof(expected)))continue;
+        DWORD old,ignored;
+        if(!VirtualProtect(site,sizeof(expected),PAGE_READWRITE,&old))continue;
+        site[0]=0x15;
+        site[1]=0x00;
+        VirtualProtect(site,sizeof(expected),old,&ignored);
+        any=TRUE;
+    }
+    return any;
 }
 
 /* Edge barriers are wall segments appended to the type-2/3 custom mesh.
