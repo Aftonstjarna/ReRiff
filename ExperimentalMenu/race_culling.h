@@ -525,6 +525,31 @@ static BOOL race_culling_retain_walls(BYTE *base){
     return ok;
 }
 
+/* Barricades and ramps use a hard-coded -30 behind window: the wall is hidden
+ * and its pooled prop is released as soon as the player is 30 units past it.
+ * A ramp throws the car forward, which pushes the ramp-side walls past that
+ * window while they are still beside the car, so they vanish early and the
+ * prop is recycled. Raise the inline -30.0 literal to the retained behind
+ * window so those walls stay attached and visible. */
+static BOOL race_culling_widen_behind(BYTE *base,double behind){
+    static const DWORD sites[]={0x23afd7,0x23c940};
+    BOOL ok=FALSE;
+    for(int i=0;i<2;i++){
+        BYTE *site=base+sites[i];
+        if(!readable(site,sizeof(double)))continue;
+        double current,value=-behind;
+        memcpy(&current,site,sizeof(current));
+        if(current==value){ok=TRUE;continue;}
+        if(current!=-30.0)continue;
+        DWORD old,ignored;
+        if(!VirtualProtect(site,sizeof(value),PAGE_READWRITE,&old))continue;
+        memcpy(site,&value,sizeof(value));
+        VirtualProtect(site,sizeof(value),old,&ignored);
+        ok=TRUE;
+    }
+    return ok;
+}
+
 static BOOL install_race_culling(BYTE *base){
     WCHAR value[16];
     WCHAR client[MAX_PATH];wcsncpy(client,config_path,MAX_PATH-1);client[MAX_PATH-1]=0;
@@ -556,11 +581,12 @@ static BOOL install_race_culling(BYTE *base){
     race_retention_block_cap=visual_retention?pool:0;
     race_window_behind=visual_retention?pool/2:0;
     race_window_ahead=visual_retention?pool-race_window_behind:0;
+    BOOL behind=race_culling_widen_behind(base,race_window_behind>60?race_window_behind:120);
     BOOL relocated=use_pool?race_track_pool_install(base,pool):FALSE;
     BOOL retained=race_culling_retain_blocks(base);
     BOOL walls=race_culling_retain_walls(base);
-    char detail[240];snprintf(detail,sizeof(detail),"Track visual retention tier=%d; trace=%d; block retention=%d; wall retention=%d; large pool=%d; window=%d behind + %d ahead.",
-        tier,race_culling_trace?1:0,retained?1:0,walls?1:0,relocated?pool:0,race_window_behind,race_window_ahead);log_line(detail);
+    char detail[240];snprintf(detail,sizeof(detail),"Track visual retention tier=%d; trace=%d; block retention=%d; wall retention=%d; release window=%d; large pool=%d; window=%d behind + %d ahead.",
+        tier,race_culling_trace?1:0,retained?1:0,walls?1:0,behind?1:0,relocated?pool:0,race_window_behind,race_window_ahead);log_line(detail);
     return TRUE;
 }
 
@@ -613,7 +639,7 @@ static unsigned race_culling_readd(void **vector,size_t object_size,void **snaps
     for(void **item=begin;item<end;item++){
         void *object=*item;
         if(!readable(object,object_size))continue;
-        if(dead_offset&&readable((BYTE *)object+dead_offset,1)&&*((BYTE *)object+dead_offset)==1)continue;
+        if(dead_offset&&readable((BYTE *)object+dead_offset,1)&&*((BYTE *)object+dead_offset)!=0)continue;
         BOOL known=FALSE;
         for(unsigned i=0;i<*count;i++)if(snapshot[i]==object){known=TRUE;break;}
         if(!known&&*count<RACE_SNAPSHOT_MAX){
@@ -626,7 +652,7 @@ static unsigned race_culling_readd(void **vector,size_t object_size,void **snaps
         unsigned kept=0;
         for(unsigned i=0;i<*count;i++){
             void *object=snapshot[i];
-            if(!readable((BYTE *)object+dead_offset,1)||*((BYTE *)object+dead_offset)==1)continue;
+            if(!readable((BYTE *)object+dead_offset,1)||*((BYTE *)object+dead_offset)!=0)continue;
             snapshot[kept]=object;
             vtable[kept]=vtable[i];
             kept++;
@@ -677,8 +703,8 @@ static void race_culling_props(BYTE *base){
         race_prop_manager=manager;
         race_prop_snapshot_count=race_node_snapshot_count=0;
     }
-    unsigned prop_readd=race_culling_readd((void **)((BYTE *)manager+448),572,race_prop_snapshot,race_prop_vtable,&race_prop_snapshot_count,502);
-    prop_readd+=race_culling_readd((void **)((BYTE *)manager+460),572,race_prop_snapshot,race_prop_vtable,&race_prop_snapshot_count,502);
+    unsigned prop_readd=race_culling_readd((void **)((BYTE *)manager+448),572,race_prop_snapshot,race_prop_vtable,&race_prop_snapshot_count,493);
+    prop_readd+=race_culling_readd((void **)((BYTE *)manager+460),572,race_prop_snapshot,race_prop_vtable,&race_prop_snapshot_count,493);
     unsigned node_readd=race_culling_readd((void **)((BYTE *)manager+472),52,race_node_snapshot,race_node_vtable,&race_node_snapshot_count,121);
     if(race_culling_trace&&(race_culling_frames%120)==0){
         void **pb=*(void ***)((BYTE *)manager+460),**pe=*(void ***)((BYTE *)manager+464);
@@ -701,7 +727,9 @@ static void race_culling_props(BYTE *base){
         for(void **item=begin;item<end;item++){
             void *prop=*item;
             if(!readable(prop,572))continue;
-            if(*((BYTE *)prop+502)==1)continue; /* exploded: let the debris show */
+            /* forceBreak sets +493 once the prop is broken and hides its
+             * visual. Keep forcing only intact props so a smashed wall clears. */
+            if(*((BYTE *)prop+493)!=0)continue;
             void *visual=*(void **)((BYTE *)prop+288);
             if(!readable(visual,132))continue;
             /* Do not touch gaPropBase+496/+464. Those drive the prop's own
