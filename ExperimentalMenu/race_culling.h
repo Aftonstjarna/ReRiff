@@ -257,17 +257,13 @@ static void race_culling_prewarm(BYTE *base){
             strips++;
             continue;
         }
-        /* Only custom-mesh strips (walls, chevrons, signs) survive a full-track
-         * sweep: their geometry accumulates in the mesh. Block and prop strips
-         * keep one elVisual per pool slot, so sweeping them consumes the spawn
-         * cursor and prewarms visuals past the retention window; once trimmed,
-         * nothing can respawn and the side buildings disappear. Let those spawn
-         * naturally as the car covers the track. */
-        void **visual_begin=*(void ***)(strip+164),**visual_end=*(void ***)(strip+168);
-        unsigned pool=visual_begin&&visual_end&&visual_end>=visual_begin?(unsigned)(visual_end-visual_begin):0;
-        if(!pool){
-            for(int step=0;step<=steps;step++)race_culling_strip_tick(strip,1,0,(float)step/(float)steps*max_progress,node);
-        }
+        /* Never sweep a live strip across the track. Every strip keeps its
+         * spawn cursor, and the cursor only advances: a full-track sweep leaves
+         * it at the end, so walls, chevrons and score-zone edge meshes stay
+         * built at the far end while the car drives through an empty track.
+         * Only the throwaway capture strip below is swept to build the road
+         * chunks. Live strips spawn naturally with the car, and photo mode
+         * advances them with the camera. */
         race_culling_strip_tick(strip,1,0,current,node);
         BYTE *custom=*(BYTE **)(strip+256);
         if(race_culling_context_dirty&&custom&&readable(custom,180)){
