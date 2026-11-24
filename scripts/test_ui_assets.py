@@ -13,7 +13,7 @@ class Assets(unittest.TestCase):
     def test_exports(self):
         before={p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in (ROOT/'images').glob('*.png')}
         with tempfile.TemporaryDirectory() as temp:
-            icon,bmp=module.build(Path(temp));data=icon.read_bytes();reserved,kind,count=struct.unpack_from('<3H',data)
+            icon,bmp,_prompts=module.build(Path(temp));data=icon.read_bytes();reserved,kind,count=struct.unpack_from('<3H',data)
             self.assertEqual((reserved,kind,count),(0,1,5))
             for i in range(count):
                 w,h,_,_,planes,bits,length,offset=struct.unpack_from('<4B2H2I',data,6+i*16)
