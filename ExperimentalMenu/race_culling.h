@@ -790,6 +790,10 @@ static void race_culling_sign_tick(BYTE *base){
         race_sign_manager=NULL;
         return;
     }
+    /* The live type-6 strip owns the rails/bases around the car. Its own tick
+     * only toggles glow visibility, and the base signs stay hidden once the
+     * distance rule trips; re-present them like the side strips. */
+    race_culling_sign_present(main);
     if(race_sign_manager!=manager){
         for(int i=0;i<race_sign_strip_count;i++)race_culling_sign_hide((BYTE *)race_sign_strips[i]);
         race_sign_manager=manager;
@@ -881,9 +885,20 @@ static void race_culling_sign_tick(BYTE *base){
     if(race_culling_trace&&(race_culling_frames%120)==0){
         void *visual=*(void **)((BYTE *)race_sign_strips[0]+268);
         float *matrix=(visual&&readable(visual,132))?(float *)((BYTE *)visual+76):NULL;
-        char trace[280];
-        snprintf(trace,sizeof(trace),"Sign trace: strips=%d window=%.1f step=%.1f spacing=%.1f distance=%.1f pace=%.2f photo=%d sign=%.1f,%.1f,%.1f.",
+        int live_placed=0,live_visible=0;
+        if(readable(main,424)){
+            for(int i=0;i<8;i++){
+                void *base=*(void **)(main+268+i*4);
+                if(!base||!readable(base,132))continue;
+                float *translation=(float *)((BYTE *)base+76);
+                if(translation[0]!=0.0f||translation[1]!=0.0f||translation[2]!=0.0f)live_placed++;
+                if(*((BYTE *)base+20)==1)live_visible++;
+            }
+        }
+        char trace[340];
+        snprintf(trace,sizeof(trace),"Sign trace: strips=%d window=%.1f step=%.1f spacing=%.1f distance=%.1f pace=%.2f photo=%d live=%d/%d sign=%.1f,%.1f,%.1f.",
             strips,window,step_distance,spacing,distance,pace_time?*pace_time:-1.0f,race_photo_active?1:0,
+            live_visible,live_placed,
             matrix?matrix[0]:0.0f,matrix?matrix[1]:0.0f,matrix?matrix[2]:0.0f);
         log_line(trace);
     }
