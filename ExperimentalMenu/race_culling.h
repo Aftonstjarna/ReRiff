@@ -602,7 +602,7 @@ static void *race_prop_manager;
  * asleep), and the vector keeps its capacity, so re-append the snapshot entry
  * at the current end when it is missing. The vtable check rejects entries that
  * were destroyed and reused. */
-static unsigned race_culling_readd(void **vector,size_t object_size,void **snapshot,void **vtable,unsigned *count){
+static unsigned race_culling_readd(void **vector,size_t object_size,void **snapshot,void **vtable,unsigned *count,size_t dead_offset){
     if(!vector)return 0;
     void **begin=(void **)vector[0],**end=(void **)vector[1],**cap=(void **)vector[2];
     if(!begin||!end||!cap||end<begin||cap<end)return 0;
@@ -611,6 +611,7 @@ static unsigned race_culling_readd(void **vector,size_t object_size,void **snaps
     for(void **item=begin;item<end;item++){
         void *object=*item;
         if(!readable(object,object_size))continue;
+        if(dead_offset&&readable((BYTE *)object+dead_offset,1)&&*((BYTE *)object+dead_offset)==1)continue;
         BOOL known=FALSE;
         for(unsigned i=0;i<*count;i++)if(snapshot[i]==object){known=TRUE;break;}
         if(!known&&*count<RACE_SNAPSHOT_MAX){
@@ -618,6 +619,17 @@ static unsigned race_culling_readd(void **vector,size_t object_size,void **snaps
             vtable[*count]=*(void **)object;
             (*count)++;
         }
+    }
+    if(dead_offset){
+        unsigned kept=0;
+        for(unsigned i=0;i<*count;i++){
+            void *object=snapshot[i];
+            if(!readable((BYTE *)object+dead_offset,1)||*((BYTE *)object+dead_offset)==1)continue;
+            snapshot[kept]=object;
+            vtable[kept]=vtable[i];
+            kept++;
+        }
+        *count=kept;
     }
     for(unsigned i=0;i<*count;i++){
         void *object=snapshot[i];
@@ -649,9 +661,9 @@ static void race_culling_props(BYTE *base){
         race_prop_manager=manager;
         race_prop_snapshot_count=race_node_snapshot_count=0;
     }
-    unsigned prop_readd=race_culling_readd((void **)((BYTE *)manager+448),572,race_prop_snapshot,race_prop_vtable,&race_prop_snapshot_count);
-    prop_readd+=race_culling_readd((void **)((BYTE *)manager+460),572,race_prop_snapshot,race_prop_vtable,&race_prop_snapshot_count);
-    unsigned node_readd=race_culling_readd((void **)((BYTE *)manager+472),52,race_node_snapshot,race_node_vtable,&race_node_snapshot_count);
+    unsigned prop_readd=race_culling_readd((void **)((BYTE *)manager+448),572,race_prop_snapshot,race_prop_vtable,&race_prop_snapshot_count,502);
+    prop_readd+=race_culling_readd((void **)((BYTE *)manager+460),572,race_prop_snapshot,race_prop_vtable,&race_prop_snapshot_count,502);
+    unsigned node_readd=race_culling_readd((void **)((BYTE *)manager+472),52,race_node_snapshot,race_node_vtable,&race_node_snapshot_count,0);
     if(race_culling_trace&&(race_culling_frames%120)==0){
         void **pb=*(void ***)((BYTE *)manager+460),**pe=*(void ***)((BYTE *)manager+464);
         unsigned active=(pb&&pe&&pe>=pb)?(unsigned)(pe-pb):0;
@@ -673,6 +685,7 @@ static void race_culling_props(BYTE *base){
         for(void **item=begin;item<end;item++){
             void *prop=*item;
             if(!readable(prop,572))continue;
+            if(*((BYTE *)prop+502)==1)continue; /* exploded: let the debris show */
             void *visual=*(void **)((BYTE *)prop+288);
             if(!readable(visual,132))continue;
             /* Do not touch gaPropBase+496/+464. Those drive the prop's own
