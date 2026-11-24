@@ -312,10 +312,12 @@ static void race_culling_prewarm(BYTE *base){
         }
     }
     if(main_road&&master_total>0&&capture_custom){
-        int window_start=main_cursor-232;
-        if(window_start<0)window_start=0;
-        if(window_start>0)race_culling_road_chunks_split(base,main_road,capture_custom,0,window_start*9,master_total,node);
-        if(main_cursor<master_total)race_culling_road_chunks_split(base,main_road,capture_custom,main_cursor*9,master_total*9,master_total,node);
+        /* Cover the whole road, including the pre-start blocks. The old split
+         * skipped [0, main_cursor*9], assuming the live strip covered it, so
+         * retention only began at the race start line. Hide the live road mesh
+         * once the chunks exist so the two surfaces do not overlap. */
+        race_culling_road_chunks_split(base,main_road,capture_custom,0,master_total*9,master_total,node);
+        race_culling_force_custom(main_road,0);
     }else{
         log_line("Track prewarm deferred: road data is not ready.");
         return;
@@ -958,7 +960,7 @@ static void race_culling_strips(BYTE *base){
         BYTE *strip=(BYTE *)*item;
         if(!readable(strip,424))continue;
         int type=*((int *)(strip+212));
-        if(photo_progress>=0.0f&&photo_node&&type!=0
+        if(photo_progress>=0.0f&&photo_node&&type!=0&&type!=6
             &&race_culling_strip_tick)race_culling_strip_tick(strip,1,0,photo_progress,photo_node);
         race_culling_trim_strip(strip);
         /* The custom road/wall/zone mesh is one elVisualCustom at strip+256.
