@@ -45,10 +45,19 @@ static RaceCullingBackNode race_culling_back_node;
 typedef void *(__cdecl *RaceCullingStripCtor)(void *,int);
 typedef void (__thiscall *RaceCullingSetCollision)(void *,BYTE);
 typedef void *(__cdecl *RaceCullingOperatorNew)(size_t);
+typedef void (__cdecl *RaceCullingOperatorDelete)(void *);
+/* The capture buffer must hold the whole track: the road mesh wraps at the
+ * capacity, so a short buffer overwrites the start with the end of the track.
+ * 131072 vertices covers ~14500 blocks; the pre-race window is reused. */
+#define RACE_CAPTURE_VERTEX_CAP 131072u
+#define RACE_ROAD_CHUNK_MAX 128
 static RaceCullingStripCtor race_culling_strip_ctor;
 static RaceCullingSetCollision race_culling_set_collision;
 static RaceCullingOperatorNew race_culling_operator_new;
-static void *race_culling_road_chunks[64];
+static RaceCullingOperatorDelete race_culling_operator_delete;
+static BYTE *race_capture_vertices;
+static unsigned race_capture_vertex_capacity;
+static void *race_culling_road_chunks[RACE_ROAD_CHUNK_MAX];
 static unsigned race_culling_road_chunk_count;
 /* Side type-6 strips reuse the original sign tick at a shifted pace time.
  * Each one adds a forward window of scrolling base/glow signs without
@@ -124,7 +133,7 @@ static void race_culling_road_chunks_split(BYTE *base,BYTE *main,BYTE *capture_c
     const unsigned chunk_verts=2000,overlap=32,stride=chunk_verts-overlap;
     unsigned added=0;
     for(unsigned start=(unsigned)vertex_start;start<(unsigned)vertex_end;start+=stride){
-        if(race_culling_road_chunk_count>=64)break;
+        if(race_culling_road_chunk_count>=RACE_ROAD_CHUNK_MAX)break;
         unsigned end=start+chunk_verts;
         if(end>(unsigned)vertex_end)end=(unsigned)vertex_end;
         unsigned ext_start=start>overlap?start-overlap:0;
@@ -205,6 +214,28 @@ static void race_culling_road_chunks_apply(void){
     for(unsigned i=0;i<race_culling_road_chunk_count;i++)race_culling_force_custom((BYTE *)race_culling_road_chunks[i],1);
 }
 
+/* A chunk owns its mesh buffers but not a game object, so hide it and return
+ * the two large allocations when the race manager changes. Leaving them made
+ * every prewarm leak the previous track's road chunks. */
+static void race_culling_road_chunk_release(void *chunk){
+    BYTE *strip=(BYTE *)chunk;
+    if(!strip||!readable(strip,424))return;
+    BYTE *custom=*(BYTE **)(strip+256);
+    if(!custom||!readable(custom,180))return;
+    *((BYTE *)custom+20)=0;
+    BYTE *vertices=*(BYTE **)(custom+156),*triangles=*(BYTE **)(custom+168);
+    *(BYTE **)(custom+156)=NULL;
+    *(BYTE **)(custom+160)=NULL;
+    *(BYTE **)(custom+164)=NULL;
+    *(BYTE **)(custom+168)=NULL;
+    *(BYTE **)(custom+172)=NULL;
+    *(BYTE **)(custom+176)=NULL;
+    if(race_culling_operator_delete){
+        if(vertices)race_culling_operator_delete(vertices);
+        if(triangles)race_culling_operator_delete(triangles);
+    }
+}
+
 static void race_culling_prewarm(BYTE *base){
     if(!race_culling_enabled||!race_track_pool_relocated||!race_culling_strip_tick||!race_culling_back_node
         ||!readable(base+0x7dce7c,4))return;
@@ -212,8 +243,8 @@ static void race_culling_prewarm(BYTE *base){
     if(!readable(manager,2728)||manager==race_culling_prewarm_done)return;
     race_track_block_total=0;
     if(race_culling_road_chunk_count&&race_culling_prewarm_done&&manager!=race_culling_prewarm_done){
-        for(unsigned i=0;i<race_culling_road_chunk_count;i++)race_culling_force_custom((BYTE *)race_culling_road_chunks[i],0);
-        char detail[128];snprintf(detail,sizeof(detail),"Track prewarm reset: hid %u chunks from the previous manager.",race_culling_road_chunk_count);log_line(detail);
+        for(unsigned i=0;i<race_culling_road_chunk_count;i++)race_culling_road_chunk_release(race_culling_road_chunks[i]);
+        char detail[160];snprintf(detail,sizeof(detail),"Track prewarm reset: released %u chunks from the previous manager.",race_culling_road_chunk_count);log_line(detail);
         race_culling_road_chunk_count=0;
     }
     if(!readable(base+0x7d5930,4))return;
@@ -304,8 +335,13 @@ static void race_culling_prewarm(BYTE *base){
             if(body&&race_culling_set_collision)race_culling_set_collision(body,0);
             capture_custom=*(BYTE **)(capture+256);
             if(capture_custom&&readable(capture_custom,180)){
-                const unsigned cap=40000;
-                BYTE *vbig=race_culling_operator_new?(BYTE *)race_culling_operator_new((size_t)cap*40):NULL;
+                const unsigned cap=RACE_CAPTURE_VERTEX_CAP;
+                if(race_capture_vertex_capacity<cap){
+                    if(race_capture_vertices&&race_culling_operator_delete)race_culling_operator_delete(race_capture_vertices);
+                    race_capture_vertices=race_culling_operator_new?(BYTE *)race_culling_operator_new((size_t)cap*40):NULL;
+                    race_capture_vertex_capacity=race_capture_vertices?cap:0;
+                }
+                BYTE *vbig=race_capture_vertices;
                 if(vbig){
                     *(BYTE **)(capture_custom+156)=vbig;
                     *(BYTE **)(capture_custom+160)=vbig+(size_t)cap*40;
@@ -315,6 +351,10 @@ static void race_culling_prewarm(BYTE *base){
             for(int step=0;step<=steps;step++)race_culling_strip_tick(capture,1,0,(float)step/(float)steps*max_progress,node);
             master_total=*((int *)(capture+56));
             race_track_block_total=master_total;
+            if(master_total>0&&(unsigned)master_total*9>race_capture_vertex_capacity){
+                char detail[180];snprintf(detail,sizeof(detail),"Road capture truncated: need=%u cap=%u; the road mesh wrapped.",
+                    (unsigned)master_total*9,race_capture_vertex_capacity);log_line(detail);
+            }
             if(capture_custom&&readable(capture_custom,180))*((BYTE *)capture_custom+20)=0;
             for(int off=268;off<=300;off+=32){
                 for(int i=0;i<8;i++){
@@ -575,6 +615,7 @@ static BOOL install_race_culling(BYTE *base){
     race_culling_context_dirty=(RaceCullingContextDirty)(base+0x53580);
     race_culling_set_collision=(RaceCullingSetCollision)(base+0x3bc80);
     if(readable(base+0x52d4b4,4))race_culling_operator_new=(RaceCullingOperatorNew)*(void **)(base+0x52d4b4);
+    if(readable(base+0x52d4b0,4))race_culling_operator_delete=(RaceCullingOperatorDelete)*(void **)(base+0x52d4b0);
     BOOL expanded=race_culling_expand_pool(base);
     race_culling_pool_expanded=expanded;
     WCHAR pool_value[16];
