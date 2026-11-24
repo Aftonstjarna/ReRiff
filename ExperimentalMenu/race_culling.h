@@ -563,8 +563,9 @@ static void race_culling_props(BYTE *base){
         if(!readable(prop,572))continue;
         void *visual=*(void **)((BYTE *)prop+288);
         if(!readable(visual,132))continue;
-        *((BYTE *)prop+496)=0;
-        *((BYTE *)prop+464)=0xFF;
+        /* Do not touch gaPropBase+496/+464. Those drive the prop's own
+         * setVisible bookkeeping; clearing them made destructible props
+         * (barricades/fences) stop drawing. Only push the visual itself. */
         *((DWORD *)((BYTE *)visual+128))=0x0FFF;
         *((BYTE *)visual+20)=1;
         race_culling_visual(visual,1);
