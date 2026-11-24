@@ -613,6 +613,7 @@ static void race_culling_props(BYTE *base){
          * setVisible bookkeeping; clearing them made destructible props
          * (barricades/fences) stop drawing. Only push the visual itself. */
         *((DWORD *)((BYTE *)visual+128))=0x0FFF;
+        *((BYTE *)visual+137)&=(BYTE)~1; /* disable view-frustum culling */
         *((BYTE *)visual+20)=1;
         race_culling_visual(visual,1);
         race_culling_prop_forced++;
@@ -633,6 +634,7 @@ static void race_culling_ramps(BYTE *base){
         if(!readable(visual,132))continue;
         *((BYTE *)visual+20)=1;
         *((DWORD *)((BYTE *)visual+128))=0x0FFF;
+        *((BYTE *)visual+137)&=(BYTE)~1; /* disable view-frustum culling */
         race_culling_visual(visual,1);
         race_culling_ramp_forced++;
     }
@@ -804,9 +806,13 @@ static void race_culling_sign_present(BYTE *strip){
                 if(race_culling_visual)race_culling_visual(base,1);
             }
             *((DWORD *)((BYTE *)base+128))=0x0FFF;
+            *((BYTE *)base+137)&=(BYTE)~1;
         }
         void *glow=*(void **)(strip+300+i*4);
-        if(glow&&readable(glow,132))*((DWORD *)((BYTE *)glow+128))=0x0FFF;
+        if(glow&&readable(glow,132)){
+            *((DWORD *)((BYTE *)glow+128))=0x0FFF;
+            *((BYTE *)glow+137)&=(BYTE)~1;
+        }
     }
 }
 static void race_culling_sign_link(BYTE *strip,BYTE *main){
@@ -1049,9 +1055,11 @@ static void race_culling_strips(BYTE *base){
             race_culling_strip_block_count++;
             if(*((BYTE *)visual+20)==1){
                 *((DWORD *)((BYTE *)visual+128))=0x0FFF;
+                *((BYTE *)visual+137)&=(BYTE)~1;
                 continue;
             }
             *((DWORD *)((BYTE *)visual+128))=0x0FFF;
+            *((BYTE *)visual+137)&=(BYTE)~1;
             *((BYTE *)visual+20)=1;
             race_culling_visual(visual,1);
             race_culling_strip_forced++;
