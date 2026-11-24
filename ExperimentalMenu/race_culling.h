@@ -374,6 +374,12 @@ static BOOL race_track_pool_install(BYTE *base,int pool){
     }
     static BYTE body[RERIFF_TRACK_CTOR_BLOB_SIZE];
     memcpy(body,race_track_ctor_blob,sizeof(body));
+    /* Give the type-2/3 wall custom mesh room for the whole driven edge. */
+    for(unsigned i=0;i+5<=sizeof(body);i++){
+        if(body[i]==0x20&&body[i+1]==0x58&&body[i+2]==0x06&&body[i+3]==0x00&&body[i+4]==0x00){
+            *(int *)(body+i+1)=65536;break;
+        }
+    }
     if(pool!=512){
         int replaced=0;
         for(unsigned i=0;i+5<=sizeof(body);i++){
@@ -475,6 +481,36 @@ static BOOL race_culling_retain_blocks(BYTE *base){
     VirtualProtect(site,sizeof(expected),old,&ignored);
     return TRUE;
 }
+
+/* Edge barriers are wall segments appended to the type-2/3 custom mesh.
+ * spawnNewWallSegment erases the triangles behind the forward-only cursor, and
+ * the ctor allocates only 1624 wall vertices, so the barrier vanishes just
+ * behind the car. Enlarge the vertex pool and skip the erase: the wall then
+ * accumulates over the driven track and stays visible in free look/photo. */
+static BOOL race_culling_retain_walls(BYTE *base){
+    BOOL ok=FALSE;
+    BYTE *pool=base+0x27306c;
+    static const BYTE pool_expected[]={0x20,0x58,0x06,0x00,0x00};
+    if(readable(pool,sizeof(pool_expected))&&!memcmp(pool,pool_expected,sizeof(pool_expected))){
+        DWORD old,ignored;
+        if(VirtualProtect(pool,sizeof(pool_expected),PAGE_READWRITE,&old)){
+            *(int *)(pool+1)=65536;
+            VirtualProtect(pool,sizeof(pool_expected),old,&ignored);
+            ok=TRUE;
+        }
+    }
+    BYTE *erase=base+0x26e93d;
+    static const BYTE erase_expected[]={0x11,0x04,0x2d,0x3e};
+    if(readable(erase,sizeof(erase_expected))&&!memcmp(erase,erase_expected,sizeof(erase_expected))){
+        DWORD old,ignored;
+        if(VirtualProtect(erase,sizeof(erase_expected),PAGE_READWRITE,&old)){
+            erase[0]=0x2b;erase[1]=0x40;erase[2]=0x00;erase[3]=0x00;
+            VirtualProtect(erase,sizeof(erase_expected),old,&ignored);
+            ok=TRUE;
+        }
+    }
+    return ok;
+}
 static BOOL install_race_culling(BYTE *base){
     WCHAR value[16];
     WCHAR client[MAX_PATH];wcsncpy(client,config_path,MAX_PATH-1);client[MAX_PATH-1]=0;
@@ -507,8 +543,9 @@ static BOOL install_race_culling(BYTE *base){
     race_window_ahead=visual_retention?pool-race_window_behind:0;
     BOOL relocated=use_pool?race_track_pool_install(base,pool):FALSE;
     BOOL retained=race_culling_retain_blocks(base);
-    char detail[220];snprintf(detail,sizeof(detail),"Track visual retention tier=%d; trace=%d; block retention=%d; large pool=%d; window=%d behind + %d ahead.",
-        tier,race_culling_trace?1:0,retained?1:0,relocated?pool:0,race_window_behind,race_window_ahead);log_line(detail);
+    BOOL walls=race_culling_retain_walls(base);
+    char detail[240];snprintf(detail,sizeof(detail),"Track visual retention tier=%d; trace=%d; block retention=%d; wall retention=%d; large pool=%d; window=%d behind + %d ahead.",
+        tier,race_culling_trace?1:0,retained?1:0,walls?1:0,relocated?pool:0,race_window_behind,race_window_ahead);log_line(detail);
     return TRUE;
 }
 
