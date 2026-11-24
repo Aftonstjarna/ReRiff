@@ -543,6 +543,7 @@ static void race_culling_apply(void *manager,BOOL paused){
 }
 
 static void race_culling_props(BYTE *base){
+    static BOOL announced;
     race_culling_prop_count=race_culling_prop_forced=0;
     if(!race_culling_visual){
         if(!race_culling_visual_announced){race_culling_visual_announced=TRUE;log_line("Culling prop visibility bridge unavailable; trigger culling fallback only.");}
@@ -550,10 +551,17 @@ static void race_culling_props(BYTE *base){
     }
     if(!readable(base+0x7e3080,4))return;
     void *manager=*(void **)(base+0x7e3080);
-    if(!readable(manager,456))return;
-    void **begin=*(void ***)((BYTE *)manager+448),**end=*(void ***)((BYTE *)manager+452);
+    if(!readable(manager,468))return;
+    /* gaPropManager keeps its ticking props in the vector at +460. The +448
+     * vector is only the add/dedupe list and is normally empty, which made the
+     * old code report props=0 and skip the road-edge prop visuals. */
+    void **begin=*(void ***)((BYTE *)manager+460),**end=*(void ***)((BYTE *)manager+464);
     if(!begin||!end||end<begin||(BYTE *)end-(BYTE *)begin>20000*4)return;
     race_culling_prop_count=(unsigned)(end-begin);
+    if(!announced){
+        announced=TRUE;
+        char line[160];snprintf(line,sizeof(line),"Culling props: manager=%p active=%u.",manager,race_culling_prop_count);log_line(line);
+    }
     for(void **item=begin;item<end;item++){
         void *prop=*item;
         if(!readable(prop,572))continue;
