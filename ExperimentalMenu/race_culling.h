@@ -623,6 +623,7 @@ static void race_culling_hide_block(BYTE *blocks,BYTE *block,void **visuals){
     (void)blocks;
 }
 static void race_culling_trim_strip(BYTE *strip){
+    if(race_photo_active)return; /* photo mode keeps every spawned block */
     if(race_window_behind<=0&&race_window_ahead<=0)return;
     BYTE *blocks=*(BYTE **)(strip+152),*blocks_end=*(BYTE **)(strip+156);
     if(!blocks||!blocks_end||blocks_end<blocks||((size_t)(blocks_end-blocks)%88))return;
@@ -930,15 +931,44 @@ static void race_culling_strips(BYTE *base){
     if(!begin||!end||end<begin||(size_t)((BYTE *)end-(BYTE *)begin)>256*sizeof(void *))return;
     race_culling_strip_count=(unsigned)(end-begin);
     race_player_distance=race_culling_player_distance(base);
+    /* Photo mode can move the camera far from the car while the race position
+     * stays frozen. Advance the prop strips to the camera's along-track
+     * position so scenery (road-edge rails, turbines, blocks) spawns where the
+     * camera is looking instead of only near the car. Incremental ticks keep
+     * model resources loading naturally, unlike a synthetic full-track sweep. */
+    float photo_progress=-1.0f;
+    void *photo_node=NULL;
+    if(race_photo_active&&race_culling_strip_tick&&race_culling_back_node){
+        float distance=0.0f,progress=0.0f,song_len=0.0f,track_len=0.0f,zone=6.0f;
+        void *tracker=NULL;
+        if(race_culling_player_state(base,&distance,&progress,&tracker)
+            &&race_culling_trackgen(base,&song_len,&track_len,&zone)&&track_len>1.0f){
+            void *player=race_culling_camera_player(base);
+            float position[3],forward[3];
+            if(player&&race_camera_player(player,position,forward)){
+                float offset=(race_photo_position[0]-position[0])*forward[0]
+                            +(race_photo_position[1]-position[1])*forward[1]
+                            +(race_photo_position[2]-position[2])*forward[2];
+                photo_progress=progress+offset/track_len;
+                if(photo_progress<0.0f)photo_progress=0.0f;
+                if(photo_progress>1.0f)photo_progress=1.0f;
+                photo_node=race_culling_back_node(tracker,NULL,NULL);
+                if(!photo_node)photo_progress=-1.0f;
+            }
+        }
+    }
     for(void **item=begin;item<end;item++){
         BYTE *strip=(BYTE *)*item;
         if(!readable(strip,424))continue;
+        int type=*((int *)(strip+212));
+        if(photo_progress>=0.0f&&photo_node&&type>=8&&type<=12
+            &&race_culling_strip_tick)race_culling_strip_tick(strip,1,0,photo_progress,photo_node);
         race_culling_trim_strip(strip);
         /* The custom road/wall/zone mesh is one elVisualCustom at strip+256.
          * When the road is split into chunks the original type-0 mesh is
          * hidden; everything else is forced visible and its fade window is
          * widened for the backed-out camera. */
-        if(*((int *)(strip+212))!=0)race_culling_force_custom(strip,1);
+        if(type!=0)race_culling_force_custom(strip,1);
         if(race_culling_trace&&(race_culling_frames%120)==0){
             void **pool_begin=*(void ***)(strip+164),**pool_end=*(void ***)(strip+168);
             unsigned pool=pool_begin&&pool_end&&pool_end>=pool_begin?(unsigned)(pool_end-pool_begin):0;
