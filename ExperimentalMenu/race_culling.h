@@ -157,7 +157,7 @@ static void race_culling_road_chunks_split(BYTE *base,BYTE *main,BYTE *capture_c
         if(readable(main_custom+152,4))*(DWORD *)(custom+152)=*(DWORD *)(main_custom+152);
         unsigned vcount=ext_end-ext_start;
         BYTE *vbuf=race_culling_operator_new?(BYTE *)race_culling_operator_new((size_t)vcount*40):NULL;
-        BYTE *tbuf=race_culling_operator_new?(BYTE *)race_culling_operator_new((size_t)nt*12):NULL;
+        BYTE *tbuf=race_culling_operator_new?(BYTE *)race_culling_operator_new((size_t)nt*2*12):NULL;
         if(!vbuf||!tbuf)continue;
         memcpy(vbuf,cvb+(size_t)ext_start*40,(size_t)vcount*40);
         unsigned k=0;
@@ -165,18 +165,24 @@ static void race_culling_road_chunks_split(BYTE *base,BYTE *main,BYTE *capture_c
             int *tri=(int *)(ctb+t*12);
             int a=tri[0],b=tri[1],c=tri[2];
             if(a<(int)ext_start||a>=(int)ext_end||b<(int)ext_start||b>=(int)ext_end||c<(int)ext_start||c>=(int)ext_end)continue;
-            int *dst=(int *)(tbuf+(size_t)k*12);
+            /* Keep the original face and add the reversed one so the chunk is
+             * visible from below (the source road mesh is single-sided). */
+            int *dst=(int *)(tbuf+(size_t)(k*2)*12);
             dst[0]=a-(int)ext_start;
             dst[1]=b-(int)ext_start;
             dst[2]=c-(int)ext_start;
+            dst=(int *)(tbuf+(size_t)(k*2+1)*12);
+            dst[0]=a-(int)ext_start;
+            dst[1]=c-(int)ext_start;
+            dst[2]=b-(int)ext_start;
             k++;
         }
         *(BYTE **)(custom+156)=vbuf;
         *(BYTE **)(custom+160)=vbuf+(size_t)vcount*40;
         *(BYTE **)(custom+164)=vbuf+(size_t)vcount*40;
         *(BYTE **)(custom+168)=tbuf;
-        *(BYTE **)(custom+172)=tbuf+(size_t)nt*12;
-        *(BYTE **)(custom+176)=tbuf+(size_t)nt*12;
+        *(BYTE **)(custom+172)=tbuf+(size_t)nt*2*12;
+        *(BYTE **)(custom+176)=tbuf+(size_t)nt*2*12;
         if(race_culling_context_dirty){
             BOOL have_next=readable(custom+12,4);
             DWORD next=have_next?*(DWORD *)(custom+12):0;
@@ -186,7 +192,7 @@ static void race_culling_road_chunks_split(BYTE *base,BYTE *main,BYTE *capture_c
         }
         race_culling_force_custom(extra,1);
         char detail[200];snprintf(detail,sizeof(detail),"Road chunk %u exact verts=%u..%u tris=%u cursor=%d.",
-            race_culling_road_chunk_count,ext_start,ext_end,nt,extra?*((int *)(extra+56)):0);log_line(detail);
+            race_culling_road_chunk_count,ext_start,ext_end,nt*2,extra?*((int *)(extra+56)):0);log_line(detail);
         race_culling_road_chunks[race_culling_road_chunk_count++]=extra;
         added++;
     }
