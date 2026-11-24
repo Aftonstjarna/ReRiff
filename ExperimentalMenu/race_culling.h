@@ -257,7 +257,17 @@ static void race_culling_prewarm(BYTE *base){
             strips++;
             continue;
         }
-        for(int step=0;step<=steps;step++)race_culling_strip_tick(strip,1,0,(float)step/(float)steps*max_progress,node);
+        /* Only custom-mesh strips (walls, chevrons, signs) survive a full-track
+         * sweep: their geometry accumulates in the mesh. Block and prop strips
+         * keep one elVisual per pool slot, so sweeping them consumes the spawn
+         * cursor and prewarms visuals past the retention window; once trimmed,
+         * nothing can respawn and the side buildings disappear. Let those spawn
+         * naturally as the car covers the track. */
+        void **visual_begin=*(void ***)(strip+164),**visual_end=*(void ***)(strip+168);
+        unsigned pool=visual_begin&&visual_end&&visual_end>=visual_begin?(unsigned)(visual_end-visual_begin):0;
+        if(!pool){
+            for(int step=0;step<=steps;step++)race_culling_strip_tick(strip,1,0,(float)step/(float)steps*max_progress,node);
+        }
         race_culling_strip_tick(strip,1,0,current,node);
         BYTE *custom=*(BYTE **)(strip+256);
         if(race_culling_context_dirty&&custom&&readable(custom,180)){
@@ -610,8 +620,15 @@ static void race_culling_trim_strip(BYTE *strip){
     if(!blocks||!blocks_end||blocks_end<blocks||((size_t)(blocks_end-blocks)%88))return;
     size_t count=(size_t)(blocks_end-blocks)/88;
     if(!count)return;
+    /* tick() converts the car's track distance into this strip's block-step
+     * coordinate with (strip+216 * distance) / strip+228, and block+76 stores
+     * that step. Convert before searching so the window follows the car
+     * instead of sliding off to the end of the block list. */
+    int step_scale=*((int *)(strip+216)),step_div=*((int *)(strip+228));
+    float player_step=race_player_distance;
+    if(step_scale>0&&step_div>0)player_step=race_player_distance*(float)step_scale/(float)step_div;
     size_t player_index=0;
-    while(player_index<count&&*((float *)(blocks+player_index*88+76))<race_player_distance)player_index++;
+    while(player_index<count&&*((float *)(blocks+player_index*88+76))<player_step)player_index++;
     size_t keep_start=player_index>(size_t)race_window_behind?player_index-(size_t)race_window_behind:0;
     size_t keep_end=player_index+(size_t)race_window_ahead;
     if(keep_end>count)keep_end=count;
@@ -945,7 +962,13 @@ static void race_culling_strips(BYTE *base){
         if(race_culling_trace&&(race_culling_frames%120)==0){
             void **pool_begin=*(void ***)(strip+164),**pool_end=*(void ***)(strip+168);
             unsigned pool=pool_begin&&pool_end&&pool_end>=pool_begin?(unsigned)(pool_end-pool_begin):0;
-            char detail[160];snprintf(detail,sizeof(detail),"Culling strip type=%d blocks=%u unique=%u current=%d pool=%u.",*((int *)(strip+212)),strip_blocks,strip_unique,*((int *)(strip+188)),pool);log_line(detail);
+            int step_scale=*((int *)(strip+216)),step_div=*((int *)(strip+228));
+            float player_step=race_player_distance;
+            if(step_scale>0&&step_div>0)player_step=race_player_distance*(float)step_scale/(float)step_div;
+            float first=blocks_end>blocks?*((float *)(blocks+76)):0.0f;
+            float last=blocks_end>blocks?*((float *)(blocks_end-88+76)):0.0f;
+            char detail[220];snprintf(detail,sizeof(detail),"Culling strip type=%d blocks=%u unique=%u current=%d pool=%u step=%.1f span=%.1f..%.1f.",
+                *((int *)(strip+212)),strip_blocks,strip_unique,*((int *)(strip+188)),pool,player_step,first,last);log_line(detail);
         }
     }
 }
