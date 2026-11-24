@@ -724,10 +724,11 @@ static void race_culling_props(BYTE *base){
             if(!readable(piece,132))continue;
             void *visual=*(void **)(piece+16);
             if(!readable(visual,132))continue;
+            /* Leave the piece's own visible flag alone: a broken-off piece is
+             * hidden by gaPropNodes and must stay hidden. Only widen its draw
+             * mask and clear the frustum flag. */
             *((DWORD *)((BYTE *)visual+128))=0x0FFF;
             *((BYTE *)visual+137)&=(BYTE)~1;
-            *((BYTE *)visual+20)=1;
-            race_culling_visual(visual,1);
             race_culling_prop_forced++;
         }
     }
