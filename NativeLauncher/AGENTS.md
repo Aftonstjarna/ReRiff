@@ -13,6 +13,13 @@ and their shared headers. Client mod sources are in `ExperimentalMenu/` and
 - Preserve the existing restart protocol, logging and configuration headers
   shared with the client. A change there needs the client build checked too.
 
+## UI wording
+
+- Name controls by their function. Button, checkbox, tab and menu text is the
+  action or setting name, not a sentence explaining it. Tooltips give the
+  setting's scope, values and restart requirements; explanations belong on the
+  wiki.
+
 ## Missing ReRiff-managed files
 
 - During installation, update or component enablement, treat missing
