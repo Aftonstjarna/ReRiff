@@ -590,22 +590,24 @@ static void race_culling_apply(void *manager,BOOL paused){
     }
 }
 
-#define RACE_SNAPSHOT_MAX 256
+#define RACE_SNAPSHOT_MAX 1024
 static void *race_prop_snapshot[RACE_SNAPSHOT_MAX],*race_prop_vtable[RACE_SNAPSHOT_MAX];
 static unsigned race_prop_snapshot_count;
 static void *race_node_snapshot[RACE_SNAPSHOT_MAX],*race_node_vtable[RACE_SNAPSHOT_MAX];
 static unsigned race_node_snapshot_count;
+static void *race_prop_manager;
 
 /* gaPropManager.tick drops props/nodes from the active vectors once their own
  * tick/setup call says they are inactive. The object is still alive (usually
  * asleep), and the vector keeps its capacity, so re-append the snapshot entry
  * at the current end when it is missing. The vtable check rejects entries that
  * were destroyed and reused. */
-static void race_culling_readd(void **vector,size_t object_size,void **snapshot,void **vtable,unsigned *count){
-    if(!vector)return;
+static unsigned race_culling_readd(void **vector,size_t object_size,void **snapshot,void **vtable,unsigned *count){
+    if(!vector)return 0;
     void **begin=(void **)vector[0],**end=(void **)vector[1],**cap=(void **)vector[2];
-    if(!begin||!end||!cap||end<begin||cap<end)return;
-    if((size_t)((BYTE *)cap-(BYTE *)begin)>20000*4)return;
+    if(!begin||!end||!cap||end<begin||cap<end)return 0;
+    if((size_t)((BYTE *)cap-(BYTE *)begin)>20000*4)return 0;
+    unsigned readded=0;
     for(void **item=begin;item<end;item++){
         void *object=*item;
         if(!readable(object,object_size))continue;
@@ -627,8 +629,10 @@ static void race_culling_readd(void **vector,size_t object_size,void **snapshot,
             *end=object;
             end++;
             vector[1]=end;
+            readded++;
         }
     }
+    return readded;
 }
 
 static void race_culling_props(BYTE *base){
@@ -641,8 +645,19 @@ static void race_culling_props(BYTE *base){
     if(!readable(base+0x7e3080,4))return;
     void *manager=*(void **)(base+0x7e3080);
     if(!readable(manager,484))return;
-    race_culling_readd((void **)((BYTE *)manager+460),572,race_prop_snapshot,race_prop_vtable,&race_prop_snapshot_count);
-    race_culling_readd((void **)((BYTE *)manager+472),52,race_node_snapshot,race_node_vtable,&race_node_snapshot_count);
+    if(manager!=race_prop_manager){
+        race_prop_manager=manager;
+        race_prop_snapshot_count=race_node_snapshot_count=0;
+    }
+    unsigned prop_readd=race_culling_readd((void **)((BYTE *)manager+448),572,race_prop_snapshot,race_prop_vtable,&race_prop_snapshot_count);
+    prop_readd+=race_culling_readd((void **)((BYTE *)manager+460),572,race_prop_snapshot,race_prop_vtable,&race_prop_snapshot_count);
+    unsigned node_readd=race_culling_readd((void **)((BYTE *)manager+472),52,race_node_snapshot,race_node_vtable,&race_node_snapshot_count);
+    if(race_culling_trace&&(race_culling_frames%120)==0){
+        void **pb=*(void ***)((BYTE *)manager+460),**pe=*(void ***)((BYTE *)manager+464);
+        unsigned active=(pb&&pe&&pe>=pb)?(unsigned)(pe-pb):0;
+        char line[220];snprintf(line,sizeof(line),"Culling props: active=%u snapshots=%u/%u readd=%u/%u.",
+            active,race_prop_snapshot_count,race_node_snapshot_count,prop_readd,node_readd);log_line(line);
+    }
     /* gaPropManager keeps its ticking props in the vector at +460. The +448
      * vector is only the add/dedupe list and is normally empty, which made the
      * old code report props=0 and skip the road-edge prop visuals. Grouped
