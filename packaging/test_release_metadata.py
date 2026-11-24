@@ -8,6 +8,7 @@ import tempfile
 import unittest
 
 from release_metadata import release_metadata
+from release_notes import release_notes
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -34,6 +35,14 @@ class ReleaseMetadataTests(unittest.TestCase):
         self.names = [f'ReRiff-{self.version}-windows.zip',f'ReRiff-{self.version}-linux.run','ReRiff-Windows-Server.zip','ReRiff-Server-x86_64.AppImage','ReRiff-CJK.zip','ReRiff-Latin.zip']
         for name in self.names:(self.root/name).write_bytes(name.encode())
     def tearDown(self): self.temp.cleanup()
+    def test_current_release_summary_is_ascii_and_bounded(self):
+        version=(ROOT/'VERSION').read_text().strip()
+        notes=release_notes((ROOT/'RELEASE-NOTES.md').read_text(encoding='utf-8'),version)
+        summary=notes.split('## In-game summary',1)[1].split('## ',1)[0]
+        bullets=[line[2:].strip() for line in summary.splitlines() if line.startswith('- ')]
+        self.assertTrue(bullets)
+        for text in bullets:
+            self.assertLessEqual(len(text),72,text)
     def parse(self, metadata, platform, valid=True):
         path=self.root/'release.json';path.write_text(json.dumps(metadata))
         result=subprocess.run([str(self.parser),'--package',str(path),platform],capture_output=True,text=True)

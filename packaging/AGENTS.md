@@ -29,6 +29,8 @@ installer payload layout.
 - Summarize the most important player-facing changes in at most three complete
   bullet sentences, each at most 72 characters (excluding the bullet prefix).
   Write concise summaries rather than cutting detailed sentences mid-thought.
+- Use ASCII punctuation in the in-game summary. The native News font has no
+  en/em dash or curly quotes; unsupported characters render as `?`.
 - Keep the full changelog on GitHub. Native News displays the short summary and
   uses its existing Visit URL action to open that exact release's full notes.
 

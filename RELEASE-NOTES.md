@@ -2,13 +2,13 @@
 
 ## In-game summary
 
-- Visual retention 0–10 keeps more road, wall and prop scenery loaded.
+- Visual retention 0-10 keeps more road, wall and prop scenery loaded.
 - Road chunks render from below; ramps and edge barriers stay loaded.
 - Launcher labels and tooltips now use setting names.
 
 ## Full release notes
 
-- Add the launcher and `client.ini` `[graphics] visual_retention` setting, 0–10. 0 is vanilla; higher tiers use a larger visual pool and a symmetric behind/ahead block window. Tier 10 uses the largest window the tier ladder drives. Restart required.
+- Add the launcher and `client.ini` `[graphics] visual_retention` setting, 0-10. 0 is vanilla; higher tiers use a larger visual pool and a symmetric behind/ahead block window. Tier 10 uses the largest window the tier ladder drives. Restart required.
 - Split the captured road mesh into full-track chunks, including the pre-start range. Each chunk carries both triangle windings so the road is solid from below, and the live road mesh is hidden while chunks are present.
 - Retain the type 2/3 edge barrier behind the car by enlarging the wall vertex pool and skipping the triangle erase, so the barrier accumulates over the driven track.
 - Keep type 8/9 block visuals and the active prop/prop-node vectors in the retention pass. Props and nodes removed by `gaPropManager` are re-added from a live snapshot with a vtable check; exploded props are excluded and broken prop-node pieces keep their hidden state.
