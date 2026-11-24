@@ -599,30 +599,52 @@ static void race_culling_props(BYTE *base){
     }
     if(!readable(base+0x7e3080,4))return;
     void *manager=*(void **)(base+0x7e3080);
-    if(!readable(manager,468))return;
+    if(!readable(manager,480))return;
     /* gaPropManager keeps its ticking props in the vector at +460. The +448
      * vector is only the add/dedupe list and is normally empty, which made the
-     * old code report props=0 and skip the road-edge prop visuals. */
+     * old code report props=0 and skip the road-edge prop visuals. Grouped
+     * destructibles (breakable walls) are gaPropNodes in the +472 vector; each
+     * node owns DamagePiece pointers at +40 and each piece's visual is +16. */
     void **begin=*(void ***)((BYTE *)manager+460),**end=*(void ***)((BYTE *)manager+464);
-    if(!begin||!end||end<begin||(BYTE *)end-(BYTE *)begin>20000*4)return;
-    race_culling_prop_count=(unsigned)(end-begin);
-    if(!announced){
-        announced=TRUE;
-        char line[160];snprintf(line,sizeof(line),"Culling props: manager=%p active=%u.",manager,race_culling_prop_count);log_line(line);
+    if(begin&&end&&end>=begin&&(BYTE *)end-(BYTE *)begin<=20000*4){
+        race_culling_prop_count=(unsigned)(end-begin);
+        if(!announced){
+            announced=TRUE;
+            char line[160];snprintf(line,sizeof(line),"Culling props: manager=%p active=%u.",manager,race_culling_prop_count);log_line(line);
+        }
+        for(void **item=begin;item<end;item++){
+            void *prop=*item;
+            if(!readable(prop,572))continue;
+            void *visual=*(void **)((BYTE *)prop+288);
+            if(!readable(visual,132))continue;
+            /* Do not touch gaPropBase+496/+464. Those drive the prop's own
+             * setVisible bookkeeping; clearing them made destructible props
+             * (barricades/fences) stop drawing. Only push the visual itself. */
+            *((DWORD *)((BYTE *)visual+128))=0x0FFF;
+            *((BYTE *)visual+137)&=(BYTE)~1; /* disable view-frustum culling */
+            *((BYTE *)visual+20)=1;
+            race_culling_visual(visual,1);
+            race_culling_prop_forced++;
+        }
     }
-    for(void **item=begin;item<end;item++){
-        void *prop=*item;
-        if(!readable(prop,572))continue;
-        void *visual=*(void **)((BYTE *)prop+288);
-        if(!readable(visual,132))continue;
-        /* Do not touch gaPropBase+496/+464. Those drive the prop's own
-         * setVisible bookkeeping; clearing them made destructible props
-         * (barricades/fences) stop drawing. Only push the visual itself. */
-        *((DWORD *)((BYTE *)visual+128))=0x0FFF;
-        *((BYTE *)visual+137)&=(BYTE)~1; /* disable view-frustum culling */
-        *((BYTE *)visual+20)=1;
-        race_culling_visual(visual,1);
-        race_culling_prop_forced++;
+    void **nbegin=*(void ***)((BYTE *)manager+472),**nend=*(void ***)((BYTE *)manager+476);
+    if(!nbegin||!nend||nend<nbegin||(BYTE *)nend-(BYTE *)nbegin>20000*4)return;
+    for(void **item=nbegin;item<nend;item++){
+        BYTE *node=(BYTE *)*item;
+        if(!readable(node,52))continue;
+        void **pbegin=*(void ***)(node+40),**pend=*(void ***)(node+44);
+        if(!pbegin||!pend||pend<pbegin||(BYTE *)pend-(BYTE *)pbegin>2000*4)continue;
+        for(void **piece_item=pbegin;piece_item<pend;piece_item++){
+            BYTE *piece=(BYTE *)*piece_item;
+            if(!readable(piece,132))continue;
+            void *visual=*(void **)(piece+16);
+            if(!readable(visual,132))continue;
+            *((DWORD *)((BYTE *)visual+128))=0x0FFF;
+            *((BYTE *)visual+137)&=(BYTE)~1;
+            *((BYTE *)visual+20)=1;
+            race_culling_visual(visual,1);
+            race_culling_prop_forced++;
+        }
     }
 }
 
