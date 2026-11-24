@@ -54,6 +54,9 @@ read the routing table in `docs/agents/README.md`.
   `packaging/vanilla-reference.json` contracts unless the task coordinates the
   change.
 - Comments explain constraints or non-obvious decisions, not task history.
+- Name UI elements by their function. Labels, buttons and menu entries use the
+  action or setting name, not a sentence explaining it. Tooltips state the
+  setting's scope and effect; rationale and history belong in the wiki.
 - Documentation stays concise and factual. Update the existing relevant section
   instead of adding a new feature page. New documents need a durable purpose
   beyond recording the current task; link to authoritative code and

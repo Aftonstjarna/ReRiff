@@ -53,6 +53,13 @@ Run the executable under Wine or on Windows. Also build and run
 `NativeLauncher/test_lastfm.c` when the change touches a shared launcher header.
 Do not skip a test and report only a caveat.
 
+## UI wording
+
+- Name controls by their function. Button, checkbox, row and menu text is the
+  action or setting name, not a sentence explaining it. Tooltips give the
+  setting's scope, values and restart requirements; explanations belong on the
+  wiki.
+
 ## Where documentation goes
 
 - Graphics, culling, free look and photo mode: wiki

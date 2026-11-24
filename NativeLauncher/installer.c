@@ -158,13 +158,13 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE previous,LPWSTR arguments,int s
         CW_USEDEFAULT,CW_USEDEFAULT,CW_USEDEFAULT,CW_USEDEFAULT,setup_window,NULL,instance,NULL);
     SendMessageW(checkbox_tooltips,TTM_SETMAXTIPWIDTH,0,440);
     SendMessageW(checkbox_tooltips,TTM_SETDELAYTIME,TTDT_AUTOPOP,20000);
-    const WCHAR *labels[]={L"Install and enable CJK fonts",L"Install and enable Latin/European fonts",L"Enable diagnostic logging",L"Download private Python if required",L"Open GitHub after installation"};
+    const WCHAR *labels[]={L"CJK fonts",L"Latin/European fonts",L"Diagnostic logging",L"Private Python",L"Open GitHub after install"};
     const WCHAR *tips[]={
-        L"Adds Chinese, Japanese and Korean characters. Downloads about 105 MiB. Fonts do not translate menus.",
-        L"Adds Latin and European characters, including Polish. A small download; fonts do not translate menus.",
-        L"Saves reports in the game's logs folder. Defaults on for beta/development builds. Disabling keeps existing logs.",
-        L"Downloads verified Python from python.org when required. It stays in the game folder; system Python, PATH and registry are unchanged.",
-        L"Opens the ReRiff repository in your browser after a successful installation, for releases, help and source."};
+        L"CJK font support. About 105 MiB.",
+        L"Latin/European font support.",
+        L"Diagnostic logs in the game logs folder.",
+        L"Private Python in the game folder.",
+        L"Open the ReRiff repository after installation."};
     for(int i=0;i<5;i++){
         options[i]=control(setup_window,L"BUTTON",labels[i],WS_TABSTOP|BS_AUTOCHECKBOX,20,248+i*34,600,28,20+i);
         checkbox_help(options[i],tips[i]);
