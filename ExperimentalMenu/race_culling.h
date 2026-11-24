@@ -930,6 +930,7 @@ static void race_culling_strips(BYTE *base){
          * When the road is split into chunks the original type-0 mesh is
          * hidden; everything else is forced visible and its fade window is
          * widened for the backed-out camera. */
+        if(*((int *)(strip+212))!=0)race_culling_force_custom(strip,1);
         if(race_culling_trace&&(race_culling_frames%120)==0){
             void **pool_begin=*(void ***)(strip+164),**pool_end=*(void ***)(strip+168);
             unsigned pool=pool_begin&&pool_end&&pool_end>=pool_begin?(unsigned)(pool_end-pool_begin):0;
