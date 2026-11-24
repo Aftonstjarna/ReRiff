@@ -523,6 +523,28 @@ static BOOL race_culling_retain_walls(BYTE *base){
     }
     return ok;
 }
+
+/* gaPropManager.tick erases props and prop nodes from the active vectors when
+ * their tick/needsSetup method returns false. A destructible wall behind the
+ * car is removed rather than merely hidden, so the force pass cannot bring it
+ * back. Turn both brtrue erase guards into "pop; br" so every active entry
+ * stays in the list; the evaluation stack stays balanced. */
+static BOOL race_culling_retain_props(BYTE *base){
+    BYTE *sites[2]={base+0x29abfe,base+0x29ac51};
+    BOOL ok=FALSE;
+    for(int i=0;i<2;i++){
+        BYTE *site=sites[i];
+        if(!readable(site,3)||site[0]!=0x2d||site[1]!=0x19)continue;
+        DWORD old,ignored;
+        if(!VirtualProtect(site,3,PAGE_READWRITE,&old))continue;
+        site[0]=0x26; /* pop the boolean */
+        site[1]=0x2b; /* br.s to the iterator advance */
+        site[2]=0x18;
+        VirtualProtect(site,3,old,&ignored);
+        ok=TRUE;
+    }
+    return ok;
+}
 static BOOL install_race_culling(BYTE *base){
     WCHAR value[16];
     WCHAR client[MAX_PATH];wcsncpy(client,config_path,MAX_PATH-1);client[MAX_PATH-1]=0;
@@ -557,8 +579,9 @@ static BOOL install_race_culling(BYTE *base){
     BOOL relocated=use_pool?race_track_pool_install(base,pool):FALSE;
     BOOL retained=race_culling_retain_blocks(base);
     BOOL walls=race_culling_retain_walls(base);
-    char detail[240];snprintf(detail,sizeof(detail),"Track visual retention tier=%d; trace=%d; block retention=%d; wall retention=%d; large pool=%d; window=%d behind + %d ahead.",
-        tier,race_culling_trace?1:0,retained?1:0,walls?1:0,relocated?pool:0,race_window_behind,race_window_ahead);log_line(detail);
+    BOOL props=race_culling_retain_props(base);
+    char detail[260];snprintf(detail,sizeof(detail),"Track visual retention tier=%d; trace=%d; block retention=%d; wall retention=%d; prop retention=%d; large pool=%d; window=%d behind + %d ahead.",
+        tier,race_culling_trace?1:0,retained?1:0,walls?1:0,props?1:0,relocated?pool:0,race_window_behind,race_window_ahead);log_line(detail);
     return TRUE;
 }
 
