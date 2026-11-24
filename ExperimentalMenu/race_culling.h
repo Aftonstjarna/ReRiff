@@ -264,8 +264,8 @@ static void race_culling_prewarm(BYTE *base){
             strips++;
             continue;
         }
-        if(type==6){
-            /* Scrolling sign rails and score zones stay vanilla. */
+        if(type==6||type==10){
+            /* Scrolling sign rails, score zones and special blocks stay vanilla. */
             strips++;
             continue;
         }
@@ -478,26 +478,21 @@ static BOOL race_culling_expand_pool(BYTE *base){
  * the post-tick visual pass keeps their visuals visible. Applied before the
  * first race tick so the CLR has not compiled this method yet. */
 static BOOL race_culling_retain_blocks(BYTE *base){
-    /* tickBlocks and tickSpecialBlocks retire blocks behind the current
-     * progress through the same beq. Replace the num2 load with ldc.i4.m1 +
-     * nop so the compare is always -1 == -1 and the erase path is skipped.
-     * Keeping beq.s (instead of a raw br.s) leaves the IL evaluation stack
-     * balanced. Applied before the first race tick, so the CLR has not
-     * compiled either method yet. */
+    /* tickBlocks retires blocks behind the current progress through this beq.
+     * Replace the num2 load with ldc.i4.m1 + nop so the compare is always
+     * -1 == -1 and the erase path is skipped. Keeping beq.s (instead of a raw
+     * br.s) leaves the IL evaluation stack balanced. tickSpecialBlocks is left
+     * vanilla so destructible special blocks (the barriers across the track)
+     * still retire after they are hit. */
+    BYTE *site=base+0x26c624;
     static const BYTE expected[]={0x11,0x08,0x15,0x2e,0x33};
-    BYTE *sites[2]={base+0x26c624,base+0x271401};
-    BOOL any=FALSE;
-    for(int s=0;s<2;s++){
-        BYTE *site=sites[s];
-        if(!readable(site,sizeof(expected))||memcmp(site,expected,sizeof(expected)))continue;
-        DWORD old,ignored;
-        if(!VirtualProtect(site,sizeof(expected),PAGE_READWRITE,&old))continue;
-        site[0]=0x15;
-        site[1]=0x00;
-        VirtualProtect(site,sizeof(expected),old,&ignored);
-        any=TRUE;
-    }
-    return any;
+    if(!readable(site,sizeof(expected))||memcmp(site,expected,sizeof(expected)))return FALSE;
+    DWORD old,ignored;
+    if(!VirtualProtect(site,sizeof(expected),PAGE_READWRITE,&old))return FALSE;
+    site[0]=0x15;
+    site[1]=0x00;
+    VirtualProtect(site,sizeof(expected),old,&ignored);
+    return TRUE;
 }
 
 /* Edge barriers are wall segments appended to the type-2/3 custom mesh.
@@ -1132,6 +1127,9 @@ static void race_culling_strips(BYTE *base){
         BYTE *strip=(BYTE *)*item;
         if(!readable(strip,424))continue;
         int type=*((int *)(strip+212));
+        /* Leave destructible special blocks (type 10) vanilla so a wall that
+         * has been hit retires instead of being forced back on screen. */
+        if(type==10)continue;
         if(photo_progress>=0.0f&&photo_node&&type!=0&&type!=6
             &&race_culling_strip_tick)race_culling_strip_tick(strip,1,0,photo_progress,photo_node);
         race_culling_trim_strip(strip);
