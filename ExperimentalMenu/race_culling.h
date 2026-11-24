@@ -22,6 +22,8 @@ static unsigned race_culling_frames,race_culling_volume_count,race_culling_valid
 static unsigned race_culling_ramp_count,race_culling_ramp_forced,race_culling_cuboid_count,race_culling_segment_count;
 static unsigned race_culling_strip_count,race_culling_strip_block_count,race_culling_strip_forced;
 static unsigned race_culling_block_unique,race_culling_block_duplicate;
+static unsigned race_building_strips,race_building_blocks,race_building_visible;
+static BOOL race_retain_buildings;
 static float race_culling_block_min,race_culling_block_max;
 static BOOL race_culling_pool_expanded;
 static BOOL race_track_pool_relocated;
@@ -564,6 +566,8 @@ static BOOL install_race_culling(BYTE *base){
     reriff_two_sided=race_culling_enabled;
     GetPrivateProfileStringW(L"camera",L"race_orbit_trace",L"false",value,16,client);
     race_culling_trace=!_wcsicmp(value,L"true")||!_wcsicmp(value,L"yes")||!wcscmp(value,L"1");
+    GetPrivateProfileStringW(L"graphics",L"retain_buildings",L"false",value,16,client);
+    race_retain_buildings=!_wcsicmp(value,L"true")||!_wcsicmp(value,L"yes")||!wcscmp(value,L"1");
     if(!race_culling_enabled)return TRUE;
     if(!readable(base+0x278ea0,8)||!readable(base+0x27959c,8))return FALSE;
     race_culling_force_visible=(RaceCullingVisible)(base+0x278ea0);
@@ -585,8 +589,8 @@ static BOOL install_race_culling(BYTE *base){
     BOOL relocated=use_pool?race_track_pool_install(base,pool):FALSE;
     BOOL retained=race_culling_retain_blocks(base);
     BOOL walls=race_culling_retain_walls(base);
-    char detail[240];snprintf(detail,sizeof(detail),"Track visual retention tier=%d; trace=%d; block retention=%d; wall retention=%d; release window=%d; large pool=%d; window=%d behind + %d ahead.",
-        tier,race_culling_trace?1:0,retained?1:0,walls?1:0,behind?1:0,relocated?pool:0,race_window_behind,race_window_ahead);log_line(detail);
+    char detail[300];snprintf(detail,sizeof(detail),"Track visual retention tier=%d; trace=%d; block retention=%d; wall retention=%d; release window=%d; buildings=%s; large pool=%d; window=%d behind + %d ahead.",
+        tier,race_culling_trace?1:0,retained?1:0,walls?1:0,behind?1:0,race_retain_buildings?"retained":"vanilla",relocated?pool:0,race_window_behind,race_window_ahead);log_line(detail);
     return TRUE;
 }
 
@@ -1118,6 +1122,7 @@ static void race_culling_strips(BYTE *base){
     static BYTE seen[10000];
     race_culling_strip_count=race_culling_strip_block_count=race_culling_strip_forced=0;
     race_culling_block_unique=race_culling_block_duplicate=0;
+    race_building_strips=race_building_blocks=race_building_visible=0;
     race_culling_block_min=race_culling_block_max=0;
     memset(seen,0,sizeof(seen));
     if(!race_culling_visual||!readable(base+0x7dce7c,4))return;
@@ -1157,9 +1162,31 @@ static void race_culling_strips(BYTE *base){
         BYTE *strip=(BYTE *)*item;
         if(!readable(strip,424))continue;
         int type=*((int *)(strip+212));
+        if(type==13){
+            /* Census the building strip before deciding whether to retain it,
+             * so the trace can compare vanilla and retained draws. Each block
+             * maps to one visual, so visible blocks are visible draw calls. */
+            race_building_strips++;
+            BYTE *bb=*(BYTE **)(strip+152),*be=*(BYTE **)(strip+156);
+            void **vis=*(void ***)(strip+164);
+            if(bb&&be&&be>bb&&(size_t)(be-bb)<=10000*88&&((size_t)(be-bb)%88)==0
+                &&vis&&readable(vis,4)&&readable(bb,(size_t)(be-bb))){
+                for(BYTE *block=bb;block<be;block+=88){
+                    int index=*((int *)(block+80));
+                    if(index<0||index>=10000)continue;
+                    race_building_blocks++;
+                    void *visual=*((void **)((BYTE *)vis+index*4));
+                    if(visual&&readable(visual,132)&&*((BYTE *)visual+20)==1)race_building_visible++;
+                }
+            }
+        }
         /* Leave destructible special blocks (type 10) vanilla so a wall that
-         * has been hit retires instead of being forced back on screen. */
-        if(type==10)continue;
+         * has been hit retires instead of being forced back on screen. Distant
+         * buildings (type 13) are also vanilla by default: the base game hides
+         * a building two units behind the car, and forcing the retained window
+         * would keep every building under and behind the track on the draw
+         * list. [graphics] retain_buildings keeps the old behaviour for A/B. */
+        if(type==10||(type==13&&!race_retain_buildings))continue;
         if(photo_progress>=0.0f&&photo_node&&type!=0&&type!=6
             &&race_culling_strip_tick)race_culling_strip_tick(strip,1,0,photo_progress,photo_node);
         race_culling_trim_strip(strip);
@@ -1225,6 +1252,11 @@ static void race_culling_strips(BYTE *base){
             char detail[220];snprintf(detail,sizeof(detail),"Culling strip type=%d blocks=%u unique=%u current=%d pool=%u step=%.1f span=%.1f..%.1f.",
                 *((int *)(strip+212)),strip_blocks,strip_unique,*((int *)(strip+188)),pool,player_step,first,last);log_line(detail);
         }
+    }
+    if(race_culling_trace&&(race_culling_frames%120)==0&&race_building_strips){
+        char line[180];snprintf(line,sizeof(line),"Buildings: mode=%s strips=%u blocks=%u visible=%u.",
+            race_retain_buildings?"retained":"vanilla",race_building_strips,race_building_blocks,race_building_visible);
+        log_line(line);
     }
 }
 

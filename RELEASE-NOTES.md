@@ -1,3 +1,18 @@
+# Unreleased
+
+## In-game summary
+
+- Destructible walls now match the base game.
+- Broken walls clear; intact walls stay loaded behind you.
+- Distant buildings under the track are no longer retained.
+
+## Full release notes
+
+- Destructible walls now meet base expectations: an intact wall stays loaded by retention, and a broken wall clears exactly as in the vanilla game. `gaPropBase.forceBreak` marks the prop at `+493`; retention now respects that flag in both the visibility pass and the snapshot re-add, instead of checking the unused `+502` byte and forcing smashed walls back on screen.
+- Raise the barricade and ramp release window from the vanilla `-30` to the retained behind window, so a ramp launch no longer recycles the walls beside the ramp while they are still visible.
+- Leave type 13 distant buildings vanilla by default. The base game hides a building two units behind the car; the retired blocks no longer consume draw calls behind the track. `[graphics] retain_buildings=true` restores the retained behaviour for A/B testing, and the trace logs `Buildings: mode=..., strips=..., blocks=..., visible=...` so the two modes can be compared.
+- Validation: native retention, prop, scrobbler and UI regressions.
+
 # ReRiff 1.5.0-beta.7 — Track visual retention
 
 ## In-game summary
