@@ -620,13 +620,13 @@ static void race_culling_trim_strip(BYTE *strip){
     if(!blocks||!blocks_end||blocks_end<blocks||((size_t)(blocks_end-blocks)%88))return;
     size_t count=(size_t)(blocks_end-blocks)/88;
     if(!count)return;
-    /* tick() converts the car's track distance into this strip's block-step
-     * coordinate with (strip+216 * distance) / strip+228, and block+76 stores
-     * that step. Convert before searching so the window follows the car
-     * instead of sliding off to the end of the block list. */
-    int step_scale=*((int *)(strip+216)),step_div=*((int *)(strip+228));
-    float player_step=race_player_distance;
-    if(step_scale>0&&step_div>0)player_step=race_player_distance*(float)step_scale/(float)step_div;
+    /* Block +76 stores the strip's spawn cursor value, and tick() advances that
+     * cursor to the car's node index as it spawns. Use the cursor itself as the
+     * window centre; the car's world distance is a different coordinate space
+     * and sliding it against block steps pushed the window to the list end. */
+    int cursor=*((int *)(strip+56)),cursor_b=*((int *)(strip+60));
+    if(cursor_b>0&&cursor_b<cursor)cursor=cursor_b;
+    float player_step=cursor>0?(float)cursor:0.0f;
     size_t player_index=0;
     while(player_index<count&&*((float *)(blocks+player_index*88+76))<player_step)player_index++;
     size_t keep_start=player_index>(size_t)race_window_behind?player_index-(size_t)race_window_behind:0;
@@ -978,9 +978,9 @@ static void race_culling_strips(BYTE *base){
         if(race_culling_trace&&(race_culling_frames%120)==0){
             void **pool_begin=*(void ***)(strip+164),**pool_end=*(void ***)(strip+168);
             unsigned pool=pool_begin&&pool_end&&pool_end>=pool_begin?(unsigned)(pool_end-pool_begin):0;
-            int step_scale=*((int *)(strip+216)),step_div=*((int *)(strip+228));
-            float player_step=race_player_distance;
-            if(step_scale>0&&step_div>0)player_step=race_player_distance*(float)step_scale/(float)step_div;
+            int cursor=*((int *)(strip+56)),cursor_b=*((int *)(strip+60));
+            if(cursor_b>0&&cursor_b<cursor)cursor=cursor_b;
+            float player_step=cursor>0?(float)cursor:0.0f;
             float first=blocks_end>blocks?*((float *)(blocks+76)):0.0f;
             float last=blocks_end>blocks?*((float *)(blocks_end-88+76)):0.0f;
             char detail[220];snprintf(detail,sizeof(detail),"Culling strip type=%d blocks=%u unique=%u current=%d pool=%u step=%.1f span=%.1f..%.1f.",
