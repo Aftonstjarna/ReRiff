@@ -1,10 +1,10 @@
-# Unreleased
+# ReRiff 1.5.0-beta.8 — Destructible wall and car slot fixes
 
 ## In-game summary
 
 - Broken walls now clear; intact walls stay loaded.
 - Track surfaces load from the start on long tracks.
-- Distant buildings under the track are no longer retained.
+- Custom cars keep their names and menu text stays intact.
 
 ## Full release notes
 
@@ -13,12 +13,12 @@
 - Leave type 13 distant buildings vanilla by default. The base game hides a building two units behind the car; the retired blocks no longer consume draw calls behind the track. `[graphics] retain_buildings=true` restores the retained behaviour for A/B testing, and the trace logs `Buildings: mode=..., strips=..., blocks=..., visible=...` so the two modes can be compared.
 - Size the road capture buffer for the whole track and reuse it between races. The old 40000-vertex cap wrapped the road mesh on tracks longer than about 4400 blocks, so the end-of-track vertices overwrote the beginning and the road surface was missing until the car passed the wrapped range.
 - Regenerate the custom unlock manifest from the composed `unlocks_pc` tables instead of copying a package's per-mod manifest. Two car mods that ship different manifests no longer abort car slot preparation, and the manifest always matches the composed tables.
-- Accept car packages that ship their own `strings/tokens.dat`. Use that table as the composed base so the new car's `Car_<name>` token resolves from Common, while per-package overrides still supply names such as the 1967 car's `Baby`.
+- Read a car package's own `strings/tokens.dat` only to locate its source name token. The composed Common table stays in stock order, so native string indices and menu labels do not shift; per-package overrides still supply names such as the 1967 car's `Baby`.
 - For a new car package that writes its name on the donor token (Customs 0.3.6-beta.4 and later), use that text for the add-on car name and keep the stock donor's own name. The game's stock string table does not register new Common tokens, so the native alias below resolves `Car_<id>` in the garage.
 - Add a native string-manager alias for add-on car names. The composer registers the donor-derived name and `Car_<id>` resolves through a synthetic handle, so the garage shows the custom name without shifting native Common indices. Customs 0.3.6-beta.6 writes the same car name to all eight locale banks; the alias uses the composed US text.
 - Release the previous race's road chunk buffers when the track changes instead of leaking them.
 - Rebuild the road capture when the live type-0 strip or the generated track length changes, not only when the track manager object changes. The menu preview and the race share the manager singleton, so a short preview track could leave its chunks in place for a full race and the road would disappear once the car passed the preview range.
-- Validation: native retention, prop, track-pool, scrobbler and UI regressions.
+- Validation: native retention, prop, track-pool and scrobbler regressions, managed client build, packaging release-metadata and release-note checks.
 
 # ReRiff 1.5.0-beta.7 — Track visual retention
 

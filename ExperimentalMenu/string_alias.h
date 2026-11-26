@@ -30,6 +30,8 @@ __declspec(dllexport) int __cdecl ReRiffRegisterCarName(const char *id,const WCH
     wcsncpy(string_aliases[slot].name,name,255);
     string_aliases[slot].name[255]=0;
     string_aliases[slot].active=1;
+    char text[256],line[320];WideCharToMultiByte(CP_UTF8,0,string_aliases[slot].name,-1,text,sizeof(text),NULL,NULL);
+    snprintf(line,sizeof(line),"Custom car name alias: %s=%s.",string_aliases[slot].id,text);log_line(line);
     return 1;
 }
 static BOOL string_alias_match(const char *name,const char *id){
