@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 namespace ReRiff {
  internal static class CarModComposer {
   internal sealed class Package {internal string Folder;internal Dictionary<string,byte[]> Assets;internal List<CarSlotRegistry.Car> Cars;}
@@ -53,11 +55,23 @@ namespace ReRiff {
    var configs=new HashSet<string>(StringComparer.Ordinal);
    foreach(string stem in new[]{"vehicleselect","unlocks","unlocks_pc","paint","paint_pc","vehicles","vehicles_pc","vehicleaudio"})
     foreach(string ext in new[]{".cfg",".luac",".luac64"})configs.Add("scripts/config/"+stem+ext);
+   /* The unlock manifest hashes one package's own unlocks_pc files. The
+    * composed table contains every active car, so a copied marker is always
+    * stale and two packages disagree on it. Regenerate it from the composed
+    * files after the merge instead of treating it as an auxiliary asset. */
+   const string markerPath="scripts/config/customs_unlocks.txt";
    foreach(var package in packages)foreach(var asset in package.Assets){
-    string path=asset.Key;if(configs.Contains(path)||path.StartsWith("strings/",StringComparison.Ordinal))continue;
+    string path=asset.Key;if(configs.Contains(path)||path==markerPath||path.StartsWith("strings/",StringComparison.Ordinal))continue;
     bool own=package.Cars.Any(c=>path.StartsWith("graphics/vehicles/"+c.Source+"/",StringComparison.Ordinal)||path.StartsWith("graphics/vehicles/decals/"+c.Source+"_",StringComparison.Ordinal)||path.StartsWith("graphics/be/hud/car/"+c.Source+"/",StringComparison.Ordinal));
     if(own)continue;byte[] existing;if(output.TryGetValue(path,out existing)&&!existing.SequenceEqual(asset.Value))throw new IOException("Conflicting auxiliary car resource: "+path);
     output[path]=asset.Value;
+   }
+   byte[] unlockCfg,unlockLua;
+   if(output.TryGetValue("scripts/config/unlocks_pc.cfg",out unlockCfg)&&output.TryGetValue("scripts/config/unlocks_pc.luac",out unlockLua)){
+    using(var hash=SHA256.Create()){
+     Func<byte[],string> hex=delegate(byte[] value){return BitConverter.ToString(hash.ComputeHash(value)).Replace("-","").ToLowerInvariant();};
+     output[markerPath]=Encoding.ASCII.GetBytes("reriff-customs-unlocks-v1\n"+hex(unlockCfg)+"\n"+hex(unlockLua)+"\n");
+    }
    }
    return output;
   }

@@ -12,8 +12,16 @@ class CarComposerSmoke {
    var a=new CarModComposer.Package{Folder="a",Assets=new Dictionary<string,byte[]>(),Cars=CarSlotRegistry.Package("a","overwrite=0\n[origins]\nalf=alf")};
    var b=new CarModComposer.Package{Folder="b",Assets=new Dictionary<string,byte[]>(),Cars=CarSlotRegistry.Package("b","overwrite=0\n[origins]\nalf=alf")};
    a.Assets["graphics/shared/car-test.texture"]=new byte[]{1,2,3};
+   a.Assets["scripts/config/customs_unlocks.txt"]=System.Text.Encoding.ASCII.GetBytes("stale-a\n");
+   b.Assets["scripts/config/customs_unlocks.txt"]=System.Text.Encoding.ASCII.GetBytes("stale-b\n");
    var list=new List<CarModComposer.Package>{a,b};var state=CarSlotRegistry.Plan(null,a.Cars.Concat(b.Cars));CarModComposer.DonorPaths=id=>entries.Keys.Where(p=>p.StartsWith("graphics/vehicles/"+id+"/")||p.StartsWith("graphics/vehicles/decals/"+id+"_")||p.StartsWith("graphics/be/hud/car/"+id+"/"));
-   var output=CarModComposer.Compose(read,list,state);Check(output["graphics/shared/car-test.texture"].SequenceEqual(new byte[]{1,2,3}),"auxiliary textures retained");var roster=NativeCarConfig.Find(NativeCarConfig.Read(output["scripts/config/vehicleselect.cfg"]),"carNames");Check(roster.Children.Count==18,"two appended cars");Check(roster.Children[16].Text=="r00"&&roster.Children[17].Text=="r01","native slot identities");Check(output.ContainsKey("graphics/vehicles/r00/lod0_livery.bdae")&&output.ContainsKey("graphics/vehicles/r01/lod0_livery.bdae"),"both model copies");
+   var output=CarModComposer.Compose(read,list,state);Check(output["graphics/shared/car-test.texture"].SequenceEqual(new byte[]{1,2,3}),"auxiliary textures retained");
+   string[] marker=System.Text.Encoding.ASCII.GetString(output["scripts/config/customs_unlocks.txt"]).TrimEnd('\n').Split('\n');
+   Check(marker.Length==3&&marker[0]=="reriff-customs-unlocks-v1","unlock marker regenerated");
+   using(var hash=System.Security.Cryptography.SHA256.Create()){
+    Func<byte[],string> hex=delegate(byte[] value){return BitConverter.ToString(hash.ComputeHash(value)).Replace("-","").ToLowerInvariant();};
+    Check(marker[1]==hex(output["scripts/config/unlocks_pc.cfg"])&&marker[2]==hex(output["scripts/config/unlocks_pc.luac"]),"unlock marker matches composed tables");
+   }var roster=NativeCarConfig.Find(NativeCarConfig.Read(output["scripts/config/vehicleselect.cfg"]),"carNames");Check(roster.Children.Count==18,"two appended cars");Check(roster.Children[16].Text=="r00"&&roster.Children[17].Text=="r01","native slot identities");Check(output.ContainsKey("graphics/vehicles/r00/lod0_livery.bdae")&&output.ContainsKey("graphics/vehicles/r01/lod0_livery.bdae"),"both model copies");
    var strings=CarModStrings.Build(read,entries.Keys,list,state);Check(strings["strings/tokens.dat"].Length>read("strings/tokens.dat").Length,"new name tokens");
    Check(strings["strings/common/us.str"].SequenceEqual(read("strings/common/us.str")),"stock common bank unchanged");
    Check(strings.ContainsKey("strings/frontend/us.str")&&!strings["strings/frontend/us.str"].SequenceEqual(read("strings/frontend/us.str")),"added tokens use an empty bank");
