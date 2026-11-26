@@ -12,7 +12,7 @@ namespace ReRiff {
   [DllImport("ReRiff.Notify.dll",CallingConvention=CallingConvention.Cdecl,EntryPoint="ReRiffClearCarNames")]static extern void NativeClearCarNames();
   [DllImport("ReRiff.Notify.dll",CallingConvention=CallingConvention.Cdecl,EntryPoint="ReRiffRegisterCarName")]static extern int NativeRegisterCarName(IntPtr id,IntPtr name);
   static void RegisterCarNames(Dictionary<string,string> names){
-   try{NativeClearCarNames();foreach(var entry in names){if(entry.Key.Length!=3)continue;byte[] id=Encoding.ASCII.GetBytes(entry.Key+"\0"),text=Encoding.UTF8.GetBytes(entry.Value+"\0");IntPtr pid=Marshal.AllocHGlobal(id.Length),ptext=Marshal.AllocHGlobal(text.Length);try{Marshal.Copy(id,0,pid,id.Length);Marshal.Copy(text,0,ptext,text.Length);if(NativeRegisterCarName(pid,ptext)!=0)NativeReelBridge.Log("Custom car name alias: "+entry.Key+"="+entry.Value);}finally{Marshal.FreeHGlobal(pid);Marshal.FreeHGlobal(ptext);}}}
+   try{NativeClearCarNames();foreach(var entry in names){if(entry.Key.Length!=3)continue;byte[] id=Encoding.ASCII.GetBytes(entry.Key+"\0"),text=Encoding.Unicode.GetBytes(entry.Value+"\0");IntPtr pid=Marshal.AllocHGlobal(id.Length),ptext=Marshal.AllocHGlobal(text.Length);try{Marshal.Copy(id,0,pid,id.Length);Marshal.Copy(text,0,ptext,text.Length);if(NativeRegisterCarName(pid,ptext)!=0)NativeReelBridge.Log("Custom car name alias: "+entry.Key+"="+entry.Value);}finally{Marshal.FreeHGlobal(pid);Marshal.FreeHGlobal(ptext);}}}
    catch(EntryPointNotFoundException){}catch(DllNotFoundException){}catch(BadImageFormatException){}
   }
   static void Need(bool b){if(!b)throw new IOException("Unsupported native localization bank");}

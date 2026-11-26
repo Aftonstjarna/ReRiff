@@ -11,24 +11,24 @@
 #include <ctype.h>
 #define STRING_ALIAS_MAX 32
 #define STRING_ALIAS_HANDLE 0x40000000
-typedef struct {char id[4];char name[256];int active;} StringAlias;
+typedef struct {char id[4];WCHAR name[256];int active;} StringAlias;
 static StringAlias string_aliases[STRING_ALIAS_MAX];
 static int string_alias_count;
 typedef int (__thiscall *StringGetHandle)(void *,const char *);
-typedef const char *(__thiscall *StringLookup)(void *,int);
+typedef const WCHAR *(__thiscall *StringLookup)(void *,int);
 static StringGetHandle string_get_original;
 static StringLookup string_lookup_original;
 
 __declspec(dllexport) void __cdecl ReRiffClearCarNames(void){string_alias_count=0;}
-__declspec(dllexport) int __cdecl ReRiffRegisterCarName(const char *id,const char *name){
+__declspec(dllexport) int __cdecl ReRiffRegisterCarName(const char *id,const WCHAR *name){
     if(!id||!name||strlen(id)!=3||!*name)return 0;
     int slot=-1;
     for(int i=0;i<string_alias_count;i++)if(!_strnicmp(string_aliases[i].id,id,3)){slot=i;break;}
     if(slot<0){if(string_alias_count>=STRING_ALIAS_MAX)return 0;slot=string_alias_count++;}
     for(int i=0;i<3;i++)string_aliases[slot].id[i]=(char)tolower((unsigned char)id[i]);
     string_aliases[slot].id[3]=0;
-    strncpy(string_aliases[slot].name,name,sizeof(string_aliases[slot].name)-1);
-    string_aliases[slot].name[sizeof(string_aliases[slot].name)-1]=0;
+    wcsncpy(string_aliases[slot].name,name,255);
+    string_aliases[slot].name[255]=0;
     string_aliases[slot].active=1;
     return 1;
 }
@@ -42,10 +42,10 @@ __attribute__((used,noinline)) static int __cdecl string_alias_get(void *self,co
         if(string_aliases[i].active&&string_alias_match(name,string_aliases[i].id))return STRING_ALIAS_HANDLE+i;
     return string_get_original?string_get_original(self,name):-1;
 }
-__attribute__((used,noinline)) static const char *__cdecl string_alias_lookup(void *self,int handle){
+__attribute__((used,noinline)) static const WCHAR *__cdecl string_alias_lookup(void *self,int handle){
     int i=handle-STRING_ALIAS_HANDLE;
     if(i>=0&&i<string_alias_count&&string_aliases[i].active)return string_aliases[i].name;
-    return string_lookup_original?string_lookup_original(self,handle):"";
+    return string_lookup_original?string_lookup_original(self,handle):L"";
 }
 __attribute__((naked,noinline)) static void string_get_entry(void){
     __asm__("push 4(%esp)\npush %ecx\ncall _string_alias_get\nadd $8,%esp\nret $4\n");
