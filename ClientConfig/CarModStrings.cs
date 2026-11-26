@@ -3,11 +3,18 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Runtime.InteropServices;
 namespace ReRiff {
  internal static class CarModStrings {
   sealed class Token {internal byte Group;internal string Name;internal int Index;}
   sealed class Table {internal List<string> Names;internal List<int> Counts;internal List<uint> Capacities;internal List<Token> Tokens;}
   sealed class SourceInfo {internal CarModComposer.Package Package;internal int Group;internal int Index;internal int Count;}
+  [DllImport("ReRiff.Notify.dll",CallingConvention=CallingConvention.Cdecl,EntryPoint="ReRiffClearCarNames")]static extern void NativeClearCarNames();
+  [DllImport("ReRiff.Notify.dll",CallingConvention=CallingConvention.Cdecl,EntryPoint="ReRiffRegisterCarName")]static extern int NativeRegisterCarName(IntPtr id,IntPtr name);
+  static void RegisterCarNames(Dictionary<string,string> names){
+   try{NativeClearCarNames();foreach(var entry in names){if(entry.Key.Length!=3)continue;byte[] id=Encoding.ASCII.GetBytes(entry.Key+"\0"),text=Encoding.UTF8.GetBytes(entry.Value+"\0");IntPtr pid=Marshal.AllocHGlobal(id.Length),ptext=Marshal.AllocHGlobal(text.Length);try{Marshal.Copy(id,0,pid,id.Length);Marshal.Copy(text,0,ptext,text.Length);if(NativeRegisterCarName(pid,ptext)!=0)NativeReelBridge.Log("Custom car name alias: "+entry.Key+"="+entry.Value);}finally{Marshal.FreeHGlobal(pid);Marshal.FreeHGlobal(ptext);}}}
+   catch(EntryPointNotFoundException){}catch(DllNotFoundException){}catch(BadImageFormatException){}
+  }
   static void Need(bool b){if(!b)throw new IOException("Unsupported native localization bank");}
   static int Bucket(string name){uint h=5381;foreach(byte c in Encoding.ASCII.GetBytes(name))h=unchecked(h*33+(uint)(c&~32));return (int)(h&255);}
   static List<string> Strings(byte[] b,int count){Need(b!=null&&b.Length>=8&&BitConverter.ToUInt32(b,0)==3&&BitConverter.ToUInt32(b,4)==2);var result=new List<string>();using(var r=new BinaryReader(new MemoryStream(b),Encoding.Unicode)){r.ReadBytes(8);for(int i=0;i<count;i++){uint n=r.ReadUInt32();Need(n<=100000&&r.BaseStream.Position+n*2<=b.Length);result.Add(Encoding.Unicode.GetString(r.ReadBytes((int)n*2)));}Need(r.BaseStream.Position==b.Length);}return result;}
@@ -58,12 +65,12 @@ namespace ReRiff {
      }
     }
    }
-   all=all.OrderBy(t=>Bucket(t.Name)).ToList();var output=new Dictionary<string,byte[]>(StringComparer.Ordinal);var maxima=new uint[names.Count];
+   all=all.OrderBy(t=>Bucket(t.Name)).ToList();var output=new Dictionary<string,byte[]>(StringComparer.Ordinal);var maxima=new uint[names.Count];var aliases=new Dictionary<string,string>(StringComparer.Ordinal);
    foreach(string path in paths){if(!path.StartsWith("strings/",StringComparison.Ordinal)||!path.EndsWith(".str",StringComparison.Ordinal))continue;string[] parts=path.Split('/');if(parts.Length!=3)continue;int group=names.IndexOf(parts[1]);if(group<0)continue;var original=Strings(stock(path),group<stockTable.Counts.Count?stockTable.Counts[group]:0);var loaded=new Dictionary<string,List<string>>(StringComparer.Ordinal);List<string> baseBank=null;
     if(basePackage!=null&&group==common){byte[] custom;if(basePackage.Assets.TryGetValue("strings/"+names[group]+"/"+parts[2],out custom))baseBank=Strings(custom,counts[group]);}
-    using(var m=new MemoryStream())using(var w=new BinaryWriter(m)){w.Write(3u);w.Write(2u);foreach(var token in all.Where(t=>t.Group==group)){string text;SourceInfo source;if(sources.TryGetValue(token.Name,out source)){string sourcePath="strings/"+names[source.Group]+"/"+parts[2];string key=source.Package.Folder+"\n"+sourcePath+"\n"+source.Count;List<string> bank;if(!loaded.TryGetValue(key,out bank)){byte[] custom;bank=Strings(source.Package.Assets.TryGetValue(sourcePath,out custom)?custom:stock(sourcePath),source.Count);loaded.Add(key,bank);}text=bank[source.Index];}else if(baseBank!=null){Need(token.Index>=0&&token.Index<baseBank.Count);text=baseBank[token.Index];}else{Need(token.Index>=0);text=original[token.Index];}byte[] utf16=Encoding.Unicode.GetBytes(text);w.Write(utf16.Length/2);w.Write(utf16);}byte[] data=m.ToArray();output[path]=data;maxima[group]=Math.Max(maxima[group],(uint)data.Length-8);}
+    using(var m=new MemoryStream())using(var w=new BinaryWriter(m)){w.Write(3u);w.Write(2u);foreach(var token in all.Where(t=>t.Group==group)){string text;SourceInfo source;if(sources.TryGetValue(token.Name,out source)){string sourcePath="strings/"+names[source.Group]+"/"+parts[2];string key=source.Package.Folder+"\n"+sourcePath+"\n"+source.Count;List<string> bank;if(!loaded.TryGetValue(key,out bank)){byte[] custom;bank=Strings(source.Package.Assets.TryGetValue(sourcePath,out custom)?custom:stock(sourcePath),source.Count);loaded.Add(key,bank);}text=bank[source.Index];}else if(baseBank!=null){Need(token.Index>=0&&token.Index<baseBank.Count);text=baseBank[token.Index];}else{Need(token.Index>=0);text=original[token.Index];}if(parts[2]=="us"&&token.Name.StartsWith("car_",StringComparison.Ordinal)&&!old.Any(t=>t.Name==token.Name))aliases[token.Name.Substring(4)]=text;byte[] utf16=Encoding.Unicode.GetBytes(text);w.Write(utf16.Length/2);w.Write(utf16);}byte[] data=m.ToArray();output[path]=data;maxima[group]=Math.Max(maxima[group],(uint)data.Length-8);}
    }
-   using(var m=new MemoryStream())using(var w=new BinaryWriter(m)){w.Write(3u);w.Write(2u);w.Write(names.Count);for(int i=0;i<names.Count;i++){byte[] name=Encoding.ASCII.GetBytes(i==0?"Common":i==1?"FrontEnd":i==2?"BackEnd":names[i]);w.Write(name.Length);w.Write(all.Count(t=>t.Group==i));w.Write(Math.Max(capacities[i],maxima[i]));w.Write(name);}for(int i=0;i<256;i++)w.Write(all.Where(t=>Bucket(t.Name)==i).Sum(t=>t.Name.Length+2));foreach(var t in all){w.Write(t.Group);w.Write(Encoding.ASCII.GetBytes(t.Name));w.Write((byte)0);}output["strings/tokens.dat"]=m.ToArray();}return output;
+   using(var m=new MemoryStream())using(var w=new BinaryWriter(m)){w.Write(3u);w.Write(2u);w.Write(names.Count);for(int i=0;i<names.Count;i++){byte[] name=Encoding.ASCII.GetBytes(i==0?"Common":i==1?"FrontEnd":i==2?"BackEnd":names[i]);w.Write(name.Length);w.Write(all.Count(t=>t.Group==i));w.Write(Math.Max(capacities[i],maxima[i]));w.Write(name);}for(int i=0;i<256;i++)w.Write(all.Where(t=>Bucket(t.Name)==i).Sum(t=>t.Name.Length+2));foreach(var t in all){w.Write(t.Group);w.Write(Encoding.ASCII.GetBytes(t.Name));w.Write((byte)0);}output["strings/tokens.dat"]=m.ToArray();}RegisterCarNames(aliases);return output;
   }
  }
 }

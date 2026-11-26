@@ -15,6 +15,7 @@
 - Regenerate the custom unlock manifest from the composed `unlocks_pc` tables instead of copying a package's per-mod manifest. Two car mods that ship different manifests no longer abort car slot preparation, and the manifest always matches the composed tables.
 - Accept car packages that ship their own `strings/tokens.dat`. Use that table as the composed base so the new car's `Car_<name>` token resolves from Common, while per-package overrides still supply names such as the 1967 car's `Baby`.
 - For a new car package that writes its name on the donor token (Customs 0.3.6-beta.4 and later), create the native `car_<id>` token in the donor's Common group from that text. The stock donor keeps its own name, and the garage can resolve `Car_<id>`.
+- Add a native string-manager alias for add-on car names. The composer registers the donor-derived name and `Car_<id>` resolves through a synthetic handle, so the garage shows the custom name without shifting native Common indices.
 - Release the previous race's road chunk buffers when the track changes instead of leaking them.
 - Rebuild the road capture when the live type-0 strip or the generated track length changes, not only when the track manager object changes. The menu preview and the race share the manager singleton, so a short preview track could leave its chunks in place for a full race and the road would disappear once the car passed the preview range.
 - Validation: native retention, prop, track-pool, scrobbler and UI regressions.

@@ -786,6 +786,7 @@ static BOOL cjk_component_enabled(void){return cjk_pack_enabled()||latin_pack_en
 #include "cjk_fonts.h"
 #include "cjk_direct_visuals.h"
 #include "unicode_trace.h"
+#include "string_alias.h"
 /* Steam can retain the original WNDPROC and deliver overlay text directly,
  * bypassing a later SetWindowLongPtr subclass. Keep both routes equivalent. */
 static WNDPROC text_entry_native_previous;
@@ -898,6 +899,7 @@ __declspec(dllexport) BOOL __cdecl ReRiffStartEngineMenu(void) {
     if(!install_text_entry_native(base))log_line("Original text-input entry hook refused: prologue differs.");
     if(!install_ui_scale(base))log_line("Native UI-scale extension could not be installed.");
     install_unicode_trace(base);
+    if(!install_string_alias(base))log_line("Custom car name aliases unavailable: string manager entry differs.");
     if(borderless_active)aa_attach();
     InterlockedExchange(&installed,2); log_line("Engine menu hooks installed."); return TRUE;
 }
