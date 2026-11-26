@@ -16,6 +16,14 @@ int main(void){
     CHECK(!ReRiffConfigureProgressionView(NULL,2)&&!ReRiffConfigureProgressionView(callbacks,1));
     CHECK(ReRiffConfigureProgressionView(callbacks,2));
     progression_friend_length=&friend_length;raw_text=text_mock;*(void **)(owner+276)=number;
+    MEMORY_BASIC_INFORMATION mi_owner,mi_number,mi_friend;
+    BOOL r_owner=readable(owner,408),r_number=readable(number,484),r_friend=readable(progression_friend_length,4);
+    VirtualQuery(owner,&mi_owner,sizeof(mi_owner));VirtualQuery(number,&mi_number,sizeof(mi_number));VirtualQuery(progression_friend_length,&mi_friend,sizeof(mi_friend));
+    fprintf(stderr,"readable owner=%d number=%d friend=%d friendlen=%lu section=%d menu101=%d\n",r_owner,r_number,r_friend,(unsigned long)*progression_friend_length,((int *)owner)[101]);
+    fprintf(stderr,"owner base=%p size=%lu state=%lx protect=%lx; number base=%p size=%lu state=%lx protect=%lx; friend base=%p size=%lu state=%lx protect=%lx\n",
+        mi_owner.BaseAddress,(unsigned long)mi_owner.RegionSize,(unsigned long)mi_owner.State,(unsigned long)mi_owner.Protect,
+        mi_number.BaseAddress,(unsigned long)mi_number.RegionSize,(unsigned long)mi_number.State,(unsigned long)mi_number.Protect,
+        mi_friend.BaseAddress,(unsigned long)mi_friend.RegionSize,(unsigned long)mi_friend.State,(unsigned long)mi_friend.Protect);
     int view_result=progression_view_update(owner,55);
     fprintf(stderr,"progression_view_update=%d texts=%d fills=%d summary=%p fill=%p raw=%p font=%p sprite=%p text=%p add=%p ui=%p friend=%p\n",
         view_result,texts,fills,(void *)progression_summary,(void *)progression_fill,(void *)raw_text,(void *)progression_font,(void *)create_sprite,(void *)create_text,(void *)add_item,(void *)ui_instance,(void *)progression_friend_length);
