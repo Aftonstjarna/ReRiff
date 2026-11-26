@@ -29,7 +29,6 @@ namespace ReRiff {
    foreach(var package in packages){byte[] data;if(package.Assets.TryGetValue("strings/tokens.dat",out data)){baseTable=Parse(data,false);basePackage=package;break;}}
    var table=baseTable??stockTable;var names=table.Names;var counts=table.Counts;var capacities=table.Capacities;var old=stockTable.Tokens;
    int common=names.IndexOf("common");Need(common>=0);
-   int addition=common;for(int i=0;i<names.Count;i++)if(i!=common&&counts[i]==0){addition=i;break;}
    var all=baseTable!=null?new List<Token>(baseTable.Tokens):new List<Token>(old);
    var sources=new Dictionary<string,SourceInfo>(StringComparer.Ordinal);var tables=new Dictionary<CarModComposer.Package,Table>();
    Func<CarModComposer.Package,Table> tokensFor=delegate(CarModComposer.Package package){Table value;if(tables.TryGetValue(package,out value))return value;byte[] data;if(package.Assets.TryGetValue("strings/tokens.dat",out data))value=Parse(data,false);tables[package]=value;return value;};
@@ -42,7 +41,7 @@ namespace ReRiff {
     var package=packages.Single(p=>p.Cars.Any(c=>c.Key==car.Key));string target="car_"+car.Native;
     var source=find(package,"car_"+car.Source)??find(package,"car_"+car.Base);Need(source!=null);
     sources[target]=source;
-    if(!all.Any(t=>t.Name==target))all.Add(new Token{Group=(byte)addition,Name=target,Index=-1});
+    if(!all.Any(t=>t.Name==target))all.Add(new Token{Group=(byte)source.Group,Name=target,Index=-1});
    }
    foreach(var car in state.Cars)if(car.Active){
     var package=packages.Single(p=>p.Cars.Any(c=>c.Key==car.Key));
