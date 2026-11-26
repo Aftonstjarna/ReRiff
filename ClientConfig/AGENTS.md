@@ -25,6 +25,9 @@ Scope: `ClientConfig/`, `Managed/`, `Shared/` and the managed parts of
 - Preserve the supported `Game.exe` identity checks and their failure paths.
   A mismatched assembly must produce the documented fallback, not a crash or a
   silent write.
+- Never patch a car package in place (`strings/`, `customs_unlocks.txt` or
+  configs). If composition fails, fix the composer or send the format change to
+  RiffRacer-Customs.
 
 ## Build and test
 

@@ -47,6 +47,9 @@ read the routing table in `docs/agents/README.md`.
 - Preserve user changes and unrelated files. Keep experiments, backups, logs,
   downloaded tools and build output outside the tracked tree. Check free space
   before large builds or captures.
+- Treat the game's `mods` directory and mod packages as read-only inputs. Never
+  edit, rename or delete a mod file to make ReRiff accept it; fix the composer
+  or send the required export change to the RiffRacer-Customs project.
 - Use the repository's pinned toolchain and scripts. Do not modify global
   installs.
 - Update affected callers when an interface changes. Preserve `client.ini`, wire
