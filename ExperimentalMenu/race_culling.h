@@ -37,6 +37,8 @@ static float race_player_distance;
  * world units once per track so props, prop nodes and ramps use the same
  * behind limit as the retained road/wall strips. */
 static float race_culling_block_distance=4.0f;
+static float race_culling_release_window;
+static BOOL race_culling_widen_behind(BYTE *base,double behind);
 static BOOL race_prop_gate_active;
 static float race_prop_gate_behind,race_prop_gate_ahead,race_prop_gate_pos[3],race_prop_gate_fwd[3];
 static int race_track_block_total;
@@ -384,6 +386,14 @@ static void race_culling_prewarm(BYTE *base){
             master_total=*((int *)(capture+56));
             race_track_block_total=master_total;
             if(master_total>0&&track_len>0.1f)race_culling_block_distance=track_len/(float)master_total;
+            if(race_retention_tier>0){
+                float release=(float)race_window_behind*race_culling_block_distance;
+                if(release<120.0f)release=120.0f;
+                race_culling_release_window=release;
+                if(race_culling_widen_behind(base,(double)release)){
+                    char release_line[160];snprintf(release_line,sizeof(release_line),"Retention release window: %.1f world units.",release);log_line(release_line);
+                }
+            }
             if(master_total>0&&(unsigned)master_total*9>race_capture_vertex_capacity){
                 char detail[180];snprintf(detail,sizeof(detail),"Road capture truncated: need=%u cap=%u; the road mesh wrapped.",
                     (unsigned)master_total*9,race_capture_vertex_capacity);log_line(detail);
@@ -618,7 +628,7 @@ static BOOL race_culling_widen_behind(BYTE *base,double behind){
         double current,value=-behind;
         memcpy(&current,site,sizeof(current));
         if(current==value){ok=TRUE;continue;}
-        if(current!=-30.0)continue;
+        if(!(current<0.0))continue;
         DWORD old,ignored;
         if(!VirtualProtect(site,sizeof(value),PAGE_READWRITE,&old))continue;
         memcpy(site,&value,sizeof(value));

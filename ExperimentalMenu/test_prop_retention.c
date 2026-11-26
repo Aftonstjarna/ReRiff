@@ -90,6 +90,8 @@ int main(void){
     CHECK(*barricade==-512.0&&*ramp==-512.0);
     CHECK(race_culling_widen_behind(base,512.0));
     CHECK(*barricade==-512.0&&*ramp==-512.0);
+    CHECK(race_culling_widen_behind(base,300.0));
+    CHECK(*barricade==-300.0&&*ramp==-300.0);
     puts("PASS: broken props clear and the release window follows retention");
     return 0;
 }
