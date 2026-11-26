@@ -19,27 +19,30 @@ namespace ReRiff {
    return table;
   }
   internal static Dictionary<string,byte[]> Build(Func<string,byte[]> stock,IEnumerable<string> paths,List<CarModComposer.Package> packages,CarSlotRegistry.State state){
-   var stockTable=Parse(stock("strings/tokens.dat"),true);var names=stockTable.Names;var counts=stockTable.Counts;var capacities=stockTable.Capacities;var old=stockTable.Tokens;
+   var stockTable=Parse(stock("strings/tokens.dat"),true);
+   /* A new-format package may ship its own token table with car_<source>
+    * inserted into Common. The garage resolves Car_<name> through Common, so a
+    * token added to an empty bank would render blank. Use that package table as
+    * the composed base and preserve its texts; other packages still override
+    * their own car/pack tokens by name. */
+   Table baseTable=null;CarModComposer.Package basePackage=null;
+   foreach(var package in packages){byte[] data;if(package.Assets.TryGetValue("strings/tokens.dat",out data)){baseTable=Parse(data,false);basePackage=package;break;}}
+   var table=baseTable??stockTable;var names=table.Names;var counts=table.Counts;var capacities=table.Capacities;var old=stockTable.Tokens;
    int common=names.IndexOf("common");Need(common>=0);
-   // Never insert into Common: its stock token order feeds compiled-in string
-   // indices. Unknown identities fall back to an empty bank, which keeps the
-   // cache loadable even though the game may not show those names.
    int addition=common;for(int i=0;i<names.Count;i++)if(i!=common&&counts[i]==0){addition=i;break;}
-   var all=new List<Token>(old);var sources=new Dictionary<string,SourceInfo>(StringComparer.Ordinal);var tables=new Dictionary<CarModComposer.Package,Table>();
-   Func<CarModComposer.Package,Table> table=delegate(CarModComposer.Package package){Table value;if(tables.TryGetValue(package,out value))return value;byte[] data;if(package.Assets.TryGetValue("strings/tokens.dat",out data))value=Parse(data,false);tables[package]=value;return value;};
+   var all=baseTable!=null?new List<Token>(baseTable.Tokens):new List<Token>(old);
+   var sources=new Dictionary<string,SourceInfo>(StringComparer.Ordinal);var tables=new Dictionary<CarModComposer.Package,Table>();
+   Func<CarModComposer.Package,Table> tokensFor=delegate(CarModComposer.Package package){Table value;if(tables.TryGetValue(package,out value))return value;byte[] data;if(package.Assets.TryGetValue("strings/tokens.dat",out data))value=Parse(data,false);tables[package]=value;return value;};
    Func<CarModComposer.Package,string,SourceInfo> find=delegate(CarModComposer.Package package,string name){
-    var custom=table(package);if(custom!=null){var token=custom.Tokens.FirstOrDefault(t=>t.Name==name);if(token!=null)return new SourceInfo{Package=package,Group=token.Group,Index=token.Index,Count=custom.Counts[token.Group]};}
+    var custom=tokensFor(package);if(custom!=null){var token=custom.Tokens.FirstOrDefault(t=>t.Name==name);if(token!=null)return new SourceInfo{Package=package,Group=token.Group,Index=token.Index,Count=custom.Counts[token.Group]};}
     var known=old.FirstOrDefault(t=>t.Name==name);if(known==null)return null;
-    return new SourceInfo{Package=package,Group=known.Group,Index=known.Index,Count=counts[known.Group]};
+    return new SourceInfo{Package=package,Group=known.Group,Index=known.Index,Count=stockTable.Counts[known.Group]};
    };
    foreach(var car in state.Cars)if(car.Active){
     var package=packages.Single(p=>p.Cars.Any(c=>c.Key==car.Key));string target="car_"+car.Native;
-    // A new-format package may insert car_<source> into Common; use its own
-    // token table and bank text for the name, but keep the composed Common
-    // order stock so native indices do not shift.
     var source=find(package,"car_"+car.Source)??find(package,"car_"+car.Base);Need(source!=null);
     sources[target]=source;
-    if(!old.Any(t=>t.Name==target)&&!all.Any(t=>t.Name==target))all.Add(new Token{Group=(byte)addition,Name=target,Index=-1});
+    if(!all.Any(t=>t.Name==target))all.Add(new Token{Group=(byte)addition,Name=target,Index=-1});
    }
    foreach(var car in state.Cars)if(car.Active){
     var package=packages.Single(p=>p.Cars.Any(c=>c.Key==car.Key));
@@ -57,8 +60,9 @@ namespace ReRiff {
     }
    }
    all=all.OrderBy(t=>Bucket(t.Name)).ToList();var output=new Dictionary<string,byte[]>(StringComparer.Ordinal);var maxima=new uint[names.Count];
-   foreach(string path in paths){if(!path.StartsWith("strings/",StringComparison.Ordinal)||!path.EndsWith(".str",StringComparison.Ordinal))continue;string[] parts=path.Split('/');if(parts.Length!=3)continue;int group=names.IndexOf(parts[1]);if(group<0)continue;var original=Strings(stock(path),counts[group]);var loaded=new Dictionary<string,List<string>>(StringComparer.Ordinal);
-    using(var m=new MemoryStream())using(var w=new BinaryWriter(m)){w.Write(3u);w.Write(2u);foreach(var token in all.Where(t=>t.Group==group)){string text;SourceInfo source;if(sources.TryGetValue(token.Name,out source)){string sourcePath="strings/"+names[source.Group]+"/"+parts[2];string key=source.Package.Folder+"\n"+sourcePath+"\n"+source.Count;List<string> bank;if(!loaded.TryGetValue(key,out bank)){byte[] custom;bank=Strings(source.Package.Assets.TryGetValue(sourcePath,out custom)?custom:stock(sourcePath),source.Count);loaded.Add(key,bank);}text=bank[source.Index];}else{Need(token.Index>=0);text=original[token.Index];}byte[] utf16=Encoding.Unicode.GetBytes(text);w.Write(utf16.Length/2);w.Write(utf16);}byte[] data=m.ToArray();output[path]=data;maxima[group]=Math.Max(maxima[group],(uint)data.Length-8);}
+   foreach(string path in paths){if(!path.StartsWith("strings/",StringComparison.Ordinal)||!path.EndsWith(".str",StringComparison.Ordinal))continue;string[] parts=path.Split('/');if(parts.Length!=3)continue;int group=names.IndexOf(parts[1]);if(group<0)continue;var original=Strings(stock(path),group<stockTable.Counts.Count?stockTable.Counts[group]:0);var loaded=new Dictionary<string,List<string>>(StringComparer.Ordinal);List<string> baseBank=null;
+    if(basePackage!=null&&group==common){byte[] custom;if(basePackage.Assets.TryGetValue("strings/"+names[group]+"/"+parts[2],out custom))baseBank=Strings(custom,counts[group]);}
+    using(var m=new MemoryStream())using(var w=new BinaryWriter(m)){w.Write(3u);w.Write(2u);foreach(var token in all.Where(t=>t.Group==group)){string text;SourceInfo source;if(sources.TryGetValue(token.Name,out source)){string sourcePath="strings/"+names[source.Group]+"/"+parts[2];string key=source.Package.Folder+"\n"+sourcePath+"\n"+source.Count;List<string> bank;if(!loaded.TryGetValue(key,out bank)){byte[] custom;bank=Strings(source.Package.Assets.TryGetValue(sourcePath,out custom)?custom:stock(sourcePath),source.Count);loaded.Add(key,bank);}text=bank[source.Index];}else if(baseBank!=null){Need(token.Index>=0&&token.Index<baseBank.Count);text=baseBank[token.Index];}else{Need(token.Index>=0);text=original[token.Index];}byte[] utf16=Encoding.Unicode.GetBytes(text);w.Write(utf16.Length/2);w.Write(utf16);}byte[] data=m.ToArray();output[path]=data;maxima[group]=Math.Max(maxima[group],(uint)data.Length-8);}
    }
    using(var m=new MemoryStream())using(var w=new BinaryWriter(m)){w.Write(3u);w.Write(2u);w.Write(names.Count);for(int i=0;i<names.Count;i++){byte[] name=Encoding.ASCII.GetBytes(i==0?"Common":i==1?"FrontEnd":i==2?"BackEnd":names[i]);w.Write(name.Length);w.Write(all.Count(t=>t.Group==i));w.Write(Math.Max(capacities[i],maxima[i]));w.Write(name);}for(int i=0;i<256;i++)w.Write(all.Where(t=>Bucket(t.Name)==i).Sum(t=>t.Name.Length+2));foreach(var t in all){w.Write(t.Group);w.Write(Encoding.ASCII.GetBytes(t.Name));w.Write((byte)0);}output["strings/tokens.dat"]=m.ToArray();}return output;
   }
