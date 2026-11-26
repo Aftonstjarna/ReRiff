@@ -38,7 +38,7 @@ static float race_player_distance;
  * behind limit as the retained road/wall strips. */
 static float race_culling_block_distance=4.0f;
 static BOOL race_prop_gate_active;
-static float race_prop_gate_behind,race_prop_gate_pos[3],race_prop_gate_fwd[3];
+static float race_prop_gate_behind,race_prop_gate_ahead,race_prop_gate_pos[3],race_prop_gate_fwd[3];
 static int race_track_block_total;
 static void *race_culling_prewarm_done;
 static void *race_culling_prewarm_road;
@@ -726,7 +726,7 @@ static BOOL race_prop_along_ok(const float *pos){
     if(!race_prop_gate_active)return TRUE;
     float dx=pos[0]-race_prop_gate_pos[0],dy=pos[1]-race_prop_gate_pos[1],dz=pos[2]-race_prop_gate_pos[2];
     float along=dx*race_prop_gate_fwd[0]+dy*race_prop_gate_fwd[1]+dz*race_prop_gate_fwd[2];
-    return along>=-race_prop_gate_behind;
+    return along>=-race_prop_gate_behind&&along<=race_prop_gate_ahead;
 }
 /* Always reject dead props/nodes. When a tier window is active also reject
  * entries farther behind than the retained block window. */
@@ -836,8 +836,10 @@ static void race_culling_props(BYTE *base){
     float pose[3],forward[3];
     BOOL pose_ok=race_retention_tier>0&&race_culling_player_pose(base,pose,forward);
     float behind_world=(float)race_window_behind*race_culling_block_distance;
+    float ahead_world=(float)race_window_ahead*race_culling_block_distance;
+    if(ahead_world<600.0f)ahead_world=600.0f;
     if(pose_ok&&behind_world>0.0f){
-        race_prop_gate_active=TRUE;race_prop_gate_behind=behind_world;
+        race_prop_gate_active=TRUE;race_prop_gate_behind=behind_world;race_prop_gate_ahead=ahead_world;
         memcpy(race_prop_gate_pos,pose,sizeof(pose));
         memcpy(race_prop_gate_fwd,forward,sizeof(forward));
     }else{
