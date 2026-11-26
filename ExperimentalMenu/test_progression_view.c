@@ -16,10 +16,7 @@ int main(void){
     CHECK(!ReRiffConfigureProgressionView(NULL,2)&&!ReRiffConfigureProgressionView(callbacks,1));
     CHECK(ReRiffConfigureProgressionView(callbacks,2));
     progression_friend_length=&friend_length;raw_text=text_mock;*(void **)(owner+276)=number;
-    int view_result=progression_view_update(owner,55);
-    fprintf(stderr,"progression_view_update=%d texts=%d fills=%d summary=%p fill=%p raw=%p font=%p sprite=%p text=%p add=%p ui=%p friend=%p\n",
-        view_result,texts,fills,(void *)progression_summary,(void *)progression_fill,(void *)raw_text,(void *)progression_font,(void *)create_sprite,(void *)create_text,(void *)add_item,(void *)ui_instance,(void *)progression_friend_length);
-    CHECK(view_result&&texts==1&&fills==1);
+    CHECK(progression_view_update(owner,55)&&texts==1&&fills==1);
     for(int section=1;section<=3;section++){((int *)owner)[101]=section;CHECK(!progression_view_update(owner,55)&&texts==1&&fills==1);}((int *)owner)[101]=0;
     friend_length=1;CHECK(!progression_view_update(owner,55)&&texts==1);friend_length=0;
     for(mode=1;mode<=3;mode++)CHECK(!progression_view_update(owner,55)&&texts==1&&fills==1);mode=0;
