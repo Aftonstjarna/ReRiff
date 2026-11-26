@@ -33,6 +33,12 @@ static int race_retention_pool;
 static int race_retention_block_cap;
 static int race_window_behind,race_window_ahead;
 static float race_player_distance;
+/* Tier retention is expressed in strip blocks. Convert the block window to
+ * world units once per track so props, prop nodes and ramps use the same
+ * behind limit as the retained road/wall strips. */
+static float race_culling_block_distance=4.0f;
+static BOOL race_prop_gate_active;
+static float race_prop_gate_behind,race_prop_gate_pos[3],race_prop_gate_fwd[3];
 static int race_track_block_total;
 static void *race_culling_prewarm_done;
 static void *race_culling_prewarm_road;
@@ -302,8 +308,11 @@ static void race_culling_prewarm(BYTE *base){
     float total=*((float *)((BYTE *)tracker+116)),position=*((float *)((BYTE *)tracker+120));
     float current=total>0.01f?position/total:0.0f;
     if(!(current>=0.0f&&current<=1.0f))current=0.0f;
-    int steps=race_retention_tier>0?race_retention_tier*10:100;
-    float max_progress=(float)steps/100.0f;
+    /* The road chunks replace the live road mesh, so the capture must cover
+     * the whole track at every tier. The tier governs how much stays loaded,
+     * not how much road exists. */
+    const int steps=100;
+    const float max_progress=1.0f;
     if(current>max_progress)current=max_progress;
     unsigned strips=0;
     BYTE *main_road=NULL;
@@ -374,6 +383,7 @@ static void race_culling_prewarm(BYTE *base){
             for(int step=0;step<=steps;step++)race_culling_strip_tick(capture,1,0,(float)step/(float)steps*max_progress,node);
             master_total=*((int *)(capture+56));
             race_track_block_total=master_total;
+            if(master_total>0&&track_len>0.1f)race_culling_block_distance=track_len/(float)master_total;
             if(master_total>0&&(unsigned)master_total*9>race_capture_vertex_capacity){
                 char detail[180];snprintf(detail,sizeof(detail),"Road capture truncated: need=%u cap=%u; the road mesh wrapped.",
                     (unsigned)master_total*9,race_capture_vertex_capacity);log_line(detail);
@@ -632,8 +642,10 @@ static BOOL install_race_culling(BYTE *base){
     reriff_two_sided=race_culling_enabled;
     GetPrivateProfileStringW(L"camera",L"race_orbit_trace",L"false",value,16,client);
     race_culling_trace=!_wcsicmp(value,L"true")||!_wcsicmp(value,L"yes")||!wcscmp(value,L"1");
-    GetPrivateProfileStringW(L"graphics",L"retain_buildings",L"false",value,16,client);
-    race_retain_buildings=!_wcsicmp(value,L"true")||!_wcsicmp(value,L"yes")||!wcscmp(value,L"1");
+    WCHAR buildings[16];
+    GetPrivateProfileStringW(L"graphics",L"retain_buildings",L"auto",buildings,16,client);
+    BOOL buildings_auto=!_wcsicmp(buildings,L"auto");
+    race_retain_buildings=buildings_auto?visual_retention:(!_wcsicmp(buildings,L"true")||!_wcsicmp(buildings,L"yes")||!wcscmp(buildings,L"1"));
     if(!race_culling_enabled)return TRUE;
     if(!readable(base+0x278ea0,8)||!readable(base+0x27959c,8))return FALSE;
     race_culling_force_visible=(RaceCullingVisible)(base+0x278ea0);
@@ -657,7 +669,7 @@ static BOOL install_race_culling(BYTE *base){
     BOOL retained=race_culling_retain_blocks(base);
     BOOL walls=race_culling_retain_walls(base);
     char detail[300];snprintf(detail,sizeof(detail),"Track visual retention tier=%d; trace=%d; block retention=%d; wall retention=%d; release window=%d; buildings=%s; large pool=%d; window=%d behind + %d ahead.",
-        tier,race_culling_trace?1:0,retained?1:0,walls?1:0,behind?1:0,race_retain_buildings?"retained":"vanilla",relocated?pool:0,race_window_behind,race_window_ahead);log_line(detail);
+        tier,race_culling_trace?1:0,retained?1:0,walls?1:0,behind?1:0,race_retain_buildings?"retained":(buildings_auto?"vanilla(auto)":"vanilla"),relocated?pool:0,race_window_behind,race_window_ahead);log_line(detail);
     return TRUE;
 }
 
@@ -696,6 +708,53 @@ static void *race_node_snapshot[RACE_SNAPSHOT_MAX],*race_node_vtable[RACE_SNAPSH
 static unsigned race_node_snapshot_count;
 static void *race_prop_manager;
 
+/* The trigger manager stores the player's world transform in
+ * ms_transPlayers; the same matrix used by trigger tests. Project a prop onto
+ * the car's forward axis to decide whether it is still inside the tier's
+ * behind window. */
+static BOOL race_culling_player_pose(BYTE *base,float *pos,float *fwd){
+    if(!readable(base+0x7a4998,48))return FALSE;
+    const float *m=(const float *)(base+0x7a4998);
+    pos[0]=m[9];pos[1]=m[10];pos[2]=m[11];
+    fwd[0]=m[6];fwd[1]=m[7];fwd[2]=m[8];
+    float length=fwd[0]*fwd[0]+fwd[1]*fwd[1]+fwd[2]*fwd[2];
+    if(!(length>0.0001f))return FALSE;
+    length=sqrtf(length);fwd[0]/=length;fwd[1]/=length;fwd[2]/=length;
+    return TRUE;
+}
+static BOOL race_prop_along_ok(const float *pos){
+    if(!race_prop_gate_active)return TRUE;
+    float dx=pos[0]-race_prop_gate_pos[0],dy=pos[1]-race_prop_gate_pos[1],dz=pos[2]-race_prop_gate_pos[2];
+    float along=dx*race_prop_gate_fwd[0]+dy*race_prop_gate_fwd[1]+dz*race_prop_gate_fwd[2];
+    return along>=-race_prop_gate_behind;
+}
+/* Always reject dead props/nodes. When a tier window is active also reject
+ * entries farther behind than the retained block window. */
+static BOOL race_prop_keep(void *object,size_t dead_offset){
+    if(!object||!readable(object,8))return FALSE;
+    if(dead_offset&&readable((BYTE *)object+dead_offset,1)&&*((BYTE *)object+dead_offset)!=0)return FALSE;
+    if(!race_prop_gate_active)return TRUE;
+    if(dead_offset==493){
+        BYTE *prop=(BYTE *)object;
+        void *visual=readable(prop+288,4)?*(void **)(prop+288):NULL;
+        if(!visual||!readable(visual,132))return TRUE;
+        return race_prop_along_ok((float *)((BYTE *)visual+76));
+    }
+    if(dead_offset==121){
+        BYTE *node=(BYTE *)object;
+        void **begin=readable(node+40,4)?*(void ***)(node+40):NULL,**end=readable(node+44,4)?*(void ***)(node+44):NULL;
+        if(!begin||!end||end<begin||(BYTE *)end-(BYTE *)begin>2000*4)return TRUE;
+        for(void **item=begin;item<end;item++){
+            BYTE *piece=(BYTE *)*item;
+            if(!readable(piece,132))continue;
+            void *visual=readable(piece+16,4)?*(void **)(piece+16):NULL;
+            if(!visual||!readable(visual,132))continue;
+            return race_prop_along_ok((float *)((BYTE *)visual+76));
+        }
+    }
+    return TRUE;
+}
+
 /* gaPropManager.tick drops props/nodes from the active vectors once their own
  * tick/setup call says they are inactive. The object is still alive (usually
  * asleep), and the vector keeps its capacity, so re-append the snapshot entry
@@ -710,7 +769,7 @@ static unsigned race_culling_readd(void **vector,size_t object_size,void **snaps
     for(void **item=begin;item<end;item++){
         void *object=*item;
         if(!readable(object,object_size))continue;
-        if(dead_offset&&readable((BYTE *)object+dead_offset,1)&&*((BYTE *)object+dead_offset)!=0)continue;
+        if(!race_prop_keep(object,dead_offset))continue;
         BOOL known=FALSE;
         for(unsigned i=0;i<*count;i++)if(snapshot[i]==object){known=TRUE;break;}
         if(!known&&*count<RACE_SNAPSHOT_MAX){
@@ -723,7 +782,7 @@ static unsigned race_culling_readd(void **vector,size_t object_size,void **snaps
         unsigned kept=0;
         for(unsigned i=0;i<*count;i++){
             void *object=snapshot[i];
-            if(!readable((BYTE *)object+dead_offset,1)||*((BYTE *)object+dead_offset)!=0)continue;
+            if(!race_prop_keep(object,dead_offset))continue;
             snapshot[kept]=object;
             vtable[kept]=vtable[i];
             kept++;
@@ -774,6 +833,16 @@ static void race_culling_props(BYTE *base){
         race_prop_manager=manager;
         race_prop_snapshot_count=race_node_snapshot_count=0;
     }
+    float pose[3],forward[3];
+    BOOL pose_ok=race_retention_tier>0&&race_culling_player_pose(base,pose,forward);
+    float behind_world=(float)race_window_behind*race_culling_block_distance;
+    if(pose_ok&&behind_world>0.0f){
+        race_prop_gate_active=TRUE;race_prop_gate_behind=behind_world;
+        memcpy(race_prop_gate_pos,pose,sizeof(pose));
+        memcpy(race_prop_gate_fwd,forward,sizeof(forward));
+    }else{
+        race_prop_gate_active=FALSE;
+    }
     unsigned prop_readd=race_culling_readd((void **)((BYTE *)manager+448),572,race_prop_snapshot,race_prop_vtable,&race_prop_snapshot_count,493);
     prop_readd+=race_culling_readd((void **)((BYTE *)manager+460),572,race_prop_snapshot,race_prop_vtable,&race_prop_snapshot_count,493);
     unsigned node_readd=race_culling_readd((void **)((BYTE *)manager+472),52,race_node_snapshot,race_node_vtable,&race_node_snapshot_count,121);
@@ -799,8 +868,10 @@ static void race_culling_props(BYTE *base){
             void *prop=*item;
             if(!readable(prop,572))continue;
             /* forceBreak sets +493 once the prop is broken and hides its
-             * visual. Keep forcing only intact props so a smashed wall clears. */
-            if(*((BYTE *)prop+493)!=0)continue;
+             * visual. Keep forcing only intact props so a smashed wall clears.
+             * The tier gate also drops props that have fallen behind the
+             * retained window instead of keeping them for the whole race. */
+            if(!race_prop_keep(prop,493))continue;
             void *visual=*(void **)((BYTE *)prop+288);
             if(!readable(visual,132))continue;
             /* Do not touch gaPropBase+496/+464. Those drive the prop's own
@@ -818,7 +889,7 @@ static void race_culling_props(BYTE *base){
     for(void **item=nbegin;item<nend;item++){
         BYTE *node=(BYTE *)*item;
         if(!readable(node,122))continue;
-        if(*((BYTE *)node+121)==1)continue; /* damaged: let the broken wall clear */
+        if(!race_prop_keep(node,121))continue; /* damaged/behind: let it clear */
         void **pbegin=*(void ***)(node+40),**pend=*(void ***)(node+44);
         if(!pbegin||!pend||pend<pbegin||(BYTE *)pend-(BYTE *)pbegin>2000*4)continue;
         for(void **piece_item=pbegin;piece_item<pend;piece_item++){
@@ -834,11 +905,18 @@ static void race_culling_props(BYTE *base){
             race_culling_prop_forced++;
         }
     }
+    race_prop_gate_active=FALSE;
 }
 
+static float race_culling_player_distance(BYTE *base);
 static void race_culling_ramps(BYTE *base){
     race_culling_ramp_count=race_culling_ramp_forced=0;
     if(!race_culling_visual)return;
+    BOOL gate=race_retention_tier>0;
+    float player=gate?race_culling_player_distance(base):0.0f;
+    float behind_world=(float)race_window_behind*race_culling_block_distance;
+    float ahead_world=(float)race_window_ahead*race_culling_block_distance;
+    if(ahead_world<600.0f)ahead_world=600.0f;
     if(!readable(base+0x7db0cc,4))return;
     void *manager=*(void **)(base+0x7db0cc);
     if(!readable(manager,44))return;
@@ -846,6 +924,10 @@ static void race_culling_ramps(BYTE *base){
     if(!begin||!end||end<begin||(size_t)(end-begin)>10000*24)return;
     race_culling_ramp_count=(unsigned)((end-begin)/24);
     for(BYTE *ramp=begin;ramp<end;ramp+=24){
+        if(gate&&readable(ramp+12,4)){
+            float delta=*((float *)(ramp+12))-player;
+            if(delta<-behind_world||delta>ahead_world)continue;
+        }
         void *visual=*(void **)ramp;
         if(!readable(visual,132))continue;
         *((BYTE *)visual+20)=1;

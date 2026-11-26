@@ -629,7 +629,7 @@ static LRESULT CALLBACK procedure(HWND hwnd,UINT event,WPARAM wp,LPARAM lp) {
         checkbox_help(graphics_resolution,L"Display resolution for the next game start. Current keeps the saved resolution. Restart required.");
         checkbox_help(graphics_mode,L"Fullscreen mode for the next game start. Current keeps the saved mode.");
         checkbox_help(graphics_aa,L"Anti-aliasing, shared with the in-game Graphics menu.");
-        checkbox_help(graphics_retention,L"Visual retention 0–10. 0 is vanilla; 10 keeps the largest behind/ahead window. Restart required.");
+        checkbox_help(graphics_retention,L"Visual retention 0-10. 0 is vanilla; higher tiers keep more road, wall, prop, ramp and building scenery. Restart required.");
         checkbox_help(graphics_bloom,L"Bloom default. L3+X toggles it in game.");
         checkbox_help(graphics_dof,L"Depth of field default. L3+A toggles it in game.");
         checkbox_help(graphics_scale,L"UI scale: Automatic or 25–100 in steps of five.");

@@ -64,6 +64,25 @@ int main(void){
     CHECK(race_culling_readd(vec,572,snapshot,vtable,&count,493)==0);
     CHECK(count==0);
 
+    /* The tier window is expressed in strip blocks and converted to world
+     * units. A prop behind that window leaves the snapshot and is not forced;
+     * a prop ahead of it remains retained. */
+    float *pose=(float *)(base+0x7a4998);
+    memset(pose,0,48);pose[0]=1;pose[4]=1;pose[8]=1;
+    race_retention_tier=10;race_window_behind=100;race_culling_block_distance=1.0f;
+    *((BYTE *)prop[0]+493)=0;
+    float *translation=(float *)(visual[0]+76);
+    translation[0]=0;translation[1]=0;translation[2]=-200;
+    prop_vector[0]=prop[0];prop_vector[1]=prop[1];
+    *((void ***)(manager+460))=prop_vector;*((void ***)(manager+464))=prop_vector+2;*((void ***)(manager+468))=prop_vector+2;
+    *((BYTE *)visual[0]+20)=0;
+    race_culling_props(base);
+    CHECK(*((BYTE *)visual[0]+20)==0);
+    translation[2]=200;
+    race_culling_props(base);
+    CHECK(*((BYTE *)visual[0]+20)==1);
+    race_retention_tier=0;
+
     /* The -30 release literal becomes the retained behind window. */
     double *barricade=(double *)(base+0x23afd7),*ramp=(double *)(base+0x23c940);
     *barricade=-30.0;*ramp=-30.0;
