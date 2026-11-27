@@ -255,11 +255,21 @@ static BOOL exit_game(void){
 static BOOL (*request_exit)(void)=exit_game;
 
 static BOOL readable(const void *p,size_t count) {
-    MEMORY_BASIC_INFORMATION info;
-    if (!p || !VirtualQuery(p,&info,sizeof(info)) || info.State!=MEM_COMMIT
-        || (info.Protect&(PAGE_GUARD|PAGE_NOACCESS))) return FALSE;
-    uintptr_t start=(uintptr_t)p, end=(uintptr_t)info.BaseAddress+info.RegionSize;
-    return start<=end && count<=end-start;
+    if (!p) return FALSE;
+    uintptr_t address=(uintptr_t)p, remaining=count;
+    while (remaining) {
+        MEMORY_BASIC_INFORMATION info;
+        if (!VirtualQuery((const void *)address,&info,sizeof(info)) || info.State!=MEM_COMMIT
+            || (info.Protect&(PAGE_GUARD|PAGE_NOACCESS))) return FALSE;
+        uintptr_t start=(uintptr_t)info.BaseAddress, end=start+info.RegionSize;
+        if (address<start || address>=end) return FALSE;
+        uintptr_t available=end-address;
+        if (!available) return FALSE;
+        if (available>=remaining) return TRUE;
+        address=end;
+        remaining-=available;
+    }
+    return TRUE;
 }
 
 /* Set while track retention is active; the D3D9 state hook below then forces
