@@ -5,6 +5,7 @@
 - Broken walls now clear; intact walls stay loaded.
 - Track surfaces load from the start on long tracks.
 - Retention tiers now scale props, ramps and buildings too.
+- LB/RB switch tabs on the chart and Recent Tracks screens again.
 - Custom cars keep their names and menu text stays intact.
 
 ## Full release notes
@@ -14,6 +15,7 @@
 - Apply the visual-retention tier to props, prop nodes and ramps, not only the block pool. The tier's behind/ahead block window is converted to world units once per track and used to stop re-adding props or forcing ramps that have fallen behind it. The trace still reports the active prop snapshots.
 - Type 13 buildings follow the visual-retention window when the slider is above 0. The base game hides a building two units behind the car; retaining it costs draw calls behind the track, so `[graphics] retain_buildings=false` restores the previous vanilla behaviour (the default is `auto`, which follows the slider). The trace logs `Buildings: mode=..., strips=..., blocks=..., visible=...` for A/B comparison.
 - Capture the whole road at every retention tier. The live road mesh is hidden when chunks exist, so the tier must control how much stays loaded, not how much road is generated; the old tier-scaled capture left the road missing after the captured range at low tiers.
+- Restore LB/RB in the SDL3 XInput proxy. They are the native previous/next-tab buttons on the chart and Recent Tracks screens; older launchers wrote `[controller] lb=none` and `rb=none`, which removed them from the virtual pad. The Controller tab now shows Previous tab and Next tab and migrates an old `none` value to the identity binding.
 - Size the road capture buffer for the whole track and reuse it between races. The old 40000-vertex cap wrapped the road mesh on tracks longer than about 4400 blocks, so the end-of-track vertices overwrote the beginning and the road surface was missing until the car passed the wrapped range.
 - Regenerate the custom unlock manifest from the composed `unlocks_pc` tables instead of copying a package's per-mod manifest. Two car mods that ship different manifests no longer abort car slot preparation, and the manifest always matches the composed tables.
 - Read a car package's own `strings/tokens.dat` only to locate its source name token. The composed Common table stays in stock order, so native string indices and menu labels do not shift; per-package overrides still supply names such as the 1967 car's `Baby`.

@@ -5,7 +5,8 @@
  *
  * [controller] in client.ini maps each virtual XInput control to a physical
  * SDL gamepad control. Missing keys keep the identity mapping; "none" clears
- * the virtual control.
+ * the virtual control, except for LB/RB, which are the game's native previous
+ * and next tab buttons and fall back to the identity binding.
  */
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -221,9 +222,6 @@ static void load_mapping(void) {
     mapping_ready = 1;
     for (int i = 0; i < VIRTUAL_BUTTON_COUNT; i++) identity_button(&button_map[i], i);
     for (int i = 0; i < 6; i++) identity_axis(&axis_map[i], i);
-    /* The game does not map LB/RB, so leave those virtual buttons unbound. */
-    button_map[9].count = 0;
-    button_map[10].count = 0;
     if (!dll_dir[0]) return;
     WCHAR ini[MAX_PATH];
     wcsncpy(ini, dll_dir, MAX_PATH - 1);
@@ -234,7 +232,6 @@ static void load_mapping(void) {
     mapping_enabled = !_wcsicmp(value, L"1") || !_wcsicmp(value, L"true") || !_wcsicmp(value, L"yes");
     int overrides = 0;
     for (int i = 0; i < VIRTUAL_BUTTON_COUNT; i++) {
-        if (i == 9 || i == 10) continue; /* LB/RB are unused by the game. */
         WCHAR key[16];
         MultiByteToWideChar(CP_UTF8, 0, virtual_button_names[i], -1, key, 16);
         DWORD got = GetPrivateProfileStringW(L"controller", key, L"", value, 128, ini);
@@ -242,6 +239,11 @@ static void load_mapping(void) {
         WideCharToMultiByte(CP_UTF8, 0, value, got + 1, binding, sizeof(binding), NULL, NULL);
         if (got) {
             parse_binding(binding, &button_map[i]);
+            /* Older launchers forced lb/rb to none because the game was
+             * thought to leave them unused. They switch tabs on the chart and
+             * Recent Tracks screens, so keep the identity binding when the
+             * stored value is none or invalid. */
+            if ((i == 9 || i == 10) && button_map[i].count == 0) identity_button(&button_map[i], i);
             log_line("controller %s=%s parts=%d", virtual_button_names[i], binding, button_map[i].count);
             overrides++;
         }

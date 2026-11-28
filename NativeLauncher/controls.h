@@ -36,7 +36,7 @@ static const KeyboardActionRow controls_keyboard_rows[KEYBOARD_ACTION_COUNT]={
     {L"mouse_look",L"Mouse look (ReRiff)",0,KEYBOARD_MOUSE,VK_RBUTTON}
 };
 static HWND controls_controller_enabled;
-#define CONTROLLER_BINDING_COUNT 19
+#define CONTROLLER_BINDING_COUNT 21
 static HWND controls_controller_bindings[CONTROLLER_BINDING_COUNT];
 
 /* ------------------------------------------------------------------ */
@@ -98,9 +98,11 @@ static const ControllerBindingRow controls_controller_rows[CONTROLLER_BINDING_CO
     {L"x",L"Drift",L"button:x"},{L"y",L"Camera",L"button:y"},
     {L"back",L"Restart",L"button:back"},{L"start",L"Pause",L"button:start"},
     {L"guide",L"Guide",L"button:guide"},
+    {L"lb",L"Previous tab",L"button:lb"},{L"rb",L"Next tab",L"button:rb"},
     {L"dup",L"Menu up",L"button:dup"},{L"ddown",L"Menu down",L"button:ddown"},
     {L"dleft",L"Steer/Menu L",L"button:dleft"},{L"dright",L"Steer/Menu R",L"button:dright"},
-    {L"l3",L"Photo mode",L"button:l3"},{L"r3",L"Free look",L"button:r3"},
+    {L"l3",L"Photo mode",L"button:l3"},
+    {L"r3",L"Free look",L"button:r3"},
     {L"lx",L"Steer/Menu",L"axis:lx"},{L"ly",L"Menu Y",L"axis:ly"},
     {L"rx",L"Look X",L"axis:rx"},{L"ry",L"Look Y",L"axis:ry"},
     {L"lt",L"Brake",L"axis:lt"},{L"rt",L"Accelerate",L"axis:rt"}
@@ -721,8 +723,14 @@ static void controls_reload(void){
     for(int i=0;i<CONTROLLER_BINDING_COUNT;i++){
         int count,kinds[CONTROLS_MAX_CHORD],indexes[CONTROLS_MAX_CHORD],signs[CONTROLS_MAX_CHORD];
         memset(kinds,0,sizeof(kinds));memset(indexes,0,sizeof(indexes));memset(signs,0,sizeof(signs));
-        GetPrivateProfileStringW(L"controller",controls_controller_rows[i].key,controls_controller_rows[i].def,value,128,controls_ini);
+        const ControllerBindingRow *row=&controls_controller_rows[i];
+        GetPrivateProfileStringW(L"controller",row->key,row->def,value,128,controls_ini);
         if(!controls_parse_binding(value,&count,kinds,indexes,signs))count=0;
+        /* Older launchers forced lb/rb to none. They are the native tab
+         * buttons on the chart and Recent Tracks screens, so show the
+         * identity default instead of an unusable empty row. */
+        if(count==0&&(!_wcsicmp(row->key,L"lb")||!_wcsicmp(row->key,L"rb")))
+            controls_parse_binding(row->def,&count,kinds,indexes,signs);
         controls_binding_assign(i,count,kinds,indexes,signs);
     }
     controls_keyboard_reload();
@@ -753,8 +761,6 @@ static BOOL controls_save_settings(void){
         controls_binding_canonical(i,binding,64);
         ok=WritePrivateProfileStringW(L"controller",controls_controller_rows[i].key,binding,controls_ini)!=0;
     }
-    if(ok)ok=WritePrivateProfileStringW(L"controller",L"lb",L"none",controls_ini)!=0;
-    if(ok)ok=WritePrivateProfileStringW(L"controller",L"rb",L"none",controls_ini)!=0;
     SetWindowTextW(status,ok?L"Input and camera settings saved. Restart the game to apply changes.":L"Could not save all input settings. Please try again.");
     return ok;
 }
@@ -817,15 +823,15 @@ static void controls_create(void){
     controls_part=CONTROLS_CONTROLLER;
     controls_controller_enabled=control(L"BUTTON",L"Enable controller remapping",BS_AUTOCHECKBOX|WS_TABSTOP,6,20,300,26,0);
     for(int i=0;i<CONTROLLER_BINDING_COUNT;i++){
-        int column=i<7?0:i<13?1:2;
-        int row=i<7?i:i<13?i-7:i-13;
+        int column=i<7?0:i<14?1:2;
+        int row=i<7?i:i<14?i-7:i-14;
         int x=9+column*216,y=50+row*25;
         control(L"STATIC",controls_controller_rows[i].label,SS_LEFTNOWORDWRAP,x,y+2,100,22,0);
         controls_controller_bindings[i]=control(L"BUTTON",L"",BS_OWNERDRAW|WS_TABSTOP,x+102,y,108,24,CONTROLLER_CAPTURE_BASE+i);
         controls_capture_button_old_proc=(WNDPROC)SetWindowLongPtrW(controls_controller_bindings[i],GWLP_WNDPROC,(LONG_PTR)controls_capture_button_proc);
     }
     controls_save=control(L"BUTTON",L"Save settings",WS_TABSTOP,14,228,140,30,CONTROLS_SAVE);
-    checkbox_help(control(L"BUTTON",L"Defaults",WS_TABSTOP,162,228,120,30,CONTROLS_DEFAULTS),L"Restore the vanilla controller mapping. LB and RB are unused by default. Save settings to apply.");
+    checkbox_help(control(L"BUTTON",L"Defaults",WS_TABSTOP,162,228,120,30,CONTROLS_DEFAULTS),L"Restore the vanilla controller mapping. LB and RB switch tabs on the chart and Recent Tracks screens. Save settings to apply.");
     checkbox_help(controls_controller_enabled,L"Enable the SDL3 XInput proxy remap table. Restart the game after saving. The game receives the virtual controls selected on this tab. Chords such as L3+R3 require every listed button.");
     restart_note(L"Click a binding, press one button or a chord, then release. Delete clears it.",14,260,630);
     controls_reload();
